@@ -39,7 +39,17 @@
       "Bash(start cell_0_x0_y0.bmp)",
       "Bash(./TestFullscreenOCR.exe)",
       "Bash(./TestWordExtraction.exe)",
-      "Bash(./TestOCROctree.exe)"
+      "Bash(./TestOCROctree.exe)",
+      "Bash(cat:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(git add:*)",
+      "Bash(uv venv:*)",
+      "Bash(uv pip install:*)",
+      "Bash(../.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
     ],
     "deny": [],
     "ask": []
