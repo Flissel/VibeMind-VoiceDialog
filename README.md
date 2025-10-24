@@ -1,254 +1,241 @@
-# Voice Dialog - Audio-Reactive Visual System
+# VibeMind Voice Dialog
 
-An audio-reactive visual simulation system with fisheye effects and dynamic colors that respond to voice and audio input. Built with C++ (OpenGL) for performance and Python for easy integration.
+A voice conversation system powered by ElevenLabs Conversational AI, with optional audio-reactive visual effects.
 
 ## Features
 
-- **Real-time particle system** (100-1000+ particles at 60 FPS)
-- **Fisheye lens effect** with audio-reactive distortion
-- **Dynamic color mapping** based on audio frequencies:
-  - Bass → Blue/Purple tones
-  - Mid → Green/Yellow tones
-  - Treble → Red/Orange tones
-- **Beat detection** with visual pulses
-- **Microphone input** support for live audio
-- **C++/Python integration** via pybind11
+- **Real-time voice conversations** with ElevenLabs AI agents
+- **Microphone input** for natural spoken interaction
+- **Audio-reactive visuals** (optional C++ OpenGL module)
+- **Simple Python API** for easy integration
 
-## Architecture
+## Quick Start
 
-```
-┌─────────────────────────────────────┐
-│   Python Application Layer          │
-│   - Audio analysis (librosa)        │
-│   - Demo application                │
-└──────────────┬──────────────────────┘
-               │ pybind11
-┌──────────────▼──────────────────────┐
-│   C++ Visual Simulation             │
-│   - OpenGL rendering (60 FPS)       │
-│   - Particle system                 │
-│   - Fisheye shader                  │
-│   - Audio-reactive colors           │
-└─────────────────────────────────────┘
-```
-
-## Prerequisites
-
-### Windows
-
-Install dependencies via [vcpkg](https://vcpkg.io/):
-
-```bash
-vcpkg install glfw3:x64-windows
-vcpkg install glm:x64-windows
-vcpkg install glad:x64-windows
-vcpkg install pybind11:x64-windows
-```
-
-### Linux
-
-```bash
-sudo apt install libglfw3-dev libglm-dev python3-dev
-pip install pybind11[global]
-```
-
-### macOS
-
-```bash
-brew install glfw glm pybind11
-```
-
-## Building
-
-### 1. Install Python dependencies
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Build C++ module
+### 2. Configure API Keys
+
+Copy the template and add your ElevenLabs credentials:
 
 ```bash
-# Create build directory
+copy .env.template .env
+notepad .env
+```
+
+Required settings:
+- `ELEVENLABS_API_KEY` - Get from [ElevenLabs API Keys](https://elevenlabs.io/app/settings/api-keys)
+- `ELEVENLABS_AGENT_ID` - Create an agent at [ElevenLabs Conversational AI](https://elevenlabs.io/app/conversational-ai)
+
+### 3. Run Voice Dialog
+
+```bash
+cd python
+python voice_dialog_main.py
+```
+
+Speak into your microphone to start a conversation with your AI agent!
+
+## How It Works
+
+```
+┌─────────────────────────────────────┐
+│   Your Microphone                   │
+└──────────────┬──────────────────────┘
+               │ Audio stream (16kHz)
+┌──────────────▼──────────────────────┐
+│   VoiceDialog Client                │
+│   - Sends audio to ElevenLabs       │
+│   - Receives agent responses        │
+└──────────────┬──────────────────────┘
+               │ Agent audio
+┌──────────────▼──────────────────────┐
+│   Speaker Output                    │
+│   + Optional Visual Effects         │
+└─────────────────────────────────────┘
+```
+
+## Architecture
+
+### Core Components
+
+- **[voice_dialog_main.py](python/voice_dialog_main.py)** - Main application entry point
+- **[elevenlabs_voice_dialog.py](python/elevenlabs_voice_dialog.py)** - ElevenLabs client wrapper
+- **[audio_analyzer.py](python/audio_analyzer.py)** - Audio feature extraction for visuals
+- **[config.py](python/config.py)** - Configuration management
+
+### Optional Visual Module (C++)
+
+The project includes an optional audio-reactive visual system built with C++ and OpenGL:
+
+- Real-time particle effects (60 FPS)
+- Fisheye lens distortion
+- Dynamic colors responding to audio frequencies
+- Bass → Blue/Purple, Mid → Green/Yellow, Treble → Red/Orange
+
+See [Building the Visual Module](#building-the-visual-module-optional) for compilation instructions.
+
+## Usage in Your Application
+
+```python
+import asyncio
+from elevenlabs_voice_dialog import VoiceDialog
+import sounddevice as sd
+
+async def main():
+    # Create voice dialog client
+    dialog = VoiceDialog(
+        agent_id="your_agent_id",
+        on_agent_response=lambda audio: sd.play(audio, samplerate=22050),
+        on_user_transcript=lambda text: print(f"You: {text}")
+    )
+
+    # Start conversation
+    await dialog.start_conversation()
+
+    # Send audio from microphone
+    # (see voice_dialog_main.py for full implementation)
+
+    # End when done
+    await dialog.end_conversation()
+
+asyncio.run(main())
+```
+
+## Building the Visual Module (Optional)
+
+The audio-reactive visual system requires C++ compilation:
+
+### Prerequisites
+
+**Windows:**
+```bash
+vcpkg install glfw3:x64-windows glm:x64-windows glad:x64-windows pybind11:x64-windows
+```
+
+**Linux:**
+```bash
+sudo apt install libglfw3-dev libglm-dev python3-dev
+pip install pybind11[global]
+```
+
+**macOS:**
+```bash
+brew install glfw glm pybind11
+```
+
+### Build Steps
+
+```bash
 mkdir build
 cd build
 
-# Configure with CMake
-cmake ..
-
-# Or on Windows with vcpkg:
+# Configure
 cmake .. -DCMAKE_TOOLCHAIN_FILE=[path to vcpkg]/scripts/buildsystems/vcpkg.cmake
 
 # Build
 cmake --build . --config Release
 
-# On Windows, the output will be: python/visual_sim_core.pyd
-# On Linux/Mac: python/visual_sim_core.so
+# Output: python/visual_sim_core.pyd (Windows) or python/visual_sim_core.so (Linux/Mac)
 ```
 
-### 3. Install GLAD (if not using vcpkg)
-
-Download GLAD from https://glad.dav1d.de/ with:
-- Language: C/C++
-- GL Version: 3.3+
-- Profile: Core
-
-Extract to `external/glad/`
-
-## Running the Demo
-
-```bash
-cd python
-python demo.py
-```
-
-### Controls
-
-- **SPACE** - Toggle audio input (microphone)
-- **UP/DOWN** - Adjust fisheye strength
-- **ESC** - Quit
-
-## Usage in Your Application
+### Using Visuals
 
 ```python
 import visual_sim_core
 from audio_analyzer import AudioAnalyzer
-import glfw
-
-# Initialize GLFW and create window
-glfw.init()
-window = glfw.create_window(800, 600, "My App", None, None)
-glfw.make_context_current(window)
 
 # Create simulation
 sim = visual_sim_core.AudioReactiveSimulation(num_particles=200)
 sim.initialize(800, 600)
 sim.set_fisheye_strength(0.6)
 
-# Create audio analyzer
+# Analyze audio and update visuals
 analyzer = AudioAnalyzer()
+features = analyzer.analyze(audio_chunk)
 
-# Main loop
-while not glfw.window_should_close(window):
-    # Get audio data (from microphone, ElevenLabs, etc.)
-    audio_chunk = get_audio_data()  # Your audio source
+cpp_features = visual_sim_core.AudioFeatures()
+cpp_features.amplitude = features.amplitude
+cpp_features.bass = features.bass
+cpp_features.mid = features.mid
+cpp_features.treble = features.treble
 
-    # Analyze audio
-    features = analyzer.analyze(audio_chunk)
-
-    # Convert to C++ struct
-    cpp_features = visual_sim_core.AudioFeatures()
-    cpp_features.amplitude = features.amplitude
-    cpp_features.bass = features.bass
-    cpp_features.mid = features.mid
-    cpp_features.treble = features.treble
-    cpp_features.spectrum = features.spectrum
-    cpp_features.beat_detected = features.beat_detected
-
-    # Update and render
-    sim.update_audio(cpp_features)
-    sim.update(delta_time)
-    sim.render()
-
-    glfw.swap_buffers(window)
-    glfw.poll_events()
-
-# Cleanup
-sim.cleanup()
-glfw.terminate()
-```
-
-## Integration with ElevenLabs Voice Agent
-
-```python
-from elevenlabs import Voice, generate
-import visual_sim_core
-from audio_analyzer import AudioAnalyzer
-import numpy as np
-
-# Setup simulation (as above)
-sim = visual_sim_core.AudioReactiveSimulation(200)
-analyzer = AudioAnalyzer()
-
-# Generate speech with ElevenLabs
-audio_stream = generate(
-    text="Hello, I'm your voice assistant!",
-    voice=Voice(voice_id="your_voice_id"),
-    stream=True
-)
-
-# Process each audio chunk
-for audio_chunk in audio_stream:
-    # Convert to numpy array
-    audio_np = np.frombuffer(audio_chunk, dtype=np.float32)
-
-    # Analyze
-    features = analyzer.analyze(audio_np)
-
-    # Update visuals
-    cpp_features = visual_sim_core.AudioFeatures()
-    # ... (set features)
-    sim.update_audio(cpp_features)
-    sim.render()
-
-    # Play audio
-    play_audio(audio_chunk)
+sim.update_audio(cpp_features)
+sim.render()
 ```
 
 ## Project Structure
 
 ```
-voice_dialog/
-├── cpp/
+VibeMind-VoiceDialog/
+├── python/
+│   ├── voice_dialog_main.py          # Main entry point
+│   ├── elevenlabs_voice_dialog.py    # ElevenLabs client
+│   ├── audio_analyzer.py             # Audio analysis
+│   ├── config.py                     # Configuration
+│   └── logger.py                     # Logging utilities
+├── cpp/                              # Optional visual module
 │   ├── include/
-│   │   ├── audio_features.hpp
-│   │   ├── particle.hpp
-│   │   └── audio_reactive_sim.hpp
+│   │   ├── audio_reactive_sim.hpp
+│   │   └── particle.hpp
 │   └── src/
 │       ├── audio_reactive_sim.cpp
 │       └── bindings.cpp
-├── shaders/
-│   ├── particle.vert
-│   ├── particle.frag
-│   ├── fisheye.vert
-│   └── fisheye.frag
-├── python/
-│   ├── audio_analyzer.py
-│   └── demo.py
-├── CMakeLists.txt
-├── requirements.txt
+├── shaders/                          # GLSL shaders for visuals
+│   ├── particle.vert/frag
+│   └── fisheye.vert/frag
+├── CMakeLists.txt                    # C++ build configuration
+├── requirements.txt                  # Python dependencies
+├── .env.template                     # Configuration template
 └── README.md
 ```
 
-## Performance
+## Configuration
 
-- **60 FPS** with 200-500 particles on modern hardware
-- **C++ handles** all rendering and physics
-- **Python handles** audio analysis and application logic
-- **Minimal overhead** thanks to pybind11
+Configuration is managed through environment variables in `.env`:
+
+```bash
+# Required
+ELEVENLABS_API_KEY=your_key_here
+ELEVENLABS_AGENT_ID=your_agent_id
+
+# Optional
+OPENAI_API_KEY=your_openai_key      # Fallback for additional features
+LOG_LEVEL=INFO                       # DEBUG, INFO, WARNING, ERROR
+LOG_FILE=voice_dialog.log           # Log file location
+```
 
 ## Troubleshooting
 
-### "visual_sim_core not found"
+### "ELEVENLABS_API_KEY not found"
 
-Make sure you've built the C++ module first:
-```bash
-mkdir build && cd build && cmake .. && cmake --build .
-```
-
-The module should be in `python/visual_sim_core.pyd` (Windows) or `python/visual_sim_core.so` (Linux/Mac).
-
-### "Failed to load shaders"
-
-Ensure the `shaders/` directory is in your working directory or build directory.
+Make sure you've created a `.env` file from `.env.template` and added your API key.
 
 ### Audio input not working
 
-Check that your microphone permissions are enabled and that `sounddevice` can access your default input device:
+Check your microphone permissions and default device:
+
 ```python
 import sounddevice as sd
 print(sd.query_devices())
 ```
+
+### Visual module not loading
+
+Ensure you've built the C++ module:
+- Windows: `python/visual_sim_core.pyd` should exist
+- Linux/Mac: `python/visual_sim_core.so` should exist
+
+The visual module is optional - voice dialog works without it.
+
+## Performance
+
+- **60 FPS** rendering with 200-500 particles (optional visuals)
+- **Low latency** voice streaming via ElevenLabs SDK
+- **Real-time** audio analysis with librosa
 
 ## License
 
@@ -256,8 +243,7 @@ MIT License
 
 ## Future Enhancements
 
-- Autogen multi-agent integration
-- Desktop assistant capabilities
-- OCR and symbol detection
-- MCP server integration
+- Multi-modal interactions
 - Advanced audio-reactive effects
+- Custom agent personalities
+- Integration with other AI frameworks

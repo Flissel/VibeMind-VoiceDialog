@@ -1,6 +1,6 @@
 """
-Production Configuration Management
-Handles environment variables, validation, and default settings
+Voice Dialog Configuration
+Simple configuration management for ElevenLabs voice dialog
 """
 
 import os
@@ -8,17 +8,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
-
-
-@dataclass
-class MoireTrackerConfig:
-    """MoireTracker service configuration"""
-    path: Path
-    timeout_ms: int = 10000
-    max_reconnect_attempts: int = 3
-    health_check_interval: int = 30
-    ipc_auth_enabled: bool = True  # Enable IPC authentication by default
-    auto_start: bool = False  # Auto-start MoireTracker on launch (default: manual)
 
 
 @dataclass
@@ -32,13 +21,13 @@ class LoggingConfig:
 
 
 @dataclass
-class AppConfig:
-    """Main application configuration"""
-    openai_api_key: Optional[str]
+class VoiceConfig:
+    """Voice dialog configuration"""
     elevenlabs_api_key: Optional[str]
-    moire_tracker: MoireTrackerConfig
+    elevenlabs_agent_id: Optional[str]
+    openai_api_key: Optional[str]  # Optional fallback
     logging: LoggingConfig
-    version: str = "1.0.0"
+    version: str = "2.0.0"
 
 
 class ConfigurationError(Exception):
@@ -48,8 +37,7 @@ class ConfigurationError(Exception):
 
 class ConfigManager:
     """
-    Manages application configuration from environment variables
-    with validation and defaults
+    Manages voice dialog configuration from environment variables
     """
 
     def __init__(self, env_file: Optional[str] = None):
@@ -64,7 +52,6 @@ class ConfigManager:
 
     def _find_env_file(self) -> Optional[str]:
         """Find .env file in project directory"""
-        # Start from current file's directory and go up
         current = Path(__file__).parent
         for _ in range(3):  # Check up to 3 levels up
             env_path = current / ".env"
@@ -94,50 +81,30 @@ class ConfigManager:
         except Exception as e:
             logging.error(f"Failed to load .env file: {e}")
 
-    def get_config(self) -> AppConfig:
+    def get_config(self) -> VoiceConfig:
         """
-        Get validated application configuration
+        Get validated voice dialog configuration
 
         Returns:
-            AppConfig instance
+            VoiceConfig instance
 
         Raises:
-            ConfigurationError: If required config is missing or invalid
+            ConfigurationError: If required config is missing
         """
-        # OpenAI API key (optional in demo mode)
-        openai_key = os.getenv('OPENAI_API_KEY')
-        if openai_key and openai_key.strip() in ['', 'your_openai_api_key_here']:
-            openai_key = None
-
-        # ElevenLabs API key (optional)
+        # ElevenLabs API key (required)
         elevenlabs_key = os.getenv('ELEVENLABS_API_KEY')
-        if elevenlabs_key and elevenlabs_key.strip() in ['', 'your_elevenlabs_key_here']:
+        if not elevenlabs_key or elevenlabs_key.strip() in ['', 'your_elevenlabs_key_here']:
             elevenlabs_key = None
 
-        # MoireTracker configuration
-        moire_path = os.getenv('MOIRE_TRACKER_PATH',
-                               r'C:\Users\User\Desktop\Moire\build\Release')
-        moire_path = Path(moire_path)
+        # ElevenLabs Agent ID (required)
+        agent_id = os.getenv('ELEVENLABS_AGENT_ID')
+        if not agent_id or agent_id.strip() in ['', 'your_agent_id_here']:
+            agent_id = None
 
-        if not moire_path.exists():
-            logging.warning(f"MoireTracker path does not exist: {moire_path}")
-
-        moire_timeout = int(os.getenv('MOIRE_TRACKER_TIMEOUT', '10000'))
-
-        # IPC authentication (enabled by default)
-        ipc_auth_enabled = os.getenv('IPC_AUTH_ENABLED', 'true').lower() in ['true', '1', 'yes']
-
-        # Auto-start MoireTracker (disabled by default for robustness)
-        auto_start = os.getenv('AUTO_START_MOIRE', 'false').lower() in ['true', '1', 'yes']
-
-        moire_config = MoireTrackerConfig(
-            path=moire_path,
-            timeout_ms=moire_timeout,
-            max_reconnect_attempts=int(os.getenv('MOIRE_MAX_RECONNECT', '3')),
-            health_check_interval=int(os.getenv('MOIRE_HEALTH_CHECK_INTERVAL', '30')),
-            ipc_auth_enabled=ipc_auth_enabled,
-            auto_start=auto_start
-        )
+        # OpenAI API key (optional)
+        openai_key = os.getenv('OPENAI_API_KEY')
+        if openai_key and openai_key.strip() in ['', 'your_openai_key_here']:
+            openai_key = None
 
         # Logging configuration
         log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
@@ -151,14 +118,14 @@ class ConfigManager:
             backup_count=int(os.getenv('LOG_BACKUP_COUNT', '5'))
         )
 
-        return AppConfig(
-            openai_api_key=openai_key,
+        return VoiceConfig(
             elevenlabs_api_key=elevenlabs_key,
-            moire_tracker=moire_config,
+            elevenlabs_agent_id=agent_id,
+            openai_api_key=openai_key,
             logging=log_config
         )
 
-    def validate_config(self, config: AppConfig, strict: bool = False) -> bool:
+    def validate_config(self, config: VoiceConfig, strict: bool = False) -> bool:
         """
         Validate configuration
 
@@ -174,14 +141,12 @@ class ConfigManager:
         """
         errors = []
 
-        # Check MoireTracker path
-        exe_path = config.moire_tracker.path / "MoireTracker.exe"
-        if not exe_path.exists():
-            errors.append(f"MoireTracker.exe not found at {exe_path}")
+        # Check required ElevenLabs credentials
+        if not config.elevenlabs_api_key:
+            errors.append("ELEVENLABS_API_KEY is required")
 
-        # Check API keys in production mode
-        if strict and not config.openai_api_key:
-            errors.append("OPENAI_API_KEY is required for production")
+        if not config.elevenlabs_agent_id:
+            errors.append("ELEVENLABS_AGENT_ID is required")
 
         if errors:
             error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
@@ -198,12 +163,12 @@ class ConfigManager:
 _config_manager = None
 
 
-def get_config() -> AppConfig:
+def get_config() -> VoiceConfig:
     """
     Get global configuration instance
 
     Returns:
-        AppConfig instance
+        VoiceConfig instance
     """
     global _config_manager
     if _config_manager is None:

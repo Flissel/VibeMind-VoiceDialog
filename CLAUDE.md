@@ -4,321 +4,360 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Voice Dialog** is a multi-agent AI system with advanced desktop interaction capabilities. It combines:
-- Multi-agent orchestration (voice, desktop, research, code agents)
-- High-precision desktop element detection (398 icons/elements via MoireTracker)
-- Visual feedback system (moiré overlay patterns)
-- Windows shared memory IPC for real-time desktop analysis
-- Audio-reactive visual simulation (C++/OpenGL + Python via pybind11)
+**VibeMind Voice Dialog** is a real-time voice conversation system powered by ElevenLabs Conversational AI. The primary goal is to enable natural spoken interactions between users and AI agents, with optional audio-reactive visual effects.
 
-The system enables AI agents to see and interact with the desktop through MoireTracker, a separate C++ application that provides sub-pixel mouse tracking and comprehensive screen element detection.
+**Core Components:**
+- Python voice dialog system using ElevenLabs SDK
+- Microphone input → AI agent → Speaker output pipeline
+- Optional C++ audio-reactive visual module (OpenGL particle system)
+- Simple configuration management via environment variables
 
-## Architecture
+## Quick Start
 
-### Two-Component System
+### First-Time Setup
 
-1. **MoireTracker** (C++ Windows application)
-   - Location: `C:\Users\User\Desktop\Moire\`
-   - Provides: Desktop scanning, mouse tracking, visual overlay
-   - Communication: Windows shared memory IPC
-   - Must be running for enhanced desktop features
-
-2. **Voice Dialog** (Python multi-agent system)
-   - Location: `C:\Users\User\Desktop\voice_dialog\`
-   - Coordinates AI agents for desktop tasks
-   - Connects to MoireTracker via IPC client
-
-### Agent Architecture
-
-```
-AgentOrchestrator
-    ├── VoiceOrchestratorAgent (routing/delegation)
-    ├── DesktopAgent (screen analysis, MoireTracker integration)
-    ├── ResearchAgent (web search, information gathering)
-    └── CodeAgent (code analysis, generation)
-```
-
-**Key Components:**
-
-- `agent_orchestrator.py`: Main entry point, manages MoireTracker service lifecycle
-- `agents/desktop_agent.py`: Enhanced with MoireTracker for 398-element desktop detection
-- `tools/moire_client.py`: IPC client using Windows shared memory (mmap)
-- `tools/moire_service.py`: Auto-start/stop MoireTracker.exe
-- `tools/moire_types.py`: Data structures matching C++ IPC protocol
-- `config.py`: Production configuration management with environment variables
-- `logger.py`: Structured logging with rotation
-- `ipc_auth.py`: Secure IPC authentication tokens
-- `health_server.py`: HTTP health check endpoints for monitoring
-
-### IPC Protocol (Critical Implementation Detail)
-
-Communication with MoireTracker uses Windows named shared memory with **8-byte struct alignment**:
-
-**Memory Regions:**
-- `MoireTracker_Commands` (4KB): Send commands
-- `MoireTracker_Responses` (4MB): Receive results
-- `MoireTracker_MouseStream` (21KB): Real-time mouse data
-
-**Struct Padding Rules (MUST follow):**
-- Response header: 32 bytes (not 24) - includes padding after uint32 fields
-- MousePosition: 24 bytes (not 20) - 4-byte padding before uint64 timestamp
-- DesktopElement: 436 bytes (not 433) - 3-byte padding after bool clickable
-- element_count: Add 4 bytes padding after to align array
-
-**Format strings:**
-```python
-# Response header
-struct.unpack('I4xQI4xQ', data[:32])  # cmd_type, request_id, status, timestamp
-
-# MousePosition
-struct.unpack('fff4xQ', data[32:56])  # x, y, confidence, timestamp
-
-# Element count (uint32) followed by 4-byte padding before array
-```
-
-## Common Commands
-
-### Environment Setup
-
-**First-time setup:**
 ```bash
-cd C:\Users\User\Desktop\voice_dialog
+cd C:\Users\User\Desktop\Voice_dialog_vibemind\VibeMind-VoiceDialog
 
-# Copy environment template
+# Create .env file from template
 copy .env.template .env
 
-# Edit .env and add your OpenAI API key
+# Edit .env and add your ElevenLabs credentials
 notepad .env
 ```
 
-**Install Python dependencies:**
+Required credentials:
+- `ELEVENLABS_API_KEY` - From [ElevenLabs API Keys](https://elevenlabs.io/app/settings/api-keys)
+- `ELEVENLABS_AGENT_ID` - Create agent at [ElevenLabs Conversational AI](https://elevenlabs.io/app/conversational-ai)
+
+### Install Dependencies
+
 ```bash
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Running the System
+### Run Voice Dialog
 
-**Start MoireTracker (required for desktop features):**
 ```bash
-cd C:\Users\User\Desktop\Moire\build\Release
-MoireTracker.exe
+cd python
+python voice_dialog_main.py
 ```
 
-**Run agent system:**
-```bash
-cd C:\Users\User\Desktop\voice_dialog\python
-python agent_orchestrator.py
+Speak into your microphone - the AI agent will respond with voice!
+
+## Architecture
+
+### Voice Dialog System
+
+The system follows a simple pipeline:
+
+```
+Microphone (16kHz)
+    ↓
+VoiceDialog Client (elevenlabs_voice_dialog.py)
+    ↓
+ElevenLabs Conversational AI (cloud)
+    ↓
+Agent Audio Response (22kHz)
+    ↓
+Speaker Output + Optional Visuals
 ```
 
-**Run with health monitoring:**
+**Key Files:**
+
+1. **[python/voice_dialog_main.py](python/voice_dialog_main.py)** - Main entry point
+   - Manages audio capture loop with sounddevice
+   - Coordinates microphone → ElevenLabs → speaker pipeline
+   - Handles user interrupts (Ctrl+C)
+
+2. **[python/elevenlabs_voice_dialog.py](python/elevenlabs_voice_dialog.py)** - ElevenLabs client wrapper
+   - Wraps ElevenLabs Conversational AI SDK
+   - Manages conversation session lifecycle
+   - Provides callbacks for agent responses and user transcripts
+
+3. **[python/audio_analyzer.py](python/audio_analyzer.py)** - Audio feature extraction
+   - Extracts amplitude, frequency bands (bass/mid/treble)
+   - Beat detection
+   - Used for optional visual effects
+
+4. **[python/config.py](python/config.py)** - Configuration management
+   - Loads settings from `.env` file
+   - Validates required credentials (API keys, agent ID)
+   - Manages logging configuration
+
+### Optional Visual Module (C++)
+
+The project includes an optional audio-reactive visual system:
+
+- **Location:** `cpp/src/` and `cpp/include/`
+- **Technology:** C++ with OpenGL, exposed to Python via pybind11
+- **Features:** Particle system, fisheye effects, frequency-based colors
+- **Not Required:** Voice dialog works without building this module
+
+## Common Commands
+
+### Running the Voice Dialog
+
 ```bash
-python integrated_health.py  # Runs agent orchestrator with HTTP health server
+cd python
+python voice_dialog_main.py
 ```
 
-**Run end-to-end integration test:**
-```bash
-cd C:\Users\User\Desktop\voice_dialog\python
-python tests/test_end_to_end.py
-```
-This test validates:
-- Auto-start MoireTracker
-- Desktop element scanning (71+ elements)
-- Mouse tracking
-- Visual feedback (overlay toggle)
-- Natural language commands
-- Auto-shutdown
+**Controls:**
+- Speak into microphone to talk
+- Ctrl+C to exit
 
-### Building MoireTracker
-
-**Important:** MoireTracker uses a custom CMake located at `C:\Users\User\Desktop\Moire\tools\cmake-3.28.1-windows-x86_64\bin\cmake.exe`
+### Testing Configuration
 
 ```bash
-cd C:\Users\User\Desktop\Moire
-
-# Configure (only needed once or after CMakeLists.txt changes)
-"C:\Users\User\Desktop\Moire\tools\cmake-3.28.1-windows-x86_64\bin\cmake.exe" -B build -G "Visual Studio 17 2022" -A x64
-
-# Build
-"C:\Users\User\Desktop\Moire\tools\cmake-3.28.1-windows-x86_64\bin\cmake.exe" --build build --config Release --target MoireTracker
-
-# Output: build\Release\MoireTracker.exe
+cd python
+python -c "from config import get_config, validate_config; print(get_config()); validate_config(strict=True)"
 ```
 
-**Note:** If build fails with "LNK1104: Datei kann nicht geöffnet werden", MoireTracker.exe is still running:
+### Building Visual Module (Optional)
+
+**Prerequisites (Windows):**
 ```bash
-powershell -Command "Get-Process MoireTracker -ErrorAction SilentlyContinue | Stop-Process -Force"
+vcpkg install glfw3:x64-windows glm:x64-windows glad:x64-windows pybind11:x64-windows
 ```
 
-### Testing IPC Integration
-
-**Quick connection test:**
+**Build:**
 ```bash
-cd C:\Users\User\Desktop\voice_dialog\python
-python tests/test_mouse_pos.py  # Tests GET_MOUSE_POS
-python tests/test_scan_only.py  # Tests desktop scanning
+mkdir build
+cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE=[path to vcpkg]/scripts/buildsystems/vcpkg.cmake
+cmake --build . --config Release
+
+# Output: python/visual_sim_core.pyd
 ```
 
-**Overlay toggle test:**
+## Configuration
+
+All configuration is managed through `.env` file:
+
 ```bash
-python tests/test_overlay_toggle.py  # Verify visual feedback persists
+# Required
+ELEVENLABS_API_KEY=your_key_here
+ELEVENLABS_AGENT_ID=your_agent_id
+
+# Optional
+OPENAI_API_KEY=your_openai_key      # Future use
+LOG_LEVEL=INFO                       # DEBUG, INFO, WARNING, ERROR
+LOG_FILE=voice_dialog.log
+```
+
+**Important:** Never commit `.env` to version control! Use `.env.template` as the reference.
+
+## Code Structure
+
+```
+VibeMind-VoiceDialog/
+├── python/
+│   ├── voice_dialog_main.py          # Main application entry
+│   ├── elevenlabs_voice_dialog.py    # ElevenLabs client wrapper
+│   ├── audio_analyzer.py             # Audio feature extraction
+│   ├── config.py                     # Configuration management
+│   └── logger.py                     # Structured logging
+├── cpp/                              # Optional visual module
+│   ├── include/
+│   │   ├── audio_reactive_sim.hpp    # Main simulation class
+│   │   ├── audio_features.hpp        # Audio data structures
+│   │   └── particle.hpp              # Particle system
+│   └── src/
+│       ├── audio_reactive_sim.cpp    # OpenGL rendering
+│       └── bindings.cpp              # pybind11 Python bindings
+├── shaders/                          # GLSL shaders (optional)
+│   ├── particle.vert/frag            # Particle rendering
+│   └── fisheye.vert/frag             # Fisheye effect
+├── CMakeLists.txt                    # C++ build configuration
+├── requirements.txt                  # Python dependencies
+├── .env.template                     # Configuration template
+└── .gitignore                        # Includes .env
 ```
 
 ## Key Implementation Details
 
-### MoireTracker Integration Checklist
+### ElevenLabs Integration
 
-When modifying IPC code, verify these critical points:
-
-1. **Struct Alignment**: All structs must account for 8-byte alignment padding
-2. **Offset Calculations**:
-   - Response header starts at offset 8 (not 0)
-   - Data follows header at offset 32 (header) + 24 (MousePosition) + 8 (element_count + padding)
-3. **Memory Sizes**: Must match C++ definitions exactly (see `moire_client.py:27-40`)
-4. **Security Attributes**: C++ creates shared memory with NULL DACL for cross-process access
-
-### Desktop Agent Enhancement Pattern
-
-The DesktopAgent automatically detects MoireTracker availability:
+The `VoiceDialog` class wraps the ElevenLabs SDK:
 
 ```python
-self.moire = MoireTrackerClient()
-self.moire_connected = self.moire.connect()
+# Initialize
+dialog = VoiceDialog(
+    agent_id="your_agent_id",
+    on_agent_response=lambda audio: play_audio(audio),
+    on_user_transcript=lambda text: print(f"You: {text}")
+)
 
-if self.moire_connected:
-    # Enhanced mode: 398 desktop elements, high-precision mouse
-    elements = await self.scan_desktop_elements()
-else:
-    # Fallback mode: Basic pyautogui
-    x, y = pyautogui.position()
+# Start conversation
+await dialog.start_conversation()
+
+# Send audio chunks from microphone
+await dialog.send_audio(audio_data)
+
+# End when done
+await dialog.end_conversation()
 ```
 
-**Visual Feedback API:**
+**Audio Format:**
+- Input (microphone): 16kHz, mono, numpy float32 array
+- Output (agent): 22kHz, varies by agent configuration
+
+### Audio Capture Loop
+
+The main application uses `sounddevice.InputStream` for real-time capture:
+
 ```python
-await desktop_agent.set_visual_feedback(True)   # Show moiré overlay
-await desktop_agent.set_visual_feedback(False)  # Hide overlay
+def audio_callback(indata, frames, time, status):
+    # Called for each 1-second chunk
+    audio_data = indata.copy().flatten()
+    asyncio.create_task(dialog.send_audio(audio_data))
+
+with sd.InputStream(samplerate=16000, channels=1,
+                    callback=audio_callback, blocksize=chunk_size):
+    while running:
+        await asyncio.sleep(0.1)
 ```
 
-### Service Lifecycle Management
+### Optional Visual Effects
 
-The `MoireTrackerService` class handles automatic startup/shutdown:
+If the C++ module is built, audio features can drive visuals:
 
 ```python
-service = MoireTrackerService()
-service.start()  # Starts MoireTracker.exe, waits 7s for initialization
-# ... use desktop features ...
-service.stop()   # Graceful shutdown
+from audio_analyzer import AudioAnalyzer
+import visual_sim_core
+
+analyzer = AudioAnalyzer()
+sim = visual_sim_core.AudioReactiveSimulation(200)
+
+# In audio callback:
+features = analyzer.analyze(audio_chunk)
+cpp_features = visual_sim_core.AudioFeatures()
+cpp_features.amplitude = features.amplitude
+cpp_features.bass = features.bass
+cpp_features.mid = features.mid
+cpp_features.treble = features.treble
+
+sim.update_audio(cpp_features)
+sim.render()
 ```
 
-**Initialization timing:**
-- Shared memory creation: ~2 seconds
-- Desktop auto-scan: Triggers after 5 seconds
-- **Total wait: 7 seconds** to ensure scan completes before IPC commands
+## Common Pitfalls
 
-### Common Pitfalls
+1. **Missing API Keys**: If you see "ELEVENLABS_API_KEY not found", check that `.env` exists and contains valid credentials.
 
-1. **Unicode in Console Output**: Windows console (cp1252) cannot display UTF-8 checkmarks (✓, ✗). Use ASCII: `[OK]`, `[FAIL]`, `[WARN]`
+2. **Microphone Access**: Windows may require microphone permissions. Check Settings → Privacy → Microphone.
 
-2. **Response Timeout**: If `scan_desktop()` times out, MoireTracker may still be initializing. The service manager handles this automatically with 7-second wait.
+3. **Audio Device Selection**: If audio input/output isn't working, check available devices:
+   ```python
+   import sounddevice as sd
+   print(sd.query_devices())
+   ```
 
-3. **Empty Element Data**: If elements return with x=0, y=0, empty text, the desktop scan hasn't completed. Wait longer or trigger manual scan.
+4. **Agent Not Responding**: Verify your agent is active in ElevenLabs dashboard. Check conversation logs for errors.
 
-4. **Overlay Appears But Stays Blank**: The `moire_enabled_` flag in C++ must be true for rendering. IPC SET_ACTIVE command now sets this flag (fixed in `main.cpp:920-949`).
+5. **Visual Module Missing**: This is expected! The visual module is optional. Voice dialog works without it.
 
-5. **Struct Unpack Errors**: Always check struct padding. Example: `struct.unpack('IQIQ', data[:24])` fails - needs `'I4xQI4xQ'` (32 bytes with padding).
+## Development Workflow
 
-## Project Structure
+### Making Changes to Voice Dialog
 
-```
-voice_dialog/
-├── python/
-│   ├── agent_orchestrator.py          # Main entry, MoireTracker lifecycle
-│   ├── agents/
-│   │   ├── voice_orchestrator.py      # Routes commands to specialized agents
-│   │   ├── desktop_agent.py           # MoireTracker integration (398 elements)
-│   │   ├── research_agent.py          # Web search capabilities
-│   │   └── code_agent.py              # Code analysis
-│   ├── tools/
-│   │   ├── moire_client.py            # IPC client (shared memory)
-│   │   ├── moire_service.py           # Auto-start/stop MoireTracker
-│   │   └── moire_types.py             # Data structures for IPC
-│   └── tests/
-│       ├── test_end_to_end.py         # Full integration test (8 tests)
-│       ├── test_overlay_toggle.py     # Visual feedback validation
-│       ├── test_mouse_pos.py          # Mouse tracking test
-│       └── test_scan_only.py          # Desktop scanning test
-├── cpp/                               # Audio-reactive visual system (OpenGL)
-│   ├── include/
-│   │   ├── audio_reactive_sim.hpp
-│   │   └── particle.hpp
-│   └── src/
-│       ├── audio_reactive_sim.cpp
-│       └── bindings.cpp               # pybind11 Python bindings
-├── shaders/                           # GLSL shaders for visuals
-│   ├── particle.vert/frag
-│   └── fisheye.vert/frag
-├── CMakeLists.txt                     # Build C++ module
-└── requirements.txt
-```
+1. Edit Python files in `python/` directory
+2. No build step required (pure Python)
+3. Run `python voice_dialog_main.py` to test
+4. Check logs in `voice_dialog.log` if issues occur
 
-## Testing Strategy
+### Making Changes to Visual Module
 
-**Integration Test Coverage** (`test_end_to_end.py`):
-1. Orchestrator auto-starts MoireTracker
-2. DesktopAgent connects to IPC
-3. Desktop scan (71+ elements detected)
-4. Find element (by name search)
-5. Mouse position tracking (high precision)
-6. Visual feedback (overlay show/hide)
-7. Natural language command processing
-8. Orchestrator auto-stops MoireTracker
+1. Edit C++ files in `cpp/src/` or `cpp/include/`
+2. Rebuild:
+   ```bash
+   cd build
+   cmake --build . --config Release
+   ```
+3. Output overwrites `python/visual_sim_core.pyd`
+4. Restart Python application to load new module
 
-**Run all tests:**
+### Testing
+
+Currently no automated tests. Manual testing workflow:
+
+1. Start voice dialog: `python voice_dialog_main.py`
+2. Speak test phrases
+3. Verify agent responds appropriately
+4. Check console output for errors
+5. Review `voice_dialog.log` for detailed logs
+
+## Platform Notes
+
+### Windows
+
+- **Tested on:** Windows 10/11
+- **Python:** 3.8+
+- **Build Tools:** Visual Studio 2022 (for C++ module)
+- **Audio:** Uses Windows audio APIs via sounddevice
+
+### Linux/Mac
+
+- **Status:** Not extensively tested, but should work
+- **Dependencies:** Install system packages (see README.md)
+- **C++ Module:** Uses GLFW (cross-platform)
+- **Note:** Adjust file paths in config if needed
+
+## Related Documentation
+
+- **[README.md](README.md)** - User-facing documentation with setup instructions
+- **[requirements.txt](requirements.txt)** - Python dependencies with version constraints
+- **[.env.template](.env.template)** - Configuration template with examples
+
+## Future Enhancements
+
+Potential areas for expansion:
+
+- Multiple conversation modes (chat, command, assistant)
+- Custom agent personalities and voices
+- Integration with other AI frameworks
+- Advanced visual effects synchronized with speech patterns
+- Multi-language support
+- Voice activity detection (VAD) for better turn-taking
+
+## Troubleshooting Guide
+
+### "Module 'elevenlabs' not found"
+
 ```bash
-cd python
-python tests/test_end_to_end.py        # Full integration (8/8 tests)
-python tests/test_overlay_toggle.py    # Visual feedback only
-python tests/test_mouse_pos.py         # Mouse tracking only
+pip install elevenlabs>=1.0.0
 ```
 
-## MoireTracker Configuration
+### "sounddevice not working"
 
-MoireTracker settings are in `C:\Users\User\Desktop\Moire\build\Release\config.json`:
-
-```json
-{
-  "grating": {
-    "freq1_x": 0.200,
-    "freq2_x": 0.20390625,
-    "contrast": 0.30
-  },
-  "roi": {
-    "width": 256,
-    "height": 256
-  }
-}
+On Windows, ensure you have audio drivers installed. On Linux:
+```bash
+sudo apt install portaudio19-dev
+pip install --upgrade sounddevice
 ```
 
-Symbol definitions in `C:\Users\User\Desktop\Moire\config\symbols_config.json`.
+### "Conversation session failed"
 
-**Desktop Scan Results:** Typically detects 71-398 elements depending on desktop state:
-- OCR-detected text labels
-- Visually detected icons (template matching)
-- Window elements
-- Desktop shortcuts
+- Verify API key is valid and has credits
+- Check agent ID exists in ElevenLabs dashboard
+- Ensure internet connection is stable
+- Review ElevenLabs service status
 
-## Windows-Specific Notes
+### High Latency in Responses
 
-- **Shared Memory IPC**: Uses Windows `mmap` with named memory regions (not available on Linux/Mac)
-- **Process Management**: `subprocess.CREATE_NO_WINDOW` flag for background MoireTracker
-- **Console Encoding**: cp1252 requires ASCII symbols, not UTF-8
-- **Build Tools**: Visual Studio 2022 required for MoireTracker C++ compilation
+- ElevenLabs latency depends on internet speed and server load
+- Audio chunk size affects responsiveness (current: 1 second chunks)
+- Consider adjusting `chunk_duration` in `voice_dialog_main.py`
 
-## Related Repositories
+## Contact & Support
 
-- **MoireTracker**: `C:\Users\User\Desktop\Moire\` (see `Moire/CLAUDE.md` for details)
-  - High-performance DirectX 11 rendering
-  - OCR-based desktop scanning
-  - GPU-accelerated phase extraction
-  - Sub-pixel mouse tracking (0.05 px RMS precision target)
+For issues specific to:
+- **ElevenLabs SDK:** Check [ElevenLabs Documentation](https://docs.elevenlabs.io/)
+- **This repository:** Create an issue on GitHub
+
+---
+
+**Note for Claude Code:** This repository is focused exclusively on voice dialog functionality. Desktop interaction, research agents, and code agents have been removed. If asked about MoireTracker, IPC, or multi-agent orchestration, clarify that this functionality is not part of the current codebase.

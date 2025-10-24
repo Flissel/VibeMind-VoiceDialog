@@ -1,13 +1,16 @@
-# Python dependencies for Voice Dialog Visual System
+# Python dependencies for VibeMind Voice Dialog
 
-# Audio processing
-librosa>=0.10.0
+# ElevenLabs Conversational AI (required)
+elevenlabs>=1.0.0
+
+# Audio processing (required for voice dialog)
 sounddevice>=0.4.6
 numpy>=1.24.0
 
-# Window management
-PyGLFW>=2.6.0
+# Audio analysis (optional - for visual effects)
+librosa>=0.10.0
 
-# Build dependencies
+# Visual system dependencies (optional - C++ module)
+PyGLFW>=2.6.0
 pybind11>=2.11.0
 cmake>=3.15.0
