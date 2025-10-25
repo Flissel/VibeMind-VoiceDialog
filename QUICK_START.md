@@ -27,29 +27,50 @@ All 4 ElevenLabs agents have been successfully created and configured. All syste
 ✓ Handoff tool: Schema validated
 ```
 
-## 🚀 Final Setup Step (5 minutes)
+## 🚀 Final Setup Steps (10-15 minutes)
 
-### Enable "Transfer to agent" Tool in Dashboard
+### Step 1: Configure Transfer Tool
 
-For **each of the 4 agents**, do the following:
+For **each of the 4 agents**, configure the "Transfer to agent" tool:
+
+See **[AGENT_TOOL_CONFIG.md](AGENT_TOOL_CONFIG.md)** for detailed JSON configurations.
+
+**Quick version:**
 
 1. Go to: https://elevenlabs.io/app/conversational-ai
 
-2. Click on the agent:
-   - Conversational Memory Assistant
-   - Project Manager
-   - Desktop Worker
-   - Project Writer
+2. Click on the agent
 
-3. Scroll to the **"Tools"** section
+3. Scroll to **"Tools"** section
 
-4. Find **"Transfer to agent"** in the built-in tools list
+4. Find **"Transfer to agent"** and toggle it **ON**
 
-5. **Toggle it ON** (enable it)
+5. **Configure the transfers array** with allowed agent IDs:
+   - Conversational Memory → can transfer to Project Manager only
+   - Project Manager → can transfer to Desktop Worker, Project Writer, or Conversational Memory
+   - Desktop Worker → can transfer to Project Manager only
+   - Project Writer → can transfer to Project Manager only
 
-6. **Save** the agent configuration
+6. **Save** the agent
 
-Repeat for all 4 agents. That's it!
+### Step 2: Update System Prompts (Recommended)
+
+For better transfer behavior, update each agent's system prompt:
+
+See **[ENHANCED_AGENT_PROMPTS.md](ENHANCED_AGENT_PROMPTS.md)** for complete prompts.
+
+This adds:
+- Clear transfer rules and examples
+- Behavior guidelines
+- What NOT to do instructions
+
+**For each agent:**
+1. Click on the agent in dashboard
+2. Find "System Prompt" or "Prompt" field
+3. Replace with enhanced prompt from the guide
+4. Save
+
+These prompts make agents transfer at the right times!
 
 ## 🎤 Test Your System
 
@@ -187,8 +208,13 @@ Each agent has a distinct voice for clear identification:
 
 ## 📚 Documentation
 
-- **[AGENT_SETUP_SIMPLIFIED.md](AGENT_SETUP_SIMPLIFIED.md)** - Simplified setup guide with screenshots
+### Setup Guides
+- **[AGENT_TOOL_CONFIG.md](AGENT_TOOL_CONFIG.md)** - ⭐ JSON configuration for transfer tool
+- **[ENHANCED_AGENT_PROMPTS.md](ENHANCED_AGENT_PROMPTS.md)** - ⭐ Enhanced system prompts with transfer rules
+- **[AGENT_SETUP_SIMPLIFIED.md](AGENT_SETUP_SIMPLIFIED.md)** - Simplified setup guide
 - **[MULTI_AGENT_SETUP.md](MULTI_AGENT_SETUP.md)** - Detailed manual setup instructions
+
+### Technical Documentation
 - **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Technical implementation details
 - **[python/AGENT_CREATION_README.md](python/AGENT_CREATION_README.md)** - API creation troubleshooting
 
