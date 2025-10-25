@@ -1,22 +1,10 @@
 """
 Tools package for voice_dialog
-Provides utilities for desktop interaction via MoireTracker
+Provides client tools manager for ElevenLabs agent delegation
 """
 
-from .moire_client import MoireTrackerClient
-from .moire_types import (
-    MousePosition,
-    DesktopElement,
-    ElementType,
-    CommandType,
-    ResponseStatus
-)
+from .client_tools_manager import ClientToolsManager
 
 __all__ = [
-    'MoireTrackerClient',
-    'MousePosition',
-    'DesktopElement',
-    'ElementType',
-    'CommandType',
-    'ResponseStatus'
+    'ClientToolsManager',
 ]

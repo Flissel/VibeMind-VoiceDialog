@@ -5,7 +5,7 @@ Simple wrapper for ElevenLabs Conversational AI
 
 import os
 import asyncio
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from elevenlabs.client import ElevenLabs
 from elevenlabs.conversational_ai.conversation import Conversation
 from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
@@ -24,7 +24,8 @@ class VoiceDialog:
         agent_id: str,
         api_key: Optional[str] = None,
         on_agent_response: Optional[Callable] = None,
-        on_user_transcript: Optional[Callable] = None
+        on_user_transcript: Optional[Callable] = None,
+        client_tools: Optional[Any] = None
     ):
         """
         Initialize Voice Dialog client
@@ -34,6 +35,7 @@ class VoiceDialog:
             api_key: ElevenLabs API key (or from env)
             on_agent_response: Callback when agent responds (audio_chunk)
             on_user_transcript: Callback when user speech transcribed (text)
+            client_tools: Optional ClientTools instance for agent tool calls
         """
         self.agent_id = agent_id
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
@@ -44,6 +46,7 @@ class VoiceDialog:
         self.client = ElevenLabs(api_key=self.api_key)
         self.conversation = None
         self.is_active = False
+        self.client_tools = client_tools
 
         # Callbacks
         self.on_agent_response = on_agent_response
@@ -58,13 +61,18 @@ class VoiceDialog:
         # Create audio interface for real-time audio input/output
         audio_interface = DefaultAudioInterface()
 
-        # Create conversation
-        self.conversation = Conversation(
-            client=self.client,
-            agent_id=self.agent_id,
-            requires_auth=False,
-            audio_interface=audio_interface,
-        )
+        # Create conversation with optional client tools
+        conversation_params = {
+            "client": self.client,
+            "agent_id": self.agent_id,
+            "requires_auth": False,
+            "audio_interface": audio_interface,
+        }
+
+        if self.client_tools:
+            conversation_params["client_tools"] = self.client_tools
+
+        self.conversation = Conversation(**conversation_params)
 
         # Start session
         await self.conversation.start_session()

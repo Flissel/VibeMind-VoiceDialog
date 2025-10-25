@@ -2,6 +2,7 @@
 
 # ElevenLabs Conversational AI (required)
 elevenlabs>=1.0.0
+pyaudio>=0.2.13
 
 # Audio processing (required for voice dialog)
 sounddevice>=0.4.6
@@ -9,6 +10,16 @@ numpy>=1.24.0
 
 # Audio analysis (optional - for visual effects)
 librosa>=0.10.0
+
+# Multi-agent system (AutoGen)
+autogen-core>=0.4.0
+autogen-ext>=0.4.0
+
+# HTTP requests (for Supermemory API)
+requests>=2.31.0
+
+# Environment variables
+python-dotenv>=1.0.0
 
 # Visual system dependencies (optional - C++ module)
 PyGLFW>=2.6.0

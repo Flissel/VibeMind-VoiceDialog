@@ -49,7 +49,10 @@
       "Bash(uv venv:*)",
       "Bash(uv pip install:*)",
       "Bash(../.venv/Scripts/python.exe:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(.venv/Scripts/pip list:*)"
     ],
     "deny": [],
     "ask": []
