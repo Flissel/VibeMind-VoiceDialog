@@ -40,7 +40,7 @@ def create_agent_via_api(api_key: str, name: str, voice_id: str,
             },
             "tts": {
                 "voice_id": voice_id,
-                "model_id": "eleven_turbo_v2_5"
+                "model_id": "eleven_flash_v2"
             }
         },
         "name": name,
