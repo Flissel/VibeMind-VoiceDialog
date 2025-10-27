@@ -13,10 +13,11 @@ librosa>=0.10.0
 
 # Multi-agent system (AutoGen)
 autogen-core>=0.4.0
-autogen-ext>=0.4.0
+autogen-ext[grpc]>=0.4.0  # Includes gRPC distributed runtime
 
-# HTTP requests (for Supermemory API)
+# HTTP requests and web scraping
 requests>=2.31.0
+beautifulsoup4>=4.12.0  # HTML parsing for knowledge worker
 
 # Environment variables
 python-dotenv>=1.0.0

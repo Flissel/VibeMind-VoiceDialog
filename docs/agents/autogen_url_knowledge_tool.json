@@ -1,0 +1,31 @@
+{
+  "type": "client",
+  "name": "fetch_url_knowledge",
+  "description": "Fetch and deeply process knowledge from a web URL using AutoGen distributed worker. This tool provides advanced URL processing with better content extraction, summarization, and understanding compared to simple fetching. Use this when the user wants to learn from documentation, research papers, articles, or any web content in depth.",
+  "expects_response": true,
+  "response_timeout_secs": 60,
+  "parameters": [
+    {
+      "name": "url",
+      "type": "string",
+      "description": "The full HTTP/HTTPS URL of the webpage or document to fetch (e.g., 'https://microsoft.github.io/autogen/docs')",
+      "required": true
+    },
+    {
+      "name": "summary_length",
+      "type": "string",
+      "description": "How detailed the summary should be: 'brief' (3 sentences), 'medium' (5 sentences), or 'detailed' (10 sentences)",
+      "required": false,
+      "default": "medium"
+    }
+  ],
+  "dynamic_variables": {
+    "dynamic_variable_placeholders": {}
+  },
+  "assignments": [],
+  "disable_interruptions": false,
+  "force_pre_tool_speech": "Let me fetch and process that URL for you.",
+  "tool_call_sound": null,
+  "tool_call_sound_behavior": "auto",
+  "execution_mode": "immediate"
+}
