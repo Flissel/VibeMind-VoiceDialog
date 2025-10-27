@@ -1,0 +1,17 @@
+{
+  "type": "client",
+  "name": "write_hello_writer",
+  "description": "Test tool that writes 'Hello world from Project Writer' to a timestamped file. Use this to verify the Project Writer agent is functioning correctly.",
+  "expects_response": true,
+  "response_timeout_secs": 5,
+  "parameters": [],
+  "dynamic_variables": {
+    "dynamic_variable_placeholders": {}
+  },
+  "assignments": [],
+  "disable_interruptions": false,
+  "force_pre_tool_speech": "auto",
+  "tool_call_sound": null,
+  "tool_call_sound_behavior": "auto",
+  "execution_mode": "immediate"
+}

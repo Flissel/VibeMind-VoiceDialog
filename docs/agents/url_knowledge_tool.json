@@ -1,0 +1,31 @@
+{
+  "type": "client",
+  "name": "add_url_knowledge",
+  "description": "Fetch and process knowledge from a web URL. This tool downloads the content from the specified URL, extracts text, and makes it available for the agent to reference in conversation. Use this when the user wants to learn from or reference a specific webpage or document.",
+  "expects_response": true,
+  "response_timeout_secs": 30,
+  "parameters": [
+    {
+      "name": "url",
+      "type": "string",
+      "description": "The full HTTP/HTTPS URL of the webpage or document to fetch (e.g., 'https://example.com/documentation')",
+      "required": true
+    },
+    {
+      "name": "summary_length",
+      "type": "string",
+      "description": "How detailed the summary should be: 'brief', 'medium', or 'detailed'",
+      "required": false,
+      "default": "medium"
+    }
+  ],
+  "dynamic_variables": {
+    "dynamic_variable_placeholders": {}
+  },
+  "assignments": [],
+  "disable_interruptions": false,
+  "force_pre_tool_speech": "auto",
+  "tool_call_sound": null,
+  "tool_call_sound_behavior": "auto",
+  "execution_mode": "immediate"
+}
