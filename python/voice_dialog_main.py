@@ -11,12 +11,9 @@ from elevenlabs.client import ElevenLabs
 from elevenlabs.conversational_ai.conversation import Conversation
 from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
 
-# Import Client Tools Manager and Agents
+# Import Client Tools Manager and Hello World Tools
 from tools.client_tools_manager import ClientToolsManager
-from agents.research_agent import ResearchAgent
-from agents.code_agent import CodeAgent
-from agents.data_agent import DataAgent
-from agents.system_agent import SystemAgent
+from tools.hello_world_tools import write_hello_desktop, write_hello_writer
 
 
 def main():
@@ -26,8 +23,8 @@ def main():
     config_manager = ConfigManager()
     config = config_manager.get_config()
 
-    if not config.elevenlabs_agent_id:
-        print("ERROR: ELEVENLABS_AGENT_ID not set in .env")
+    if not config.agent_conversational_memory:
+        print("ERROR: AGENT_CONVERSATIONAL_MEMORY not set in .env")
         sys.exit(1)
 
     if not config.elevenlabs_api_key:
@@ -38,29 +35,33 @@ def main():
     print("VibeMind Voice Dialog - ElevenLabs")
     print("=" * 50)
     print()
-    print(f"Agent ID: {config.elevenlabs_agent_id}")
+    print(f"Starting Agent: Conversational Memory (Rachel)")
+    print(f"Agent ID: {config.agent_conversational_memory}")
     print()
 
     # Initialize Client Tools Manager
-    print("Initializing client tools...")
+    print("Registering hello world test tools...")
     tools_manager = ClientToolsManager()
 
-    # Register agents
-    tools_manager.register_agent("research", ResearchAgent())
-    tools_manager.register_agent("code", CodeAgent())
-    tools_manager.register_agent("data", DataAgent())
-    tools_manager.register_agent("system", SystemAgent())
+    # Register hello world tools directly (no agent routing needed for simple test functions)
+    def hello_desktop_wrapper(params):
+        """Wrapper for write_hello_desktop that returns ElevenLabs-compatible response"""
+        result = write_hello_desktop()
+        return {"status": "success", "message": result}
 
-    # Register tools (map tool names to agents)
-    tools_manager.register_tool("web_search", "research")
-    tools_manager.register_tool("generate_code", "code")
-    tools_manager.register_tool("analyze_data", "data")
-    tools_manager.register_tool("list_files", "system")
+    def hello_writer_wrapper(params):
+        """Wrapper for write_hello_writer that returns ElevenLabs-compatible response"""
+        result = write_hello_writer()
+        return {"status": "success", "message": result}
+
+    # Register with ClientTools
+    tools_manager.client_tools.register("write_hello_desktop", hello_desktop_wrapper)
+    tools_manager.client_tools.register("write_hello_writer", hello_writer_wrapper)
 
     print()
     print("Registered client tools:")
-    for tool_name, agent_name in tools_manager.list_registered_tools().items():
-        print(f"  - {tool_name} -> {agent_name}")
+    print("  - write_hello_desktop (Desktop Worker test)")
+    print("  - write_hello_writer (Project Writer test)")
     print()
 
     # Create ElevenLabs client
@@ -72,7 +73,7 @@ def main():
     # Create conversation with client tools
     conversation = Conversation(
         client=client,
-        agent_id=config.elevenlabs_agent_id,
+        agent_id=config.agent_conversational_memory,
         requires_auth=False,
         audio_interface=audio_interface,
         client_tools=tools_manager.get_client_tools(),
