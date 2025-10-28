@@ -24,8 +24,15 @@ class LoggingConfig:
 class VoiceConfig:
     """Voice dialog configuration"""
     elevenlabs_api_key: Optional[str]
-    elevenlabs_agent_id: Optional[str]
+    elevenlabs_agent_id: Optional[str]  # Legacy single agent ID
     openai_api_key: Optional[str]  # Optional fallback
+
+    # Multi-agent system IDs
+    agent_conversational_memory: Optional[str]
+    agent_project_manager: Optional[str]
+    agent_desktop_worker: Optional[str]
+    agent_project_writer: Optional[str]
+
     logging: LoggingConfig
     version: str = "2.0.0"
 
@@ -106,6 +113,12 @@ class ConfigManager:
         if openai_key and openai_key.strip() in ['', 'your_openai_key_here']:
             openai_key = None
 
+        # Multi-agent system IDs
+        agent_conversational_memory = os.getenv('AGENT_CONVERSATIONAL_MEMORY')
+        agent_project_manager = os.getenv('AGENT_PROJECT_MANAGER')
+        agent_desktop_worker = os.getenv('AGENT_DESKTOP_WORKER')
+        agent_project_writer = os.getenv('AGENT_PROJECT_WRITER')
+
         # Logging configuration
         log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
         if log_level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
@@ -122,6 +135,10 @@ class ConfigManager:
             elevenlabs_api_key=elevenlabs_key,
             elevenlabs_agent_id=agent_id,
             openai_api_key=openai_key,
+            agent_conversational_memory=agent_conversational_memory,
+            agent_project_manager=agent_project_manager,
+            agent_desktop_worker=agent_desktop_worker,
+            agent_project_writer=agent_project_writer,
             logging=log_config
         )
 
