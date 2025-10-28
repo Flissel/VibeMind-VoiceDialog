@@ -47,12 +47,14 @@ def main():
     def hello_desktop_wrapper(params):
         """Wrapper for write_hello_desktop that returns ElevenLabs-compatible response"""
         result = write_hello_desktop()
-        return {"status": "success", "message": result}
+        # ElevenLabs expects a string response, not a dict
+        return result
 
     def hello_writer_wrapper(params):
         """Wrapper for write_hello_writer that returns ElevenLabs-compatible response"""
         result = write_hello_writer()
-        return {"status": "success", "message": result}
+        # ElevenLabs expects a string response, not a dict
+        return result
 
     # Register with ClientTools
     tools_manager.client_tools.register("write_hello_desktop", hello_desktop_wrapper)
