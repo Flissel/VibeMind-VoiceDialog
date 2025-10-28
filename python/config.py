@@ -21,6 +21,14 @@ class LoggingConfig:
 
 
 @dataclass
+class AudioConfig:
+    """Audio interface configuration"""
+    amplitude_threshold: float = 0.03  # Minimum RMS amplitude (0.0-1.0)
+    min_speech_duration: float = 0.3   # Minimum speech duration (seconds)
+    use_threshold_filtering: bool = True  # Enable/disable threshold filtering
+
+
+@dataclass
 class VoiceConfig:
     """Voice dialog configuration"""
     elevenlabs_api_key: Optional[str]
@@ -34,6 +42,7 @@ class VoiceConfig:
     agent_project_writer: Optional[str]
 
     logging: LoggingConfig
+    audio: AudioConfig
     version: str = "2.0.0"
 
 
@@ -131,6 +140,17 @@ class ConfigManager:
             backup_count=int(os.getenv('LOG_BACKUP_COUNT', '5'))
         )
 
+        # Audio configuration
+        audio_threshold = float(os.getenv('AUDIO_THRESHOLD', '0.03'))
+        min_speech_duration = float(os.getenv('MIN_SPEECH_DURATION', '0.3'))
+        use_threshold_filtering = os.getenv('USE_THRESHOLD_FILTERING', 'true').lower() in ('true', '1', 'yes')
+
+        audio_config = AudioConfig(
+            amplitude_threshold=audio_threshold,
+            min_speech_duration=min_speech_duration,
+            use_threshold_filtering=use_threshold_filtering
+        )
+
         return VoiceConfig(
             elevenlabs_api_key=elevenlabs_key,
             elevenlabs_agent_id=agent_id,
@@ -139,7 +159,8 @@ class ConfigManager:
             agent_project_manager=agent_project_manager,
             agent_desktop_worker=agent_desktop_worker,
             agent_project_writer=agent_project_writer,
-            logging=log_config
+            logging=log_config,
+            audio=audio_config
         )
 
     def validate_config(self, config: VoiceConfig, strict: bool = False) -> bool:
