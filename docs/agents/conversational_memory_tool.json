@@ -1,0 +1,19 @@
+{
+  "type": "system",
+  "name": "transfer_to_agent",
+  "description": "Transfer to Project Manager when user needs task execution",
+  "params": {
+    "system_tool_type": "transfer_to_agent",
+    "transfers": [
+      {
+        "agent_id": "agent_1201k8dnc6gre3sscfxygcy7jhp4",
+        "condition": "User requests any action, task, or project work",
+        "transfer_message": "Let me connect you with the Project Manager who can help coordinate that for you.",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      }
+    ],
+    "voicemail_message": ""
+  },
+  "disable_interruptions": false
+}

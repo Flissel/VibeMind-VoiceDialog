@@ -1,0 +1,33 @@
+{
+  "type": "system",
+  "name": "transfer_to_agent",
+  "description": "Transfer to specialist agents based on task type",
+  "params": {
+    "system_tool_type": "transfer_to_agent",
+    "transfers": [
+      {
+        "agent_id": "agent_4101k8dnc7v7fdk9cwkknedzkqqa",
+        "condition": "User needs desktop automation, file operations, window control, or system tasks",
+        "transfer_message": "I'll transfer you to the Desktop Worker who can handle that.",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      },
+      {
+        "agent_id": "agent_1501k8dnc90pe1r9ptna5j7vef5f",
+        "condition": "User needs document creation, writing, editing, or content generation",
+        "transfer_message": "I'll transfer you to the Project Writer who specializes in that.",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      },
+      {
+        "agent_id": "agent_4201k8dnc4pseff87kx5hgfkb7vy",
+        "condition": "User wants to chat, needs clarification, or task is complete",
+        "transfer_message": "Let me transfer you back to continue our conversation.",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      }
+    ],
+    "voicemail_message": ""
+  },
+  "disable_interruptions": false
+}
