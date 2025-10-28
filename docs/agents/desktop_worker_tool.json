@@ -1,0 +1,19 @@
+{
+  "type": "system",
+  "name": "transfer_to_agent",
+  "description": "Return to Project Manager after completing desktop task",
+  "params": {
+    "system_tool_type": "transfer_to_agent",
+    "transfers": [
+      {
+        "agent_id": "agent_1201k8dnc6gre3sscfxygcy7jhp4",
+        "condition": "Task is complete or user needs different help",
+        "transfer_message": "Task complete. Returning you to the Project Manager.",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      }
+    ],
+    "voicemail_message": ""
+  },
+  "disable_interruptions": false
+}

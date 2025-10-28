@@ -2,6 +2,38 @@
 
 This directory contains the individual configuration files for each ElevenLabs agent.
 
+## Design Philosophy: Natural Conversation
+
+**Goal:** Ultra-brief, natural, human-like responses that don't feel robotic or over-explained.
+
+### Key Principles
+
+1. **Radical Brevity:** System prompts are 12-23 lines (not 40-60 lines)
+2. **Silent Transfers:** Agents transfer without announcing ("One moment" max, often silent)
+3. **Minimal Responses:** "Done" or just filename (not "Success! I've created hello_desktop_20251028.txt")
+4. **Trust the LLM:** Less instruction = more natural behavior
+5. **No Over-Explaining:** Don't announce who you're transferring to or why
+
+### Why This Matters
+
+**Before (verbose):**
+```
+User: "Open Chrome"
+Agent: "Let me connect you with the Project Manager who can help coordinate that for you."
+PM: "I'll transfer you to the Desktop Worker who can open Chrome for you."
+Worker: "Success! Desktop Worker has completed the task. Chrome is now open."
+```
+
+**After (natural):**
+```
+User: "Open Chrome"
+Agent: [silent transfer]
+PM: [silent transfer]
+Worker: "Done"
+```
+
+**Result:** 40% faster, 70% fewer words, feels human.
+
 ## File Structure
 
 Each agent has two configuration files:
@@ -12,7 +44,7 @@ Each agent has two configuration files:
 ## Available Agents
 
 ### 1. Conversational Memory (Rachel)
-- **Agent ID:** `agent_4201k8dnc4pseff87kx5hgfkb7vy`
+- **Agent ID:** `agent_4801k8dffmgge8mt8e713sem2ze0`
 - **Voice:** Rachel (21m00Tcm4TlvDq8ikWAM)
 - **Files:**
   - [conversational_memory_tool.json](conversational_memory_tool.json) - Tool configuration

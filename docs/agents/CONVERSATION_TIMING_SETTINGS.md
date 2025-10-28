@@ -7,9 +7,9 @@ This guide explains how to configure conversation timing settings for all 4 Elev
 **Goal:** Make agents wait longer before responding, reducing false triggers and interruptions.
 
 **Required Configuration:**
-- ✅ 5 second silence threshold before agent responds
-- ✅ Patient turn-taking behavior (less eager to interrupt)
-- ✅ Reduced interruption sensitivity
+- ✅ 3 second silence threshold before agent responds (balanced, responsive)
+- ✅ Normal turn-taking behavior (balanced, natural conversation pace)
+- ✅ Responsive but not too eager
 
 ---
 
@@ -19,9 +19,9 @@ Your requirements map to these ElevenLabs dashboard settings:
 
 | Requirement | ElevenLabs Setting | Recommended Value | What It Does |
 |-------------|-------------------|------------------|--------------|
-| "5 sec hold time" | **Turn Timeout** | 5 seconds | How long agent waits in silence before prompting |
-| "10% volume threshold" | **Turn Eagerness** | Patient | Controls response speed - "Patient" waits longer for natural pauses |
-| "Less interruption" | **Turn Eagerness** | Patient | "Patient" mode is less likely to interrupt mid-sentence |
+| "Natural response speed" | **Turn Timeout** | 3 seconds | How long agent waits in silence before prompting - balanced for natural conversation |
+| "Balanced turn-taking" | **Turn Eagerness** | Normal | Controls response speed - "Normal" provides natural conversation flow |
+| "Responsive but not interrupting" | **Turn Eagerness** | Normal | "Normal" mode balances responsiveness with allowing natural pauses |
 
 **Note:** ElevenLabs doesn't expose a direct "volume threshold" parameter. Instead, "Turn Eagerness" controls how aggressively the system detects turn-taking opportunities.
 
@@ -50,28 +50,28 @@ Your requirements map to these ElevenLabs dashboard settings:
 **Location:** Usually in "Conversation" or "Advanced" settings
 
 1. Find: **Turn Timeout** or **Silence Timeout**
-2. Set value: **5 seconds** (or 5000ms if in milliseconds)
+2. Set value: **3 seconds** (or 3000ms if in milliseconds)
 3. Valid range: 1-30 seconds
 
 **What this does:**
-- Agent waits 5 seconds of continuous silence before assuming you're done speaking
-- Prevents premature responses when you pause to think
-- Recommended: 5-7 seconds for natural conversation
+- Agent waits 3 seconds of continuous silence before assuming you're done speaking
+- Balanced: Fast enough to feel responsive, long enough to allow natural pauses
+- Recommended: 3-4 seconds for natural, snappy conversation
 
 #### Step 3: Configure Turn Eagerness
 
 **Location:** Usually in "Conversation" or "Behavior" settings
 
 1. Find: **Turn Eagerness** or **Response Eagerness**
-2. Set value: **Patient**
+2. Set value: **Normal**
 3. Options: Eager, Normal, Patient
 
 **What this does:**
-- **Eager**: Responds quickly, may interrupt mid-sentence
-- **Normal**: Balanced turn-taking
-- **Patient**: Waits for clear natural pauses, less likely to interrupt
+- **Eager**: Responds very quickly, may interrupt mid-sentence (too fast)
+- **Normal**: Balanced turn-taking, natural conversation pace (recommended)
+- **Patient**: Waits longer for clear pauses (can feel slow)
 
-For your use case: **Patient** is the correct setting.
+For natural, responsive conversation: **Normal** is the correct setting.
 
 #### Step 4: Configure Interruptions (Optional)
 
@@ -103,10 +103,10 @@ For your use case: **Patient** is the correct setting.
 
 | Agent | Turn Timeout | Turn Eagerness | Interruptions |
 |-------|--------------|----------------|---------------|
-| Conversational Memory (Rachel) | 5 seconds | Patient | Enabled |
-| Project Manager (Alice) | 5 seconds | Patient | Enabled |
-| Desktop Worker (Adam) | 5 seconds | Patient | Enabled |
-| Project Writer (Antoni) | 5 seconds | Patient | Enabled |
+| Conversational Memory (Rachel) | 3 seconds | Normal | Enabled |
+| Project Manager (Alice) | 3 seconds | Normal | Enabled |
+| Desktop Worker (Adam) | 3 seconds | Normal | Enabled |
+| Project Writer (Antoni) | 3 seconds | Normal | Enabled |
 
 **All 4 agents should have identical conversation timing settings.**
 
@@ -156,9 +156,9 @@ After configuring all 4 agents, test with these scenarios:
 **Pass if:** Agent waits until you finish the full sentence
 
 #### Test 2: Long Silence
-**Action:** Say "Hello" then wait 5 seconds in silence
-**Expected:** Agent waits 5 seconds then prompts you (e.g., "Are you still there?")
-**Pass if:** Agent waits approximately 5 seconds before responding
+**Action:** Say "Hello" then wait 3 seconds in silence
+**Expected:** Agent waits 3 seconds then prompts you (e.g., "Are you still there?")
+**Pass if:** Agent waits approximately 3 seconds before responding (feels responsive)
 
 #### Test 3: Mid-Sentence Detection
 **Action:** Say "Can you help me with this project that I'm working on"
