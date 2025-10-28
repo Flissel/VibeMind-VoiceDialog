@@ -1,0 +1,23 @@
+Requirement already satisfied: autogen-ext[grpc] in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (0.7.5)
+Requirement already satisfied: autogen-core==0.7.5 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-ext[grpc]) (0.7.5)
+Collecting grpcio~=1.70.0 (from autogen-ext[grpc])
+  Downloading grpcio-1.70.0-cp311-cp311-win_amd64.whl.metadata (4.0 kB)
+Requirement already satisfied: jsonref~=1.1.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (1.1.0)
+Requirement already satisfied: opentelemetry-api>=1.34.1 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (1.34.1)
+Requirement already satisfied: pillow>=11.0.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (11.2.1)
+Requirement already satisfied: protobuf~=5.29.3 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (5.29.5)
+Requirement already satisfied: pydantic<3.0.0,>=2.10.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (2.11.9)
+Requirement already satisfied: typing-extensions>=4.0.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from autogen-core==0.7.5->autogen-ext[grpc]) (4.15.0)
+Requirement already satisfied: annotated-types>=0.6.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from pydantic<3.0.0,>=2.10.0->autogen-core==0.7.5->autogen-ext[grpc]) (0.7.0)
+Requirement already satisfied: pydantic-core==2.33.2 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from pydantic<3.0.0,>=2.10.0->autogen-core==0.7.5->autogen-ext[grpc]) (2.33.2)
+Requirement already satisfied: typing-inspection>=0.4.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from pydantic<3.0.0,>=2.10.0->autogen-core==0.7.5->autogen-ext[grpc]) (0.4.1)
+Requirement already satisfied: importlib-metadata<8.8.0,>=6.0 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from opentelemetry-api>=1.34.1->autogen-core==0.7.5->autogen-ext[grpc]) (6.11.0)
+Requirement already satisfied: zipp>=0.5 in c:\users\user\.pyenv\pyenv-win\versions\3.11.0\lib\site-packages (from importlib-metadata<8.8.0,>=6.0->opentelemetry-api>=1.34.1->autogen-core==0.7.5->autogen-ext[grpc]) (3.21.0)
+Downloading grpcio-1.70.0-cp311-cp311-win_amd64.whl (4.3 MB)
+   ---------------------------------------- 4.3/4.3 MB 12.3 MB/s  0:00:00
+Installing collected packages: grpcio
+  Attempting uninstall: grpcio
+    Found existing installation: grpcio 1.71.0
+    Uninstalling grpcio-1.71.0:
+      Successfully uninstalled grpcio-1.71.0
+Successfully installed grpcio-1.70.0
