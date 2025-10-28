@@ -8,21 +8,21 @@
       {
         "agent_id": "agent_4101k8dnc7v7fdk9cwkknedzkqqa",
         "condition": "User needs desktop automation, file operations, window control, or system tasks",
-        "transfer_message": "I'll transfer you to the Desktop Worker who can handle that.",
+        "transfer_message": "",
         "delay_ms": 0,
         "enable_transferred_agent_first_message": true
       },
       {
         "agent_id": "agent_1501k8dnc90pe1r9ptna5j7vef5f",
         "condition": "User needs document creation, writing, editing, or content generation",
-        "transfer_message": "I'll transfer you to the Project Writer who specializes in that.",
+        "transfer_message": "",
         "delay_ms": 0,
         "enable_transferred_agent_first_message": true
       },
       {
-        "agent_id": "agent_4201k8dnc4pseff87kx5hgfkb7vy",
+        "agent_id": "agent_4801k8dffmgge8mt8e713sem2ze0",
         "condition": "User wants to chat, needs clarification, or task is complete",
-        "transfer_message": "Let me transfer you back to continue our conversation.",
+        "transfer_message": "",
         "delay_ms": 0,
         "enable_transferred_agent_first_message": true
       }
