@@ -7,9 +7,9 @@ This guide explains how to configure conversation timing settings for all 4 Elev
 **Goal:** Make agents wait longer before responding, reducing false triggers and interruptions.
 
 **Required Configuration:**
-- ✅ 3 second silence threshold before agent responds (balanced, responsive)
+- ✅ **Coordinators (Rachel/Alice):** 3 seconds, Normal - Fast, snappy responses
+- ✅ **Workers (Adam/Antoni):** 5 seconds, Normal - Allow time for tool execution
 - ✅ Normal turn-taking behavior (balanced, natural conversation pace)
-- ✅ Responsive but not too eager
 
 ---
 
@@ -17,11 +17,23 @@ This guide explains how to configure conversation timing settings for all 4 Elev
 
 Your requirements map to these ElevenLabs dashboard settings:
 
+### Coordinator Agents (Rachel/Alice)
+
 | Requirement | ElevenLabs Setting | Recommended Value | What It Does |
 |-------------|-------------------|------------------|--------------|
-| "Natural response speed" | **Turn Timeout** | 3 seconds | How long agent waits in silence before prompting - balanced for natural conversation |
-| "Balanced turn-taking" | **Turn Eagerness** | Normal | Controls response speed - "Normal" provides natural conversation flow |
-| "Responsive but not interrupting" | **Turn Eagerness** | Normal | "Normal" mode balances responsiveness with allowing natural pauses |
+| "Fast, snappy coordination" | **Turn Timeout** | 3 seconds | Quick responses for greetings and task delegation |
+| "Natural conversation flow" | **Turn Eagerness** | Normal | Balanced responsiveness for conversation |
+
+### Worker Agents (Adam/Antoni)
+
+| Requirement | ElevenLabs Setting | Recommended Value | What It Does |
+|-------------|-------------------|------------------|--------------|
+| "Allow tool execution time" | **Turn Timeout** | 5 seconds | Extra time for client tools to execute before responding |
+| "Patient during work" | **Turn Eagerness** | Normal | Waits patiently while tools run |
+
+**Why Different Settings?**
+- **Coordinators** (Rachel/Alice) only chat and transfer - they can respond quickly (3s)
+- **Workers** (Adam/Antoni) execute client tools that take time - they need longer wait (5s) to avoid interrupting while tools run
 
 **Note:** ElevenLabs doesn't expose a direct "volume threshold" parameter. Instead, "Turn Eagerness" controls how aggressively the system detects turn-taking opportunities.
 
@@ -50,13 +62,17 @@ Your requirements map to these ElevenLabs dashboard settings:
 **Location:** Usually in "Conversation" or "Advanced" settings
 
 1. Find: **Turn Timeout** or **Silence Timeout**
-2. Set value: **3 seconds** (or 3000ms if in milliseconds)
+2. Set value based on agent type:
+   - **Conversational Memory (Rachel)**: 3 seconds
+   - **Project Manager (Alice)**: 3 seconds
+   - **Desktop Worker (Adam)**: 5 seconds
+   - **Project Writer (Antoni)**: 5 seconds
 3. Valid range: 1-30 seconds
 
 **What this does:**
-- Agent waits 3 seconds of continuous silence before assuming you're done speaking
-- Balanced: Fast enough to feel responsive, long enough to allow natural pauses
-- Recommended: 3-4 seconds for natural, snappy conversation
+- Agent waits this many seconds of continuous silence before assuming you're done speaking
+- **Coordinators (3s)**: Fast, snappy responses for greetings and task delegation
+- **Workers (5s)**: Extra time allows client tools to execute without interruptions
 
 #### Step 3: Configure Turn Eagerness
 
@@ -101,14 +117,16 @@ For natural, responsive conversation: **Normal** is the correct setting.
 
 ### Configuration Table
 
-| Agent | Turn Timeout | Turn Eagerness | Interruptions |
-|-------|--------------|----------------|---------------|
-| Conversational Memory (Rachel) | 3 seconds | Normal | Enabled |
-| Project Manager (Alice) | 3 seconds | Normal | Enabled |
-| Desktop Worker (Adam) | 3 seconds | Normal | Enabled |
-| Project Writer (Antoni) | 3 seconds | Normal | Enabled |
+| Agent | Turn Timeout | Turn Eagerness | Interruptions | Role |
+|-------|--------------|----------------|---------------|------|
+| Conversational Memory (Rachel) | 3 seconds | Normal | Enabled | Coordinator |
+| Project Manager (Alice) | 3 seconds | Normal | Enabled | Coordinator |
+| Desktop Worker (Adam) | 5 seconds | Normal | Enabled | Worker |
+| Project Writer (Antoni) | 5 seconds | Normal | Enabled | Worker |
 
-**All 4 agents should have identical conversation timing settings.**
+**Key Difference:**
+- **Coordinators** (Rachel/Alice): 3 seconds for fast, snappy responses
+- **Workers** (Adam/Antoni): 5 seconds to allow tool execution time
 
 ---
 
@@ -155,10 +173,15 @@ After configuring all 4 agents, test with these scenarios:
 **Expected:** Agent waits through your pause, doesn't interrupt at "..."
 **Pass if:** Agent waits until you finish the full sentence
 
-#### Test 2: Long Silence
+#### Test 2: Long Silence (Coordinator)
 **Action:** Say "Hello" then wait 3 seconds in silence
-**Expected:** Agent waits 3 seconds then prompts you (e.g., "Are you still there?")
-**Pass if:** Agent waits approximately 3 seconds before responding (feels responsive)
+**Expected:** Rachel waits 3 seconds then responds
+**Pass if:** Rachel waits approximately 3 seconds before responding (feels snappy)
+
+#### Test 2b: Long Silence (Worker)
+**Action:** Say "Write hello world" and let it complete, then wait 5 seconds
+**Expected:** Worker agent waits 5 seconds before transferring back
+**Pass if:** Worker allows full 5 seconds for potential tool execution
 
 #### Test 3: Mid-Sentence Detection
 **Action:** Say "Can you help me with this project that I'm working on"
@@ -178,27 +201,40 @@ python voice_dialog_main.py
 ```
 
 **Test dialogue:**
-1. "Hello" → Rachel responds
-2. "Write hello world" → Rachel → Alice → Adam (wait 5s before speaking)
-3. Verify Adam doesn't interrupt during transfer
-4. Verify files are created correctly
+1. "Hello" → Rachel responds (3s timeout - snappy)
+2. "Write hello world" → Rachel (3s) → Alice (3s) → Adam (5s - allows tool execution)
+3. Verify coordinators (Rachel/Alice) respond quickly (3s)
+4. Verify workers (Adam/Antoni) wait longer (5s) during tool execution
+5. Verify files are created correctly
 
 ---
 
 ## Troubleshooting
 
-### Issue: Agent Still Interrupts Too Quickly
+### Issue: Coordinators (Rachel/Alice) Interrupt Too Quickly
 
 **Possible Causes:**
-- Turn Eagerness not set to "Patient"
-- Turn Timeout too low (less than 5 seconds)
+- Turn Timeout too low (less than 3 seconds)
+- Turn Eagerness set to "Eager" instead of "Normal"
 - Settings not saved properly
 
 **Solutions:**
-1. Double-check: Turn Eagerness = "Patient" for all 4 agents
-2. Increase: Turn Timeout to 7 seconds (more conservative)
-3. Verify: Save and refresh dashboard to confirm settings persist
-4. Clear cache: Log out and back into ElevenLabs dashboard
+1. Double-check: Turn Timeout = 3 seconds for Rachel/Alice
+2. Verify: Turn Eagerness = "Normal" for coordinators
+3. If still too fast: Increase to 4 seconds
+4. Save and refresh dashboard to confirm settings persist
+
+### Issue: Workers (Adam/Antoni) Respond Too Fast During Tool Execution
+
+**Possible Causes:**
+- Turn Timeout too low (less than 5 seconds)
+- Tools taking longer than expected
+
+**Solutions:**
+1. Double-check: Turn Timeout = 5 seconds for Adam/Antoni
+2. If tools are slow: Increase to 7 seconds
+3. Verify: Settings saved correctly for worker agents
+4. Test: Observe actual tool execution time
 
 ### Issue: Agent Takes Too Long to Respond
 
@@ -247,13 +283,21 @@ from elevenlabs.client import ElevenLabs
 
 client = ElevenLabs(api_key="your_key")
 
-# Update agent configuration
+# Update coordinator agent (Rachel) - 3 seconds
 client.conversational_ai.update_agent(
     agent_id="agent_4801k8dffmgge8mt8e713sem2ze0",  # Conversational Memory (Rachel)
-    turn_timeout=5,  # 5 seconds
-    turn_eagerness="patient",  # Options: "eager", "normal", "patient"
-    # Note: API parameters may vary - check latest ElevenLabs API docs
+    turn_timeout=3,  # 3 seconds for coordinators
+    turn_eagerness="normal",  # Options: "eager", "normal", "patient"
 )
+
+# Update worker agent (Adam) - 5 seconds
+client.conversational_ai.update_agent(
+    agent_id="agent_4101k8dnc7v7fdk9cwkknedzkqqa",  # Desktop Worker (Adam)
+    turn_timeout=5,  # 5 seconds for workers
+    turn_eagerness="normal",
+)
+
+# Note: API parameters may vary - check latest ElevenLabs API docs
 ```
 
 **Note:** API configuration is not currently implemented in this project. Dashboard configuration is recommended.
@@ -269,17 +313,20 @@ client.conversational_ai.update_agent(
 - ❌ Uncomfortable, rushed conversation flow
 
 ### After Configuration:
-- ✅ Agent waits 5 seconds of silence before responding
-- ✅ Agent doesn't interrupt mid-sentence
+- ✅ Coordinators respond quickly (3s) for snappy greetings and delegation
+- ✅ Workers wait longer (5s) to allow tool execution without interruption
+- ✅ Agents don't interrupt mid-sentence
 - ✅ Natural conversation pauses are preserved
 - ✅ Less sensitivity to background noise
 - ✅ Comfortable, natural conversation pace
 
 ### Conversation Feel:
-- **More natural:** Like talking to a patient human listener
-- **Less rushed:** You have time to think and formulate thoughts
+- **Snappy coordination:** Rachel and Alice respond quickly (3s) for natural conversation flow
+- **Patient workers:** Adam and Antoni wait longer (5s) during tool execution
+- **More natural:** Different timing for different roles feels human
 - **Fewer errors:** Reduces false triggers and premature responses
 - **Better transfers:** Agent coordination feels smoother
+- **No tool interruptions:** Workers don't cut off during file creation or automation
 
 ---
 
@@ -287,39 +334,42 @@ client.conversational_ai.update_agent(
 
 Use this checklist to verify all settings are configured:
 
-### Conversational Memory (Rachel)
-- [ ] Turn Timeout: 5 seconds
-- [ ] Turn Eagerness: Patient
+### Conversational Memory (Rachel) - Coordinator
+- [ ] Turn Timeout: 3 seconds
+- [ ] Turn Eagerness: Normal
 - [ ] Interruptions: Enabled
 - [ ] Settings saved and verified
-- [ ] Tested with voice dialogue
+- [ ] Tested with voice dialogue (snappy responses)
 
-### Project Manager (Alice)
-- [ ] Turn Timeout: 5 seconds
-- [ ] Turn Eagerness: Patient
+### Project Manager (Alice) - Coordinator
+- [ ] Turn Timeout: 3 seconds
+- [ ] Turn Eagerness: Normal
 - [ ] Interruptions: Enabled
 - [ ] Settings saved and verified
-- [ ] Tested with transfer coordination
+- [ ] Tested with transfer coordination (fast delegation)
 
-### Desktop Worker (Adam)
+### Desktop Worker (Adam) - Worker
 - [ ] Turn Timeout: 5 seconds
-- [ ] Turn Eagerness: Patient
+- [ ] Turn Eagerness: Normal
 - [ ] Interruptions: Enabled
 - [ ] Settings saved and verified
-- [ ] Tested with tool execution
+- [ ] Tested with tool execution (allows execution time)
 
-### Project Writer (Antoni)
+### Project Writer (Antoni) - Worker
 - [ ] Turn Timeout: 5 seconds
-- [ ] Turn Eagerness: Patient
+- [ ] Turn Eagerness: Normal
 - [ ] Interruptions: Enabled
 - [ ] Settings saved and verified
-- [ ] Tested with tool execution
+- [ ] Tested with tool execution (allows execution time)
 
 ### Overall System
-- [ ] All 4 agents configured identically
+- [ ] Coordinators (Rachel/Alice) configured for 3 seconds
+- [ ] Workers (Adam/Antoni) configured for 5 seconds
+- [ ] All agents using Normal turn eagerness
 - [ ] Full conversation flow tested
 - [ ] Agent transfers working smoothly
 - [ ] No premature interruptions observed
+- [ ] Workers have time for tool execution
 
 ---
 
@@ -357,10 +407,10 @@ Use this checklist to verify all settings are configured:
 - Turn Timeout: 5 seconds
 - Turn Eagerness: Normal
 
-**Your Configuration (Testing/Development):**
-- Turn Timeout: 5 seconds
-- Turn Eagerness: Patient
-- Reason: Prevents false triggers during testing
+**Your Configuration (Multi-Agent Voice System):**
+- **Coordinators** (Rachel/Alice): 3 seconds, Normal - Fast greetings and delegation
+- **Workers** (Adam/Antoni): 5 seconds, Normal - Allow tool execution time
+- Reason: Differential timing matches agent roles and responsibilities
 
 ### Adjusting for Your Environment
 
@@ -376,8 +426,10 @@ If you have:
 - Lower timeout = Faster responses, more interruptions
 - Higher timeout = Slower responses, fewer interruptions
 
-**Your current settings (5s, Patient):**
-- Balanced approach favoring user comfort
+**Your current settings (3s/5s, Normal):**
+- Coordinators (3s): Snappy, responsive greetings and task delegation
+- Workers (5s): Patient, allows tool execution without interruption
+- Balanced approach matching agent roles
 - Suitable for testing and validation
 - Can be fine-tuned after initial testing
 
