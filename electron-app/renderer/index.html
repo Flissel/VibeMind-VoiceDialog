@@ -1,0 +1,2397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeMind - Multiverse</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Three.js from local lib folder -->
+    <script defer src="lib/three.min.js"></script>
+    <script defer src="lib/OrbitControls.js"></script>
+    <script defer src="shuttle_manager.js"></script>
+    <script defer src="multiverse.js"></script>
+    <script defer src="universe_canvas.js"></script>
+</head>
+<body>
+    <!-- Custom Titlebar -->
+    <div id="titlebar">
+        <div class="titlebar-drag">
+            <span class="titlebar-title">VibeMind</span>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="minimize-btn">─</button>
+            <button class="titlebar-btn" id="maximize-btn">□</button>
+            <button class="titlebar-btn close-btn" id="close-btn">×</button>
+        </div>
+    </div>
+
+    <!-- Space Navigation Bar -->
+    <div id="space-nav">
+        <div class="space-nav-tabs">
+            <button class="space-tab active" id="tab-ideas" data-space="ideas">
+                <span class="space-icon">💭</span>
+                <span class="space-name">Ideas Space</span>
+            </button>
+            <button class="space-tab" id="tab-projects" data-space="projects">
+                <span class="space-icon">🧬</span>
+                <span class="space-name">Project Space</span>
+            </button>
+            <button class="space-tab" id="tab-desktop" data-space="desktop">
+                <span class="space-icon">🖥️</span>
+                <span class="space-name">Desktop Space</span>
+            </button>
+        </div>
+        <div class="agent-status" id="agent-status">
+            <span class="agent-indicator"></span>
+            <span class="agent-name" id="current-agent-name">Rachel</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="app">
+        <!-- Three.js Canvas Container -->
+        <div id="canvas-container"></div>
+
+        <!-- Space View (inside bubble) - hidden by default -->
+        <div id="space-view" class="hidden">
+            <div id="space-header">
+                <button id="back-btn">← Back</button>
+                <span id="space-title">Space</span>
+            </div>
+            <div id="space-canvas"></div>
+            
+            <!-- Summaries Toggle Button -->
+            <button id="summaries-toggle" class="summaries-toggle">📋 Summaries</button>
+            
+            <!-- Summaries Panel -->
+            <div id="summaries-panel" class="hidden">
+                <div class="summaries-header">
+                    <h3>📋 Summaries</h3>
+                    <button class="summaries-close" id="summaries-close">×</button>
+                </div>
+                <div class="summaries-content" id="summaries-content">
+                    <div class="no-summaries">
+                        <div class="no-summaries-icon">📝</div>
+                        <div>No summaries yet</div>
+                        <div style="font-size: 11px; margin-top: 4px;">Say "summarize this idea" to create one</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- White Paper Toggle Button -->
+            <button id="whitepaper-toggle" class="whitepaper-toggle">📄 White Paper</button>
+            
+            <!-- White Paper Panel (A4 Document) -->
+            <div id="whitepaper-panel" class="hidden">
+                <div class="whitepaper-header">
+                    <h3>📄 <span id="whitepaper-title">White Paper</span></h3>
+                    <button class="whitepaper-close" id="whitepaper-close">×</button>
+                </div>
+                <div class="whitepaper-content" id="whitepaper-content">
+                    <div class="whitepaper-a4">
+                        <div class="whitepaper-placeholder">
+                            <div class="whitepaper-placeholder-icon">📄</div>
+                            <div>No White Paper generated yet</div>
+                            <div style="font-size: 11px; margin-top: 4px;">Say "generate white paper from [idea name]"</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="whitepaper-footer">
+                    <button id="whitepaper-print" title="Print as PDF">🖨️ Print</button>
+                    <button id="whitepaper-copy" title="Copy Markdown">📋 Copy</button>
+                    <button id="whitepaper-export" title="Download as Markdown">💾 Export</button>
+                    <span class="whitepaper-meta" id="whitepaper-meta"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voice Status Panel -->
+        <div id="voice-panel">
+            <div id="voice-indicator" class="inactive"></div>
+            <span id="voice-status">Voice: Inactive</span>
+            <button id="voice-btn">Start Voice</button>
+        </div>
+
+        <!-- Info Panel -->
+        <div id="info-panel">
+            <div id="bubble-info" class="hidden">
+                <h3 id="selected-title">No Selection</h3>
+                <p id="selected-description"></p>
+                <button id="enter-btn" class="hidden">Enter Space</button>
+            </div>
+            
+            <!-- Project Info Panel (NEW) -->
+            <div id="project-info" class="hidden">
+                <h3 id="project-title">No Project Selected</h3>
+                <div class="project-status-row">
+                    <span class="project-status-label">Status:</span>
+                    <span id="project-status" class="project-status-value">-</span>
+                </div>
+                <div class="project-progress">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar" id="project-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="project-description"></p>
+                <button id="open-project-btn" class="hidden">Open Project</button>
+            </div>
+        </div>
+
+        <!-- Transcript Panel -->
+        <div id="transcript-panel" class="hidden">
+            <div id="transcript-content"></div>
+        </div>
+
+        <!-- Shuttle Info Panel -->
+        <div id="shuttle-info-panel" class="hidden">
+            <div class="shuttle-header">
+                <span class="shuttle-icon">🚀</span>
+                <span class="shuttle-title">Requirement Shuttle</span>
+                <button class="shuttle-close" id="shuttle-close">×</button>
+            </div>
+            <div class="shuttle-content">
+                <div class="shuttle-name" id="shuttle-bubble-name">-</div>
+                <div class="shuttle-stats">
+                    <div class="shuttle-input">
+                        <h4>Input</h4>
+                        <span class="count" id="shuttle-req-count">0 requirements</span>
+                        <span class="source" id="shuttle-source">from: -</span>
+                    </div>
+                    <div class="shuttle-output">
+                        <h4>Output</h4>
+                        <span class="passed" id="shuttle-passed">0 passed</span>
+                        <span class="failed" id="shuttle-failed">0 need work</span>
+                    </div>
+                </div>
+                <div class="shuttle-score">
+                    <div class="score-bar">
+                        <div class="score-fill" id="shuttle-score-fill" style="width: 0%"></div>
+                    </div>
+                    <span class="score-text" id="shuttle-score-text">Score: 0%</span>
+                </div>
+            </div>
+            <div class="shuttle-action-buttons">
+                <button class="shuttle-enter-btn" id="shuttle-enter-btn">🚀 Enter Shuttle</button>
+                <button class="shuttle-navigate-btn" id="shuttle-navigate-btn">Navigate with Alice</button>
+            </div>
+        </div>
+
+        <!-- Orchestrator Panel (iframe) -->
+        <div id="orchestrator-panel" class="hidden">
+            <div class="orchestrator-header">
+                <h3>🔧 Requirement Orchestrator</h3>
+                <button class="orchestrator-close" id="orchestrator-close">×</button>
+            </div>
+            <div class="orchestrator-content">
+                <iframe
+                    id="orchestrator-frame"
+                    src=""
+                    frameborder="0"
+                    style="width: 100%; height: 100%; border: none;">
+                </iframe>
+            </div>
+        </div>
+
+        <!-- Transition Overlay -->
+        <div id="transition-overlay"></div>
+
+        <!-- VNC Live Preview Container (NEW) -->
+        <div id="vnc-preview-container" class="hidden">
+            <div class="vnc-preview-header">
+                <div class="vnc-preview-title">
+                    <span class="vnc-preview-icon">🖥️</span>
+                    <span id="vnc-project-title">Live Preview</span>
+                    <span class="vnc-status" id="vnc-status">Loading...</span>
+                </div>
+                <div class="vnc-preview-controls">
+                    <button id="vnc-refresh-btn" title="Refresh Preview">🔄</button>
+                    <button id="vnc-fullscreen-btn" title="Fullscreen">⛶</button>
+                    <button id="vnc-close-btn" title="Close Preview">×</button>
+                </div>
+            </div>
+            <div class="vnc-preview-content">
+                <iframe id="vnc-frame" src="" frameborder="0" allow="fullscreen"></iframe>
+                <div class="vnc-loading-overlay" id="vnc-loading">
+                    <div class="vnc-spinner"></div>
+                    <div class="vnc-loading-text">Starting Live Preview...</div>
+                    <div class="vnc-loading-details" id="vnc-loading-details">Initializing Docker container...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shuttle Interior View (zoomed-in shuttle space) -->
+        <div id="shuttle-interior-view" class="hidden">
+            <div class="shuttle-interior-header">
+                <div class="shuttle-interior-title">
+                    <span class="shuttle-rocket-icon">🚀</span>
+                    <span id="shuttle-interior-name">Requirement Shuttle</span>
+                    <span class="shuttle-stage-badge" id="shuttle-current-stage">Mining</span>
+                </div>
+                <button id="shuttle-exit-btn" class="shuttle-exit-btn">← Exit Shuttle</button>
+            </div>
+
+            <!-- DNA Pipeline Progress -->
+            <div class="shuttle-pipeline">
+                <div class="pipeline-stage" data-stage="mining">
+                    <span class="stage-icon">⛏️</span>
+                    <span class="stage-label">Mining</span>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-stage" data-stage="requirements">
+                    <span class="stage-icon">📄</span>
+                    <span class="stage-label">Requirements</span>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-stage" data-stage="validation">
+                    <span class="stage-icon">✓</span>
+                    <span class="stage-label">Validation</span>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-stage" data-stage="knowledge_graph">
+                    <span class="stage-icon">✳️</span>
+                    <span class="stage-label">Knowledge Graph</span>
+                </div>
+                <div class="pipeline-connector"></div>
+                <div class="pipeline-stage" data-stage="techstack">
+                    <span class="stage-icon">🚀</span>
+                    <span class="stage-label">TechStack</span>
+                </div>
+            </div>
+
+            <!-- Shuttle Score Summary -->
+            <div class="shuttle-summary">
+                <div class="summary-score">
+                    <div class="score-circle" id="shuttle-interior-score">
+                        <span class="score-value">0%</span>
+                    </div>
+                    <span class="score-label">Overall Score</span>
+                </div>
+                <div class="summary-stats">
+                    <div class="stat passed">
+                        <span class="stat-value" id="shuttle-interior-passed">0</span>
+                        <span class="stat-label">Passed</span>
+                    </div>
+                    <div class="stat failed">
+                        <span class="stat-value" id="shuttle-interior-failed">0</span>
+                        <span class="stat-label">Need Work</span>
+                    </div>
+                    <div class="stat total">
+                        <span class="stat-value" id="shuttle-interior-total">0</span>
+                        <span class="stat-label">Total Reqs</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Checkpoint Tabs -->
+            <div class="checkpoint-tabs">
+                <button class="checkpoint-tab active" data-stage="mining">
+                    <span class="tab-icon">⛏️</span>
+                    <span class="tab-label">Mining</span>
+                    <span class="tab-status" id="tab-status-mining">✅</span>
+                </button>
+                <button class="checkpoint-tab" data-stage="validation">
+                    <span class="tab-icon">✓</span>
+                    <span class="tab-label">Validation</span>
+                    <span class="tab-status" id="tab-status-validation">⏳</span>
+                </button>
+                <button class="checkpoint-tab" data-stage="knowledge_graph">
+                    <span class="tab-icon">✳️</span>
+                    <span class="tab-label">KGraph</span>
+                    <span class="tab-status" id="tab-status-knowledge_graph">⏳</span>
+                </button>
+                <button class="checkpoint-tab" data-stage="techstack">
+                    <span class="tab-icon">🚀</span>
+                    <span class="tab-label">TechStack</span>
+                    <span class="tab-status" id="tab-status-techstack">⏳</span>
+                </button>
+            </div>
+
+            <!-- Checkpoint Content Panels -->
+            <div class="checkpoint-panels">
+                <!-- Mining Panel: Shows extracted requirements -->
+                <div class="checkpoint-panel active" id="checkpoint-mining">
+                    <div class="panel-header">
+                        <h4>⛏️ Mining Results</h4>
+                        <span class="panel-count" id="mining-count">0 requirements extracted</span>
+                    </div>
+                    <div class="requirements-grid" id="shuttle-requirements-grid">
+                        <div class="req-loading">Loading requirements...</div>
+                    </div>
+                </div>
+
+                <!-- Validation Panel: Shows 9-criteria scores -->
+                <div class="checkpoint-panel" id="checkpoint-validation">
+                    <div class="panel-header">
+                        <h4>✓ Validation Results (IEEE 29148)</h4>
+                        <span class="panel-count" id="validation-count">0 evaluated</span>
+                    </div>
+                    <div class="validation-criteria-grid" id="validation-criteria-grid">
+                        <div class="criteria-header">
+                            <span>Criterion</span>
+                            <span>Score</span>
+                            <span>Status</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Clarity</span>
+                            <span class="criteria-score" id="criteria-clarity">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Testability</span>
+                            <span class="criteria-score" id="criteria-testability">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Measurability</span>
+                            <span class="criteria-score" id="criteria-measurability">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Atomicity</span>
+                            <span class="criteria-score" id="criteria-atomic">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Conciseness</span>
+                            <span class="criteria-score" id="criteria-concise">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Unambiguous</span>
+                            <span class="criteria-score" id="criteria-unambiguous">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Design Independent</span>
+                            <span class="criteria-score" id="criteria-design_independent">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Consistent Language</span>
+                            <span class="criteria-score" id="criteria-consistent_language">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                        <div class="criteria-row">
+                            <span>Purpose Independent</span>
+                            <span class="criteria-score" id="criteria-purpose_independent">-</span>
+                            <span class="criteria-status">⏳</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Knowledge Graph Panel: Shows entities and relationships -->
+                <div class="checkpoint-panel" id="checkpoint-knowledge_graph">
+                    <div class="panel-header">
+                        <h4>✳️ Knowledge Graph</h4>
+                        <span class="panel-count" id="kg-count">0 nodes, 0 edges</span>
+                    </div>
+                    <div class="kg-preview" id="kg-preview">
+                        <div class="kg-placeholder">
+                            <div class="kg-icon">✳️</div>
+                            <div>Knowledge Graph not yet built</div>
+                            <div class="kg-hint">Enable USE_KG_API=true to build entity relationships</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TechStack Panel: Shows architecture recommendations -->
+                <div class="checkpoint-panel" id="checkpoint-techstack">
+                    <div class="panel-header">
+                        <h4>🚀 TechStack Recommendations</h4>
+                        <span class="panel-count" id="techstack-count">Not detected</span>
+                    </div>
+                    <div class="techstack-preview" id="techstack-preview">
+                        <div class="techstack-placeholder">
+                            <div class="techstack-icon">🚀</div>
+                            <div>TechStack not yet detected</div>
+                            <div class="techstack-hint">Enable USE_TECHSTACK_API=true to detect recommended technologies</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="shuttle-actions">
+                <button id="shuttle-open-orchestrator" class="action-btn secondary">
+                    🔧 Open Orchestrator
+                </button>
+                <button id="shuttle-continue-to-project" class="action-btn primary">
+                    Continue to Projects →
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Space Indicator (top right, initially hidden) -->
+    <div id="space-indicator" class="hidden">
+        <span id="current-space-icon">💭</span>
+        <span id="current-space-name">Ideas Universe</span>
+    </div>
+    
+    <!-- Hand Tracking Status - always visible when connected -->
+    <div id="hand-status">
+        <span class="gesture-icon">✋</span>
+        <span id="gesture-name">Not Connected</span>
+    </div>
+
+    <script>
+        // ========================================
+        // MULTIVERSE INITIALIZATION
+        // ========================================
+        
+        // Create MultiverseApp instance on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[Index] Creating MultiverseApp...');
+            window.multiverseApp = new MultiverseApp('canvas-container');
+        });
+
+        // Window controls
+        document.getElementById('minimize-btn').onclick = () => window.vibemind.minimize();
+        document.getElementById('maximize-btn').onclick = () => window.vibemind.maximize();
+        document.getElementById('close-btn').onclick = () => window.vibemind.close();
+
+        // Voice controls
+        let voiceActive = false;
+        const voiceBtn = document.getElementById('voice-btn');
+        const voiceIndicator = document.getElementById('voice-indicator');
+        const voiceStatus = document.getElementById('voice-status');
+
+        voiceBtn.onclick = () => {
+            if (voiceActive) {
+                window.vibemind.stopVoice();
+                voiceActive = false;
+                voiceIndicator.className = 'inactive';
+                voiceStatus.textContent = 'Voice: Inactive';
+                voiceBtn.textContent = 'Start Voice';
+            } else {
+                window.vibemind.startVoice();
+                voiceActive = true;
+                voiceIndicator.className = 'active';
+                voiceStatus.textContent = 'Voice: Listening...';
+                voiceBtn.textContent = 'Stop Voice';
+            }
+        };
+
+        // Space navigation
+        const enterBtn = document.getElementById('enter-btn');
+        const backBtn = document.getElementById('back-btn');
+        const spaceView = document.getElementById('space-view');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        enterBtn.onclick = () => {
+            const selectedId = window.multiverseApp?.getSelectedBubbleId();
+            if (selectedId !== null && selectedId !== undefined) {
+                window.vibemind.enterBubble(selectedId);
+                enterSpace(selectedId);
+            }
+        };
+
+        backBtn.onclick = () => exitSpace();
+
+        // Space Canvas instance
+        let spaceCanvas = null;
+
+        function enterSpace(bubbleId) {
+            try {
+                const bubble = window.multiverseApp?.getBubbleById(bubbleId);
+                const bubbleTitle = bubble ? bubble.title : 'Space';
+                document.getElementById('space-title').textContent = bubbleTitle;
+
+                // Get bubble index for animation
+                const bubbleIndex = window.multiverseApp?.getBubbleIndexById(bubbleId);
+
+                if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
+                    // Use animated entry
+                    console.log('[Enter] Starting animated entry to bubble:', bubbleId);
+                    window.multiverseApp.enterBubbleWithAnimation(bubbleIndex, () => {
+                        // After animation: switch views
+                        canvasContainer.classList.add('hidden');
+                        spaceView.classList.remove('hidden');
+
+                        if (!spaceCanvas) {
+                            spaceCanvas = new UniverseCanvas('space-canvas');
+                        }
+                        spaceCanvas.loadBubble(bubbleId);
+
+                        // Hide overlay after view switch
+                        setTimeout(() => {
+                            const overlay = document.getElementById('transition-overlay');
+                            if (overlay) overlay.classList.remove('active');
+                        }, 100);
+                    });
+                } else {
+                    // Fallback: immediate switch (no animation)
+                    console.log('[Enter] Fallback immediate entry to bubble:', bubbleId);
+                    canvasContainer.classList.add('hidden');
+                    spaceView.classList.remove('hidden');
+
+                    if (!spaceCanvas) {
+                        spaceCanvas = new UniverseCanvas('space-canvas');
+                    }
+                    spaceCanvas.loadBubble(bubbleId);
+                }
+            } catch(e) {
+                console.error('[Enter] Error:', e);
+            }
+        }
+
+        function exitSpace(fromPython = false) {
+            try {
+                console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ')');
+
+                // Show transition overlay
+                const overlay = document.getElementById('transition-overlay');
+                if (overlay) overlay.classList.add('active');
+
+                // Clear canvas
+                if (spaceCanvas) {
+                    spaceCanvas.clear();
+                }
+
+                // Switch views
+                spaceView.classList.add('hidden');
+                canvasContainer.classList.remove('hidden');
+
+                // Notify backend ONLY if exit was initiated from UI (not from Python)
+                if (!fromPython) {
+                    try {
+                        if (window.vibemind?.exitBubble) {
+                            window.vibemind.exitBubble();
+                        }
+                    } catch(e) { /* ignore IPC errors */ }
+                }
+
+                // Trigger resize and animation in next frame (minimal delay)
+                requestAnimationFrame(() => {
+                    window.dispatchEvent(new Event('resize'));
+                    if (window.multiverseApp) {
+                        window.multiverseApp.exitBubbleWithAnimation(() => {
+                            console.log('[Exit] Animation complete');
+                        });
+                    } else {
+                        // No animation, just hide overlay
+                        if (overlay) overlay.classList.remove('active');
+                    }
+                });
+            } catch(e) {
+                console.error('[Exit] Error:', e);
+            }
+        }
+
+        // Listen for Python messages
+        window.vibemind.onPythonMessage((message) => {
+            console.log('[Python]', message);
+
+            switch (message.type) {
+                case 'bubbles_sync':
+                    // Update bubbles from Python
+                    if (window.multiverseApp && message.bubbles) {
+                        window.multiverseApp.syncBubbles(message.bubbles);
+                        // Request shuttles AFTER bubbles are synced
+                        // This ensures bubble meshes exist for shuttle position lookup
+                        console.log('[UI] Bubbles synced, now requesting shuttles...');
+                        setTimeout(() => {
+                            window.vibemind.requestShuttles();
+                        }, 100); // Small delay to ensure bubbles are fully rendered
+                    }
+                    break;
+
+                // NEW: Project sync messages
+                case 'projects_sync':
+                    // Update projects from Python
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'generated_projects_list':
+                    // Response to get_generated_projects request
+                    if (window.multiverseApp && message.projects) {
+                        console.log('[UI] Got generated projects:', message.projects.length);
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'project_created':
+                    // New project created from shuttle or voice
+                    console.log('[UI] Project created:', message.project);
+                    if (message.success && message.project) {
+                        // Show success notification
+                        const projectName = message.project.name || 'New Project';
+                        const score = message.project.score ? ` (score: ${(message.project.score * 100).toFixed(0)}%)` : '';
+                        showTranscript('System', `✅ Project created: ${projectName}${score}`);
+
+                        // Request projects refresh
+                        if (window.vibemind?.sendToPython) {
+                            window.vibemind.sendToPython({ type: 'get_generated_projects' });
+                        }
+                    } else if (!message.success) {
+                        showTranscript('System', `❌ Failed to create project: ${message.error || 'Unknown error'}`);
+                    }
+                    break;
+
+                case 'project_updated':
+                    // Project was updated
+                    console.log('[UI] Project updated:', message.project_id);
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'project_deleted':
+                    // Project was deleted
+                    console.log('[UI] Project deleted:', message.project_id);
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'enter_project':
+                    // Voice command to enter project details
+                    console.log('[UI] Enter project:', message.project_id);
+                    // Could open a project canvas or detail view
+                    break;
+
+                // ============================================
+                // PROJECT LIVE PREVIEW MESSAGES (NEW)
+                // ============================================
+                
+                case 'project-preview_starting':
+                    // Show loading state
+                    console.log('[UI] Project preview starting:', message.project_id);
+                    showVncLoading(true, message.project_title || 'Project');
+                    updateVncLoadingDetails('Starting sandbox container...');
+                    break;
+                    
+                case 'project-preview-ready':
+                    // VNC stream is ready - load in iframe
+                    console.log('[UI] Project preview ready:', message.vnc_url);
+                    showVncPreview(message.vnc_url, message.project_title, message.project_id);
+                    showTranscript('System', `Live Preview ready for ${message.project_title || 'project'}`);
+                    break;
+                    
+                case 'project-preview-error':
+                    // Preview failed
+                    console.error('[UI] Project preview error:', message.error);
+                    hideVncPreview();
+                    showTranscript('System', `Preview failed: ${message.error}`);
+                    break;
+                    
+                case 'project-preview-stopped':
+                    // Preview was stopped
+                    console.log('[UI] Project preview stopped:', message.project_id);
+                    hideVncPreview();
+                    break;
+                    
+                case 'sandbox_cycle_complete':
+                    // Continuous sandbox test cycle completed
+                    console.log('[UI] Sandbox cycle:', message.cycle_number, 'Success:', message.success);
+                    if (message.success) {
+                        updateVncStatus('Running ✓');
+                    } else {
+                        updateVncStatus('Error ✗');
+                    }
+                    break;
+
+                case 'bubble_created':
+                    // New bubble created via voice - add to 3D view
+                    if (window.multiverseApp && message.bubble) {
+                        const b = message.bubble;
+                        // Generate random position for new bubble
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = 2 + Math.random() * 2;
+                        const bubbleData = {
+                            id: b.id,           // Use DB UUID as main ID
+                            db_id: b.id,        // Also store as db_id for compatibility
+                            title: b.title,
+                            color: { r: 0.3 + Math.random() * 0.4, g: 0.5 + Math.random() * 0.3, b: 0.8 + Math.random() * 0.2 },
+                            position: {
+                                x: Math.cos(angle) * radius,
+                                y: -0.5 + Math.random() * 1,
+                                z: Math.sin(angle) * radius
+                            },
+                            radius: 0.6 + Math.random() * 0.3
+                        };
+                        window.multiverseApp.addBubble(bubbleData);
+                        console.log('[UI] Added new bubble:', b.title, 'id:', b.id);
+                    }
+                    break;
+
+                case 'user_transcript':
+                    showTranscript('You', message.text);
+                    break;
+
+                case 'agent_response':
+                    showTranscript('Agent', message.text);
+                    break;
+
+                case 'navigate_to_bubble':
+                    // Voice command to navigate
+                    if (window.multiverseApp) {
+                        window.multiverseApp.focusBubble(message.bubble_id);
+                    }
+                    break;
+
+                case 'enter_bubble':
+                    // Voice command to enter
+                    enterSpace(message.bubble_id);
+                    break;
+
+                case 'exit_bubble':
+                    exitSpace();
+                    break;
+
+                case 'voice_started':
+                    voiceActive = true;
+                    voiceIndicator.className = 'active';
+                    voiceStatus.textContent = 'Voice: Listening...';
+                    voiceBtn.textContent = 'Stop Voice';
+                    break;
+
+                case 'voice_stopped':
+                    voiceActive = false;
+                    voiceIndicator.className = 'inactive';
+                    voiceStatus.textContent = 'Voice: Inactive';
+                    voiceBtn.textContent = 'Start Voice';
+                    break;
+
+                // Canvas events
+                case 'entered_bubble':
+                    // First switch views if not already in space view
+                    if (spaceView.classList.contains('hidden')) {
+                        console.log('[Python] entered_bubble - switching to space view');
+                        const bubbleTitle = message.bubble_title || 'Space';
+                        document.getElementById('space-title').textContent = bubbleTitle;
+                        
+                        // Get bubble index for animation (if available)
+                        const bubbleIndex = window.multiverseApp?.getBubbleIndexById(message.bubble_id);
+                        
+                        if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
+                            // Use animated entry
+                            window.multiverseApp.enterBubbleWithAnimation(bubbleIndex, () => {
+                                canvasContainer.classList.add('hidden');
+                                spaceView.classList.remove('hidden');
+                                
+                                if (!spaceCanvas) {
+                                    spaceCanvas = new UniverseCanvas('space-canvas');
+                                }
+                                if (message.content) {
+                                    spaceCanvas.loadNodes(message.content, message.edges || []);
+                                }
+                                
+                                setTimeout(() => {
+                                    const overlay = document.getElementById('transition-overlay');
+                                    if (overlay) overlay.classList.remove('active');
+                                }, 100);
+                            });
+                        } else {
+                            // Fallback: immediate switch
+                            canvasContainer.classList.add('hidden');
+                            spaceView.classList.remove('hidden');
+                            
+                            if (!spaceCanvas) {
+                                spaceCanvas = new UniverseCanvas('space-canvas');
+                            }
+                            if (message.content) {
+                                spaceCanvas.loadNodes(message.content, message.edges || []);
+                            }
+                        }
+                    } else {
+                        // Already in space view, just load nodes
+                        if (spaceCanvas && message.content) {
+                            spaceCanvas.loadNodes(message.content, message.edges || []);
+                        }
+                    }
+                    break;
+
+                case 'node_added':
+                    if (spaceCanvas) {
+                        spaceCanvas.onNodeAdded(message.node);
+                    }
+                    break;
+
+                case 'node_updated':
+                    if (spaceCanvas) {
+                        spaceCanvas.onNodeUpdated(message.node_id, message.updates);
+                    }
+                    break;
+
+                case 'node_deleted':
+                    if (spaceCanvas) {
+                        spaceCanvas.onNodeDeleted(message.node_id);
+                    }
+                    break;
+
+                // BUG 3 FIX: Handle edge_added event for visual feedback
+                case 'edge_added':
+                    if (spaceCanvas && message.edge) {
+                        spaceCanvas.onEdgeAdded(message.edge);
+                        showTranscript('System', `Linked ideas together`);
+                    }
+                    break;
+
+                // Handle exited_bubble from Python backend
+                case 'exited_bubble':
+                    exitSpace(true);  // Pass true to indicate this came from Python
+                    break;
+
+                // ============================================
+                // Tool-initiated messages (from voice commands)
+                // ============================================
+
+                case 'agent_switching':
+                    // Visual feedback when switching agents
+                    console.log('[Agent] Switching to:', message.bubble_title);
+                    showTranscript('System', `Switching to ${message.bubble_title}...`);
+                    break;
+
+                case 'tool_add_node':
+                    // Voice tool added a node to a bubble
+                    console.log('[Tool] Add node to bubble:', message.bubble_name || message.bubble_id);
+                    if (spaceCanvas && message.node) {
+                        spaceCanvas.onNodeAdded(message.node);
+                    }
+                    break;
+
+                case 'tool_update_node':
+                    // Voice tool updated a node
+                    console.log('[Tool] Update node:', message.node_id);
+                    if (spaceCanvas && message.updates) {
+                        spaceCanvas.onNodeUpdated(message.node_id, message.updates);
+                    }
+                    break;
+
+                case 'tool_delete_node':
+                    // Voice tool deleted a node
+                    console.log('[Tool] Delete node:', message.node_id);
+                    if (spaceCanvas) {
+                        spaceCanvas.onNodeDeleted(message.node_id);
+                    }
+                    break;
+
+                case 'bubble_scored':
+                    // Bubble was scored via voice
+                    console.log('[Tool] Bubble scored:', message.bubble_id, 'Score:', message.score);
+                    showTranscript('System', `Scored ${message.score}/100`);
+                    break;
+
+                case 'bubble_promoted':
+                    // Bubble was promoted to project
+                    console.log('[Tool] Bubble promoted:', message.bubble_id, '->', message.project_name);
+                    showTranscript('System', `Promoted to project: ${message.project_name}`);
+                    break;
+
+                case 'bubble_deleted':
+                    // Bubble was deleted via voice
+                    console.log('[Tool] Bubble deleted:', message.bubble_id, 'title:', message.title);
+                    if (window.multiverseApp) {
+                        // Try to remove by ID first, then by title as fallback
+                        let removed = window.multiverseApp.removeBubble(message.bubble_id);
+                        if (!removed && message.title) {
+                            console.log('[Tool] Trying to remove by title:', message.title);
+                            removed = window.multiverseApp.removeBubble(message.title);
+                        }
+                        if (!removed) {
+                            console.warn('[Tool] Could not find bubble to remove:', message.bubble_id, message.title);
+                        }
+                    }
+                    break;
+
+                case 'canvas_refresh':
+                    // Refresh canvas from database
+                    console.log('[Tool] Canvas refresh requested');
+                    if (spaceCanvas) {
+                        spaceCanvas.refresh();
+                    }
+                    break;
+
+                case 'idea_summarized':
+                    // Handle idea summarization result
+                    console.log('[Tool] Idea summarized:', message);
+                    if (typeof addSummary === 'function') {
+                        addSummary(
+                            message.idea_title || 'Untitled',
+                            message.summary || '',
+                            message.style || 'concise',
+                            message.node_count || 0
+                        );
+                    }
+                    break;
+
+                case 'white_paper_generated':
+                    // Handle White Paper generation result
+                    console.log('[Tool] White Paper generated:', message);
+                    if (typeof displayWhitePaper === 'function') {
+                        displayWhitePaper(
+                            message.title || 'White Paper',
+                            message.content || '',
+                            message.node_count || 0,
+                            message.max_depth_reached || 0
+                        );
+                    }
+                    showTranscript('System', `White Paper "${message.title}" generated with ${message.node_count} ideas`);
+                    break;
+
+                // ============================================
+                // SPACE NAVIGATION & AGENT SWITCH MESSAGES
+                // ============================================
+                
+                case 'agent_switched':
+                    // Agent was switched via transfer tool
+                    console.log('[Agent] Switched from', message.from_agent, 'to', message.to_agent);
+                    updateAgentDisplay(message.to_agent);
+                    showTranscript('System', `Agent switched to ${message.to_agent}`);
+                    
+                    // AUTO-NAVIGATE: If target_space is different, MultiverseApp will animate
+                    if (message.auto_navigate && message.target_space) {
+                        console.log('[Agent] Auto-navigating to space:', message.target_space);
+                        // The space_changed message will follow and trigger switchSpace()
+                    }
+                    break;
+                    
+                case 'space_changed':
+                    // Space was changed (from backend, keyboard shortcut, or agent transfer)
+                    console.log('[Space] Changed to:', message.space);
+                    
+                    // Only animate if space is actually different
+                    if (message.space !== currentSpace) {
+                        currentSpace = message.space;
+                        
+                        // Update UI tabs
+                        document.querySelectorAll('.space-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.dataset.space === message.space);
+                        });
+                        
+                        // Update Space Indicator (bottom center)
+                        const spaceIcon = document.getElementById('current-space-icon');
+                        const spaceName = document.getElementById('current-space-name');
+                        const spaceConfig = {
+                            'ideas': { icon: '💭', name: 'Ideas Universe' },
+                            'projects': { icon: '🧬', name: 'Project Space' },
+                            'desktop': { icon: '🌟', name: 'Desktop Automation' }
+                        };
+                        const cfg = spaceConfig[message.space] || { icon: '❓', name: message.space };
+                        if (spaceIcon) spaceIcon.textContent = cfg.icon;
+                        if (spaceName) spaceName.textContent = cfg.name;
+                        
+                        // TRIGGER ANIMATED NAVIGATION in MultiverseApp
+                        if (window.multiverseApp) {
+                            console.log('[Space] Triggering animated navigation to:', message.space);
+                            window.multiverseApp.navigateToSpace(message.space);
+                        }
+                        
+                        // Show reason if provided (e.g., from agent transfer)
+                        if (message.reason) {
+                            showTranscript('System', message.reason);
+                        }
+                    } else {
+                        console.log('[Space] Already in space:', message.space);
+                    }
+                    break;
+                    
+                case 'space_suggestion':
+                    // Agent suggests switching to a different space
+                    console.log('[Space] Suggestion:', message.suggested_space);
+                    showTranscript('System', `Suggestion: Switch to ${message.suggested_space} space`);
+                    // Optional: Auto-switch or ask user
+                    // switchSpace(message.suggested_space);
+                    break;
+
+                // ============================================
+                // VOICE NAVIGATION COMMANDS (from navigation_tools.py)
+                // ============================================
+                
+                case 'navigate_space':
+                    // Voice command: navigate to space
+                    console.log('[Voice Nav] Navigate to space:', message.space);
+                    if (message.space && window.multiverseApp) {
+                        window.multiverseApp.navigateToSpace(message.space);
+                        currentSpace = message.space;
+                        // Update UI tabs
+                        document.querySelectorAll('.space-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.dataset.space === message.space);
+                        });
+                    }
+                    break;
+                    
+                case 'select_item':
+                    // Voice command: select next/previous item
+                    console.log('[Voice Nav] Select item:', message.direction, message.item_type);
+                    if (window.multiverseApp) {
+                        const direction = message.direction || 1;
+                        if (message.item_type === 'project' || currentSpace === 'projects') {
+                            window.multiverseApp.selectNextProject(direction);
+                        } else {
+                            window.multiverseApp.selectNextBubble(direction);
+                        }
+                    }
+                    break;
+                    
+                case 'select_by_name':
+                    // Voice command: select item by name
+                    console.log('[Voice Nav] Select by name:', message.name);
+                    if (window.multiverseApp && message.name) {
+                        // Find and select bubble/project by name
+                        const bubbleIndex = window.multiverseApp.getBubbleIndexById(message.name);
+                        if (bubbleIndex >= 0) {
+                            window.multiverseApp.selectBubble(bubbleIndex);
+                        }
+                    }
+                    break;
+                    
+                case 'select_by_index':
+                    // Voice command: select item by index
+                    console.log('[Voice Nav] Select by index:', message.index);
+                    if (window.multiverseApp && message.index !== undefined) {
+                        if (currentSpace === 'projects') {
+                            window.multiverseApp.selectProject(message.index);
+                        } else {
+                            window.multiverseApp.selectBubble(message.index);
+                        }
+                    }
+                    break;
+                    
+                case 'enter_selection':
+                    // Voice command: enter currently selected item
+                    console.log('[Voice Nav] Enter selection');
+                    if (window.multiverseApp) {
+                        window.multiverseApp.enterCurrentSelection();
+                    }
+                    break;
+                    
+                case 'exit_view':
+                    // Voice command: exit current view
+                    console.log('[Voice Nav] Exit view');
+                    exitSpace(true);  // Exit bubble view
+                    break;
+
+                // ============================================
+                // SHUTTLE VOICE NAVIGATION
+                // ============================================
+
+                case 'enter_shuttle':
+                    // Voice command: enter selected shuttle
+                    console.log('[Voice Nav] Enter shuttle');
+                    if (window.multiverseApp?.shuttleManager) {
+                        const selectedShuttle = window.multiverseApp.shuttleManager.getSelectedShuttle();
+                        if (selectedShuttle) {
+                            window.enterShuttleFromClick(selectedShuttle.id);
+                        } else {
+                            showTranscript('System', 'No shuttle selected. Say "select shuttle" first.');
+                        }
+                    }
+                    break;
+
+                case 'enter_shuttle_by_name':
+                    // Voice command: enter shuttle by name
+                    console.log('[Voice Nav] Enter shuttle by name:', message.name);
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttle = window.multiverseApp.shuttleManager.findShuttleByName(message.name);
+                        if (shuttle) {
+                            window.enterShuttleFromClick(shuttle.id);
+                        } else {
+                            showTranscript('System', `Shuttle "${message.name}" not found.`);
+                        }
+                    }
+                    break;
+
+                case 'exit_shuttle':
+                    // Voice command: exit shuttle view
+                    console.log('[Voice Nav] Exit shuttle');
+                    if (window.multiverseApp?.shuttleManager) {
+                        window.multiverseApp.shuttleManager.exitCurrentShuttle();
+                    }
+                    break;
+
+                case 'select_shuttle':
+                    // Voice command: select next/previous shuttle
+                    console.log('[Voice Nav] Select shuttle, direction:', message.direction);
+                    if (window.multiverseApp?.shuttleManager) {
+                        window.multiverseApp.shuttleManager.selectShuttle(message.direction || 1);
+                    }
+                    break;
+
+                case 'select_shuttle_by_name':
+                    // Voice command: select shuttle by name
+                    console.log('[Voice Nav] Select shuttle by name:', message.name);
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttle = window.multiverseApp.shuttleManager.findShuttleByName(message.name);
+                        if (shuttle) {
+                            window.multiverseApp.shuttleManager.setSelectedShuttle(shuttle.id);
+                            showTranscript('System', `Selected shuttle: ${shuttle.bubbleName}`);
+                        } else {
+                            showTranscript('System', `Shuttle "${message.name}" not found.`);
+                        }
+                    }
+                    break;
+
+                case 'list_shuttles':
+                    // Voice command: list available shuttles
+                    console.log('[Voice Nav] List shuttles');
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttles = window.multiverseApp.shuttleManager.getShuttleList();
+                        if (shuttles.length > 0) {
+                            const names = shuttles.map(s => s.bubbleName).join(', ');
+                            showTranscript('System', `Active shuttles: ${names}`);
+                        } else {
+                            showTranscript('System', 'No active shuttles.');
+                        }
+                    }
+                    break;
+
+                case 'shuttle_continue_to_project':
+                    // Voice command: continue to project from shuttle
+                    console.log('[Voice Nav] Continue to project');
+                    document.getElementById('shuttle-continue-to-project')?.click();
+                    break;
+
+                case 'hand_gesture':
+                    // Hand gesture detected from MediaPipe
+                    console.log('[Hand] Gesture:', message.gesture, 'Position:', message.position);
+                    // Could trigger visual feedback or actions
+                    if (message.gesture === 'POINTING' && currentSpace === 'desktop') {
+                        // Pointing gesture in desktop space
+                        showTranscript('Hand', `Pointing at ${Math.round(message.position?.x * 100)}%, ${Math.round(message.position?.y * 100)}%`);
+                    }
+                    break;
+
+                // ============================================
+                // REQUIREMENT SHUTTLE MESSAGES
+                // ============================================
+
+                case 'shuttle_launched':
+                    // New requirement shuttle launched from bubble
+                    console.log('[Shuttle] Launched:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.createShuttle({
+                            id: message.shuttle_id || `shuttle-${Date.now()}`,
+                            bubbleName: message.bubble_name,
+                            bubbleId: message.bubble_id,  // Pass bubble ID for position lookup
+                            startPosition: message.start_position,  // Use stored bubble position
+                            totalRequirements: message.total_requirements,
+                            batchCount: message.batch_count
+                        });
+                    }
+                    showTranscript('System', `Shuttle launched: ${message.total_requirements} requirements from "${message.bubble_name}"`);
+                    break;
+
+                case 'batch_progress':
+                    // Batch processing progress update
+                    console.log('[Shuttle] Batch progress:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateBatchProgress(
+                            message.shuttle_id,
+                            message.batch_index,
+                            message.results
+                        );
+                    }
+                    break;
+
+                case 'shuttle_complete':
+                    // Shuttle evaluation complete
+                    console.log('[Shuttle] Complete:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateShuttleComplete(
+                            message.shuttle_id,
+                            {
+                                score: message.score,
+                                passed: message.passed,
+                                failed: message.failed
+                            }
+                        );
+                    }
+                    showTranscript('System', `Shuttle complete: Score ${(message.score * 100).toFixed(0)}% (${message.passed} passed, ${message.failed} need work)`);
+                    break;
+
+                case 'shuttles_sync':
+                    // Restore persisted shuttles from database on startup
+                    console.log('[Shuttle] Restoring', message.shuttles?.length || 0, 'shuttles from database');
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        (message.shuttles || []).forEach(shuttleData => {
+                            window.multiverseApp.shuttleManager.createShuttle({
+                                id: shuttleData.shuttle_id,
+                                bubbleName: shuttleData.bubble_name,
+                                bubbleId: shuttleData.bubble_id,  // Pass bubble ID for position lookup
+                                startPosition: shuttleData.start_position,  // Use stored bubble position
+                                totalRequirements: shuttleData.total_count,
+                                batchCount: 4, // DNA stages (4 checkpoints)
+                                score: shuttleData.score,
+                                passed: shuttleData.passed_count,
+                                failed: shuttleData.failed_count,
+                                status: shuttleData.status,
+                                currentStage: shuttleData.current_stage || 'mining'
+                            });
+                        });
+                    }
+                    break;
+
+                case 'shuttle_stage_update':
+                    // Real-time update when shuttle progresses to a new DNA stage
+                    console.log('[Shuttle] Stage update:', message.shuttle_id, '->', message.stage);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateShuttleStage(
+                            message.shuttle_id,
+                            message.stage
+                        );
+                        // Show transcript notification
+                        const stageNames = {
+                            'mining': '⛏️ Mining',
+                            'requirements': '📄 Requirements',
+                            'validation': '✓ Validation',
+                            'knowledge_graph': '✳️ Knowledge Graph',
+                            'techstack': '🚀 TechStack'
+                        };
+                        const stageName = stageNames[message.stage] || message.stage;
+                        showTranscript('System', `Shuttle: ${stageName} stage`);
+                    }
+                    break;
+
+                case 'shuttle_synced':
+                    // Shuttle synced from req-orchestrator API (real progress)
+                    console.log('[Shuttle] Synced from orchestrator:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        const existingShuttle = window.multiverseApp.shuttleManager.getShuttle(message.shuttle_id);
+                        if (existingShuttle) {
+                            // Update existing shuttle position/stage
+                            window.multiverseApp.shuttleManager.updateShuttleStage(
+                                message.shuttle_id,
+                                message.current_stage
+                            );
+                        } else {
+                            // Create new shuttle at synced position
+                            window.multiverseApp.shuttleManager.createShuttle({
+                                id: message.shuttle_id,
+                                bubbleName: message.bubble_name,
+                                bubbleId: message.bubble_id,  // Pass bubble ID for position lookup
+                                totalRequirements: message.total,
+                                batchCount: 4, // DNA stages (4 checkpoints)
+                                score: message.score,
+                                passed: message.passed,
+                                failed: message.failed,
+                                status: message.score >= 0.7 ? 'arrived' : 'in_transit',
+                                currentStage: message.current_stage
+                            });
+                        }
+                    }
+                    const progressPct = Math.round((message.progress || 0.2) * 100);
+                    showTranscript('System', `Shuttle synced: "${message.bubble_name}" at ${progressPct}% (${message.current_stage})`);
+                    break;
+
+                case 'stage_shuttle_created':
+                    // PHASE 13: Stage-specific shuttle created (parked at checkpoint)
+                    console.log('[Shuttle] Stage shuttle created:', message.stage_type, 'for', message.bubble_name);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.createStageShuttle({
+                            shuttle_id: message.shuttle_id,
+                            bubble_id: message.bubble_id,
+                            bubble_name: message.bubble_name,
+                            stage_type: message.stage_type,
+                            stage_data: message.stage_data
+                        });
+
+                        // Show notification based on stage type
+                        const stageIconsP13 = {
+                            'mining': '🏭',
+                            'validation': '⚖️',
+                            'knowledge_graph': '🔗',
+                            'techstack': '📁'
+                        };
+                        const stageNamesP13 = {
+                            'mining': 'Mining',
+                            'validation': 'Validation',
+                            'knowledge_graph': 'Knowledge Graph',
+                            'techstack': 'TechStack'
+                        };
+                        const iconP13 = stageIconsP13[message.stage_type] || '🚀';
+                        const stageNameP13 = stageNamesP13[message.stage_type] || message.stage_type;
+
+                        // Build info string based on stage
+                        let infoP13 = '';
+                        if (message.stage_type === 'mining') {
+                            infoP13 = `${message.total || 0} requirements`;
+                        } else if (message.stage_type === 'validation') {
+                            infoP13 = `${message.passed || 0}/${(message.passed || 0) + (message.failed || 0)} passed`;
+                        } else if (message.stage_type === 'knowledge_graph') {
+                            infoP13 = `${message.entities || 0} entities`;
+                        } else if (message.stage_type === 'techstack') {
+                            infoP13 = message.recommended_stack || 'analyzing...';
+                        }
+
+                        showTranscript('System', `${iconP13} ${stageNameP13} shuttle: ${message.bubble_name} (${infoP13})`);
+                    }
+                    break;
+            }
+        });
+
+        function showTranscript(speaker, text) {
+            const panel = document.getElementById('transcript-panel');
+            const content = document.getElementById('transcript-content');
+            panel.classList.remove('hidden');
+
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry';
+            entry.innerHTML = `<strong>${speaker}:</strong> ${text}`;
+            content.appendChild(entry);
+            content.scrollTop = content.scrollHeight;
+
+            // Auto-hide after 5 seconds if no new messages
+            clearTimeout(window.transcriptTimeout);
+            window.transcriptTimeout = setTimeout(() => {
+                panel.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Request initial bubbles from Python
+        // NOTE: Shuttles are requested AFTER bubbles_sync is received (see bubbles_sync handler)
+        // This ensures bubble meshes exist before shuttles try to find their positions
+        window.vibemind.requestBubbles();
+
+        // ========================================
+        // VNC LIVE PREVIEW FUNCTIONS (NEW)
+        // ========================================
+        
+        const vncContainer = document.getElementById('vnc-preview-container');
+        const vncFrame = document.getElementById('vnc-frame');
+        const vncLoading = document.getElementById('vnc-loading');
+        const vncProjectTitle = document.getElementById('vnc-project-title');
+        const vncStatus = document.getElementById('vnc-status');
+        const vncLoadingDetails = document.getElementById('vnc-loading-details');
+        
+        let currentPreviewProjectId = null;
+        
+        function showVncLoading(show, projectTitle = 'Project') {
+            if (vncContainer) {
+                vncContainer.classList.remove('hidden');
+            }
+            if (vncLoading) {
+                vncLoading.style.display = show ? 'flex' : 'none';
+            }
+            if (vncProjectTitle) {
+                vncProjectTitle.textContent = projectTitle;
+            }
+            if (vncStatus) {
+                vncStatus.textContent = show ? 'Loading...' : 'Ready';
+                vncStatus.className = 'vnc-status ' + (show ? 'loading' : 'ready');
+            }
+        }
+        
+        function updateVncLoadingDetails(text) {
+            if (vncLoadingDetails) {
+                vncLoadingDetails.textContent = text;
+            }
+        }
+        
+        function updateVncStatus(text) {
+            if (vncStatus) {
+                vncStatus.textContent = text;
+                vncStatus.className = 'vnc-status ' + (text.includes('✓') ? 'ready' : text.includes('✗') ? 'error' : 'loading');
+            }
+        }
+        
+        function showVncPreview(url, projectTitle, projectId) {
+            currentPreviewProjectId = projectId;
+            
+            if (vncContainer) {
+                vncContainer.classList.remove('hidden');
+            }
+            if (vncFrame) {
+                vncFrame.src = url;
+            }
+            if (vncProjectTitle) {
+                vncProjectTitle.textContent = projectTitle || 'Live Preview';
+            }
+            if (vncStatus) {
+                vncStatus.textContent = 'Running';
+            }
+
+            // Update Space Indicator (top right)
+            const spaceIndicator = document.getElementById('space-indicator');
+            if (spaceIndicator) spaceIndicator.classList.remove('hidden');
+        }
+        
+        function hideVncPreview() {
+            if (vncContainer) {
+                vncContainer.classList.add('hidden');
+            }
+            if (vncFrame) {
+                vncFrame.src = '';
+            }
+            currentPreviewProjectId = null;
+        }
+        
+        // VNC Control Buttons
+        document.getElementById('vnc-refresh-btn')?.addEventListener('click', () => {
+            if (vncFrame && vncFrame.src) {
+                const currentSrc = vncFrame.src;
+                vncFrame.src = '';
+                setTimeout(() => {
+                    vncFrame.src = currentSrc;
+                }, 100);
+            }
+        });
+        
+        document.getElementById('vnc-close-btn')?.addEventListener('click', () => {
+            if (currentPreviewProjectId) {
+                window.vibemind.stopProjectPreview(currentPreviewProjectId);
+            }
+            hideVncPreview();
+        });
+        
+        document.getElementById('vnc-fullscreen-btn')?.addEventListener('click', () => {
+            if (vncFrame) {
+                if (vncFrame.requestFullscreen) {
+                    vncFrame.requestFullscreen();
+                } else if (vncFrame.webkitRequestFullscreen) {
+                    vncFrame.webkitRequestFullscreen();
+                }
+            }
+        });
+        
+        // Open Project Button Handler
+        document.getElementById('open-project-btn')?.addEventListener('click', async () => {
+            const projectId = window.multiverseApp?.selectedProjectId;
+            const projectData = window.multiverseApp?.getProjectById(projectId);
+            
+            if (projectId) {
+                console.log('[UI] Opening project preview:', projectId);
+                showVncLoading(true, projectData?.title || 'Project');
+                
+                try {
+                    // Start the preview via IPC - this triggers the Coding Engine sandbox
+                    await window.vibemind.startProjectPreview(projectId, projectData?.path);
+                    showTranscript('System', `Starting Live Preview for ${projectData?.title || projectId}...`);
+                } catch (error) {
+                    console.error('[UI] Failed to start preview:', error);
+                    hideVncPreview();
+                    showTranscript('System', `Failed to start preview: ${error.message}`);
+                }
+            }
+        });
+
+        // ========================================
+        // SHUTTLE INFO PANEL
+        // ========================================
+
+        const shuttlePanel = document.getElementById('shuttle-info-panel');
+        const shuttleCloseBtn = document.getElementById('shuttle-close');
+        const shuttleNavigateBtn = document.getElementById('shuttle-navigate-btn');
+        const shuttleEnterBtn = document.getElementById('shuttle-enter-btn');
+        let infoPanelShuttleId = null;  // Store shuttle ID for Enter button
+
+        // Listen for shuttle clicks from ShuttleManager
+        window.addEventListener('shuttle-clicked', (event) => {
+            const data = event.detail;
+            console.log('[Shuttle Panel] Showing info for:', data);
+
+            // Store shuttle ID for Enter button
+            infoPanelShuttleId = data.id;
+
+            // Update panel content
+            document.getElementById('shuttle-bubble-name').textContent = data.bubbleName || '-';
+            document.getElementById('shuttle-req-count').textContent = `${data.totalRequirements || 0} requirements`;
+            document.getElementById('shuttle-source').textContent = `from: ${data.bubbleName || '-'}`;
+            document.getElementById('shuttle-passed').textContent = `${data.passed || 0} passed`;
+            document.getElementById('shuttle-failed').textContent = `${data.failed || 0} need work`;
+
+            const score = (data.score || 0) * 100;
+            document.getElementById('shuttle-score-fill').style.width = `${score}%`;
+            document.getElementById('shuttle-score-text').textContent = `Score: ${score.toFixed(0)}%`;
+
+            // Show panel
+            shuttlePanel?.classList.remove('hidden');
+        });
+
+        // Close shuttle panel
+        shuttleCloseBtn?.addEventListener('click', () => {
+            shuttlePanel?.classList.add('hidden');
+        });
+
+        // Navigate with Alice button
+        shuttleNavigateBtn?.addEventListener('click', () => {
+            console.log('[Shuttle] Navigate with Alice clicked');
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'shuttle_navigate',
+                    action: 'transfer_to_alice'
+                });
+            }
+            shuttlePanel?.classList.add('hidden');
+        });
+
+        // Enter Shuttle button - zoom into shuttle space
+        shuttleEnterBtn?.addEventListener('click', () => {
+            console.log('[Shuttle] Enter Shuttle clicked, id:', infoPanelShuttleId);
+            if (infoPanelShuttleId && window.enterShuttleFromClick) {
+                shuttlePanel?.classList.add('hidden');
+                window.enterShuttleFromClick(infoPanelShuttleId);
+            }
+        });
+
+        // ========================================
+        // SHUTTLE INTERIOR VIEW (zoomed-in space)
+        // ========================================
+
+        const shuttleInteriorView = document.getElementById('shuttle-interior-view');
+        const shuttleExitBtn = document.getElementById('shuttle-exit-btn');
+        const shuttleOpenOrchestrator = document.getElementById('shuttle-open-orchestrator');
+        const shuttleContinueToProject = document.getElementById('shuttle-continue-to-project');
+        let currentShuttleData = null;
+
+        // Store camera position before entering shuttle
+        let savedCameraPosition = null;
+        let savedCameraTarget = null;
+
+        // Listen for shuttle-entered event (from ShuttleManager zoom animation)
+        window.addEventListener('shuttle-entered', (event) => {
+            currentShuttleData = event.detail;
+            console.log('[Shuttle Interior] Entered:', currentShuttleData);
+
+            // Update interior view with shuttle data
+            document.getElementById('shuttle-interior-name').textContent = currentShuttleData.bubbleName || 'Requirement Shuttle';
+
+            // Update stage badge
+            const stageBadge = document.getElementById('shuttle-current-stage');
+            const stageLabels = {
+                'mining': 'Mining',
+                'requirements': 'Requirements',
+                'validation': 'Validation',
+                'knowledge_graph': 'Knowledge Graph',
+                'techstack': 'TechStack',
+                'complete': 'Complete'
+            };
+            stageBadge.textContent = stageLabels[currentShuttleData.currentStage] || 'Mining';
+
+            // Update pipeline visualization
+            const stages = ['mining', 'requirements', 'validation', 'knowledge_graph', 'techstack'];
+            const currentStageIndex = stages.indexOf(currentShuttleData.currentStage || 'mining');
+            document.querySelectorAll('.pipeline-stage').forEach((el, i) => {
+                el.classList.remove('active', 'complete');
+                if (i < currentStageIndex) {
+                    el.classList.add('complete');
+                } else if (i === currentStageIndex) {
+                    el.classList.add('active');
+                }
+            });
+            document.querySelectorAll('.pipeline-connector').forEach((el, i) => {
+                el.classList.toggle('active', i < currentStageIndex);
+            });
+
+            // Update score circle
+            const score = (currentShuttleData.score || 0) * 100;
+            const scoreCircle = document.getElementById('shuttle-interior-score');
+            scoreCircle.style.background = `conic-gradient(#66aaff ${score}%, rgba(100, 100, 100, 0.3) ${score}%)`;
+            scoreCircle.querySelector('.score-value').textContent = `${score.toFixed(0)}%`;
+
+            // Update stats
+            document.getElementById('shuttle-interior-passed').textContent = currentShuttleData.passed || 0;
+            document.getElementById('shuttle-interior-failed').textContent = currentShuttleData.failed || 0;
+            document.getElementById('shuttle-interior-total').textContent = currentShuttleData.totalRequirements || 0;
+
+            // PHASE 13: Check if this is a stage-specific shuttle with embedded data
+            if (currentShuttleData.isStageShuttle && currentShuttleData.stageData) {
+                // Stage shuttle: render data directly (no backend request needed)
+                console.log('[Shuttle Interior] Stage shuttle with embedded data:', currentShuttleData.stageType);
+                renderStageShuttleData(currentShuttleData.stageType, currentShuttleData.stageData);
+            } else {
+                // Legacy shuttle: request requirements from backend
+                if (window.vibemind?.sendToPython) {
+                    window.vibemind.sendToPython({
+                        type: 'get_shuttle_requirements',
+                        shuttle_id: currentShuttleData.id
+                    });
+                }
+            }
+
+            // Update checkpoint tab status indicators
+            const currentStage = currentShuttleData.stageType || currentShuttleData.currentStage || 'mining';
+            updateCheckpointTabStatus(currentStage);
+
+            // Show only the tab for the current stage (hide tabs for other checkpoints)
+            const checkpointStages = ['mining', 'validation', 'knowledge_graph', 'techstack'];
+            const activeStageIdx = checkpointStages.indexOf(currentStage);
+
+            document.querySelectorAll('.checkpoint-tab').forEach(tab => {
+                const tabStage = tab.dataset.stage;
+                const tabIdx = checkpointStages.indexOf(tabStage);
+
+                // Show only the current stage's tab
+                const shouldShow = tabIdx === activeStageIdx;
+                tab.style.display = shouldShow ? '' : 'none';
+
+                // Activate the current stage tab
+                tab.classList.toggle('active', shouldShow);
+            });
+
+            // Show the corresponding panel
+            document.querySelectorAll('.checkpoint-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            document.getElementById(`checkpoint-${currentStage}`)?.classList.add('active');
+
+            // Show interior view
+            shuttleInteriorView?.classList.remove('hidden');
+            shuttlePanel?.classList.add('hidden');
+
+            console.log('[Shuttle Interior] View opened, stage:', currentStage);
+        });
+
+        // Listen for shuttle-exited event
+        window.addEventListener('shuttle-exited', () => {
+            currentShuttleData = null;
+            shuttleInteriorView?.classList.add('hidden');
+
+            // Reset all tabs to visible for next shuttle
+            document.querySelectorAll('.checkpoint-tab').forEach(tab => {
+                tab.style.display = '';
+            });
+
+            console.log('[Shuttle Interior] View closed');
+        });
+
+        // Exit shuttle button
+        shuttleExitBtn?.addEventListener('click', () => {
+            console.log('[Shuttle Interior] Exit clicked');
+            if (window.multiverseApp?.shuttleManager) {
+                const returnPos = savedCameraPosition || new THREE.Vector3(0, 3, 12);
+                const returnTarget = savedCameraTarget || new THREE.Vector3(0, 0, 0);
+                window.multiverseApp.shuttleManager.exitShuttleWithAnimation(
+                    window.multiverseApp.camera,
+                    window.multiverseApp.controls,
+                    returnPos,
+                    returnTarget,
+                    () => {
+                        shuttleInteriorView?.classList.add('hidden');
+                    }
+                );
+            } else {
+                // Fallback: just hide the panel
+                shuttleInteriorView?.classList.add('hidden');
+            }
+        });
+
+        // Open orchestrator button
+        shuttleOpenOrchestrator?.addEventListener('click', () => {
+            console.log('[Shuttle Interior] Open orchestrator clicked');
+            toggleOrchestratorPanel();
+        });
+
+        // Continue to projects button
+        shuttleContinueToProject?.addEventListener('click', () => {
+            console.log('[Shuttle Interior] Continue to projects clicked');
+            if (currentShuttleData && window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'create_project_from_shuttle',
+                    shuttle_id: currentShuttleData.id,
+                    bubble_name: currentShuttleData.bubbleName
+                });
+            }
+            shuttleInteriorView?.classList.add('hidden');
+
+            // Navigate to Projects space
+            if (window.multiverseApp) {
+                window.multiverseApp.navigateToSpace('projects');
+            }
+        });
+
+        // Handle requirements loaded from backend
+        window.addEventListener('shuttle-requirements-loaded', (event) => {
+            const { requirements } = event.detail;
+            const grid = document.getElementById('shuttle-requirements-grid');
+            if (!grid) return;
+
+            if (!requirements || requirements.length === 0) {
+                grid.innerHTML = '<div class="req-loading">No requirements found</div>';
+                return;
+            }
+
+            grid.innerHTML = requirements.map(req => `
+                <div class="req-card ${req.verdict === 'pass' ? 'passed' : 'failed'}">
+                    <div class="req-card-header">
+                        <span class="req-id">${req.id}</span>
+                        <span class="req-score">${((req.score || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="req-text">${req.text || 'No description'}</div>
+                </div>
+            `).join('');
+
+            // Update mining count
+            document.getElementById('mining-count').textContent = `${requirements.length} requirements extracted`;
+        });
+
+        // ========================================
+        // CHECKPOINT TABS
+        // ========================================
+
+        // Tab switching logic
+        document.querySelectorAll('.checkpoint-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const stage = tab.dataset.stage;
+
+                // Update tab states
+                document.querySelectorAll('.checkpoint-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update panel visibility
+                document.querySelectorAll('.checkpoint-panel').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+                document.getElementById(`checkpoint-${stage}`)?.classList.add('active');
+            });
+        });
+
+        // Update checkpoint tab status based on shuttle stage (4 tabs)
+        function updateCheckpointTabStatus(currentStage) {
+            // Only the 4 tabs that exist in the HTML (no 'requirements' tab)
+            const tabStages = ['mining', 'validation', 'knowledge_graph', 'techstack'];
+            const currentIndex = tabStages.indexOf(currentStage);
+
+            tabStages.forEach((s, i) => {
+                const tabStatus = document.getElementById(`tab-status-${s}`);
+                if (tabStatus) {
+                    if (i < currentIndex) {
+                        tabStatus.textContent = '✅';  // Completed
+                    } else if (i === currentIndex) {
+                        tabStatus.textContent = '🔄';  // Active/current
+                    } else {
+                        tabStatus.textContent = '⏳';  // Pending
+                    }
+                }
+            });
+        }
+
+        // ========================================
+        // PHASE 13: STAGE-SPECIFIC RENDERING FUNCTIONS
+        // ========================================
+
+        /**
+         * Render mining stage data (extracted requirements)
+         */
+        function renderMiningStageData(stageData) {
+            const grid = document.getElementById('shuttle-requirements-grid');
+            const countEl = document.getElementById('mining-count');
+            if (!grid) return;
+
+            const requirements = stageData?.requirements || [];
+            if (requirements.length === 0) {
+                grid.innerHTML = '<div class="req-loading">No requirements extracted</div>';
+                countEl.textContent = '0 requirements';
+                return;
+            }
+
+            grid.innerHTML = requirements.map(req => `
+                <div class="req-card">
+                    <div class="req-card-header">
+                        <span class="req-id">${req.id || 'REQ-???'}</span>
+                        <span class="req-source">${req.source_node_type || 'unknown'}</span>
+                    </div>
+                    <div class="req-text">${req.text || 'No description'}</div>
+                </div>
+            `).join('');
+
+            countEl.textContent = `${requirements.length} requirements extracted`;
+        }
+
+        /**
+         * Render validation stage data (9-criteria scores)
+         */
+        function renderValidationStageData(stageData) {
+            const grid = document.getElementById('shuttle-requirements-grid');
+            const countEl = document.getElementById('validation-count');
+            if (!grid) return;
+
+            const results = stageData?.results || [];
+            if (results.length === 0) {
+                grid.innerHTML = '<div class="req-loading">No validation results</div>';
+                countEl.textContent = '0 evaluated';
+                return;
+            }
+
+            // Render requirements with pass/fail status
+            grid.innerHTML = results.map(req => `
+                <div class="req-card ${req.status === 'passed' ? 'passed' : 'failed'}">
+                    <div class="req-card-header">
+                        <span class="req-id">${req.id || 'REQ-???'}</span>
+                        <span class="req-score">${((req.score || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="req-text">${req.text || 'No description'}</div>
+                    ${req.criteria && req.criteria.length > 0 ? `
+                        <div class="req-criteria">
+                            ${req.criteria.map(c => `<span class="criterion">${c.criterion}: ${(c.score * 100).toFixed(0)}%</span>`).join(' ')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+
+            countEl.textContent = `${stageData.passed || 0}/${results.length} passed (${((stageData.average_score || 0) * 100).toFixed(0)}%)`;
+        }
+
+        /**
+         * Render knowledge graph stage data (entities + relationships)
+         */
+        function renderKnowledgeGraphStageData(stageData) {
+            const preview = document.getElementById('kg-preview');
+            const countEl = document.getElementById('kg-count');
+            if (!preview) return;
+
+            const entities = stageData?.entities || [];
+            const relationships = stageData?.relationships || [];
+
+            if (stageData?.skipped) {
+                preview.innerHTML = '<div class="kg-placeholder">Knowledge Graph API disabled (USE_KG_API=false)</div>';
+                countEl.textContent = 'Skipped';
+                return;
+            }
+
+            if (entities.length === 0 && relationships.length === 0) {
+                preview.innerHTML = '<div class="kg-placeholder">No knowledge graph data</div>';
+                countEl.textContent = '0 nodes, 0 edges';
+                return;
+            }
+
+            preview.innerHTML = `
+                <div class="kg-summary">
+                    <div class="kg-stat">
+                        <span class="stat-value">${entities.length}</span>
+                        <span class="stat-label">Entities</span>
+                    </div>
+                    <div class="kg-stat">
+                        <span class="stat-value">${relationships.length}</span>
+                        <span class="stat-label">Relations</span>
+                    </div>
+                </div>
+                <div class="kg-entities">
+                    <h5>Entities</h5>
+                    <ul class="entity-list">
+                        ${entities.slice(0, 10).map(e => `<li>${e.name || e.label || e} (${e.type || 'entity'})</li>`).join('')}
+                        ${entities.length > 10 ? `<li class="more">+${entities.length - 10} more...</li>` : ''}
+                    </ul>
+                </div>
+                <div class="kg-relationships">
+                    <h5>Relationships</h5>
+                    <ul class="relationship-list">
+                        ${relationships.slice(0, 8).map(r => `<li>${r.source || r.from} → ${r.relation || r.type} → ${r.target || r.to}</li>`).join('')}
+                        ${relationships.length > 8 ? `<li class="more">+${relationships.length - 8} more...</li>` : ''}
+                    </ul>
+                </div>
+            `;
+
+            countEl.textContent = `${entities.length} entities, ${relationships.length} relationships`;
+        }
+
+        /**
+         * Render techstack stage data (recommendations)
+         */
+        function renderTechStackStageData(stageData) {
+            const container = document.getElementById('techstack-content');
+            const countEl = document.getElementById('techstack-count');
+            if (!container) return;
+
+            if (stageData?.skipped) {
+                container.innerHTML = '<div class="tech-placeholder">TechStack API disabled (USE_TECHSTACK_API=false)</div>';
+                countEl.textContent = 'Skipped';
+                return;
+            }
+
+            const stack = stageData?.recommended_stack || 'Unknown';
+            const templates = stageData?.templates || [];
+            const technologies = stageData?.technologies || [];
+
+            container.innerHTML = `
+                <div class="tech-recommendation">
+                    <h5>Recommended Stack</h5>
+                    <div class="recommended-stack">${stack}</div>
+                </div>
+                ${technologies.length > 0 ? `
+                    <div class="tech-technologies">
+                        <h5>Technologies</h5>
+                        <div class="tech-tags">
+                            ${technologies.map(t => `<span class="tech-tag">${t}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                ${templates.length > 0 ? `
+                    <div class="tech-templates">
+                        <h5>Available Templates</h5>
+                        <ul class="template-list">
+                            ${templates.map(t => `<li>${t}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            `;
+
+            countEl.textContent = stack;
+        }
+
+        /**
+         * Render stage shuttle data based on stage type
+         */
+        function renderStageShuttleData(stageType, stageData) {
+            switch (stageType) {
+                case 'mining':
+                    renderMiningStageData(stageData);
+                    break;
+                case 'validation':
+                    renderValidationStageData(stageData);
+                    break;
+                case 'knowledge_graph':
+                    renderKnowledgeGraphStageData(stageData);
+                    break;
+                case 'techstack':
+                    renderTechStackStageData(stageData);
+                    break;
+                default:
+                    console.warn('[Shuttle] Unknown stage type:', stageType);
+            }
+        }
+
+        // Listen for checkpoint data updates from backend
+        window.addEventListener('shuttle-checkpoint-data', (event) => {
+            const { stage, data } = event.detail;
+
+            switch (stage) {
+                case 'validation':
+                    // Update validation criteria grid
+                    if (data.criteria) {
+                        Object.entries(data.criteria).forEach(([criterion, score]) => {
+                            const scoreEl = document.getElementById(`criteria-${criterion}`);
+                            if (scoreEl) {
+                                scoreEl.textContent = `${(score * 100).toFixed(0)}%`;
+                                scoreEl.parentElement.querySelector('.criteria-status').textContent = score >= 0.7 ? '✅' : '❌';
+                            }
+                        });
+                    }
+                    document.getElementById('validation-count').textContent = `${data.evaluated || 0} evaluated`;
+                    break;
+
+                case 'knowledge_graph':
+                    // Update KG preview
+                    const kgPreview = document.getElementById('kg-preview');
+                    if (kgPreview && data.nodes && data.nodes.length > 0) {
+                        kgPreview.innerHTML = `
+                            <div class="kg-summary">
+                                <div class="kg-stat">
+                                    <span class="stat-value">${data.nodes.length}</span>
+                                    <span class="stat-label">Nodes</span>
+                                </div>
+                                <div class="kg-stat">
+                                    <span class="stat-value">${data.edges?.length || 0}</span>
+                                    <span class="stat-label">Edges</span>
+                                </div>
+                            </div>
+                            <div class="kg-entities">
+                                ${(data.nodes.slice(0, 10) || []).map(n => `
+                                    <span class="kg-entity">${n.label || n.name || 'Entity'}</span>
+                                `).join('')}
+                                ${data.nodes.length > 10 ? `<span class="kg-more">+${data.nodes.length - 10} more</span>` : ''}
+                            </div>
+                        `;
+                    }
+                    document.getElementById('kg-count').textContent = `${data.nodes?.length || 0} nodes, ${data.edges?.length || 0} edges`;
+                    break;
+
+                case 'techstack':
+                    // Update TechStack preview
+                    const techPreview = document.getElementById('techstack-preview');
+                    if (techPreview && data.recommended_stack) {
+                        techPreview.innerHTML = `
+                            <div class="techstack-recommendation">
+                                <div class="tech-stack-name">${data.recommended_stack}</div>
+                                ${data.technologies ? `
+                                    <div class="tech-list">
+                                        ${data.technologies.map(t => `<span class="tech-tag">${t}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                                ${data.reasoning ? `<div class="tech-reasoning">${data.reasoning}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                    document.getElementById('techstack-count').textContent = data.recommended_stack || 'Not detected';
+                    break;
+            }
+        });
+
+        // Function to enter shuttle from click (saves camera position first)
+        window.enterShuttleFromClick = function(shuttleId) {
+            if (!window.multiverseApp?.shuttleManager) return;
+
+            // Save current camera position for return
+            savedCameraPosition = window.multiverseApp.camera.position.clone();
+            savedCameraTarget = window.multiverseApp.controls.target.clone();
+
+            // Enter the shuttle
+            window.multiverseApp.shuttleManager.enterShuttleWithAnimation(
+                shuttleId,
+                window.multiverseApp.camera,
+                window.multiverseApp.controls,
+                () => {
+                    console.log('[Shuttle] Zoom animation complete');
+                }
+            );
+        };
+
+        // ========================================
+        // ORCHESTRATOR PANEL
+        // ========================================
+
+        const orchestratorPanel = document.getElementById('orchestrator-panel');
+        const orchestratorCloseBtn = document.getElementById('orchestrator-close');
+        const orchestratorFrame = document.getElementById('orchestrator-frame');
+        const ORCHESTRATOR_URL = 'http://localhost:8087';
+
+        function toggleOrchestratorPanel() {
+            const isHidden = orchestratorPanel?.classList.toggle('hidden');
+            if (!isHidden && orchestratorFrame && !orchestratorFrame.src) {
+                orchestratorFrame.src = ORCHESTRATOR_URL;
+            }
+        }
+
+        orchestratorCloseBtn?.addEventListener('click', () => {
+            orchestratorPanel?.classList.add('hidden');
+        });
+
+        // Expose for voice commands
+        window.toggleOrchestratorPanel = toggleOrchestratorPanel;
+
+        // ========================================
+        // SPACE NAVIGATION
+        // ========================================
+
+        let currentSpace = 'ideas';  // 'ideas' or 'desktop'
+        let currentAgent = 'rachel';
+        
+        const tabIdeas = document.getElementById('tab-ideas');
+        const tabDesktop = document.getElementById('tab-desktop');
+        const agentNameDisplay = document.getElementById('current-agent-name');
+        
+        // Space tab click handlers
+        if (tabIdeas) {
+            tabIdeas.onclick = () => {
+                switchSpace('ideas');
+                if (window.vibemind?.navigateToSpace) {
+                    try {
+                        window.vibemind.navigateToSpace('ideas');
+                    } catch(e) {
+                        console.error('[Space] Navigation failed:', e);
+                    }
+                }
+            };
+        }
+        
+        // NEW: Project tab handler
+        const tabProjects = document.getElementById('tab-projects');
+        if (tabProjects) {
+            tabProjects.onclick = () => {
+                switchSpace('projects');
+                if (window.vibemind?.navigateToSpace) {
+                    try {
+                        window.vibemind.navigateToSpace('projects');
+                    } catch(e) {
+                        console.error('[Space] Navigation failed:', e);
+                    }
+                }
+            };
+        }
+        
+        if (tabDesktop) {
+            tabDesktop.onclick = () => {
+                switchSpace('desktop');
+                if (window.vibemind?.navigateToSpace) {
+                    try {
+                        window.vibemind.navigateToSpace('desktop');
+                    } catch(e) {
+                        console.error('[Space] Navigation failed:', e);
+                    }
+                }
+            };
+        }
+        
+        async function switchSpace(spaceId) {
+            if (spaceId === currentSpace) return;
+            
+            console.log('[Space] Switching to:', spaceId);
+            currentSpace = spaceId;
+            
+            // Update UI tabs
+            document.querySelectorAll('.space-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.space === spaceId);
+            });
+            
+            // Update Nav Panel buttons
+            document.querySelectorAll('.nav-space-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.space === spaceId);
+            });
+            
+            // Navigate via MultiverseApp (visual navigation with camera animation)
+            if (window.multiverseApp) {
+                window.multiverseApp.navigateToSpace(spaceId);
+            }
+            
+            // Also notify backend
+            try {
+                await window.vibemind.navigateToSpace(spaceId);
+            } catch(e) {
+                console.error('[Space] Navigation failed:', e);
+            }
+            
+            // Update Space Indicator (top right)
+            const spaceIndicator = document.getElementById('space-indicator');
+            const spaceIcon = document.getElementById('current-space-icon');
+            const spaceName = document.getElementById('current-space-name');
+            if (spaceId === 'ideas') {
+                if (spaceIcon) spaceIcon.textContent = '💭';
+                if (spaceName) spaceName.textContent = 'Ideas Universe';
+            } else if (spaceId === 'projects') {
+                if (spaceIcon) spaceIcon.textContent = '🧬';
+                if (spaceName) spaceName.textContent = 'Project Space';
+            } else if (spaceId === 'desktop') {
+                if (spaceIcon) spaceIcon.textContent = '🌟';
+                if (spaceName) spaceName.textContent = 'Desktop Automation';
+            }
+            // Show the indicator when space changes
+            if (spaceIndicator) spaceIndicator.classList.remove('hidden');
+            
+            // Update agent display based on space
+            const spaceInfo = window.multiverseApp?.getSpaceInfo(spaceId);
+            if (spaceInfo && spaceInfo.agent) {
+                updateAgentDisplay(spaceInfo.agent.slug);
+            }
+            
+            // Hide/show appropriate info panels
+            const bubbleInfo = document.getElementById('bubble-info');
+            const projectInfo = document.getElementById('project-info');
+            if (spaceId === 'projects') {
+                if (bubbleInfo) bubbleInfo.classList.add('hidden');
+                // projectInfo will show when project is selected
+            } else if (spaceId === 'ideas') {
+                if (projectInfo) projectInfo.classList.add('hidden');
+            }
+        }
+        
+        function updateAgentDisplay(agentName) {
+            currentAgent = agentName;
+            if (agentNameDisplay) {
+                agentNameDisplay.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+            }
+            // Update indicator color based on agent
+            const indicator = document.querySelector('.agent-indicator');
+            if (indicator) {
+                indicator.className = 'agent-indicator ' + agentName.toLowerCase();
+            }
+        }
+
+        // ========================================
+        // SUMMARIES PANEL
+        // ========================================
+        const summariesToggle = document.getElementById('summaries-toggle');
+        const summariesPanel = document.getElementById('summaries-panel');
+        const summariesClose = document.getElementById('summaries-close');
+        const summariesContent = document.getElementById('summaries-content');
+
+        // Store summaries in memory
+        let summaries = [];
+
+        // Toggle summaries panel
+        if (summariesToggle) {
+            summariesToggle.onclick = () => {
+                summariesPanel.classList.toggle('hidden');
+                summariesToggle.classList.toggle('hidden');
+            };
+        }
+
+        // Close summaries panel
+        if (summariesClose) {
+            summariesClose.onclick = () => {
+                summariesPanel.classList.add('hidden');
+                summariesToggle.classList.remove('hidden');
+            };
+        }
+
+        // Add a summary to the panel
+        function addSummary(ideaTitle, summaryText, style = 'concise', nodeCount = 0) {
+            // Remove "no summaries" message if present
+            const noSummaries = summariesContent.querySelector('.no-summaries');
+            if (noSummaries) {
+                noSummaries.remove();
+            }
+            
+            // Check if this idea already has a summary (update instead of add)
+            const existingCard = summariesContent.querySelector(`[data-idea-title="${ideaTitle}"]`);
+            if (existingCard) {
+                existingCard.querySelector('.summary-text').textContent = summaryText;
+                existingCard.querySelector('.summary-meta').textContent = `Style: ${style} • ${nodeCount} notes • Updated just now`;
+                existingCard.classList.add('updated');
+                setTimeout(() => existingCard.classList.remove('updated'), 1000);
+                return;
+            }
+            
+            // Create new summary card
+            const card = document.createElement('div');
+            card.className = 'summary-card';
+            card.dataset.ideaTitle = ideaTitle;
+            card.innerHTML = `
+                <div class="summary-title">
+                    <span class="summary-title-icon">📝</span>
+                    ${ideaTitle}
+                </div>
+                <div class="summary-text">${summaryText}</div>
+                <div class="summary-meta">Style: ${style} • ${nodeCount} notes • Just now</div>
+            `;
+            
+            // Add to top of list
+            summariesContent.insertBefore(card, summariesContent.firstChild);
+            
+            // Store in memory
+            summaries.push({ ideaTitle, summaryText, style, nodeCount, timestamp: Date.now() });
+            
+            // Show panel if hidden
+            if (summariesPanel.classList.contains('hidden')) {
+                summariesPanel.classList.remove('hidden');
+                summariesToggle.classList.add('hidden');
+            }
+            
+            // Flash animation
+            card.classList.add('updated');
+            setTimeout(() => card.classList.remove('updated'), 1000);
+        }
+
+        // ========================================
+        // WHITE PAPER PANEL
+        // ========================================
+        const whitepaperToggle = document.getElementById('whitepaper-toggle');
+        const whitepaperPanel = document.getElementById('whitepaper-panel');
+        const whitepaperClose = document.getElementById('whitepaper-close');
+        const whitepaperContent = document.getElementById('whitepaper-content');
+        const whitepaperTitle = document.getElementById('whitepaper-title');
+        const whitepaperMeta = document.getElementById('whitepaper-meta');
+
+        // Store raw markdown for export
+        let currentWhitepaperMarkdown = '';
+
+        // Toggle white paper panel
+        if (whitepaperToggle) {
+            whitepaperToggle.onclick = () => {
+                whitepaperPanel.classList.toggle('hidden');
+                whitepaperToggle.classList.toggle('hidden');
+            };
+        }
+
+        // Close white paper panel
+        if (whitepaperClose) {
+            whitepaperClose.onclick = () => {
+                whitepaperPanel.classList.add('hidden');
+                whitepaperToggle.classList.remove('hidden');
+            };
+        }
+
+        // Print button - opens print dialog
+        document.getElementById('whitepaper-print')?.addEventListener('click', () => {
+            window.print();
+        });
+
+        // Copy button - copies markdown to clipboard
+        document.getElementById('whitepaper-copy')?.addEventListener('click', async () => {
+            if (currentWhitepaperMarkdown) {
+                try {
+                    await navigator.clipboard.writeText(currentWhitepaperMarkdown);
+                    showTranscript('System', 'White Paper markdown copied to clipboard!');
+                } catch(e) {
+                    console.error('Failed to copy:', e);
+                }
+            }
+        });
+
+        // Export button - downloads as .md file
+        document.getElementById('whitepaper-export')?.addEventListener('click', () => {
+            if (currentWhitepaperMarkdown) {
+                const title = whitepaperTitle.textContent || 'white-paper';
+                const filename = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.md';
+                const blob = new Blob([currentWhitepaperMarkdown], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+                showTranscript('System', `Exported as ${filename}`);
+            }
+        });
+
+        /**
+         * Simple Markdown to HTML converter
+         * Supports: headings, bold, italic, lists, code, blockquotes
+         */
+        function markdownToHtml(markdown) {
+            if (!markdown) return '';
+            
+            let html = markdown
+                // Escape HTML
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                // Headings
+                .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+                .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                // Bold and italic
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                // Code (inline)
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                // Blockquotes
+                .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+                // Unordered lists
+                .replace(/^- (.+)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+                // Ordered lists
+                .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+                // Paragraphs (double newlines)
+                .replace(/\n\n/g, '</p><p>')
+                // Single newlines within paragraphs
+                .replace(/\n/g, '<br>');
+            
+            // Wrap in paragraph tags if not starting with block element
+            if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<blockquote')) {
+                html = '<p>' + html + '</p>';
+            }
+            
+            // Clean up empty paragraphs
+            html = html.replace(/<p><\/p>/g, '').replace(/<p><br>/g, '<p>');
+            
+            return html;
+        }
+
+        /**
+         * Display White Paper content in the panel
+         */
+        function displayWhitePaper(title, markdownContent, nodeCount, maxDepth) {
+            // Store raw markdown
+            currentWhitepaperMarkdown = markdownContent;
+            
+            // Update title
+            if (whitepaperTitle) {
+                whitepaperTitle.textContent = title || 'White Paper';
+            }
+            
+            // Convert markdown to HTML and display
+            const htmlContent = markdownToHtml(markdownContent);
+            const a4Container = whitepaperContent?.querySelector('.whitepaper-a4');
+            if (a4Container) {
+                a4Container.innerHTML = htmlContent;
+            }
+            
+            // Update meta info
+            if (whitepaperMeta) {
+                whitepaperMeta.textContent = `${nodeCount} ideas • depth ${maxDepth} • Just now`;
+            }
+            
+            // Show panel
+            whitepaperPanel?.classList.remove('hidden');
+            whitepaperToggle?.classList.add('hidden');
+            
+            // Flash animation
+            a4Container?.classList.add('updated');
+            setTimeout(() => a4Container?.classList.remove('updated'), 1000);
+        }
+    </script>
+</body>
+</html>
