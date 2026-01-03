@@ -39,6 +39,14 @@ python voice_dialog_main.py
 
 Speak into your microphone to start a conversation with your AI agent!
 
+## Documentation
+
+- [Agent Setup Guide](docs/AGENT_SETUP.md) - Multi-agent voice system setup
+- [Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md) - Architecture reference
+- [User Transfers Guide](docs/USER_CONTROLLED_TRANSFERS_GUIDE.md) - Voice handoffs & audio settings
+- [Client Tools](docs/CLIENT_TOOLS_QUICKSTART.md) - Tool implementation guide
+- [AutoGen gRPC Setup](docs/AUTOGEN_GRPC_SETUP.md) - Distributed runtime configuration
+
 ## How It Works
 
 ```
@@ -173,23 +181,25 @@ sim.render()
 VibeMind-VoiceDialog/
 ├── python/
 │   ├── voice_dialog_main.py          # Main entry point
-│   ├── elevenlabs_voice_dialog.py    # ElevenLabs client
-│   ├── audio_analyzer.py             # Audio analysis
+│   ├── electron_backend.py           # Electron IPC handler
+│   ├── agent_config.py               # Agent registry
 │   ├── config.py                     # Configuration
-│   └── logger.py                     # Logging utilities
+│   ├── agents/                       # Multi-agent configs
+│   ├── tools/                        # Tool implementations
+│   ├── workers/                      # Background workers
+│   ├── scripts/                      # Utility/deploy scripts
+│   ├── tests/                        # Test suites
+│   └── demos/                        # Demo visualizations
+├── electron-app/                     # Electron UI
+│   ├── main.js                       # Electron main process
+│   └── renderer/                     # Three.js multiverse UI
+├── docs/                             # Documentation
+│   ├── AGENT_SETUP.md
+│   ├── COMPLETE_SYSTEM_GUIDE.md
+│   └── agents/                       # Agent tool configs
 ├── cpp/                              # Optional visual module
-│   ├── include/
-│   │   ├── audio_reactive_sim.hpp
-│   │   └── particle.hpp
-│   └── src/
-│       ├── audio_reactive_sim.cpp
-│       └── bindings.cpp
-├── shaders/                          # GLSL shaders for visuals
-│   ├── particle.vert/frag
-│   └── fisheye.vert/frag
-├── CMakeLists.txt                    # C++ build configuration
+├── shaders/                          # GLSL shaders
 ├── requirements.txt                  # Python dependencies
-├── .env.template                     # Configuration template
 └── README.md
 ```
 
