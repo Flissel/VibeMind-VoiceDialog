@@ -43,3 +43,25 @@ Thumbs.db
 *.tmp
 .temp/
 nul
+
+# Test/Debug output files
+*_output.txt
+*_result.txt
+*_check.txt
+*_status.txt
+*_debug.txt
+test_output/
+
+# Crash dumps
+*.stackdump
+
+# Database (local dev)
+*.db
+
+# Logs directories
+logs/
+python/logs/
+
+# Virtual environments
+.venv/
+.venv*/
