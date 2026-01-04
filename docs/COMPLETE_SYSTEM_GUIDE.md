@@ -14,46 +14,27 @@ Your multi-agent voice dialog system with AutoGen gRPC integration is ready to u
 ┌─────────────────────────────────────────────────────────────┐
 │           ElevenLabs Conversational Agents                  │
 │                                                             │
-│  Conversational Memory (Rachel) ──→ Project Manager (Alice)│
+│  Rachel (Multiverse Navigator) ──→ Alice (Coordinator Hub) │
 │                                           │        │        │
 │                                      ┌────┘        └────┐   │
 │                                      ↓                  ↓   │
-│                          Desktop Worker (Adam)  Project Writer (Antoni)
+│                       Adam (Desktop Worker)  Antoni (Coding Worker)
 └──────────────────────────┬─────────────────────┬──────────┘
                            │                     │
                     ┌──────┴──────┐       ┌─────┴──────┐
                     │ Client      │       │ Client     │
                     │ Tools       │       │ Tools      │
-                    │ (Simple)    │       │ (Simple)   │
-                    └──────┬──────┘       └─────┬──────┘
-                           │                     │
-                    ┌──────┴──────┐       ┌─────┴──────┐
-                    │ AutoGen     │       │ AutoGen    │
-                    │ Bridge      │       │ Bridge     │
-                    └──────┬──────┘       └─────┬──────┘
-                           │                     │
-                           └──────────┬──────────┘
-                                      ↓
-                    ┌─────────────────────────────┐
-                    │   gRPC Host (localhost:50051)│
-                    └─────────────────────────────┘
-                           ┌──────┴──────┐
-                           │             │
-                    ┌──────▼──────┐  ┌──▼──────────┐
-                    │ Knowledge   │  │ Future      │
-                    │ Worker      │  │ Workers     │
-                    └─────────────┘  └─────────────┘
+                    └─────────────┘       └────────────┘
 ```
 
 ## Components Summary
 
-### Phase 1: Basic Client Tools ✅
+### ElevenLabs Agents (4 total)
 
-**ElevenLabs Agents (4 total):**
-1. **Conversational Memory (Rachel)** - Entry point, routes to PM
-2. **Project Manager (Alice)** - Coordinates and delegates
-3. **Desktop Worker (Adam)** - Executes desktop tasks
-4. **Project Writer (Antoni)** - Creates code and documents
+1. **Rachel - Multiverse Navigator** - Entry point, spaces & bubbles
+2. **Alice - Coordinator Hub** - Coordinates and delegates
+3. **Adam - Desktop Worker** - Desktop automation
+4. **Antoni - Coding Worker** - Code generation
 
 **Simple Test Tools:**
 - `write_hello_desktop()` - Desktop Worker test function
@@ -179,23 +160,26 @@ VibeMind-VoiceDialog/
 ## Agent Configuration Reference
 
 ### Agent IDs (from .env)
+
 ```bash
-AGENT_CONVERSATIONAL_MEMORY=agent_4201k8dnc4pseff87kx5hgfkb7vy
-AGENT_PROJECT_MANAGER=agent_1201k8dnc6gre3sscfxygcy7jhp4
-AGENT_DESKTOP_WORKER=agent_4101k8dnc7v7fdk9cwkknedzkqqa
-AGENT_PROJECT_WRITER=agent_1501k8dnc90pe1r9ptna5j7vef5f
+AGENT_MULTIVERSE=agent_xxx      # Rachel (entry agent)
+RACHEL_AGENT_ID=agent_xxx       # Multiverse Navigator
+ALICE_AGENT_ID=agent_xxx        # Coordinator Hub
+ADAM_AGENT_ID=agent_xxx         # Desktop Worker
+ANTONI_AGENT_ID=agent_xxx       # Coding Worker
 ```
 
 ### Tool Assignment Matrix
 
-| Agent | Transfer Tool | Client Tools |
-|-------|--------------|--------------|
-| Conversational Memory (Rachel) | ✅ To PM only | ❌ None |
-| Project Manager (Alice) | ✅ To Desktop/Writer/Memory | ❌ None |
-| Desktop Worker (Adam) | ✅ Back to PM | ✅ Hello + AutoGen |
-| Project Writer (Antoni) | ✅ Back to PM | ✅ Hello |
+| Agent | Transfer Tools | Client Tools |
+|-------|----------------|--------------|
+| Rachel (Multiverse Navigator) | to Alice | Bubble, Idea tools |
+| Alice (Coordinator Hub) | to Rachel/Adam/Antoni | None |
+| Adam (Desktop Worker) | to Alice | Desktop tools |
+| Antoni (Coding Worker) | to Alice | Coding tools |
 
 ### Voice Assignments
+
 - Rachel: 21m00Tcm4TlvDq8ikWAM (warm, friendly)
 - Alice: Xb7hH8MSUJpSbSDYk0k2 (professional, organized)
 - Adam: pNInz6obpgDQGcFmaJgB (efficient, direct)
@@ -216,51 +200,40 @@ AGENT_PROJECT_WRITER=agent_1501k8dnc90pe1r9ptna5j7vef5f
 
 ## Expected Behavior
 
-### Example 1: Simple Hello World
+### Example 1: Idea Capture
 ```
-User: "Write hello world"
+User: "I have an idea for a new feature"
     ↓
-Rachel: "Let me connect you with the Project Manager."
-    ↓ (transfer)
-Alice: "I'll transfer you to the Desktop Worker to handle that."
-    ↓ (transfer)
-Adam: [calls write_hello_desktop()]
-    ↓ (executes)
-Adam: "Success! Desktop Worker wrote file: hello_desktop_20250127_143022.txt"
-    ↓ (transfer back)
-Alice: "Task complete. Is there anything else?"
+Rachel: "Tell me about your idea and I'll capture it in your current bubble."
+    ↓ (calls add_idea tool)
+Rachel: "I've added your idea to the VibeMind bubble. Anything else?"
 ```
 
-### Example 2: AutoGen URL Fetch
+### Example 2: Desktop Automation
 ```
-User: "Learn from this URL: https://microsoft.github.io/autogen"
+User: "Open VS Code"
     ↓
-Rachel: "Let me connect you with the Project Manager."
-    ↓ (transfer)
-Alice: "I'll transfer you to the Desktop Worker to handle that."
-    ↓ (transfer)
-Adam: [calls fetch_url_knowledge()]
-    ↓ (AutoGen bridge → gRPC → Knowledge Worker)
-Worker: Fetches URL, extracts 5000 words, generates summary
-    ↓ (response back through chain)
-Adam: "I've fetched knowledge from that URL. The page is titled
-      'AutoGen Documentation' and contains 5000 words. Here's a
-      medium summary: AutoGen is a framework for building multi-agent
-      systems..."
-    ↓ (transfer back)
-Alice: "Knowledge added. What would you like to do next?"
+Rachel: "I'll connect you with Alice to coordinate that."
+    ↓ (transfer to Alice)
+Alice: "I'll have Adam handle the desktop task."
+    ↓ (transfer to Adam)
+Adam: [calls open_application("VS Code")]
+    ↓
+Adam: "VS Code is now open."
+    ↓ (transfer back to Alice)
+Alice: "Done. What else do you need?"
 ```
 
 ## Documentation Index
 
 | Document | Purpose |
 |----------|---------|
-| [README.md](README.md) | Project overview and getting started |
-| [CLAUDE.md](CLAUDE.md) | Project instructions for Claude Code |
-| [CLIENT_TOOLS_QUICKSTART.md](CLIENT_TOOLS_QUICKSTART.md) | Quick reference for client tools |
-| [CLIENT_TOOLS_SETUP.md](docs/agents/CLIENT_TOOLS_SETUP.md) | Detailed client tools guide |
-| [AUTOGEN_GRPC_SETUP.md](AUTOGEN_GRPC_SETUP.md) | AutoGen gRPC complete guide |
-| [Agent README](docs/agents/README.md) | Agent configuration reference |
+| [README.md](../README.md) | Project overview and getting started |
+| [CLAUDE.md](../CLAUDE.md) | Project instructions for Claude Code |
+| [AGENT_SETUP.md](AGENT_SETUP.md) | Multi-agent voice system setup |
+| [CLIENT_TOOLS_SETUP.md](agents/CLIENT_TOOLS_SETUP.md) | Client tools guide |
+| [USER_CONTROLLED_TRANSFERS_GUIDE.md](USER_CONTROLLED_TRANSFERS_GUIDE.md) | Voice handoffs & audio |
+| [Agent README](agents/README.md) | Agent configuration reference |
 | **This file** | Complete system overview |
 
 ## Troubleshooting
