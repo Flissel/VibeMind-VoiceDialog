@@ -11,7 +11,8 @@ numpy>=1.24.0
 # Audio analysis (optional - for visual effects)
 librosa>=0.10.0
 
-# Multi-agent system (AutoGen)
+# Multi-agent system (AutoGen 0.4)
+autogen-agentchat~=0.4
 autogen-core>=0.4.0
 autogen-ext[grpc]>=0.4.0  # Includes gRPC distributed runtime
 
@@ -19,10 +20,35 @@ autogen-ext[grpc]>=0.4.0  # Includes gRPC distributed runtime
 requests>=2.31.0
 beautifulsoup4>=4.12.0  # HTML parsing for knowledge worker
 
+# AI Summarization (OpenRouter via OpenAI-compatible SDK)
+openai>=2.0.0
+
 # Environment variables
 python-dotenv>=1.0.0
 
 # Visual system dependencies (optional - C++ module)
-PyGLFW>=2.6.0
+# Only needed if building C++ visual module
+glfw>=2.6.0
 pybind11>=2.11.0
-cmake>=3.15.0
+
+# Vibemind Workspace UI (optional - PyQt5)
+# PyQt5>=5.15.0
+# qasync>=0.23.0
+
+# Hand Motion Detection (Desktop Automation Space)
+mediapipe>=0.10.0
+opencv-python>=4.8.0
+
+# WebSocket communication
+websockets>=12.0
+
+# Desktop automation (MCP tools)
+pyautogui>=0.9.0
+pyperclip>=1.8.0
+
+# Redis for Claude Orchestrator
+redis>=4.0.0
+
+# OCR for screen reading
+pytesseract>=0.3.10
+Pillow>=10.0.0
