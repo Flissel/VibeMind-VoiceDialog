@@ -44,7 +44,7 @@ Speak into your microphone to start a conversation with your AI agent!
 - [Agent Setup Guide](docs/AGENT_SETUP.md) - Multi-agent voice system setup
 - [Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md) - Architecture reference
 - [User Transfers Guide](docs/USER_CONTROLLED_TRANSFERS_GUIDE.md) - Voice handoffs & audio settings
-- [Client Tools](docs/CLIENT_TOOLS_QUICKSTART.md) - Tool implementation guide
+- [Client Tools](docs/agents/CLIENT_TOOLS_SETUP.md) - Tool implementation guide
 - [AutoGen gRPC Setup](docs/AUTOGEN_GRPC_SETUP.md) - Distributed runtime configuration
 
 ## How It Works
