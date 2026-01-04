@@ -1,0 +1,121 @@
+[
+  {
+    "type": "client",
+    "name": "summarize_idea",
+    "description": "Create an AI summary of an idea or note. Use when user asks to summarize something.",
+    "expects_response": true,
+    "response_timeout_secs": 30,
+    "parameters": [
+      {
+        "name": "idea_name",
+        "type": "string",
+        "description": "Name of idea/note to summarize (optional - uses current bubble if not specified)",
+        "required": false
+      },
+      {
+        "name": "style",
+        "type": "string",
+        "description": "Summary style: 'concise', 'detailed', or 'actionable' (default: concise)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "list_summaries",
+    "description": "List all ideas that have summaries. Use when user asks what has been summarized.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": []
+  },
+  {
+    "type": "client",
+    "name": "get_summary",
+    "description": "Get the existing summary for an idea. Use when user asks to read a summary.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "idea_name",
+        "type": "string",
+        "description": "Name of idea (optional - uses current if not specified)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "generate_white_paper",
+    "description": "Generate a structured document from linked ideas. Use when user wants a white paper or project overview.",
+    "expects_response": true,
+    "response_timeout_secs": 45,
+    "parameters": [
+      {
+        "name": "start_node",
+        "type": "string",
+        "description": "Name of the idea/note to start from",
+        "required": true
+      },
+      {
+        "name": "task",
+        "type": "string",
+        "description": "Type of document: 'project overview', 'technical spec', 'requirements doc' (default: project overview)",
+        "required": false
+      },
+      {
+        "name": "max_depth",
+        "type": "number",
+        "description": "Maximum depth to traverse linked ideas (default: 5)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "generate_project_structure",
+    "description": "Convert whitepaper/notes into structured project with requirements and features. Use when user wants to turn ideas into a project spec or extract requirements.",
+    "expects_response": true,
+    "response_timeout_secs": 45,
+    "parameters": [
+      {
+        "name": "bubble_name",
+        "type": "string",
+        "description": "Name of bubble to structure (optional - uses current)",
+        "required": false
+      },
+      {
+        "name": "create_nodes",
+        "type": "boolean",
+        "description": "Create canvas nodes for each feature (default: true)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "generate_feature_docs",
+    "description": "Generate detailed markdown documentation for each feature with user stories and acceptance criteria. Creates connected documents on canvas. Use when user wants feature documentation or detailed specs.",
+    "expects_response": true,
+    "response_timeout_secs": 60,
+    "parameters": [
+      {
+        "name": "bubble_name",
+        "type": "string",
+        "description": "Name of bubble to document (optional - uses current)",
+        "required": false
+      },
+      {
+        "name": "include_requirements",
+        "type": "boolean",
+        "description": "Include linked requirements in docs (default: true)",
+        "required": false
+      },
+      {
+        "name": "connect_features",
+        "type": "boolean",
+        "description": "Create edges between related features (default: true)",
+        "required": false
+      }
+    ]
+  }
+]

@@ -50,7 +50,7 @@ class AgentRegistry:
                 "env_var": "AGENT_CONVERSATIONAL_MEMORY",
                 "voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel
                 "role": "Entry point, learns user preferences and routes to specialists",
-                "can_handoff_to": ["ProjectManager"],
+                "can_handoff_to": ["ProjectManager", "ClaudeCoordinator"],
                 "tools": [
                     "handoff_to_agent",
                     "remember_preference",
@@ -60,13 +60,22 @@ class AgentRegistry:
             "ProjectManager": {
                 "env_var": "AGENT_PROJECT_MANAGER",
                 "voice_id": "Xb7hH8MSUJpSbSDYk0k2",  # Alice
-                "role": "Manages projects, tracks progress, delegates to workers",
-                "can_handoff_to": ["DesktopWorker", "ProjectWriter", "ConversationalMemory"],
+                "role": "Manages projects, tracks progress, delegates to workers and Claude instances",
+                "can_handoff_to": ["DesktopWorker", "ProjectWriter", "ConversationalMemory", "ClaudeCoordinator"],
                 "tools": [
                     "handoff_to_agent",
                     "list_projects",
                     "get_project_status",
-                    "update_project"
+                    "update_project",
+                    # Claude Orchestrator Tools - delegate to Claude Code
+                    "spawn_claude",
+                    "send_to_claude",
+                    "list_claude_instances",
+                    "close_claude",
+                    "get_claude_status",
+                    # Claude Notifications - retrieve info from instances
+                    "get_claude_notifications",
+                    "get_claude_output"
                 ]
             },
             "DesktopWorker": {
@@ -80,7 +89,19 @@ class AgentRegistry:
                     "open_application",
                     "click_element",
                     "type_text",
-                    "get_window_info"
+                    "get_window_info",
+                    # Handoff MCP Tools - direct pyautogui
+                    "mcp_click",
+                    "mcp_type",
+                    "mcp_scroll",
+                    "mcp_press_key",
+                    "mcp_read_screen",
+                    "mcp_validate",
+                    "mcp_get_focus",
+                    # Moire Server Tools - advanced OCR
+                    "moire_scan",
+                    "moire_find_element",
+                    "moire_get_ui_context"
                 ]
             },
             "ProjectWriter": {
@@ -94,6 +115,24 @@ class AgentRegistry:
                     "create_documentation",
                     "update_file",
                     "generate_readme"
+                ]
+            },
+            "ClaudeCoordinator": {
+                "env_var": "AGENT_CLAUDE_COORDINATOR",
+                "voice_id": "VR6AewLTigWG4xSOukaG",  # Arnold - authoritative voice
+                "role": "Coordinates complex multi-step tasks using extended thinking and reasoning. Delegates work to Claude Code instances, monitors progress, and synthesizes results. Uses OpenRouter Claude Opus 4.5 for advanced reasoning.",
+                "can_handoff_to": ["ProjectManager", "DesktopWorker", "ConversationalMemory"],
+                "tools": [
+                    "handoff_to_agent",
+                    # Claude Orchestrator - spawn and manage instances
+                    "spawn_claude",
+                    "send_to_claude",
+                    "list_claude_instances",
+                    "close_claude",
+                    "get_claude_status",
+                    # Claude Notifications - retrieve results with reasoning
+                    "get_claude_notifications",
+                    "get_claude_output"
                 ]
             }
         }

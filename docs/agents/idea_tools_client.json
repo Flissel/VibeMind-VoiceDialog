@@ -1,0 +1,123 @@
+[
+  {
+    "type": "client",
+    "name": "list_ideas",
+    "description": "List all ideas in the current space. Use when user asks what ideas they have.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": []
+  },
+  {
+    "type": "client",
+    "name": "create_idea",
+    "description": "Create a new idea/note in the current space. Use when user wants to add an idea.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "title",
+        "type": "string",
+        "description": "Short title for the idea",
+        "required": true
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "description": "Full content or description",
+        "required": false
+      },
+      {
+        "name": "type",
+        "type": "string",
+        "description": "Type: idea, note, link, or image (default: idea)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "find_idea",
+    "description": "Search for ideas matching a query. Use when user wants to find something.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "query",
+        "type": "string",
+        "description": "Search text",
+        "required": true
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "update_idea",
+    "description": "Update an existing idea. Use when user wants to change an idea.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "idea_name",
+        "type": "string",
+        "description": "Name of idea to update",
+        "required": true
+      },
+      {
+        "name": "new_content",
+        "type": "string",
+        "description": "New content",
+        "required": false
+      },
+      {
+        "name": "new_title",
+        "type": "string",
+        "description": "New title",
+        "required": false
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "connect_ideas",
+    "description": "Link two ideas together. Use when user wants to connect ideas.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "idea1",
+        "type": "string",
+        "description": "First idea name",
+        "required": true
+      },
+      {
+        "name": "idea2",
+        "type": "string",
+        "description": "Second idea name",
+        "required": true
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "delete_idea",
+    "description": "Delete an idea. Use when user wants to remove something.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": [
+      {
+        "name": "idea_name",
+        "type": "string",
+        "description": "Name of idea to delete",
+        "required": true
+      }
+    ]
+  },
+  {
+    "type": "client",
+    "name": "get_current_space",
+    "description": "Get information about current location. Use when user asks where they are.",
+    "expects_response": true,
+    "response_timeout_secs": 5,
+    "parameters": []
+  }
+]

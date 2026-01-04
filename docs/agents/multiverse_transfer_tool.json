@@ -1,0 +1,26 @@
+{
+  "type": "system",
+  "name": "transfer_to_agent",
+  "description": "Transfer to Rachel for conversation or Alice for tasks",
+  "params": {
+    "system_tool_type": "transfer_to_agent",
+    "transfers": [
+      {
+        "agent_id": "agent_4801k8dffmgge8mt8e713sem2ze0",
+        "condition": "User wants to chat, have a conversation, talk to Rachel, or just wants to talk",
+        "transfer_message": "",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      },
+      {
+        "agent_id": "agent_1201k8dnc6gre3sscfxygcy7jhp4",
+        "condition": "User needs task execution, project work, automation, or coordination",
+        "transfer_message": "",
+        "delay_ms": 0,
+        "enable_transferred_agent_first_message": true
+      }
+    ],
+    "voicemail_message": ""
+  },
+  "disable_interruptions": false
+}

@@ -1,0 +1,52 @@
+{
+  "name": "vibemind",
+  "version": "1.0.0",
+  "description": "VibeMind - Voice-Powered Idea Workspace",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "author": "VibeMind",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.vibemind.app",
+    "productName": "VibeMind",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
+    },
+    "extraResources": [
+      {
+        "from": "../python",
+        "to": "python",
+        "filter": [
+          "**/*",
+          "!__pycache__/**",
+          "!*.pyc"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "three": "^0.128.0"
+  }
+}

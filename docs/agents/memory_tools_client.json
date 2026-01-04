@@ -1,0 +1,38 @@
+[
+  {
+    "type": "client",
+    "name": "make_memories",
+    "description": "Background memory consolidation. Called automatically during conversation pauses when user speaks briefly (less than 3 seconds). Analyzes recent conversation to extract and store insights about the user. Returns empty string - NO voice response should be generated.",
+    "expects_response": false,
+    "response_timeout_secs": 10,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "recent_audio_duration": {
+          "type": "number",
+          "description": "How long the user spoke in seconds"
+        },
+        "trigger_reason": {
+          "type": "string",
+          "description": "Why this was triggered: 'pause', 'short_utterance', or 'silence'"
+        }
+      }
+    }
+  },
+  {
+    "type": "client",
+    "name": "recall_about_user",
+    "description": "Recall stored insights about the user from previous conversations. Use when user asks 'What do you remember about me?', 'What have we talked about?', or similar questions about your memory of them.",
+    "expects_response": true,
+    "response_timeout_secs": 20,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "insight_type": {
+          "type": "string",
+          "description": "Optional filter: 'preference', 'goal', 'topic', or 'emotion'"
+        }
+      }
+    }
+  }
+]
