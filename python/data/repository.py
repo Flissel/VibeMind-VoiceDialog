@@ -5,6 +5,7 @@ CRUD operations for Ideas, Projects, and Canvas elements.
 """
 
 import uuid
+import unicodedata
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -15,6 +16,20 @@ from .models import Idea, Project, CanvasNode, CanvasEdge, ConversationMessage, 
 def generate_id() -> str:
     """Generate a unique ID for new entities"""
     return str(uuid.uuid4())[:8]
+
+
+def normalize_text(text: str) -> str:
+    """
+    Remove accents and normalize text for fuzzy matching.
+
+    Handles speech recognition artifacts like "evaluiären" vs "evaluieren"
+    by decomposing unicode and removing combining marks (accents).
+    """
+    # NFD: decompose ä → a + ¨ (combining diaeresis)
+    text = unicodedata.normalize('NFD', text)
+    # Remove combining marks (accents, umlauts decomposed parts)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    return text.lower()
 
 
 class IdeasRepository:
@@ -88,6 +103,52 @@ class IdeasRepository:
             (f"%{title}%",)
         )
         return Idea.from_dict(dict(row)) if row else None
+
+    def get_by_title_fuzzy(self, title: str, parent_id: Optional[str] = None) -> Optional[Idea]:
+        """
+        Accent-insensitive fuzzy title search.
+
+        Handles speech recognition artifacts where accents may be added/removed.
+        E.g., "swarm team evaluiären" will match "swarm team evaluieren".
+        Also handles compound word variations:
+        E.g., "Testkontext" will match "Test Kontext" (space vs no-space).
+
+        Args:
+            title: Title to search for (may contain accent artifacts)
+            parent_id: If provided, only search within this parent (None = top-level spaces)
+
+        Returns:
+            Matching Idea or None
+        """
+        normalized_query = normalize_text(title)
+        # Also create spaceless version for compound word matching
+        spaceless_query = normalized_query.replace(" ", "")
+
+        # Fetch candidates based on parent_id
+        if parent_id is None:
+            # Search top-level spaces (bubbles)
+            rows = self.db.fetch_all("SELECT * FROM ideas WHERE parent_id IS NULL")
+        else:
+            # Search within a specific parent
+            rows = self.db.fetch_all(
+                "SELECT * FROM ideas WHERE parent_id = ?",
+                (parent_id,)
+            )
+
+        # Fuzzy match in Python (accent-insensitive)
+        for row in rows:
+            row_title = row['title'] if row['title'] else ''
+            normalized_title = normalize_text(row_title)
+            spaceless_title = normalized_title.replace(" ", "")
+
+            # Match if query is substring of title (with or without spaces)
+            if normalized_query in normalized_title:
+                return Idea.from_dict(dict(row))
+            # Also match spaceless versions (handles "Testkontext" vs "Test Kontext")
+            if spaceless_query in spaceless_title or spaceless_title in spaceless_query:
+                return Idea.from_dict(dict(row))
+
+        return None
 
     def list(
         self,
@@ -177,10 +238,14 @@ class IdeasRepository:
         """
         Delete an idea with CASCADE deletion of all related content.
 
-        This handles:
-        1. Delete canvas_edges connected to nodes in this idea
-        2. Delete canvas_nodes linked to this idea
-        3. Delete the idea itself
+        This handles (in order to respect foreign key constraints):
+        1. Delete shuttles referencing this idea (bubble_id)
+        2. Find projects created from this idea
+        3. Delete shuttles referencing those projects (project_id)
+        4. Delete projects created from this idea
+        5. Delete canvas_edges connected to nodes in this idea
+        6. Delete canvas_nodes linked to this idea
+        7. Delete the idea itself
 
         All operations are done in a single transaction to maintain consistency.
 
@@ -190,11 +255,47 @@ class IdeasRepository:
         Returns:
             dict: Statistics about what was deleted
         """
-        stats = {"edges_deleted": 0, "nodes_deleted": 0, "idea_deleted": False}
+        stats = {
+            "shuttles_deleted": 0,
+            "projects_deleted": 0,
+            "edges_deleted": 0,
+            "nodes_deleted": 0,
+            "idea_deleted": False
+        }
 
         with self.db.connection() as conn:
             try:
-                # Step 1: Find all node IDs linked to this idea
+                # Step 1: Delete shuttles where bubble_id = idea_id
+                cursor = conn.execute(
+                    "DELETE FROM shuttles WHERE bubble_id = ?",
+                    (idea_id,)
+                )
+                stats["shuttles_deleted"] += cursor.rowcount
+
+                # Step 2: Find projects created from this idea
+                cursor = conn.execute(
+                    "SELECT id FROM projects WHERE from_idea_id = ?",
+                    (idea_id,)
+                )
+                project_ids = [row[0] for row in cursor.fetchall()]
+
+                if project_ids:
+                    # Step 3: Delete shuttles referencing these projects
+                    placeholders = ','.join('?' * len(project_ids))
+                    cursor = conn.execute(
+                        f"DELETE FROM shuttles WHERE project_id IN ({placeholders})",
+                        project_ids
+                    )
+                    stats["shuttles_deleted"] += cursor.rowcount
+
+                    # Step 4: Delete the projects
+                    cursor = conn.execute(
+                        f"DELETE FROM projects WHERE id IN ({placeholders})",
+                        project_ids
+                    )
+                    stats["projects_deleted"] = cursor.rowcount
+
+                # Step 5: Find all node IDs linked to this idea
                 cursor = conn.execute(
                     "SELECT id FROM canvas_nodes WHERE linked_idea_id = ?",
                     (idea_id,)
@@ -202,34 +303,34 @@ class IdeasRepository:
                 node_ids = [row[0] for row in cursor.fetchall()]
 
                 if node_ids:
-                    # Step 2: Delete edges connected to these nodes
+                    # Step 6: Delete edges connected to these nodes
                     placeholders = ','.join('?' * len(node_ids))
                     cursor = conn.execute(
                         f"DELETE FROM canvas_edges WHERE from_node_id IN ({placeholders}) OR to_node_id IN ({placeholders})",
                         node_ids + node_ids
                     )
                     stats["edges_deleted"] = cursor.rowcount
-                    
-                    # Step 3: Delete the nodes themselves
+
+                    # Step 7: Delete the nodes themselves
                     cursor = conn.execute(
                         f"DELETE FROM canvas_nodes WHERE id IN ({placeholders})",
                         node_ids
                     )
                     stats["nodes_deleted"] = cursor.rowcount
-                
-                # Step 4: Delete the idea
+
+                # Step 8: Delete the idea
                 cursor = conn.execute(
                     "DELETE FROM ideas WHERE id = ?",
                     (idea_id,)
                 )
                 stats["idea_deleted"] = cursor.rowcount > 0
-                
+
                 conn.commit()
-                
+
             except Exception as e:
                 conn.rollback()
                 raise e
-        
+
         return stats
 
     def count(self, status: Optional[str] = None) -> int:
@@ -275,6 +376,104 @@ class IdeasRepository:
             (source,)
         )
         return [Idea.from_dict(dict(row)) for row in rows]
+
+    def search_semantic(
+        self,
+        query: str,
+        top_k: int = 5,
+        min_score: float = 0.5,
+        parent_id: Optional[str] = None,
+    ) -> List[Idea]:
+        """
+        Semantic search for ideas/bubbles using embeddings.
+
+        Finds conceptually similar bubbles even if keywords don't match exactly.
+        E.g., "Testkontext" will find "Test Kontext" with high similarity.
+
+        Args:
+            query: Search query (natural language)
+            top_k: Maximum number of results
+            min_score: Minimum similarity score (0.0 - 1.0)
+            parent_id: If provided, only search within this parent (None = top-level spaces)
+
+        Returns:
+            List of Ideas sorted by similarity (best match first)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Lazy import to avoid startup overhead if not used
+        try:
+            from .embedding_service import get_embedding_service, EmbeddingService
+        except ImportError:
+            logger.warning("[search_semantic] embedding_service not available")
+            return []
+
+        embedding_service = get_embedding_service()
+        if not embedding_service.is_available:
+            logger.debug("[search_semantic] Embedding service not available, falling back")
+            return []
+
+        # Generate query embedding
+        query_vec = embedding_service.embed(query)
+        if query_vec is None:
+            logger.debug("[search_semantic] Could not embed query")
+            return []
+
+        # Fetch all candidates
+        if parent_id is None:
+            rows = self.db.fetch_all("SELECT * FROM ideas WHERE parent_id IS NULL")
+        else:
+            rows = self.db.fetch_all(
+                "SELECT * FROM ideas WHERE parent_id = ?",
+                (parent_id,)
+            )
+
+        # Calculate similarities
+        scored_ideas = []
+        ideas_to_update = []
+
+        for row in rows:
+            idea = Idea.from_dict(dict(row))
+
+            # Get or generate embedding
+            idea_vec = idea.embedding_vector
+            content_for_embedding = f"{idea.title} {idea.description}".strip()
+            current_hash = EmbeddingService.content_hash(content_for_embedding)
+
+            # Regenerate embedding if content changed or doesn't exist
+            if idea_vec is None or idea.embedding_hash != current_hash:
+                idea_vec = embedding_service.embed(content_for_embedding)
+                if idea_vec is not None:
+                    idea.embedding_vector = idea_vec
+                    idea.embedding_hash = current_hash
+                    ideas_to_update.append(idea)
+
+            if idea_vec is not None:
+                score = embedding_service.similarity(query_vec, idea_vec)
+                if score >= min_score:
+                    scored_ideas.append((idea, score))
+
+        # Update embeddings in background (lazy caching)
+        for idea in ideas_to_update:
+            try:
+                self.db.execute(
+                    "UPDATE ideas SET embedding_vector = ?, embedding_hash = ? WHERE id = ?",
+                    (
+                        EmbeddingService.vector_to_json(idea.embedding_vector),
+                        idea.embedding_hash,
+                        idea.id
+                    )
+                )
+            except Exception as e:
+                logger.debug(f"[search_semantic] Failed to cache embedding for {idea.id}: {e}")
+
+        # Sort by similarity (descending) and return top_k
+        scored_ideas.sort(key=lambda x: x[1], reverse=True)
+        results = [idea for idea, score in scored_ideas[:top_k]]
+
+        logger.debug(f"[search_semantic] Found {len(results)} matches for '{query}'")
+        return results
 
 
 class ProjectsRepository:

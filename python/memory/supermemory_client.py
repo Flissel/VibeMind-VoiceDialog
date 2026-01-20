@@ -169,27 +169,47 @@ class SupermemoryClient:
         Returns:
             List of memory items
         """
-        # Note: Supermemory API search endpoint details may vary
-        # This is a placeholder for the actual implementation
-        # You may need to adjust based on Supermemory's actual API
+        # Note: Supermemory API search endpoint may vary by version
+        # Try different payload formats as API may vary
 
-        url = f"{self.base_url}/memories/search"
+        # Try different payload formats (API might expect different field names)
+        payloads_to_try = [
+            # Format 1: Standard with q
+            {"q": query, "top_k": limit},
+            # Format 2: With content
+            {"content": query, "limit": limit},
+            # Format 3: Just query
+            {"query": query, "limit": limit},
+            # Format 4: With filters
+            {"query": query, "filters": {"session_id": session_id}, "limit": limit},
+        ]
 
-        payload = {
-            "query": query,
-            "filters": {
-                "session_id": session_id
-            },
-            "limit": limit
-        }
+        url = f"{self.base_url}/search"
 
-        try:
-            response = requests.post(url, headers=self.headers, json=payload)
-            response.raise_for_status()
-            return response.json().get("results", [])
-        except Exception as e:
-            print(f"[Supermemory] Retrieval error: {e}")
-            return []
+        for payload in payloads_to_try:
+            try:
+                response = requests.post(url, headers=self.headers, json=payload)
+                if response.status_code == 400:
+                    # Try next payload format
+                    continue
+                if response.status_code == 404:
+                    break  # Endpoint doesn't exist
+                response.raise_for_status()
+                result = response.json()
+                # Handle different response formats
+                return result.get("results", result.get("memories", result.get("data", [])))
+            except requests.exceptions.HTTPError as e:
+                if "400" in str(e):
+                    continue  # Try next payload format
+                print(f"[Supermemory] Retrieval error: {e}")
+                break
+            except Exception as e:
+                print(f"[Supermemory] Retrieval error: {e}")
+                break
+
+        # All formats failed - return empty (will fall back to local search)
+        print(f"[Supermemory] Search failed - check API docs for correct format")
+        return []
 
     def get_conversation_history(
         self,
