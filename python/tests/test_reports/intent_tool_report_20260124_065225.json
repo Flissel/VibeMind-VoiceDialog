@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-01-24T06:52:25.295771",
+  "summary": {
+    "total": 59,
+    "passed": 22,
+    "failed": 37,
+    "pass_rate": 0.3728813559322034
+  },
+  "latency": {
+    "avg_classification_ms": 4375.05208474576,
+    "avg_tool_execution_ms": 121.43812400056049,
+    "p95_classification_ms": 5893.805200001225,
+    "p95_tool_execution_ms": 511.31790000363253
+  },
+  "categories": {
+    "bubble": {
+      "total": 13,
+      "passed": 9,
+      "pass_rate": 0.6923076923076923
+    },
+    "idea": {
+      "total": 20,
+      "passed": 8,
+      "pass_rate": 0.4
+    },
+    "idea_format": {
+      "total": 10,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "system": {
+      "total": 5,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "task": {
+      "total": 4,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "conversation": {
+      "total": 2,
+      "passed": 1,
+      "pass_rate": 0.5
+    },
+    "natural": {
+      "total": 5,
+      "passed": 4,
+      "pass_rate": 0.8
+    }
+  },
+  "monitoring": {
+    "total_operations": 59,
+    "errors": 37,
+    "error_rate": 0.63
+  }
+}

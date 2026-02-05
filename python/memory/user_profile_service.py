@@ -122,10 +122,10 @@ class UserProfileService:
             return default
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=f"user {self.user_id} preference {key}",
                 container_tags=[self.CONTAINER_TAG],
-                top_k=1
+                limit=1
             )
             results = getattr(response, 'results', [])
             if results:
@@ -154,11 +154,14 @@ class UserProfileService:
         now = datetime.utcnow()
         content = f"User {self.user_id} used intent {intent_type}"
 
+        # Sanitize intent_type: replace dots with underscores for valid customId
+        sanitized_intent = intent_type.replace(".", "_")
+
         try:
-            await self._client.documents.create(
+            await self._client.memories.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
-                custom_id=f"habit_{self.user_id}_{intent_type}_{now.strftime('%Y%m%d%H%M%S')}",
+                custom_id=f"habit_{self.user_id}_{sanitized_intent}_{now.strftime('%Y%m%d%H%M%S')}",
                 metadata={
                     "type": "habit",
                     "user_id": self.user_id,
@@ -183,10 +186,10 @@ class UserProfileService:
             return []
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=f"user {self.user_id} intent usage habit",
                 container_tags=[self.CONTAINER_TAG],
-                top_k=100  # Get many to aggregate
+                limit=100  # Get many to aggregate
             )
             results = getattr(response, 'results', [])
 
@@ -216,10 +219,10 @@ class UserProfileService:
             return ""
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=f"user {self.user_id} preferences habits",
                 container_tags=[self.CONTAINER_TAG],
-                top_k=50
+                limit=50
             )
             results = getattr(response, 'results', [])
 

@@ -150,6 +150,11 @@ function startPythonBackend() {
                 if (message.type === 'navigate_to_space') {
                     handleSpaceNavigation(message);
                 }
+
+                // Handle structured content updates
+                if (message.type === 'node_structured_update') {
+                    debugLog('Structured content update:', message.node_id);
+                }
                 
                 // Forward to renderer
                 if (mainWindow && mainWindow.webContents) {
@@ -304,6 +309,32 @@ function setupIpcHandlers() {
 
     ipcMain.on('stop-voice', (event) => {
         sendToPython({ type: 'stop_voice' });
+    });
+
+    // Canvas operations (inside bubble view)
+    ipcMain.on('add_canvas_node', (event, data) => {
+        sendToPython({
+            type: 'add_canvas_node',
+            bubble_id: data.bubble_id,
+            node: data.node
+        });
+    });
+
+    ipcMain.on('update_canvas_node', (event, data) => {
+        sendToPython({
+            type: 'update_canvas_node',
+            bubble_id: data.bubble_id,
+            node_id: data.node_id,
+            updates: data.updates
+        });
+    });
+
+    ipcMain.on('delete_canvas_node', (event, data) => {
+        sendToPython({
+            type: 'delete_canvas_node',
+            bubble_id: data.bubble_id,
+            node_id: data.node_id
+        });
     });
     
     // ========================================

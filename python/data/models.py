@@ -49,6 +49,13 @@ class Idea:
     # ElevenLabs agent ID for this bubble/idea (for multi-agent architecture)
     agent_id: Optional[str] = None
 
+    # Parent bubble ID for nested bubble hierarchy
+    parent_id: Optional[str] = None
+
+    # Embedding for semantic search
+    embedding_vector: Optional[List[float]] = None
+    embedding_hash: Optional[str] = None
+
     def calculate_score(self) -> float:
         """Calculate composite score from dimensions (0-100)"""
         if all(d == 0 for d in [self.feasibility, self.impact, self.novelty, self.urgency]):
@@ -87,6 +94,9 @@ class Idea:
                 "urgency": self.urgency,
             }),
             "agent_id": self.agent_id,
+            "parent_id": self.parent_id,
+            "embedding_vector": json.dumps(self.embedding_vector) if self.embedding_vector else None,
+            "embedding_hash": self.embedding_hash,
         }
 
     @classmethod
@@ -117,6 +127,9 @@ class Idea:
             novelty=metadata.get("novelty", 0.0),
             urgency=metadata.get("urgency", 0.0),
             agent_id=data.get("agent_id"),
+            parent_id=data.get("parent_id"),
+            embedding_vector=json.loads(data["embedding_vector"]) if data.get("embedding_vector") else None,
+            embedding_hash=data.get("embedding_hash"),
         )
 
 
@@ -224,6 +237,11 @@ class CanvasNode:
     summary: Optional[str] = None  # AI-generated summary of the node content
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    # Structured formatting fields (for LLM-generated structured content)
+    format_schema: Optional[Dict[str, Any]] = None  # JSON Schema defining allowed structure
+    content_json: Optional[Dict[str, Any]] = None   # Structured JSON content (alternative to plain text)
+    last_formatted: Optional[datetime] = None       # When content was last structured by LLM
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for database storage"""
         return {
@@ -241,12 +259,24 @@ class CanvasNode:
                 "width": self.width,
                 "height": self.height,
             }),
+            # Structured formatting fields
+            "format_schema": json.dumps(self.format_schema) if self.format_schema else None,
+            "content_json": json.dumps(self.content_json) if self.content_json else None,
+            "last_formatted": self.last_formatted.isoformat() if self.last_formatted else None,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CanvasNode":
         """Create CanvasNode from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+
+        # Parse structured formatting fields
+        format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
+        content_json = json.loads(data.get("content_json", "{}")) if isinstance(data.get("content_json"), str) and data.get("content_json") else None
+
+        last_formatted = data.get("last_formatted")
+        if isinstance(last_formatted, str):
+            last_formatted = datetime.fromisoformat(last_formatted)
 
         return cls(
             id=data["id"],
@@ -261,6 +291,10 @@ class CanvasNode:
             linked_project_id=data.get("linked_project_id"),
             summary=data.get("summary"),
             metadata=metadata,
+            # Structured formatting fields
+            format_schema=format_schema,
+            content_json=content_json,
+            last_formatted=last_formatted,
         )
 
 
@@ -522,3 +556,200 @@ class Shuttle:
             requirement_results=requirement_results,
             metadata=metadata,
         )
+
+
+# Task status enum values
+class TaskStatus:
+    """Status values for persistent tasks."""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class Task:
+    """
+    A persistent task tracked across conversation sessions.
+
+    Used by Rachel to remember ongoing tasks and their status.
+    Tasks are created for complex operations and tracked until completion.
+    """
+    id: str
+    title: str
+    user_id: str = "default"
+    session_id: Optional[str] = None
+    description: str = ""
+    status: str = TaskStatus.PENDING
+
+    # Timestamps
+    created_at: datetime = field(default_factory=datetime.now)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    # Execution context
+    intent_type: Optional[str] = None  # original event_type (idea.move, code.generate, etc.)
+    payload: Dict[str, Any] = field(default_factory=dict)  # original parameters
+    job_id: Optional[str] = None  # last job_id for this task
+    progress: int = 0  # 0-100
+    stage: str = ""  # current stage description
+
+    # Results
+    result: Optional[str] = None
+    error: Optional[str] = None
+
+    # Priority and tags
+    priority: int = 2  # 1=low, 2=medium, 3=high
+    tags: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage"""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "user_id": self.user_id,
+            "session_id": self.session_id,
+            "description": self.description,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "intent_type": self.intent_type,
+            "payload": json.dumps(self.payload),
+            "job_id": self.job_id,
+            "progress": self.progress,
+            "stage": self.stage,
+            "result": self.result,
+            "error": self.error,
+            "priority": self.priority,
+            "tags": json.dumps(self.tags),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+        """Create Task from database row"""
+        payload = json.loads(data.get("payload", "{}")) if isinstance(data.get("payload"), str) else data.get("payload", {})
+        tags = json.loads(data.get("tags", "[]")) if isinstance(data.get("tags"), str) else data.get("tags", [])
+
+        def parse_datetime(value):
+            if isinstance(value, str):
+                return datetime.fromisoformat(value)
+            return value
+
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            user_id=data.get("user_id", "default"),
+            session_id=data.get("session_id"),
+            description=data.get("description", ""),
+            status=data.get("status", TaskStatus.PENDING),
+            created_at=parse_datetime(data.get("created_at")) or datetime.now(),
+            started_at=parse_datetime(data.get("started_at")),
+            completed_at=parse_datetime(data.get("completed_at")),
+            updated_at=parse_datetime(data.get("updated_at")),
+            intent_type=data.get("intent_type"),
+            payload=payload,
+            job_id=data.get("job_id"),
+            progress=data.get("progress", 0),
+            stage=data.get("stage", ""),
+            result=data.get("result"),
+            error=data.get("error"),
+            priority=data.get("priority", 2),
+            tags=tags,
+        )
+
+
+# Mermaid diagram type enum values
+class MermaidDiagramType:
+    """Mermaid diagram types."""
+    FLOWCHART = "flowchart"
+    SEQUENCE = "sequenceDiagram"
+    CLASS = "classDiagram"
+    STATE = "stateDiagram"
+    ER = "erDiagram"
+    GANTT = "gantt"
+    PIE = "pie"
+    JOURNEY = "journey"
+    MINDMAP = "mindmap"
+    TIMELINE = "timeline"
+    REQUIREMENT = "requirementDiagram"
+    GITGRAPH = "gitgraph"
+    C4 = "C4Context"
+
+
+@dataclass
+class MermaidDiagram:
+    """
+    A mermaid diagram generated from requirements or ideas.
+
+    Supports various diagram types: flowchart, sequence, class, state, ER, gantt, etc.
+    Links back to source ideas/requirements for traceability.
+    """
+    id: str
+    title: str
+    diagram_type: str = MermaidDiagramType.FLOWCHART
+    content: str = ""
+    source_idea_id: Optional[str] = None
+    source_shuttle_id: Optional[str] = None
+    source_requirement_ids: List[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = None
+    version: int = 1
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "diagram_type": self.diagram_type,
+            "content": self.content,
+            "source_idea_id": self.source_idea_id,
+            "source_shuttle_id": self.source_shuttle_id,
+            "source_requirement_ids": json.dumps(self.source_requirement_ids),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "version": self.version,
+            "metadata": json.dumps(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MermaidDiagram":
+        """Create MermaidDiagram from database row."""
+        requirement_ids = json.loads(data.get("source_requirement_ids", "[]")) \
+            if isinstance(data.get("source_requirement_ids"), str) \
+            else data.get("source_requirement_ids", [])
+        metadata = json.loads(data.get("metadata", "{}")) \
+            if isinstance(data.get("metadata"), str) \
+            else data.get("metadata", {})
+
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        elif created_at is None:
+            created_at = datetime.now()
+
+        updated_at = data.get("updated_at")
+        if isinstance(updated_at, str):
+            updated_at = datetime.fromisoformat(updated_at)
+
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            diagram_type=data.get("diagram_type", MermaidDiagramType.FLOWCHART),
+            content=data.get("content", ""),
+            source_idea_id=data.get("source_idea_id"),
+            source_shuttle_id=data.get("source_shuttle_id"),
+            source_requirement_ids=requirement_ids,
+            created_at=created_at,
+            updated_at=updated_at,
+            version=data.get("version", 1),
+            metadata=metadata,
+        )
+
+    def to_markdown(self) -> str:
+        """Return the diagram wrapped in markdown code block."""
+        return f"```mermaid\n{self.content}\n```"

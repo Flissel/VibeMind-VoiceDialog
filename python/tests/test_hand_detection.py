@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import asyncio
 import cv2
 
-from spaces.desktop_automation.hand_motion import (
+from spaces.desktop_space.hand_motion import (
     get_hand_detector,
     HandMotionDetector,
     GestureType,

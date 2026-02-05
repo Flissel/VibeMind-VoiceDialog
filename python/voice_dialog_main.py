@@ -73,6 +73,55 @@ _should_exit = False
 _last_switch_info = None  # Store switch info for main loop
 
 
+def _install_exception_handlers():
+    """Install exception handlers for better crash visibility.
+
+    - faulthandler: Shows traceback on segfaults/hangs
+    - threading.excepthook: Logs exceptions in background threads
+    - sys.excepthook: Logs unhandled exceptions in main thread
+    """
+    import faulthandler
+    import traceback
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Enable faulthandler for segfaults and SIGABRT
+    faulthandler.enable()
+
+    # Also enable dump on SIGUSR1 (Unix) or after timeout
+    try:
+        # Write crash dumps to stderr by default
+        faulthandler.register(signal.SIGUSR1)
+    except (AttributeError, ValueError):
+        # SIGUSR1 not available on Windows
+        pass
+
+    # Threading excepthook (Python 3.8+)
+    def thread_excepthook(args):
+        """Log uncaught exceptions in threads."""
+        thread_name = args.thread.name if args.thread else "Unknown"
+        logger.error(f"[THREAD CRASH] {thread_name}: {args.exc_type.__name__}: {args.exc_value}")
+        logger.error("".join(traceback.format_tb(args.exc_traceback)))
+        # Also print to stderr for visibility
+        print(f"\n[THREAD CRASH] {thread_name}: {args.exc_type.__name__}: {args.exc_value}", file=sys.stderr)
+        traceback.print_tb(args.exc_traceback, file=sys.stderr)
+
+    threading.excepthook = thread_excepthook
+
+    # Override sys.excepthook for main thread
+    original_excepthook = sys.excepthook
+    def main_excepthook(exc_type, exc_value, exc_tb):
+        """Log unhandled exceptions in main thread."""
+        logger.error(f"[MAIN CRASH] {exc_type.__name__}: {exc_value}")
+        logger.error("".join(traceback.format_tb(exc_tb)))
+        original_excepthook(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = main_excepthook
+
+    print("[Exception handlers installed: faulthandler + threading.excepthook]")
+
+
 def setup_tools_manager():
     """Initialize and register all client tools."""
     tools_manager = ClientToolsManager()
@@ -196,6 +245,9 @@ def run_conversation(client, agent_id, agent_name, tools_manager, audio_interfac
 def main():
     """Main entry point for voice dialog with dynamic agent switching."""
     global _should_exit
+
+    # Install exception handlers for better crash visibility
+    _install_exception_handlers()
 
     # Load configuration
     config_manager = ConfigManager()

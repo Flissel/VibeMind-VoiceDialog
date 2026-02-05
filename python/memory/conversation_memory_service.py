@@ -79,25 +79,24 @@ class ConversationMemoryService:
             return None
 
         try:
-            # Format messages for Supermemory v4 API
-            formatted_messages = []
-            for msg in messages:
-                formatted_messages.append({
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
-                    "name": msg.get("agent", agent_name)
-                })
+            # Format messages as content string (SDK uses memories.add, not conversations.ingest)
+            conversation_content = "\n".join([
+                f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+                for msg in messages
+            ])
 
-            response = await self._client.conversations.ingest(
-                conversation_id=f"session_{session_id}",
-                container_tags=[self.CONTAINER_TAG, f"vibemind-session-{session_id}"],
-                messages=formatted_messages,
+            response = await self._client.memories.add(
+                content=conversation_content,
+                container_tag=self.CONTAINER_TAG,
                 metadata={
+                    "conversation_id": f"session_{session_id}",
+                    "session_tag": f"vibemind-session-{session_id}",
                     "session_id": session_id,
                     "timestamp": datetime.utcnow().isoformat(),
                     "message_count": len(messages),
                     "agent": agent_name,
-                    "summary": summary
+                    "summary": summary,
+                    "type": "conversation"
                 }
             )
             logger.debug(f"[ConversationMemory] Stored {len(messages)} messages for session {session_id}")
@@ -134,10 +133,10 @@ class ConversationMemoryService:
             return []
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=query,
                 container_tags=[self.CONTAINER_TAG],
-                top_k=limit
+                limit=limit
             )
             results = []
             for r in getattr(response, 'results', []):

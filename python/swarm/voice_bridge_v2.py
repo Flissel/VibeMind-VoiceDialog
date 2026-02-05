@@ -128,7 +128,11 @@ class VoiceBridgeV2:
         5. Start backend agents
         6. Start status listener
         """
+        import time
+        start_time = time.time()
+
         # 1. Setup model client
+        _debug_print("[VoiceBridgeV2] Step 1/6: Setting up model client...")
         if self.model_client is None:
             try:
                 from swarm.cloud_client import get_model_client
@@ -143,31 +147,42 @@ class VoiceBridgeV2:
                     logger.info(f"Fallback to Ollama: {ollama.model}")
                 except Exception as e2:
                     logger.error(f"No LLM client available: {e2}")
+        _debug_print(f"[VoiceBridgeV2] Step 1/6 DONE ({time.time() - start_time:.2f}s)")
 
         # 2. Create NotificationQueue (shared between Rachel and StatusListener)
+        _debug_print("[VoiceBridgeV2] Step 2/6: Setting up notification queue...")
         await self._setup_notification_queue()
+        _debug_print(f"[VoiceBridgeV2] Step 2/6 DONE ({time.time() - start_time:.2f}s)")
 
         # 3. Create orchestrator
+        _debug_print("[VoiceBridgeV2] Step 3/6: Setting up orchestrator...")
         await self._setup_orchestrator()
+        _debug_print(f"[VoiceBridgeV2] Step 3/6 DONE ({time.time() - start_time:.2f}s)")
 
         # 4. Create Rachel (voice interface)
+        _debug_print("[VoiceBridgeV2] Step 4/6: Setting up Rachel...")
         await self._setup_rachel()
+        _debug_print(f"[VoiceBridgeV2] Step 4/6 DONE ({time.time() - start_time:.2f}s)")
 
         # 5. Setup TTS queue
+        _debug_print("[VoiceBridgeV2] Step 5/6: Starting TTS queue...")
         await self.tts_queue.start_processing()
+        _debug_print(f"[VoiceBridgeV2] Step 5/6 DONE ({time.time() - start_time:.2f}s)")
 
         # 6. Start backend agents and listeners (skip if FORCE_SYNC_MODE)
         # StatusListener now subscribes BEFORE start_listeners() in _start_backend_agents()
         force_sync = os.getenv("FORCE_SYNC_MODE", "false").lower() == "true"
         if not force_sync:
+            _debug_print("[VoiceBridgeV2] Step 6/6: Starting backend agents...")
             await self._start_backend_agents()
-            # Note: StatusListener is now set up inside _start_backend_agents()
+            _debug_print(f"[VoiceBridgeV2] Step 6/6 DONE ({time.time() - start_time:.2f}s)")
             _debug_print(f"MODE: Redis async (backend_available={self._backend_available})")
         else:
             _debug_print("MODE: SYNC (FORCE_SYNC_MODE=true - tools execute directly)")
             logger.info("FORCE_SYNC_MODE=true - skipping backend agents (using direct tool execution)")
 
         self._running = True
+        _debug_print(f"[VoiceBridgeV2] FULLY INITIALIZED in {time.time() - start_time:.2f}s")
         logger.info("VoiceBridgeV2 fully initialized")
 
     async def _setup_notification_queue(self) -> None:
@@ -197,43 +212,73 @@ class VoiceBridgeV2:
 
     async def _start_backend_agents(self) -> None:
         """Start all backend agents."""
+        import time
         try:
             from swarm.backend_agents import (
+                get_bubbles_agent,
                 get_ideas_agent,
                 get_desktop_agent,
                 get_coding_agent
             )
             from swarm.event_bus import get_event_bus
-            from swarm.listeners import get_status_listener
+            from swarm.listeners import get_status_listener, get_question_listener
+
+            t0 = time.time()
 
             # Get event bus
+            _debug_print("[BackendAgents] Getting event bus...")
             self._event_bus = get_event_bus()
+            _debug_print(f"[BackendAgents] Event bus ready ({time.time() - t0:.2f}s)")
 
             # Create agents
+            _debug_print("[BackendAgents] Creating agents...")
+            self._bubbles_agent = get_bubbles_agent()
             self._ideas_agent = get_ideas_agent()
             self._desktop_agent = get_desktop_agent()
             self._coding_agent = get_coding_agent()
+            _debug_print(f"[BackendAgents] Agents created ({time.time() - t0:.2f}s)")
 
             # Step 1: Subscribe all agents to their streams (no listeners yet)
+            _debug_print("[BackendAgents] Starting BubblesAgent...")
+            await self._bubbles_agent.start()
+            _debug_print(f"[BackendAgents] BubblesAgent started ({time.time() - t0:.2f}s)")
+
+            _debug_print("[BackendAgents] Starting IdeasAgent...")
             await self._ideas_agent.start()
+            _debug_print(f"[BackendAgents] IdeasAgent started ({time.time() - t0:.2f}s)")
+
+            _debug_print("[BackendAgents] Starting DesktopAgent...")
             await self._desktop_agent.start()
+            _debug_print(f"[BackendAgents] DesktopAgent started ({time.time() - t0:.2f}s)")
+
+            _debug_print("[BackendAgents] Starting CodingAgent...")
             await self._coding_agent.start()
+            _debug_print(f"[BackendAgents] CodingAgent started ({time.time() - t0:.2f}s)")
 
             # Step 2: Subscribe StatusListener BEFORE starting listeners
             # This ensures events:status gets a listener task
+            _debug_print("[BackendAgents] Starting StatusListener...")
             self._status_listener = get_status_listener(
                 notification_queue=self._notification_queue,
                 tts_callback=self._tts_callback
             )
             await self._status_listener.start()
-            _debug_print("StatusListener SUBSCRIBED to events:status")
+            _debug_print(f"[BackendAgents] StatusListener SUBSCRIBED ({time.time() - t0:.2f}s)")
+
+            # Step 2.5: Subscribe QuestionListener for backend questions
+            _debug_print("[BackendAgents] Starting QuestionListener...")
+            self._question_listener = get_question_listener()
+            await self._question_listener.start()
+            _debug_print(f"[BackendAgents] QuestionListener SUBSCRIBED ({time.time() - t0:.2f}s)")
 
             # Step 3: NOW start all listeners (includes events:status)
+            _debug_print("[BackendAgents] Starting event bus listeners...")
             await self._event_bus.start_listeners()
+            _debug_print(f"[BackendAgents] Event bus listeners started ({time.time() - t0:.2f}s)")
 
             self._backend_available = True
-            _debug_print("Backend agents STARTED: IdeasAgent, DesktopAgent, CodingAgent + StatusListener")
-            logger.info("Backend agents started: IdeasAgent, DesktopAgent, CodingAgent + StatusListener")
+            _debug_print("Backend agents STARTED: BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent + Listeners")
+            logger.info("Backend agents started: BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent + Listeners")
 
         except Exception as e:
             # Set flag to indicate backend is not available
@@ -274,7 +319,11 @@ class VoiceBridgeV2:
             except Exception as e:
                 logger.warning(f"Could not start status listener: {e}")
 
-    async def handle_voice_input(self, text: str) -> VoiceBridgeResult:
+    async def handle_voice_input(
+        self,
+        text: str,
+        domain_hint: Optional[str] = None
+    ) -> VoiceBridgeResult:
         """
         Process voice input through Rachel.
 
@@ -283,6 +332,8 @@ class VoiceBridgeV2:
 
         Args:
             text: Transcribed voice input
+            domain_hint: Optional domain hint (ideas, bubbles, desktop, coding, shuttles)
+                        If provided, skips domain detection and routes directly.
 
         Returns:
             VoiceBridgeResult with response and metadata
@@ -299,10 +350,12 @@ class VoiceBridgeV2:
             )
 
         # Create input event (target_space defaults to IDEAS)
+        # Include domain_hint for direct routing
         input_event = InputEvent(
             text=text,
             timestamp=timestamp,
             target_space=SpaceType.IDEAS,
+            domain_hint=domain_hint,
         )
 
         # Track message count for debugging
@@ -384,6 +437,8 @@ class VoiceBridgeV2:
         await self.tts_queue.stop_processing()
 
         # Stop backend agents
+        if hasattr(self, '_bubbles_agent') and self._bubbles_agent:
+            await self._bubbles_agent.stop()
         if self._ideas_agent:
             await self._ideas_agent.stop()
         if self._desktop_agent:
@@ -394,6 +449,10 @@ class VoiceBridgeV2:
         # Stop status listener
         if self._status_listener:
             await self._status_listener.stop()
+
+        # Stop question listener
+        if hasattr(self, '_question_listener') and self._question_listener:
+            await self._question_listener.stop()
 
         # Close event bus
         if self._event_bus:

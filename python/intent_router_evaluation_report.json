@@ -1,0 +1,6402 @@
+{
+  "timestamp": "2026-01-19T00:38:34.743577",
+  "duration_seconds": 964.7,
+  "total_tests": 300,
+  "total_passed": 232,
+  "overall_pass_rate": 0.7733333333333333,
+  "categories": {
+    "easy": {
+      "passed": 75,
+      "partial": 0,
+      "failed": 25,
+      "total": 100,
+      "pass_rate": 0.75,
+      "pattern_breakdown": {
+        "incomplete": {
+          "passed": 8,
+          "total": 10
+        },
+        "filler": {
+          "passed": 10,
+          "total": 10
+        },
+        "ambiguous": {
+          "passed": 8,
+          "total": 10
+        },
+        "mixed_lang": {
+          "passed": 10,
+          "total": 10
+        },
+        "informal": {
+          "passed": 5,
+          "total": 10
+        },
+        "asr_error": {
+          "passed": 8,
+          "total": 10
+        },
+        "contextual": {
+          "passed": 6,
+          "total": 10
+        },
+        "mumbled": {
+          "passed": 9,
+          "total": 10
+        },
+        "correction": {
+          "passed": 2,
+          "total": 10
+        },
+        "dialect": {
+          "passed": 9,
+          "total": 10
+        }
+      }
+    },
+    "medium": {
+      "passed": 65,
+      "partial": 8,
+      "failed": 27,
+      "total": 100,
+      "pass_rate": 0.65,
+      "pattern_breakdown": {
+        "incomplete": {
+          "passed": 10,
+          "total": 10
+        },
+        "filler": {
+          "passed": 6,
+          "total": 10
+        },
+        "ambiguous": {
+          "passed": 6,
+          "total": 10
+        },
+        "mixed_lang": {
+          "passed": 9,
+          "total": 10
+        },
+        "informal": {
+          "passed": 3,
+          "total": 10
+        },
+        "asr_error": {
+          "passed": 7,
+          "total": 10
+        },
+        "contextual": {
+          "passed": 4,
+          "total": 10
+        },
+        "mumbled": {
+          "passed": 6,
+          "total": 10
+        },
+        "correction": {
+          "passed": 10,
+          "total": 10
+        },
+        "dialect": {
+          "passed": 4,
+          "total": 10
+        }
+      }
+    },
+    "complex": {
+      "passed": 92,
+      "partial": 4,
+      "failed": 4,
+      "total": 100,
+      "pass_rate": 0.92,
+      "pattern_breakdown": {
+        "incomplete": {
+          "passed": 10,
+          "total": 10
+        },
+        "filler": {
+          "passed": 10,
+          "total": 10
+        },
+        "ambiguous": {
+          "passed": 6,
+          "total": 10
+        },
+        "mixed_lang": {
+          "passed": 10,
+          "total": 10
+        },
+        "informal": {
+          "passed": 10,
+          "total": 10
+        },
+        "asr_error": {
+          "passed": 10,
+          "total": 10
+        },
+        "contextual": {
+          "passed": 8,
+          "total": 10
+        },
+        "mumbled": {
+          "passed": 8,
+          "total": 10
+        },
+        "correction": {
+          "passed": 10,
+          "total": 10
+        },
+        "dialect": {
+          "passed": 10,
+          "total": 10
+        }
+      }
+    }
+  },
+  "thresholds": {
+    "easy": 0.9,
+    "medium": 0.75,
+    "complex": 0.65
+  },
+  "meets_requirements": {
+    "easy": false,
+    "medium": false,
+    "complex": true
+  },
+  "detailed_results": {
+    "easy": [
+      {
+        "test_id": "INC_E01",
+        "input": "aeh die ideen... zeigen oder so",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.find",
+        "confidence": 0.85,
+        "pattern": "incomplete",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.85"
+      },
+      {
+        "test_id": "INC_E02",
+        "input": "kannst du mal die... na du weisst schon... spaces",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.list",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "INC_E03",
+        "input": "mach mal eine... wie heisst das... bubble fuer marketing",
+        "expected_intent": "bubble.create",
+        "actual_intent": "bubble.create",
+        "confidence": 0.95,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INC_E04",
+        "input": "ja also loesch mal das ding da",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.85,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "INC_E05",
+        "input": "verbinde das mit dem... moment... ja mit dem anderen",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "INC_E06",
+        "input": "geh mal in den... ach wie hiess der... marketing space",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.85,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "INC_E07",
+        "input": "neue idee und zwar... moment... ja genau so speichern",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INC_E08",
+        "input": "zusammenfassung von den... also von allem",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INC_E09",
+        "input": "das paper ding... whitepaper mein ich",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.95,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INC_E10",
+        "input": "tabelle... ja formatieren als tabelle",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "incomplete",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E01",
+        "input": "aehm ja also kannst du mir mal eben die spaces zeigen",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.list",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E02",
+        "input": "hmm ja genau also so ne neue idee oder so",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E03",
+        "input": "ja aeh moment mal aeh loesch das mal",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E04",
+        "input": "oookay also dann geh mal in den space marketing",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E05",
+        "input": "ehm ja such mal nach der idee budget",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.find",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E06",
+        "input": "aeh ja ne tabelle daraus machen bitte",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E07",
+        "input": "hmm wo bin ich denn grade eigentlich",
+        "expected_intent": "idea.current_space",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E08",
+        "input": "also aehm verlinke mal die ideen sinnvoll ja",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E09",
+        "input": "ja also so ne zusammenfassung waere gut",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "FIL_E10",
+        "input": "hmm ja genau die statistiken vom space bitte",
+        "expected_intent": "bubble.stats",
+        "actual_intent": "bubble.stats",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E01",
+        "input": "mach das weg",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "AMB_E02",
+        "input": "zeig mal",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.list",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "AMB_E03",
+        "input": "geh da rein",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "AMB_E04",
+        "input": "verbinde die beiden",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.connect",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E05",
+        "input": "das andere format",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "idea.convert_format",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "AMB_E06",
+        "input": "speicher das",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E07",
+        "input": "mach eine liste draus",
+        "expected_intent": "idea.format_action_list",
+        "actual_intent": "idea.format_action_list",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E08",
+        "input": "erweitern bitte",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.expand",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E09",
+        "input": "zusammenfassen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "AMB_E10",
+        "input": "stats",
+        "expected_intent": "bubble.stats",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.85"
+      },
+      {
+        "test_id": "MIX_E01",
+        "input": "delete das mal bitte",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "MIX_E02",
+        "input": "zeig mir die spaces please",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.list",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E03",
+        "input": "create ne neue idee",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E04",
+        "input": "link die ideas zusammen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E05",
+        "input": "enter den marketing space",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E06",
+        "input": "summary erstellen bitte",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E07",
+        "input": "format das als table",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E08",
+        "input": "mach ein whitepaper daraus please",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E09",
+        "input": "find die idee about marketing",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.find",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MIX_E10",
+        "input": "update das content von der idee",
+        "expected_intent": "idea.update",
+        "actual_intent": "idea.update",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E01",
+        "input": "zeig mal schnell",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "INF_E02",
+        "input": "mach weg",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E03",
+        "input": "neue idee reinhauen",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E04",
+        "input": "geh rein da",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E05",
+        "input": "alles zusammenpacken",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E06",
+        "input": "wo isses",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E07",
+        "input": "verbinden tun",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E08",
+        "input": "schnell mal checken",
+        "expected_intent": "bubble.stats",
+        "actual_intent": "conversation.help",
+        "confidence": 0.85,
+        "pattern": "informal",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.85"
+      },
+      {
+        "test_id": "INF_E09",
+        "input": "aufhuebschen als tabelle",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "INF_E10",
+        "input": "neuer space anlegen",
+        "expected_intent": "bubble.create",
+        "actual_intent": "bubble.create",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E01",
+        "input": "zeig mir meine idden",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E02",
+        "input": "erstele einen neuen speiss",
+        "expected_intent": "bubble.create",
+        "actual_intent": "bubble.create",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E03",
+        "input": "gehe in den marketink space",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E04",
+        "input": "losche die idee",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E05",
+        "input": "verbine die ideen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E06",
+        "input": "zusammnfassung erstellen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E07",
+        "input": "formatiren als tabele",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E08",
+        "input": "weisspapier generiren",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E09",
+        "input": "statistik vom speiss zeigen",
+        "expected_intent": "bubble.stats",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "ASR_E10",
+        "input": "aektualisiere die ide",
+        "expected_intent": "idea.update",
+        "actual_intent": "idea.update",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E01",
+        "input": "das da loeschen",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "CTX_E02",
+        "input": "die sache von vorhin zeigen",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E03",
+        "input": "das letzte nochmal anzeigen",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.current_space",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E04",
+        "input": "genau das verbinden",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.connect",
+        "confidence": 0.85,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "CTX_E05",
+        "input": "so wie vorher machen tabelle",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E06",
+        "input": "das gleiche fuer den anderen space",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "CTX_E07",
+        "input": "wieder dahin zurueck",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E08",
+        "input": "das ganze drumherum erweitern",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.expand",
+        "confidence": 0.85,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "CTX_E09",
+        "input": "die anderen auch verlinken",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "CTX_E10",
+        "input": "davon ne zusammenfassung",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MUM_E01",
+        "input": "nee andersrum... die ideen zeigen",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.list",
+        "confidence": 0.95,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MUM_E02",
+        "input": "warte mal... doch die spaces",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.list",
+        "confidence": 0.95,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MUM_E03",
+        "input": "ach nee... moment... ja genau loeschen",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.90"
+      },
+      {
+        "test_id": "MUM_E04",
+        "input": "hm wie heisst das nochmal... verbinden halt",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "MUM_E05",
+        "input": "das dings da... weisste... anzeigen ideen",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.list",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "MUM_E06",
+        "input": "irgendwie... formatieren als tabelle oder so",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.format_table",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "MUM_E07",
+        "input": "wie sagt man... erweitern glaub ich",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.expand",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "MUM_E08",
+        "input": "na du weisst schon... das paper ding",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "MUM_E09",
+        "input": "achso ja genau... in den space gehen",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "MUM_E10",
+        "input": "dings... aeh... zusammenfassung machen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "mumbled",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "COR_E01",
+        "input": "erstelle... nein warte loesche den space",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "bubble.delete",
+        "confidence": 0.95,
+        "pattern": "correction",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "COR_E02",
+        "input": "zeig die ideen... ach nee die spaces",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E03",
+        "input": "geh in marketing... quatsch in projekte",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E04",
+        "input": "loesch... stopp... aktualisiere die idee",
+        "expected_intent": "idea.update",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E05",
+        "input": "verbinde a mit b... halt nee verlinke alles",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E06",
+        "input": "als tabelle... moment als aufgabenliste",
+        "expected_intent": "idea.format_action_list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E07",
+        "input": "zusammenfassung... ach whitepaper mein ich",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "COR_E08",
+        "input": "erweitern... nee analysieren verbindungen",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "idea.analyze_links",
+        "confidence": 0.95,
+        "pattern": "correction",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "COR_E09",
+        "input": "neue idee... stopp suchen mein ich",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.95"
+      },
+      {
+        "test_id": "COR_E10",
+        "input": "space erstellen... warte umbenennen",
+        "expected_intent": "bubble.update",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.90"
+      },
+      {
+        "test_id": "DIA_E01",
+        "input": "schaug amoi de ideen an",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.list",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E02",
+        "input": "mach dat weg",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E03",
+        "input": "geh ma do nei in den space",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E04",
+        "input": "zeig amoi de spaces",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.list",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E05",
+        "input": "dat verbinden tun",
+        "expected_intent": "idea.connect",
+        "actual_intent": "idea.connect",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      },
+      {
+        "test_id": "DIA_E06",
+        "input": "mach a neie idee",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E07",
+        "input": "lueg mal die sache an",
+        "expected_intent": "idea.list",
+        "actual_intent": "conversation.help",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "status": "FAIL",
+        "reasoning": "Match: False, Conf: 0.85"
+      },
+      {
+        "test_id": "DIA_E08",
+        "input": "des zamfassn bitte",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E09",
+        "input": "loeschens bittschoen die idee",
+        "expected_intent": "idea.delete",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.95"
+      },
+      {
+        "test_id": "DIA_E10",
+        "input": "des paper dings macha",
+        "expected_intent": "idea.whitepaper",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "status": "PASS",
+        "reasoning": "Match: True, Conf: 0.85"
+      }
+    ],
+    "medium": [
+      {
+        "test_id": "MED_A01",
+        "input": "geh erstmal in den space und dann... ja zeig mal alles",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A02",
+        "input": "also aehm reingehn in marketing und zeigen was da is",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A03",
+        "input": "rein da und alles anzeigen",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A04",
+        "input": "enter space projekte and show ideas",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A05",
+        "input": "reinspringen und alles angucken",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A06",
+        "input": "gehe in den speiss und zeig die idden",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A07",
+        "input": "da wieder rein und das zeigen",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A08",
+        "input": "warte... also erstmal reingehn dann zeigen",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A09",
+        "input": "zeig ideen... nee erst in space gehen dann zeigen",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A10",
+        "input": "geh ma do nei und schaug wos drin is",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "actual_steps": [
+          "bubble.enter"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A11",
+        "input": "spaces zeigen und dann in marketing gehen",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A12",
+        "input": "aehm also liste mal spaces und geh dann rein",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A13",
+        "input": "uebersicht und dann da rein",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "conversation.help",
+          "idea.current_space"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 0,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 0/2"
+      },
+      {
+        "test_id": "MED_A14",
+        "input": "show spaces und dann enter marketing",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A15",
+        "input": "mal gucken was da is und dann rein",
+        "expected_intent": "bubble.list",
+        "actual_intent": "bubble.enter",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.enter"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A16",
+        "input": "zeig speisses und geh in marketink",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.find"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A17",
+        "input": "das von vorhin zeigen und dann dahin",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "idea.current_space",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A18",
+        "input": "moment... also spaces und dann... ja reingehn",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_A19",
+        "input": "ideen... nee spaces zeigen dann reingehn",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_A20",
+        "input": "schaug amoi de spaces und geh do nei",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B01",
+        "input": "mach mal nen space... und dann ideen rein",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B02",
+        "input": "ja also erstell space marketing und fueg idee roadmap hinzu",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B03",
+        "input": "neuer bereich und was reinpacken",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B04",
+        "input": "create space projekte und add idee features",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B05",
+        "input": "schnell space anlegen und idee reinhauen",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B06",
+        "input": "erstele speiss und fuge ideen hinsu",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B07",
+        "input": "so wie vorher neuen machen und das gleiche rein",
+        "expected_intent": "bubble.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "idea.create"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_B08",
+        "input": "dings... neuer space... und dann... ja idee dazu",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B09",
+        "input": "idee... nee erst space erstellen dann idee",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B10",
+        "input": "mach dat space und pack da wat rein",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B11",
+        "input": "neue idee erstellen und als tabelle formatieren",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B12",
+        "input": "aehm ja mach ne idee und dann als liste",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_action_list"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_action_list"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B13",
+        "input": "das speichern und formatieren",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_note"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_B14",
+        "input": "create idea und format als table please",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B15",
+        "input": "idee reinhauen und huebsch machen",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.create",
+        "confidence": 0.95,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_B16",
+        "input": "erstele ide und formatir als tabele",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B17",
+        "input": "so wie das andere erstellen und gleich formatieren",
+        "expected_intent": "idea.create",
+        "actual_intent": "idea.format_action_list",
+        "confidence": 0.85,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.format_action_list"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 0,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 0/2"
+      },
+      {
+        "test_id": "MED_B18",
+        "input": "also... neue idee... dann... ja tabelle draus",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_B19",
+        "input": "formatieren... nee erst erstellen dann format",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_note"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_B20",
+        "input": "mach a neie idee und des als tabelle",
+        "expected_intent": "idea.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.95,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_table"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C01",
+        "input": "zeig alles und mach das dann weg",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C02",
+        "input": "liste ideen auf und loesch die ueber budget",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C03",
+        "input": "aehm zeig mal und dann das alte weg",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C04",
+        "input": "show ideas and delete the marketing one",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C05",
+        "input": "gucken was da is und muell raus",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C06",
+        "input": "zeig idden und losch die alte",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C07",
+        "input": "das zeigen und dann das loeschen",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C08",
+        "input": "warte... zeigen erstmal... dann weg damit",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C09",
+        "input": "loeschen... nee erst zeigen dann loeschen",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C10",
+        "input": "schaug amoi und mach des dann weg",
+        "expected_intent": "idea.list",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.list",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C11",
+        "input": "such nach budget und loesch das",
+        "expected_intent": "idea.find",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C12",
+        "input": "hmm find die alte idee und weg damit",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C13",
+        "input": "finden und entfernen",
+        "expected_intent": "idea.find",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C14",
+        "input": "find idea marketing and delete it please",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C15",
+        "input": "raussuchen und wegmachen",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C16",
+        "input": "finde ide und losche die",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.95,
+        "pattern": "asr_error",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C17",
+        "input": "das von vorhin suchen und loeschen",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.85,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C18",
+        "input": "also... suchen... und dann weg",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.find",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_C19",
+        "input": "loeschen... stopp erst suchen budget dann loeschen",
+        "expected_intent": "idea.find",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_C20",
+        "input": "such des und mach weg",
+        "expected_intent": "idea.find",
+        "actual_intent": "idea.delete",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.find",
+          "idea.delete"
+        ],
+        "actual_steps": [
+          "idea.delete"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_D01",
+        "input": "verlink alles und dann zusammenfassung",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D02",
+        "input": "aehm ja verlinken und dann ne summary",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D03",
+        "input": "zusammenhaengen und das wichtigste zeigen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_D04",
+        "input": "auto-link und create summary bitte",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D05",
+        "input": "alles zusammenkleben und ueberblick",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_D06",
+        "input": "ferlinke und zamfassung erstelen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D07",
+        "input": "so wie beim letzten mal verlinken und zusammenfassen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D08",
+        "input": "also... verlinken... und dann... ja zusammenfassen",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D09",
+        "input": "summary... nee erst verlinken dann summary",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D10",
+        "input": "verbind des zam und mach zamfassung",
+        "expected_intent": "idea.auto_link",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.auto_link",
+          "idea.summarize"
+        ],
+        "actual_steps": [
+          "idea.connect",
+          "idea.summarize"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_D11",
+        "input": "zusammenfassung und dann whitepaper",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D12",
+        "input": "ja also fass zusammen und mach paper draus",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D13",
+        "input": "ueberblick und dann dokument erstellen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D14",
+        "input": "summarize und generate whitepaper please",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.whitepaper",
+        "confidence": 0.95,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D15",
+        "input": "kurz zusammenfassen und paper raushauen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D16",
+        "input": "zamfassung und dann weisspapier",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D17",
+        "input": "das gleiche wie vorhin zusammenfassen und paper machen",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D18",
+        "input": "dings... zusammenfassen... und paper",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "idea.summarize",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PARTIAL",
+        "reasoning": "Multi: False, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_D19",
+        "input": "whitepaper... ach erst summary dann paper",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_D20",
+        "input": "zamfassn und des paper dings macha",
+        "expected_intent": "idea.summarize",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E01",
+        "input": "analysier verbindungen und verlink dann",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E02",
+        "input": "aeh ja schau welche zusammengehoeren und verbinde die",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "filler",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E03",
+        "input": "pruefen und dann zusammenfuehren",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "idea.connect",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.connect"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 0,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 0/2"
+      },
+      {
+        "test_id": "MED_E04",
+        "input": "analyze links und auto-link dann",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E05",
+        "input": "mal checken und dann verknuepfen",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "idea.analyze_links",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E06",
+        "input": "analysir verlinkungen und verbine dann",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E07",
+        "input": "das pruefen und das verbinden",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E08",
+        "input": "also... pruefen erstmal... dann verlinken",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E09",
+        "input": "verlinken... nee erst analysieren dann verlinken",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E10",
+        "input": "schaug wos zsamgehoert und verbind des",
+        "expected_intent": "idea.analyze_links",
+        "actual_intent": "idea.connect",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.connect"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 0,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 0/2"
+      },
+      {
+        "test_id": "MED_E11",
+        "input": "erweitere idee und verlinke mit original",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.expand",
+          "idea.auto_link"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E12",
+        "input": "hmm ja mehr ideen generieren und zusammenbinden",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 0,
+        "status": "FAIL",
+        "reasoning": "Multi: True, First: N, Steps: 0/2"
+      },
+      {
+        "test_id": "MED_E13",
+        "input": "mehr davon und verbinden",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.expand",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E14",
+        "input": "expand ideas und dann connect bitte",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E15",
+        "input": "mehr draus machen und zusammenhaengen",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.expand",
+          "idea.auto_link"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E16",
+        "input": "erwitere und verbine dann",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E17",
+        "input": "das erweitern und das verbinden",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E18",
+        "input": "also mehr... und dann... verbinden",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.connect",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.connect"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      },
+      {
+        "test_id": "MED_E19",
+        "input": "verbinden... nee erst erweitern dann verbinden",
+        "expected_intent": "idea.expand",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "step_count": 2,
+        "expected_count": 2,
+        "steps_found": 2,
+        "status": "PASS",
+        "reasoning": "Multi: True, First: Y, Steps: 2/2"
+      },
+      {
+        "test_id": "MED_E20",
+        "input": "mach mehr draus und verbind des",
+        "expected_intent": "idea.expand",
+        "actual_intent": "idea.connect",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.expand",
+          "idea.connect"
+        ],
+        "actual_steps": [
+          "idea.connect"
+        ],
+        "step_count": 1,
+        "expected_count": 2,
+        "steps_found": 1,
+        "status": "FAIL",
+        "reasoning": "Multi: False, First: N, Steps: 1/2"
+      }
+    ],
+    "complex": [
+      {
+        "test_id": "CPX_1_01",
+        "input": "also mach mal nen space fuer das projekt... dann pack da rei...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 8,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 1.0,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_1_02",
+        "input": "aehm ja also erstell space produktentwicklung geh rein mach ...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "min_steps": 10,
+        "expected_count": 11,
+        "actual_count": 11,
+        "step_ratio": 1.1,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 110.0%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_1_03",
+        "input": "neues projekt anlegen da rein alles wichtige speichern verbi...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "idea.summarize",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_1_04",
+        "input": "create space startup dann enter und add ideas vision mission...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "min_steps": 10,
+        "expected_count": 12,
+        "actual_count": 12,
+        "step_ratio": 1.2,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 120.0%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_1_05",
+        "input": "okay mach mal so nen space fuer das projekt da dann hau da r...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.whitepaper"
+        ],
+        "min_steps": 10,
+        "expected_count": 11,
+        "actual_count": 5,
+        "step_ratio": 0.5,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_1_06",
+        "input": "erstele speiss projektentwiklung gehe hinein erstele idden f...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 10,
+        "expected_count": 11,
+        "actual_count": 6,
+        "step_ratio": 0.6,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_1_07",
+        "input": "mach das gleiche wie beim letzten projekt da mit den ganzen ...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 7,
+        "actual_count": 2,
+        "step_ratio": 0.33,
+        "coverage": 0.4,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 33.3%, Coverage: 40.0%"
+      },
+      {
+        "test_id": "CPX_1_08",
+        "input": "also das projekt dings machen... warte wie hiess das... ja s...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_1_09",
+        "input": "mach space... warte erstmal ideen zeigen... nee doch space m...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 8,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_1_10",
+        "input": "mach amoi an space fuers projekt geh do nei pack de sachen r...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 8,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_1_11",
+        "input": "space sprint-42 erstellen hineingehen user stories erstellen...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "min_steps": 12,
+        "expected_count": 13,
+        "actual_count": 13,
+        "step_ratio": 1.08,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 108.3%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_1_12",
+        "input": "aehm ja space api-design machen und dann geh rein und erstel...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_specs",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 10,
+        "actual_count": 5,
+        "step_ratio": 0.56,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 55.6%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_1_13",
+        "input": "api dokumentation anlegen alles rein endpoints auth errors f...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.create",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 8,
+        "expected_count": 9,
+        "actual_count": 5,
+        "step_ratio": 0.62,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 62.5%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_1_14",
+        "input": "create space documentation enter add ideas introduction basi...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.format_hierarchy",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 10,
+        "actual_count": 9,
+        "step_ratio": 1.0,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_1_15",
+        "input": "schnell space anlegen fuer knowledge base reinspringen ideen...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 8,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 1.0,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_1_16",
+        "input": "erstele speiss dokumentaion gehe rein mache idden einfurung ...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 8,
+        "expected_count": 9,
+        "actual_count": 4,
+        "step_ratio": 0.5,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_1_17",
+        "input": "so wie beim letzten mal docs aufsetzen da rein die ueblichen...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.format_specs",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 8,
+        "actual_count": 3,
+        "step_ratio": 0.43,
+        "coverage": 0.33,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 42.9%, Coverage: 33.3%"
+      },
+      {
+        "test_id": "CPX_1_18",
+        "input": "also... space fuer docs... warte... ja reingehn... dann sach...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.format_hierarchy",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.format_specs",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 7,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.33,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 33.3%"
+      },
+      {
+        "test_id": "CPX_1_19",
+        "input": "whitepaper... nee erstmal space erstellen docs dann reingehn...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.format_hierarchy",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_1_20",
+        "input": "mach an space fuer de doku geh nei pack de sachen rein einfu...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.format_hierarchy",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 8,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_2_01",
+        "input": "geh in den space... zeig was da is... format alles als tabel...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.analyze_links",
+          "idea.summarize"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_2_02",
+        "input": "aehm ja also geh in marketing zeig ideen formatier als tabel...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_2_03",
+        "input": "reingehn alles anzeigen strukturieren verbinden pruefen zusa...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.format_hierarchy",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 6,
+        "step_ratio": 0.86,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 85.7%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_2_04",
+        "input": "enter marketing space list ideas format all as tables auto-l...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_2_05",
+        "input": "reinspringen alles angucken aufhuebschen als tabellen zusamm...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.format_table",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.43,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 42.9%"
+      },
+      {
+        "test_id": "CPX_2_06",
+        "input": "gehe in speiss zeig idden formatir als tabelen verlinke auto...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 6,
+        "step_ratio": 0.86,
+        "coverage": 0.86,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 85.7%, Coverage: 85.7%"
+      },
+      {
+        "test_id": "CPX_2_07",
+        "input": "da wieder rein das anzeigen so formatieren wie letztens verl...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_2_08",
+        "input": "also... reingehn... zeigen... dann formatieren... verlinken....",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link",
+          "idea.format_table",
+          "idea.summarize"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.57,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 57.1%"
+      },
+      {
+        "test_id": "CPX_2_09",
+        "input": "paper... nee erst reingehn zeigen formatieren verlinken anal...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 6,
+        "step_ratio": 0.86,
+        "coverage": 0.86,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 85.7%, Coverage: 85.7%"
+      },
+      {
+        "test_id": "CPX_2_10",
+        "input": "geh amoi do nei und schaug wos drin is dann des zam verlinke...",
+        "expected_intent": "bubble.enter",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.enter",
+          "idea.list",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.auto_link",
+          "idea.analyze_links",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.4,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 40.0%"
+      },
+      {
+        "test_id": "CPX_2_11",
+        "input": "liste ideen... erste als tabelle... zweite als aufgabenliste...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_table",
+          "idea.format_table",
+          "idea.auto_link"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 5,
+        "step_ratio": 0.83,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 83.3%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_2_12",
+        "input": "hmm also zeig mal ideen formatier erste als tabelle zweite a...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_2_13",
+        "input": "alles zeigen verschieden formatieren verbinden dokument",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.list_formats",
+          "idea.auto_link"
+        ],
+        "min_steps": 4,
+        "expected_count": 4,
+        "actual_count": 2,
+        "step_ratio": 0.5,
+        "coverage": 0.25,
+        "status": "PARTIAL",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 25.0%"
+      },
+      {
+        "test_id": "CPX_2_14",
+        "input": "list ideas format first as table second as action list third...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 6,
+        "step_ratio": 1.0,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_2_15",
+        "input": "alles angucken erste aufhuebschen als tabelle zweite als tas...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_2_16",
+        "input": "zeig idden formatir erste als tabele zweite als aufgaben dri...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_table",
+          "idea.format_pros_cons",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_2_17",
+        "input": "das zeigen so formatieren wie letztens die eine als tabelle ...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_2_18",
+        "input": "also... zeigen... erste formatieren... zweite... dritte... d...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_2_19",
+        "input": "paper... nee erst zeigen dann formatieren tabelle liste pro ...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.find",
+          "idea.format_table",
+          "idea.format_pros_cons",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 5,
+        "step_ratio": 0.83,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 83.3%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_2_20",
+        "input": "schaug des an formatir de erste als tabelle de zweite als au...",
+        "expected_intent": "idea.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.list",
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_01",
+        "input": "formatier alles als tabellen... dann einige als listen... an...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_note",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 5,
+        "step_ratio": 1.0,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_3_02",
+        "input": "aehm ja also formatier ideen als tabelle dann manche als auf...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_3_03",
+        "input": "strukturieren verschiedene formate verbinden exportieren als...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_hierarchy",
+          "idea.auto_link",
+          "idea.format_specs"
+        ],
+        "min_steps": 4,
+        "expected_count": 4,
+        "actual_count": 3,
+        "step_ratio": 0.75,
+        "coverage": 0.25,
+        "status": "PARTIAL",
+        "reasoning": "Multi: True, Ratio: 75.0%, Coverage: 25.0%"
+      },
+      {
+        "test_id": "CPX_3_04",
+        "input": "format ideas as table some as action list others as specs au...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_note",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 5,
+        "step_ratio": 1.0,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_3_05",
+        "input": "alles aufhuebschen manche als tabellen manche als tasks manc...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.analyze_links",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_06",
+        "input": "formatiren alles als tabelen manche als aufgabelisten andere...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_07",
+        "input": "so wie vorher formatieren die einen als tabelle die anderen ...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.whitepaper"
+        ],
+        "min_steps": 4,
+        "expected_count": 4,
+        "actual_count": 3,
+        "step_ratio": 0.75,
+        "coverage": 0.75,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 75.0%, Coverage: 75.0%"
+      },
+      {
+        "test_id": "CPX_3_08",
+        "input": "also formatieren... tabelle... liste... specs... verlinken.....",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": false,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 1,
+        "step_ratio": 0.2,
+        "coverage": 0.2,
+        "status": "FAIL",
+        "reasoning": "Multi: False, Ratio: 20.0%, Coverage: 20.0%"
+      },
+      {
+        "test_id": "CPX_3_09",
+        "input": "paper... nee erst formatieren tabelle liste specs dann verli...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_10",
+        "input": "formatir des als tabelle des als aufgaben des als specs verl...",
+        "expected_intent": "idea.format_table",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.format_specs",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.connect",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.4,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 40.0%"
+      },
+      {
+        "test_id": "CPX_3_11",
+        "input": "konvertier alles zu tabellen... dann zurueck zu notizen... d...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.convert_format",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 5,
+        "step_ratio": 1.0,
+        "coverage": 0.8,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 80.0%"
+      },
+      {
+        "test_id": "CPX_3_12",
+        "input": "ja also konvertier zu tabellen dann zu notizen dann wieder t...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.format_action_list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_13",
+        "input": "format umwandeln hin und her dann verbinden exportieren",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.auto_link",
+          "idea.export"
+        ],
+        "min_steps": 4,
+        "expected_count": 4,
+        "actual_count": 3,
+        "step_ratio": 0.75,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 75.0%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_3_14",
+        "input": "convert to tables dann to notes dann tables again auto-link ...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.convert_format",
+          "idea.auto_link"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_15",
+        "input": "umwandeln zu tabellen dann notizen dann wieder tabellen zusa...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.convert_format",
+          "idea.convert_format",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.4,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 40.0%"
+      },
+      {
+        "test_id": "CPX_3_16",
+        "input": "konvertir zu tabelen dann zu notisen dann wieder tabelen ver...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.convert_format",
+          "idea.convert_format",
+          "idea.auto_link"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.4,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 40.0%"
+      },
+      {
+        "test_id": "CPX_3_17",
+        "input": "so wie vorher umwandeln hin und her dann verlinken und paper",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 4,
+        "expected_count": 4,
+        "actual_count": 3,
+        "step_ratio": 0.75,
+        "coverage": 0.75,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 75.0%, Coverage: 75.0%"
+      },
+      {
+        "test_id": "CPX_3_18",
+        "input": "konvertieren... tabellen... notizen... wieder tabellen... ve...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.convert_format",
+          "idea.format_table",
+          "idea.auto_link"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_19",
+        "input": "paper... nee erst konvertieren tabellen notizen tabellen ver...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 3,
+        "step_ratio": 0.6,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 60.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_3_20",
+        "input": "wandel zu tabellen um dann zu notizen dann wieder tabellen v...",
+        "expected_intent": "idea.convert_format",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "idea.convert_format",
+          "idea.format_note",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "actual_steps": [
+          "idea.format_table",
+          "idea.create",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 5,
+        "expected_count": 5,
+        "actual_count": 4,
+        "step_ratio": 0.8,
+        "coverage": 0.6,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 80.0%, Coverage: 60.0%"
+      },
+      {
+        "test_id": "CPX_4_01",
+        "input": "mach spaces q1 q2 q3 q4... geh in jeden... pack ideen rein.....",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 11,
+        "step_ratio": 1.22,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 122.2%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_02",
+        "input": "aehm ja erstell spaces q1 q2 q3 q4 geh in jeden fueg ideen h...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "bubble.enter",
+          "idea.create",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 15,
+        "step_ratio": 1.67,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 166.7%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_4_03",
+        "input": "mehrere bereiche anlegen in jeden rein sachen speichern verb...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "idea.create",
+          "idea.create",
+          "idea.auto_link"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_4_04",
+        "input": "create spaces q1 q2 q3 q4 enter each add ideas auto-link sum...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 12,
+        "step_ratio": 1.33,
+        "coverage": 1.0,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 133.3%, Coverage: 100.0%"
+      },
+      {
+        "test_id": "CPX_4_05",
+        "input": "schnell vier spaces anlegen q1 bis q4 reinspringen ideen rei...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 11,
+        "step_ratio": 1.22,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 122.2%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_06",
+        "input": "erstele speisses q1 q2 q3 q4 gehe in jeden fuge idden hinsu ...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 4,
+        "step_ratio": 0.44,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 44.4%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_4_07",
+        "input": "so wie beim letzten mal vier bereiche anlegen ueberall das g...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 1,
+        "step_ratio": 0.11,
+        "coverage": 0.17,
+        "status": "FAIL",
+        "reasoning": "Multi: False, Ratio: 11.1%, Coverage: 16.7%"
+      },
+      {
+        "test_id": "CPX_4_08",
+        "input": "spaces machen... vier stueck... reingehn... ideen... verlink...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 7,
+        "step_ratio": 0.78,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 77.8%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_4_09",
+        "input": "paper... nee erst spaces erstellen vier stueck dann reingehn...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 0.89,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 88.9%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_10",
+        "input": "mach vier spaces q1 q2 q3 q4 geh in jeden pack sachen rein v...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.create",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "bubble.enter",
+          "..."
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 11,
+        "step_ratio": 1.22,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 122.2%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_11",
+        "input": "spaces zeigen... in jeden reingehn... stats checken... ideen...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "idea.current_space",
+          "idea.list",
+          "idea.auto_link"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 5,
+        "step_ratio": 0.83,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 83.3%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_4_12",
+        "input": "ja also zeig spaces geh in jeden zeig stats liste ideen verl...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "idea.list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 5,
+        "step_ratio": 0.83,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 83.3%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_13",
+        "input": "alle bereiche durchgehen statistik anzeigen verbinden dokume...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 2,
+        "step_ratio": 0.33,
+        "coverage": 0.17,
+        "status": "PARTIAL",
+        "reasoning": "Multi: True, Ratio: 33.3%, Coverage: 16.7%"
+      },
+      {
+        "test_id": "CPX_4_14",
+        "input": "list spaces enter each show stats list ideas auto-link creat...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "stats.show",
+          "idea.list",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 6,
+        "step_ratio": 1.0,
+        "coverage": 0.83,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 100.0%, Coverage: 83.3%"
+      },
+      {
+        "test_id": "CPX_4_15",
+        "input": "alle spaces durchgucken in jeden rein stats checken ideen an...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "idea.find",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_4_16",
+        "input": "zeig speisses gehe in jeden zeig statistik liste idden verli...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_4_17",
+        "input": "so wie vorher alle durchgehen das anzeigen verlinken und pap...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.analyze_links",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.33,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 33.3%"
+      },
+      {
+        "test_id": "CPX_4_18",
+        "input": "spaces... reingehn... stats... ideen... verlinken... paper",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 3,
+        "step_ratio": 0.5,
+        "coverage": 0.5,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 50.0%, Coverage: 50.0%"
+      },
+      {
+        "test_id": "CPX_4_19",
+        "input": "paper... nee erst spaces zeigen reingehn stats ideen verlink...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_4_20",
+        "input": "schaug de spaces geh in jeden zeig stats de idden verlink un...",
+        "expected_intent": "bubble.list",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "bubble.stats",
+          "idea.list",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.list",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 6,
+        "expected_count": 6,
+        "actual_count": 4,
+        "step_ratio": 0.67,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_5_01",
+        "input": "space erstellen... ideen rein... als tabellen formatieren......",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 0.89,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 88.9%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_5_02",
+        "input": "aehm ja space projekt machen reingehn ideen erstellen format...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.update",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 0.89,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 88.9%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_5_03",
+        "input": "bereich anlegen sachen rein strukturieren verbinden statisti...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "ambiguous",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.auto_link",
+          "idea.summarize",
+          "bubble.update",
+          "idea.format_table",
+          "idea.analyze_links"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 6,
+        "step_ratio": 0.67,
+        "coverage": 0.56,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 55.6%"
+      },
+      {
+        "test_id": "CPX_5_04",
+        "input": "create space enter add ideas format as tables auto-link show...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 0.89,
+        "coverage": 0.78,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 88.9%, Coverage: 77.8%"
+      },
+      {
+        "test_id": "CPX_5_05",
+        "input": "space anlegen reinspringen ideen reinhauen aufhuebschen verk...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "idea.create",
+          "bubble.update",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 5,
+        "step_ratio": 0.56,
+        "coverage": 0.56,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 55.6%, Coverage: 55.6%"
+      },
+      {
+        "test_id": "CPX_5_06",
+        "input": "erstele speiss gehe rein erstele idden formatir als tabelen ...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 5,
+        "step_ratio": 0.56,
+        "coverage": 0.56,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 55.6%, Coverage: 55.6%"
+      },
+      {
+        "test_id": "CPX_5_07",
+        "input": "so wie vorher alles aufsetzen formatieren verlinken statisti...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "contextual",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.format_hierarchy",
+          "idea.auto_link",
+          "idea.analyze_links",
+          "idea.update",
+          "idea.summarize",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 6,
+        "step_ratio": 0.67,
+        "coverage": 0.33,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 66.7%, Coverage: 33.3%"
+      },
+      {
+        "test_id": "CPX_5_08",
+        "input": "space... reingehn... ideen... formatieren... verlinken... st...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.enter",
+          "idea.auto_link",
+          "bubble.update",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 4,
+        "step_ratio": 0.44,
+        "coverage": 0.44,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 44.4%, Coverage: 44.4%"
+      },
+      {
+        "test_id": "CPX_5_09",
+        "input": "paper... nee erst space erstellen reingehn ideen formatieren...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.format_table",
+          "bubble.update",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 5,
+        "step_ratio": 0.56,
+        "coverage": 0.56,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 55.6%, Coverage: 55.6%"
+      },
+      {
+        "test_id": "CPX_5_10",
+        "input": "mach space geh nei pack idden rein formatir verlink zeig sta...",
+        "expected_intent": "bubble.create",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.format_table",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.create",
+          "idea.create",
+          "idea.summarize",
+          "bubble.update",
+          "idea.whitepaper"
+        ],
+        "min_steps": 9,
+        "expected_count": 9,
+        "actual_count": 8,
+        "step_ratio": 0.89,
+        "coverage": 0.67,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 88.9%, Coverage: 66.7%"
+      },
+      {
+        "test_id": "CPX_5_11",
+        "input": "spaces loeschen... neuen erstellen... reingehn... ideen von ...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "incomplete",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.format_table"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.57,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 57.1%"
+      },
+      {
+        "test_id": "CPX_5_12",
+        "input": "ja also loesch alte spaces erstell neuen geh rein fueg ideen...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "filler",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.71,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 71.4%"
+      },
+      {
+        "test_id": "CPX_5_13",
+        "input": "altes weg neues anlegen sachen rein verbinden strukturieren ...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.95,
+        "pattern": "ambiguous",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 1,
+        "step_ratio": 0.14,
+        "coverage": 0.14,
+        "status": "FAIL",
+        "reasoning": "Multi: False, Ratio: 14.3%, Coverage: 14.3%"
+      },
+      {
+        "test_id": "CPX_5_14",
+        "input": "delete old spaces create new enter add ideas auto-link forma...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mixed_lang",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 6,
+        "step_ratio": 0.86,
+        "coverage": 0.86,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 85.7%, Coverage: 85.7%"
+      },
+      {
+        "test_id": "CPX_5_15",
+        "input": "altes rausschmeissen neues anlegen rein ideen rein verknuepf...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "informal",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.delete",
+          "idea.create",
+          "idea.auto_link",
+          "idea.format_specs"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.43,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 42.9%"
+      },
+      {
+        "test_id": "CPX_5_16",
+        "input": "losche speisses erstele neuen gehe rein erstele idden verlin...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "asr_error",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 5,
+        "step_ratio": 0.71,
+        "coverage": 0.57,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 71.4%, Coverage: 57.1%"
+      },
+      {
+        "test_id": "CPX_5_17",
+        "input": "das alte weg neues wie vorher anlegen sachen rein verlinken ...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "idea.auto_link",
+        "confidence": 0.85,
+        "pattern": "contextual",
+        "is_multi_step": false,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.auto_link"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 1,
+        "step_ratio": 0.14,
+        "coverage": 0.14,
+        "status": "FAIL",
+        "reasoning": "Multi: False, Ratio: 14.3%, Coverage: 14.3%"
+      },
+      {
+        "test_id": "CPX_5_18",
+        "input": "loeschen... neuen... reingehn... ideen... verlinken... forma...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "mumbled",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.delete",
+          "idea.auto_link",
+          "idea.format_table",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.29,
+        "status": "PARTIAL",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 28.6%"
+      },
+      {
+        "test_id": "CPX_5_19",
+        "input": "paper... nee erst altes loeschen neues erstellen reingehn id...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.9,
+        "pattern": "correction",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "idea.delete",
+          "idea.create",
+          "bubble.enter",
+          "idea.auto_link",
+          "idea.format_table",
+          "idea.whitepaper"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 6,
+        "step_ratio": 0.86,
+        "coverage": 0.57,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 85.7%, Coverage: 57.1%"
+      },
+      {
+        "test_id": "CPX_5_20",
+        "input": "loesch des alte mach neuen space geh nei pack idden rein ver...",
+        "expected_intent": "bubble.delete",
+        "actual_intent": "multi_step",
+        "confidence": 0.85,
+        "pattern": "dialect",
+        "is_multi_step": true,
+        "expected_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "bubble.enter",
+          "idea.create",
+          "idea.auto_link",
+          "..."
+        ],
+        "actual_steps": [
+          "bubble.delete",
+          "bubble.create",
+          "idea.auto_link",
+          "idea.format_specs"
+        ],
+        "min_steps": 7,
+        "expected_count": 7,
+        "actual_count": 4,
+        "step_ratio": 0.57,
+        "coverage": 0.57,
+        "status": "PASS",
+        "reasoning": "Multi: True, Ratio: 57.1%, Coverage: 57.1%"
+      }
+    ]
+  }
+}

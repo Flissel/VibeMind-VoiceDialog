@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any
 class SpaceType(Enum):
     """Verfügbare Space-Typen im Multiverse."""
     IDEAS = "ideas"
-    DESKTOP_AUTOMATION = "desktop_automation"
+    DESKTOP_SPACE = "desktop_space"
     # Zukünftige Spaces:
     # CODING_WORKSHOP = "coding_workshop"  # Antoni's Space
     # PROJECT_HUB = "project_hub"  # Alice's Space
@@ -52,9 +52,9 @@ SPACES = {
             "allows_creation": True,
         }
     ),
-    SpaceType.DESKTOP_AUTOMATION: SpaceConfig(
-        type=SpaceType.DESKTOP_AUTOMATION,
-        name="Desktop Automation Space",
+    SpaceType.DESKTOP_SPACE: SpaceConfig(
+        type=SpaceType.DESKTOP_SPACE,
+        name="Desktop Space",
         description="Adams Desktop-Kontrolle - System-Operationen und App-Steuerung",
         position={"x": 10, "y": 0, "z": -5},  # Weiter entfernt im Raum
         agent_slug="adam",

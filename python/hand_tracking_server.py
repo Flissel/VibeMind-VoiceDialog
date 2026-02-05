@@ -38,7 +38,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from spaces.desktop_automation.hand_motion import (
+    from spaces.desktop_space.hand_motion import (
         get_hand_detector, HandMotionDetector, GestureType, HAS_OPENCV, HAS_MEDIAPIPE,
     )
     HAS_HAND_DETECTION = HAS_OPENCV and HAS_MEDIAPIPE

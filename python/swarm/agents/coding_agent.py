@@ -131,31 +131,58 @@ CODING_TOOLS = [
 
 def create_coding_agent(model_client, handoff_targets: List[str] = None):
     """
-    Create the Coding Agent for code generation.
+    Create the Coding Agent for code generation, plus sub-agents.
 
     Args:
         model_client: The LLM client (Ollama or OpenAI-compatible)
         handoff_targets: List of agent names this agent can hand off to
 
     Returns:
-        AssistantAgent instance
+        Tuple of (AssistantAgent, list of sub-agent AssistantAgents)
     """
     from autogen_agentchat.agents import AssistantAgent
+
+    # Import sub-agent factories
+    from swarm.sub_agents.base_sub_agent import (
+        create_memory_sub_agent,
+        create_context_sub_agent,
+    )
+    from swarm.sub_agents.coding_sub_agents import (
+        create_coding_requirements,
+        create_coding_monitor,
+        create_coding_preview,
+    )
+
+    # Create sub-agents
+    memory_sub = create_memory_sub_agent("coding_agent", "coding", model_client)
+    context_sub = create_context_sub_agent("coding_agent", "coding", model_client)
+    requirements = create_coding_requirements(model_client)
+    monitor = create_coding_monitor(model_client)
+    preview = create_coding_preview(model_client)
+
+    sub_agents = [memory_sub, context_sub, requirements, monitor, preview]
+    sub_agent_names = [sa.name for sa in sub_agents]
 
     # Default handoff targets
     if handoff_targets is None:
         handoff_targets = ["shuttle_agent", "user"]
 
+    # Extend handoffs with sub-agent names
+    all_handoffs = handoff_targets + sub_agent_names
+
     agent = AssistantAgent(
         name="coding_agent",
         model_client=model_client,
         tools=CODING_TOOLS,
-        handoffs=handoff_targets,
+        handoffs=all_handoffs,
         system_message=CODING_SYSTEM_MESSAGE,
     )
 
-    logger.info(f"Created Coding Agent with {len(CODING_TOOLS)} tools, handoffs: {handoff_targets}")
-    return agent
+    logger.info(
+        f"Created Coding Agent with {len(CODING_TOOLS)} tools, "
+        f"{len(sub_agents)} sub-agents, handoffs: {all_handoffs}"
+    )
+    return agent, sub_agents
 
 
 def get_coding_tools() -> List[Callable]:

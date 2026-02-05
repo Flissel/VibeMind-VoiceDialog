@@ -8,6 +8,7 @@ Tracks all task events with timestamps for:
 """
 
 import os
+import json
 import logging
 import time
 from datetime import datetime, timedelta
@@ -87,7 +88,8 @@ class TaskMemoryService:
         content = f"Task created: {intent_type} - {title}"
 
         try:
-            response = await self._client.documents.create(
+            # SDK uses memories.add, not documents.create
+            response = await self._client.memories.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_created",
@@ -95,7 +97,7 @@ class TaskMemoryService:
                     "event_type": "task_created",
                     "task_id": task_id,
                     "intent_type": intent_type,
-                    "payload": payload,
+                    "payload": json.dumps(payload) if payload else "{}",
                     "timestamp": now.isoformat(),
                     "date": now.strftime("%Y-%m-%d"),
                     "session_id": session_id,
@@ -124,7 +126,8 @@ class TaskMemoryService:
         content = f"Task completed: {intent_type} in {duration_ms}ms - Result: {result_preview}"
 
         try:
-            response = await self._client.documents.create(
+            # SDK uses memories.add, not documents.create
+            response = await self._client.memories.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_completed",
@@ -160,7 +163,8 @@ class TaskMemoryService:
         content = f"Task failed: {intent_type} - Error: {error}"
 
         try:
-            response = await self._client.documents.create(
+            # SDK uses memories.add, not documents.create
+            response = await self._client.memories.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_failed",
@@ -191,10 +195,10 @@ class TaskMemoryService:
             return []
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=query,
                 container_tags=[self.CONTAINER_TAG],
-                top_k=limit
+                limit=limit
             )
             results = []
             for r in getattr(response, 'results', []):

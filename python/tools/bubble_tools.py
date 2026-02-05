@@ -192,40 +192,192 @@ def get_pending_agent_switch() -> Optional[Dict[str, Any]]:
 
 def list_bubbles(params: Dict[str, Any]) -> str:
     """
-    List all SPACES/BUBBLES in the multiverse (top-level containers).
-    
-    NOT to be confused with list_ideas which shows notes INSIDE a bubble.
-    This tool shows the SPACES available to enter.
+    List all BUBBLES in the Ideas Space (top-level containers).
 
-    Voice triggers: "What spaces do I have?", "Show my bubbles", 
-                   "List all spaces", "What bubbles exist?"
+    NOT to be confused with list_ideas which shows notes INSIDE a bubble.
+    This tool shows the BUBBLES available to enter.
+
+    Voice triggers: "What bubbles do I have?", "Show my bubbles",
+                   "List all bubbles", "Welche Bubbles habe ich?"
 
     Returns:
-        str: Formatted list of bubbles/spaces with scores
+        str: Formatted list of bubbles with scores
     """
     logger.info("=" * 50)
     logger.info(">>> list_bubbles() CALLED <<<")
-    logger.info(f"    Tool purpose: Show SPACES in multiverse (NOT notes inside)")
+    logger.info(f"    Tool purpose: Show BUBBLES in Ideas Space (NOT notes inside)")
     logger.info("=" * 50)
-    
+
     repo = _get_ideas_repo()
     ideas = repo.list(limit=20, order_by="score DESC")
 
-    logger.info(f"    Total bubbles/spaces found: {len(ideas)}")
+    logger.info(f"    Total bubbles found: {len(ideas)}")
     for idea in ideas[:5]:
         logger.info(f"      - {idea.title} (score: {idea.score:.0f}, id: {idea.id[:8]}...)")
 
     if not ideas:
-        logger.info("    Result: No spaces exist yet")
-        return "You have no spaces yet. Would you like me to create one? Say 'Create a space for...'."
+        logger.info("    Result: No bubbles exist yet")
+        return "Du hast noch keine Bubbles. Moechtest du eine erstellen? Sag 'Erstelle eine Bubble fuer...'."
 
-    # Format with scores
+    # Store mapping for index-based voice referencing
+    from tools.index_mapping import set_bubble_mapping
+    set_bubble_mapping(ideas[:10])
+
+    # Format with numbers for voice reference (1. Title, 2. Title...)
     titles = []
-    for idea in ideas[:10]:
+    indexed_bubbles = []
+    for i, idea in enumerate(ideas[:10], 1):
         score_str = f" (score: {idea.score:.0f})" if idea.score > 0 else ""
-        titles.append(f"{idea.title}{score_str}")
+        titles.append(f"{i}. {idea.title}{score_str}")
+        indexed_bubbles.append({
+            "index": i,
+            "id": idea.id,
+            "title": idea.title,
+            "score": idea.score
+        })
 
-    return f"You have {len(ideas)} spaces: {', '.join(titles)}. Enter one with 'go into [name]'."
+    # Broadcast indexed list to Electron UI so numbers are visible
+    _broadcast_to_electron({
+        "type": "bubbles_listed",
+        "bubbles": indexed_bubbles,
+        "total": len(ideas)
+    })
+
+    return f"Du hast {len(ideas)} Bubbles: {', '.join(titles)}. Betrete eine mit 'Geh in [Name]' oder 'Geh in [Nummer]'."
+
+
+def find_bubble(params: Dict[str, Any]) -> str:
+    """
+    Search for a bubble by name (fuzzy) and automatically enter it.
+
+    This is a MULTI-STEP tool:
+    1. Search using fuzzy matching (handles speech recognition artifacts)
+    2. If found, automatically enter the bubble
+    3. Return combined result
+
+    Voice triggers: "Such nach Bubble Marketing", "Finde Bubble Swarm Team",
+                   "Wo ist die Bubble Finanzen?"
+
+    Args (via params):
+        query: Search term for bubble name (fuzzy matched)
+        auto_enter: Whether to auto-enter if found (default: True)
+
+    Returns:
+        str: Search result with navigation status
+    """
+    global _current_bubble_db_id
+
+    query = params.get("query", "").strip()
+    auto_enter = params.get("auto_enter", True)
+
+    logger.info("=" * 50)
+    logger.info(">>> find_bubble() CALLED <<<")
+    logger.info(f"    Query: '{query}', auto_enter: {auto_enter}")
+    logger.info("=" * 50)
+
+    # Phase 8A Fix: If query is empty or generic (list-like), delegate to list_bubbles
+    # This handles cases like "Welche Bubbles gibt es?" being routed to find instead of list
+    generic_queries = ["bubbles", "bubble", "alle", "all", "gibt es", "habe ich", ""]
+    if not query or query.lower() in generic_queries:
+        logger.info(f"Generic query '{query}' detected - delegating to list_bubbles()")
+        return list_bubbles(params)
+
+    if not query:
+        return "Nach welcher Bubble soll ich suchen?"
+
+    repo = _get_ideas_repo()
+
+    # 1. Try exact match first
+    bubble = repo.get_by_title(query)
+    match_type = "exact"
+
+    # 2. Fuzzy match fallback
+    if not bubble:
+        bubble = repo.get_by_title_fuzzy(query)
+        match_type = "fuzzy"
+        if bubble:
+            logger.info(f"Fuzzy matched '{query}' to '{bubble.title}'")
+
+    # 3. Semantic search fallback (Phase 9)
+    if not bubble:
+        try:
+            semantic_matches = repo.search_semantic(query, top_k=3, min_score=0.4)
+            if semantic_matches:
+                bubble = semantic_matches[0]
+                match_type = "semantic"
+                logger.info(f"Semantic matched '{query}' to '{bubble.title}'")
+        except Exception as e:
+            logger.debug(f"Semantic search failed: {e}")
+
+    # 4. Not found - list alternatives
+    if not bubble:
+        all_bubbles = repo.list(limit=20)
+        if not all_bubbles:
+            return f"Keine Bubble mit '{query}' gefunden. Du hast noch keine Bubbles."
+
+        # Simple substring search as last resort
+        candidates = [b for b in all_bubbles if query.lower() in b.title.lower()]
+        if candidates:
+            names = ", ".join([c.title for c in candidates[:3]])
+            return f"Keine exakte Uebereinstimmung fuer '{query}'. Meintest du: {names}?"
+
+        # No match at all
+        all_names = ", ".join([b.title for b in all_bubbles[:5]])
+        return f"Keine Bubble mit '{query}' gefunden. Deine Bubbles: {all_names}"
+
+    # Found! Now auto-enter if enabled
+    if auto_enter:
+        # Check idempotency: already in this bubble?
+        if _current_bubble_db_id == bubble.id:
+            return f"Du bist bereits in der Bubble '{bubble.title}'."
+
+        # Enter the bubble (reuse logic from enter_bubble)
+        _current_bubble_db_id = bubble.id
+        logger.info(f"Set _current_bubble_db_id = '{bubble.id}' for bubble '{bubble.title}'")
+
+        # Update electron_backend
+        try:
+            import electron_backend
+            local_bubble_id = electron_backend.get_bubble_by_db_id(bubble.id)
+            backend = electron_backend.get_backend()
+
+            if backend and local_bubble_id:
+                electron_backend._current_bubble_id = local_bubble_id
+                backend.current_bubble_id = local_bubble_id
+                backend.enter_bubble(local_bubble_id)
+            else:
+                # Broadcast entered_bubble event for UI
+                canvas_repo = _get_canvas_repo()
+                all_nodes = canvas_repo.list_nodes(limit=1000)
+                nodes = []
+                for db_node in all_nodes:
+                    if db_node.linked_idea_id == bubble.id:
+                        nodes.append({
+                            "id": db_node.id,
+                            "type": db_node.node_type or "note",
+                            "position": {"x": db_node.x or 100, "y": db_node.y or 100},
+                            "content": {"title": db_node.title or "", "text": db_node.content or ""}
+                        })
+
+                _broadcast_to_electron({
+                    "type": "entered_bubble",
+                    "bubble_id": bubble.id,
+                    "bubble_title": bubble.title,
+                    "content": nodes,
+                    "edges": []
+                })
+        except (ImportError, AttributeError) as e:
+            logger.warning(f"Could not sync with electron_backend: {e}")
+
+        match_info = ""
+        if match_type == "fuzzy":
+            match_info = " (fuzzy match)"
+        elif match_type == "semantic":
+            match_info = " (semantic match)"
+        return f"Ich habe '{bubble.title}' gefunden{match_info} und bin reingewechselt. Was moechtest du hier tun?"
+
+    # Just report found, don't enter
+    return f"Gefunden: '{bubble.title}' mit Score {bubble.score:.0f}. Sag 'Geh rein' zum Betreten."
 
 
 def create_bubble(params: Dict[str, Any]) -> str:
@@ -237,12 +389,15 @@ def create_bubble(params: Dict[str, Any]) -> str:
     Args (via params):
         title: Name for the new space (required)
         description: Optional description
+        skip_agent_creation: If True, skip ElevenLabs agent creation (for simulation)
+                            Phase 7 Fix: Agent creation takes 15s which spikes latency
 
     Returns:
         str: Confirmation message
     """
     title = params.get("title", "").strip()
     description = params.get("description", "").strip()
+    skip_agent_creation = params.get("skip_agent_creation", False)
 
     if not title:
         return "What should I call this new space?"
@@ -260,15 +415,18 @@ def create_bubble(params: Dict[str, Any]) -> str:
         source="voice"
     )
 
-    # Create ElevenLabs agent for this bubble
-    agent_id = _create_elevenlabs_agent(title, idea.id)
+    # Create ElevenLabs agent for this bubble (optional)
+    # Phase 7: Skip during simulation to avoid 15s latency spike
+    agent_id = None
+    if not skip_agent_creation:
+        agent_id = _create_elevenlabs_agent(title, idea.id)
 
     if agent_id:
         idea.agent_id = agent_id
         repo.update(idea)
         logger.info(f"Created bubble '{title}' with agent {agent_id}")
     else:
-        logger.info(f"Created bubble '{title}' without agent (API key missing or error)")
+        logger.info(f"Created bubble '{title}' without agent (skipped or API error)")
 
     # Broadcast to Electron
     _broadcast_to_electron({
@@ -282,7 +440,109 @@ def create_bubble(params: Dict[str, Any]) -> str:
         }
     })
 
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_bubble_created
+        bubble_data = {
+            "id": str(idea.id),
+            "title": idea.title,
+            "description": idea.description,
+            "color": None,  # Will be set by UI
+            "position": {"x": 0, "y": 0, "z": 0},  # Default position
+            "radius": 0.7,
+            "space_type": "ideas"
+        }
+        asyncio.create_task(on_bubble_created(bubble_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for bubble creation: {e}")
+
     return f"Created new space '{title}'"
+
+
+def update_bubble(params: Dict[str, Any]) -> str:
+    """
+    Update a bubble's title or description.
+
+    Voice triggers: "Rename this space to X", "Update bubble name",
+                   "Change the title to X"
+
+    Args (via params):
+        bubble_name: Current name of the bubble to update (optional - uses current if not specified)
+        new_title: New title for the bubble (optional)
+        new_description: New description for the bubble (optional)
+
+    Returns:
+        str: Confirmation message
+    """
+    bubble_name = params.get("bubble_name", "").strip()
+    new_title = params.get("new_title", params.get("title", "")).strip()
+    new_description = params.get("new_description", params.get("description", "")).strip()
+
+    if not new_title and not new_description:
+        return "Was soll ich aendern? Bitte sag mir den neuen Namen oder die neue Beschreibung."
+
+    repo = _get_ideas_repo()
+
+    # Find the bubble to update
+    bubble = None
+    if bubble_name:
+        bubble = repo.get_by_title(bubble_name)
+    else:
+        # Use current bubble if inside one
+        current_id = _get_current_bubble_id()
+        if current_id:
+            bubble = repo.get_by_id(current_id)
+
+    if not bubble:
+        if bubble_name:
+            return f"Ich konnte den Space '{bubble_name}' nicht finden."
+        else:
+            return "Du bist nicht in einem Space. Bitte sag mir welchen Space ich updaten soll."
+
+    old_title = bubble.title
+
+    # Update the bubble
+    if new_title:
+        # Check for duplicate title
+        existing = repo.get_by_title(new_title)
+        if existing and existing.id != bubble.id:
+            return f"Ein Space mit dem Namen '{new_title}' existiert bereits."
+        bubble.title = new_title
+
+    if new_description:
+        bubble.description = new_description
+
+    repo.update(bubble)
+
+    # Broadcast to Electron
+    _broadcast_to_electron({
+        "type": "bubble_updated",
+        "bubble": {
+            "id": bubble.id,
+            "title": bubble.title,
+            "description": bubble.description,
+            "old_title": old_title
+        }
+    })
+
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_bubble_updated
+        bubble_data = {
+            "id": str(bubble.id),
+            "title": bubble.title,
+            "description": bubble.description,
+        }
+        asyncio.create_task(on_bubble_updated(bubble_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for bubble update: {e}")
+
+    if new_title:
+        return f"Space umbenannt von '{old_title}' zu '{new_title}'"
+    else:
+        return f"Beschreibung von Space '{bubble.title}' aktualisiert"
 
 
 def get_bubble_stats(params: Dict[str, Any]) -> str:
@@ -420,6 +680,23 @@ def score_bubble(params: Dict[str, Any]) -> str:
         }
     })
 
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_bubble_updated
+        bubble_data = {
+            "id": str(idea.id),
+            "title": idea.title,
+            "description": idea.description,
+            "color": None,
+            "position": {"x": 0, "y": 0, "z": 0},
+            "radius": 0.7,
+            "space_type": "ideas"
+        }
+        asyncio.create_task(on_bubble_updated(bubble_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for bubble scoring: {e}")
+
     logger.info(f"Scored bubble '{idea.title}': {idea.score:.0f}/100")
 
     return (f"'{idea.title}' scored {idea.score:.0f} out of 100. "
@@ -494,6 +771,7 @@ def promote_bubble(params: Dict[str, Any]) -> str:
 def delete_bubble(params: Dict[str, Any]) -> str:
     """
     Delete a bubble/idea space with CASCADE deletion of all content.
+    Supports deleting multiple bubbles when a list of names is provided.
 
     Voice triggers: "Delete this space", "Remove the cooking bubble"
 
@@ -503,14 +781,21 @@ def delete_bubble(params: Dict[str, Any]) -> str:
     3. Delete the bubble/idea itself
 
     Args (via params):
-        bubble_name: Name of bubble to delete (required)
+        bubble_name: Name of bubble to delete (required) - can be string or list of strings
 
     Returns:
         str: Confirmation message
     """
-    bubble_name = params.get("bubble_name", "").strip()
-    
+    raw_bubble_name = params.get("bubble_name", "")
+
     logger.info(f"delete_bubble called with params: {params}")
+
+    # Handle list input (RAG classifier may pass multiple names)
+    if isinstance(raw_bubble_name, list):
+        return _delete_multiple_bubbles(raw_bubble_name)
+
+    # Handle single string input
+    bubble_name = raw_bubble_name.strip() if isinstance(raw_bubble_name, str) else str(raw_bubble_name)
 
     if not bubble_name:
         return "Which space should I delete? Please specify the name."
@@ -524,19 +809,19 @@ def delete_bubble(params: Dict[str, Any]) -> str:
 
     title = idea.title
     idea_id = idea.id
-    
+
     logger.info(f"Found bubble to delete: '{title}' (id: {idea_id})")
-    
+
     # Use CASCADE DELETE which handles FK constraints atomically
     try:
         stats = ideas_repo.delete_cascade(idea_id)
         deleted_nodes = stats.get("nodes_deleted", 0)
         deleted_edges = stats.get("edges_deleted", 0)
-        
+
         if not stats.get("idea_deleted", False):
             logger.error(f"Failed to delete idea {idea_id} - idea_deleted is False")
             return f"Error deleting space '{title}'"
-            
+
     except Exception as e:
         logger.error(f"Cascade delete failed for bubble {idea_id}: {e}")
         return f"Error deleting space '{title}': {str(e)}"
@@ -554,30 +839,255 @@ def delete_bubble(params: Dict[str, Any]) -> str:
     return f"Deleted space '{title}' with {deleted_nodes} notes and {deleted_edges} connections"
 
 
+def _delete_multiple_bubbles(bubble_names: list) -> str:
+    """
+    Helper to delete multiple bubbles by name.
+
+    Args:
+        bubble_names: List of bubble names to delete
+
+    Returns:
+        str: Summary of deletion results
+    """
+    if not bubble_names:
+        return "No bubble names provided to delete."
+
+    ideas_repo = _get_ideas_repo()
+    deleted = []
+    not_found = []
+    errors = []
+    total_nodes = 0
+    total_edges = 0
+
+    for name in bubble_names:
+        # Clean up the name
+        if isinstance(name, str):
+            name = name.strip()
+        else:
+            name = str(name).strip()
+
+        if not name:
+            continue
+
+        idea = ideas_repo.get_by_title(name)
+        if not idea:
+            not_found.append(name)
+            continue
+
+        try:
+            stats = ideas_repo.delete_cascade(idea.id)
+            if stats.get("idea_deleted", False):
+                deleted.append(idea.title)
+                total_nodes += stats.get("nodes_deleted", 0)
+                total_edges += stats.get("edges_deleted", 0)
+
+                # Broadcast each deletion to UI
+                _broadcast_to_electron({
+                    "type": "bubble_deleted",
+                    "bubble_id": idea.id,
+                    "title": idea.title,
+                    "deleted_nodes": stats.get("nodes_deleted", 0),
+                    "deleted_edges": stats.get("edges_deleted", 0)
+                })
+            else:
+                errors.append(name)
+        except Exception as e:
+            logger.error(f"Failed to delete bubble '{name}': {e}")
+            errors.append(name)
+
+    # Build response message
+    parts = []
+    if deleted:
+        parts.append(f"Deleted {len(deleted)} spaces: {', '.join(deleted[:5])}" +
+                    (f" and {len(deleted) - 5} more" if len(deleted) > 5 else ""))
+        parts.append(f"Removed {total_nodes} notes and {total_edges} connections total")
+    if not_found:
+        parts.append(f"Not found: {', '.join(not_found[:3])}" +
+                    (f" and {len(not_found) - 3} more" if len(not_found) > 3 else ""))
+    if errors:
+        parts.append(f"Errors deleting: {', '.join(errors[:3])}")
+
+    if not parts:
+        return "No bubbles were deleted."
+
+    logger.info(f"Bulk delete: {len(deleted)} deleted, {len(not_found)} not found, {len(errors)} errors")
+    return ". ".join(parts)
+
+
+def delete_all_bubbles_except(params: Dict[str, Any] = None) -> str:
+    """
+    Delete all bubbles/spaces EXCEPT the specified ones.
+
+    Voice triggers:
+    - "Lösche alle Bubbles außer Langzeitspeicher"
+    - "Delete all spaces except VibeMind"
+    - "Lösche alles bis auf X und Y"
+
+    Args (via params):
+        exceptions: Bubble names to keep (string or list of strings)
+                   Can be comma-separated string: "VibeMind, Langzeitspeicher"
+                   Or a list: ["VibeMind", "Langzeitspeicher"]
+
+    Returns:
+        str: Summary of what was deleted and what was kept
+    """
+    params = params or {}
+    exceptions_raw = params.get("exceptions", params.get("keep", params.get("bubble_name", "")))
+
+    logger.info(f"delete_all_bubbles_except called with params: {params}")
+
+    # Normalize exceptions to a list of lowercase names
+    exceptions = []
+    if isinstance(exceptions_raw, list):
+        for e in exceptions_raw:
+            if isinstance(e, str):
+                # Handle comma-separated within list items
+                for part in e.split(","):
+                    cleaned = part.strip().lower()
+                    if cleaned:
+                        exceptions.append(cleaned)
+            else:
+                exceptions.append(str(e).strip().lower())
+    elif isinstance(exceptions_raw, str):
+        # Handle comma-separated string
+        for part in exceptions_raw.split(","):
+            cleaned = part.strip().lower()
+            if cleaned:
+                exceptions.append(cleaned)
+
+    if not exceptions:
+        return "Welche Spaces sollen behalten werden? Bitte sag z.B. 'Lösche alle außer VibeMind'."
+
+    logger.info(f"Keeping bubbles (lowercase): {exceptions}")
+
+    # Get all bubbles
+    ideas_repo = _get_ideas_repo()
+    all_ideas = ideas_repo.list(limit=1000)
+
+    if not all_ideas:
+        return "Es gibt keine Bubbles zum Löschen."
+
+    deleted = []
+    skipped = []
+    errors = []
+    total_nodes = 0
+    total_edges = 0
+
+    for idea in all_ideas:
+        title_lower = idea.title.lower()
+
+        # Check if this bubble should be kept
+        should_keep = False
+        for exc in exceptions:
+            if exc in title_lower or title_lower in exc:
+                should_keep = True
+                break
+
+        if should_keep:
+            skipped.append(idea.title)
+            logger.info(f"Keeping bubble: {idea.title}")
+            continue
+
+        # Delete this bubble
+        try:
+            stats = ideas_repo.delete_cascade(idea.id)
+            if stats.get("idea_deleted", False):
+                deleted.append(idea.title)
+                total_nodes += stats.get("nodes_deleted", 0)
+                total_edges += stats.get("edges_deleted", 0)
+
+                # Broadcast deletion to UI
+                _broadcast_to_electron({
+                    "type": "bubble_deleted",
+                    "bubble_id": idea.id,
+                    "title": idea.title,
+                    "deleted_nodes": stats.get("nodes_deleted", 0),
+                    "deleted_edges": stats.get("edges_deleted", 0)
+                })
+                logger.info(f"Deleted bubble: {idea.title}")
+            else:
+                errors.append(idea.title)
+        except Exception as e:
+            logger.error(f"Failed to delete bubble '{idea.title}': {e}")
+            errors.append(idea.title)
+
+    # Build response message
+    parts = []
+    if deleted:
+        if len(deleted) <= 5:
+            parts.append(f"{len(deleted)} Spaces gelöscht: {', '.join(deleted)}")
+        else:
+            parts.append(f"{len(deleted)} Spaces gelöscht: {', '.join(deleted[:5])} und {len(deleted) - 5} weitere")
+        parts.append(f"Insgesamt {total_nodes} Notizen und {total_edges} Verbindungen entfernt")
+
+    if skipped:
+        parts.append(f"Behalten: {', '.join(skipped)}")
+
+    if errors:
+        parts.append(f"Fehler bei: {', '.join(errors[:3])}")
+
+    if not deleted and not errors:
+        return f"Keine Spaces gelöscht. Alle {len(skipped)} Spaces wurden behalten: {', '.join(skipped)}"
+
+    logger.info(f"Delete all except: {len(deleted)} deleted, {len(skipped)} kept, {len(errors)} errors")
+    return ". ".join(parts)
+
+
 def enter_bubble(params: Dict[str, Any]) -> str:
     """
     Enter a bubble and switch to its dedicated agent.
 
-    Voice triggers: "Enter cooking space", "Go into my project ideas", "Open the recipes bubble"
+    Voice triggers: "Enter cooking space", "Go into my project ideas", "Open the recipes bubble",
+                   "Geh in 2" (index-based)
 
     Args (via params):
-        bubble_name: Name of the bubble to enter (required)
+        bubble_name: Name or index of the bubble to enter (required)
 
     Returns:
         str: Confirmation message (triggers agent switch in Python)
     """
     global _current_bubble_db_id
-    
+    from tools.index_mapping import resolve_bubble_index, get_index_mapping
+
     bubble_name = params.get("bubble_name", "").strip()
 
     if not bubble_name:
         return "Which space would you like to enter?"
 
     repo = _get_ideas_repo()
-    idea = repo.get_by_title(bubble_name)
+    idea = None
+
+    # 0. Try index-based resolution first (e.g., "2" -> second bubble)
+    if bubble_name.isdigit():
+        bubble_id = resolve_bubble_index(bubble_name)
+        if bubble_id:
+            idea = repo.get(bubble_id)
+            if idea:
+                logger.info(f"Resolved bubble index {bubble_name} -> '{idea.title}'")
+        if not idea:
+            mapping = get_index_mapping()
+            max_idx = len(mapping.bubbles) if mapping.bubbles else 0
+            if max_idx > 0:
+                return f"Keine Bubble mit Index {bubble_name}. Verfuegbar: 1-{max_idx}. Nutze 'Zeig mir meine Spaces' fuer die Liste."
+            # Fall through to try numeric as title
+
+    # 1. Try exact match first
+    if not idea:
+        idea = repo.get_by_title(bubble_name)
+
+    # 2. Fuzzy match fallback (handles speech recognition accent artifacts)
+    if not idea:
+        idea = repo.get_by_title_fuzzy(bubble_name)
+        if idea:
+            logger.info(f"Fuzzy matched '{bubble_name}' to '{idea.title}'")
 
     if not idea:
         return f"I couldn't find a space called '{bubble_name}'. Use 'create bubble {bubble_name}' to create one."
+
+    # 3. Idempotency check: if already in this bubble, just confirm
+    if _current_bubble_db_id == idea.id:
+        logger.info(f"Already in bubble '{idea.title}' (id: {idea.id}) - idempotent return")
+        return f"You are already in {idea.title}. What would you like to work on?"
 
     # CRITICAL: Set the DB UUID for tool functions (like create_idea)
     _current_bubble_db_id = idea.id
@@ -868,6 +1378,42 @@ def transfer_to_multiverse(params: Dict[str, Any]) -> str:
     return "Transferring to Multiverse..."
 
 
+def generate_bubble_embeddings(params: Dict[str, Any]) -> str:
+    """
+    Generate embeddings for all bubbles in the database.
+
+    This function generates embeddings for all bubbles that don't have embeddings yet,
+    or whose content has changed (detected by hash mismatch).
+
+    Voice triggers: "Generiere Embeddings", "Erstelle Vektoren", "Bubbles indizieren"
+
+    Args (via params):
+        None
+
+    Returns:
+        str: Summary of embedding generation process
+    """
+    from data.repository import IdeasRepository
+
+    repo = _get_ideas_repo()
+    result = repo.generate_embeddings_for_all_bubbles()
+
+    if not result.get("success"):
+        return f"Fehler bei der Embedding-Generierung: {result.get('error', 'Unbekannter Fehler')}"
+
+    total = result.get("total", 0)
+    generated = result.get("generated", 0)
+    skipped = result.get("skipped", 0)
+    errors = result.get("errors", 0)
+
+    message = f"Embeddings generiert für {total} Bubbles: {generated} neu, {skipped} übersprungen"
+    if errors > 0:
+        message += f", {errors} Fehler"
+
+    logger.info(f"[generate_bubble_embeddings] {message}")
+    return message
+
+
 # =============================================================================
 # AI EVOLUTION SCORING
 # =============================================================================
@@ -1107,12 +1653,14 @@ Provide your evaluation as JSON."""
 
 BUBBLE_TOOLS = {
     "list_bubbles": list_bubbles,
+    "find_bubble": find_bubble,  # Multi-step: search + auto-enter
     "create_bubble": create_bubble,
     "get_bubble_stats": get_bubble_stats,
     "score_bubble": score_bubble,
     "evaluate_bubble_evolution": evaluate_bubble_evolution,  # AI-based scoring
     "promote_bubble": promote_bubble,
     "delete_bubble": delete_bubble,
+    "delete_all_bubbles_except": delete_all_bubbles_except,  # Bulk delete with exceptions
     "enter_bubble": enter_bubble,
     "exit_bubble": exit_bubble,
     # Agent transfer tools
@@ -1121,6 +1669,8 @@ BUBBLE_TOOLS = {
     "transfer_to_antoni": transfer_to_antoni,
     "transfer_to_rachel": transfer_to_rachel,
     "transfer_to_multiverse": transfer_to_multiverse,
+    # Embedding generation tool
+    "generate_bubble_embeddings": generate_bubble_embeddings,
 }
 
 
@@ -1134,12 +1684,15 @@ def register_bubble_tools(tools_manager) -> None:
 
 __all__ = [
     "list_bubbles",
+    "find_bubble",
     "create_bubble",
+    "update_bubble",
     "get_bubble_stats",
     "score_bubble",
     "evaluate_bubble_evolution",
     "promote_bubble",
     "delete_bubble",
+    "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
     "transfer_to_alice",
@@ -1147,6 +1700,7 @@ __all__ = [
     "transfer_to_antoni",
     "transfer_to_rachel",
     "transfer_to_multiverse",
+    "generate_bubble_embeddings",
     "get_pending_agent_switch",
     "get_current_bubble_db_id",
     "BUBBLE_TOOLS",

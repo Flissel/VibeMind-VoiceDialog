@@ -115,16 +115,94 @@ class UniverseCanvas {
         const toolbar = document.createElement('div');
         toolbar.className = 'canvas-toolbar';
         toolbar.innerHTML = `
-            <button data-action="add-note" title="Add Note">+ Note</button>
-            <button data-action="add-link" title="Add Link">+ Link</button>
-            <button data-action="add-image" title="Add Image">+ Image</button>
+            <div class="toolbar-section">
+                <span class="toolbar-label">Create</span>
+                <button data-action="add-note" title="Add Note">+ Note</button>
+                <button data-action="add-link" title="Add Link">+ Link</button>
+                <button data-action="add-image" title="Add Image">+ Image</button>
+            </div>
+            <div class="toolbar-section">
+                <span class="toolbar-label">Format</span>
+                <button data-action="format-table" title="Format as Table">Table</button>
+                <button data-action="format-action-list" title="Format as Action List">Actions</button>
+                <button data-action="format-pros-cons" title="Pros & Cons">Pro/Con</button>
+                <button data-action="format-hierarchy" title="Hierarchy">Hierarchy</button>
+                <button data-action="format-specs" title="Technical Specs">Specs</button>
+            </div>
+            <div class="toolbar-section">
+                <span class="toolbar-label">AI Tools</span>
+                <button data-action="summarize" title="Summarize">Summary</button>
+                <button data-action="whitepaper" title="Generate White Paper">White Paper</button>
+                <button data-action="expand" title="Expand Ideas">Expand</button>
+                <button data-action="explain" title="Explain Idea">Explain</button>
+                <button data-action="auto-link" title="Auto-Link Ideas">Auto Link</button>
+                <button data-action="explore" title="Deep Exploration">Explore</button>
+            </div>
+            <div class="toolbar-section">
+                <span class="toolbar-label">Layout</span>
+                <button data-action="auto-layout" title="Auto Layout (Force-Directed)">Auto Layout</button>
+            </div>
         `;
 
         toolbar.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const action = btn.dataset.action;
+
+            // Create actions
             if (action === 'add-note') this.addNode('note');
             if (action === 'add-link') this.addNode('link');
             if (action === 'add-image') this.addNode('image');
+
+            // Layout actions
+            if (action === 'auto-layout') {
+                this.autoLayout();
+                return;
+            }
+
+            // Tool actions - dispatch to Python backend via IPC
+            const toolActions = {
+                'format-table': 'idea.format_table',
+                'format-action-list': 'idea.format_action_list',
+                'format-pros-cons': 'idea.format_pros_cons',
+                'format-hierarchy': 'idea.format_hierarchy',
+                'format-specs': 'idea.format_specs',
+                'summarize': 'idea.summarize',
+                'whitepaper': 'idea.whitepaper',
+                'expand': 'idea.expand',
+                'explain': 'idea.explain',
+                'auto-link': 'idea.auto_link',
+                'explore': 'idea.explore.start',
+            };
+
+            if (toolActions[action]) {
+                const eventType = toolActions[action];
+                const payload = {};
+
+                // If a node is selected, pass its name
+                if (this.selectedNode) {
+                    const nodeInfo = this.nodes.get(this.selectedNode);
+                    if (nodeInfo) {
+                        payload.idea_name = nodeInfo.data?.title || '';
+                        payload.name = payload.idea_name;
+                    }
+                }
+
+                // Send to Python backend
+                if (window.vibemind?.sendToolAction) {
+                    window.vibemind.sendToolAction(eventType, payload);
+                } else {
+                    console.log('[Toolbar] Tool action:', eventType, payload);
+                    // Fallback: show transcript
+                    const transcript = document.getElementById('transcript-content');
+                    if (transcript) {
+                        const msg = document.createElement('div');
+                        msg.className = 'transcript-msg';
+                        msg.textContent = `[Tool] ${eventType} triggered`;
+                        transcript.appendChild(msg);
+                    }
+                }
+            }
         });
 
         this.container.appendChild(toolbar);
@@ -293,7 +371,7 @@ class UniverseCanvas {
             case 'feature_doc':
             case 'feature_index':
                 const wpText = data.content?.text || '';
-                const preview = wpText.length > 500 ? wpText.slice(0, 500) + '...' : wpText;
+                const preview = wpText.length > 1000000 ? wpText.slice(0, 1000000) + '...' : wpText;
                 return `<div class="whitepaper-preview">${this.escapeHtml(preview)}</div>`;
             case 'feature':
                 return `<div class="feature-content">${this.escapeHtml(data.content?.text || '')}</div>`;
@@ -561,6 +639,148 @@ class UniverseCanvas {
         // Fallback: place below all existing nodes
         const maxY = existingPositions.reduce((max, p) => Math.max(max, p.y + p.height), 0);
         return { x: startX, y: maxY + this.nodeMargin };
+    }
+
+    // ========================================================================
+    // FORCE-DIRECTED AUTO LAYOUT
+    // ========================================================================
+
+    /**
+     * Auto-layout nodes using a force-directed algorithm.
+     * Connected nodes attract, all nodes repel, edges act as springs.
+     */
+    autoLayout() {
+        const nodeIds = Array.from(this.nodes.keys());
+        if (nodeIds.length < 2) return;
+
+        // Build adjacency set for quick lookup
+        const adjacency = new Map();
+        nodeIds.forEach(id => adjacency.set(id, new Set()));
+        this.edges.forEach(edge => {
+            if (adjacency.has(edge.fromId) && adjacency.has(edge.toId)) {
+                adjacency.get(edge.fromId).add(edge.toId);
+                adjacency.get(edge.toId).add(edge.fromId);
+            }
+        });
+
+        // Initialize positions from current node positions (canvas-relative)
+        const positions = new Map();
+        nodeIds.forEach(id => {
+            const node = this.nodes.get(id);
+            const el = node.element;
+            positions.set(id, {
+                x: (parseInt(el.style.left) || this.canvasCenter) - this.canvasCenter,
+                y: (parseInt(el.style.top) || this.canvasCenter) - this.canvasCenter,
+                vx: 0,
+                vy: 0
+            });
+        });
+
+        // Layout parameters
+        const REPULSION = 80000;      // Repulsion force between all nodes
+        const ATTRACTION = 0.005;     // Spring constant for connected nodes
+        const IDEAL_LENGTH = 350;     // Ideal edge length
+        const DAMPING = 0.85;         // Velocity damping
+        const CENTER_PULL = 0.01;     // Pull towards center
+        const ITERATIONS = 200;       // Simulation steps
+
+        for (let iter = 0; iter < ITERATIONS; iter++) {
+            const cooling = 1 - (iter / ITERATIONS) * 0.8; // Slow down over time
+
+            // Calculate forces for each node
+            nodeIds.forEach(id => {
+                const p = positions.get(id);
+                let fx = 0, fy = 0;
+
+                // Repulsion from all other nodes (Coulomb's law)
+                nodeIds.forEach(otherId => {
+                    if (otherId === id) return;
+                    const o = positions.get(otherId);
+                    const dx = p.x - o.x;
+                    const dy = p.y - o.y;
+                    const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+                    const force = REPULSION / (dist * dist);
+                    fx += (dx / dist) * force;
+                    fy += (dy / dist) * force;
+                });
+
+                // Attraction along edges (Hooke's law)
+                const neighbors = adjacency.get(id);
+                if (neighbors) {
+                    neighbors.forEach(neighborId => {
+                        const o = positions.get(neighborId);
+                        const dx = o.x - p.x;
+                        const dy = o.y - p.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const displacement = dist - IDEAL_LENGTH;
+                        const force = ATTRACTION * displacement;
+                        fx += (dx / Math.max(dist, 1)) * force;
+                        fy += (dy / Math.max(dist, 1)) * force;
+                    });
+                }
+
+                // Center gravity (prevent drift)
+                fx -= p.x * CENTER_PULL;
+                fy -= p.y * CENTER_PULL;
+
+                // Update velocity with damping and cooling
+                p.vx = (p.vx + fx) * DAMPING * cooling;
+                p.vy = (p.vy + fy) * DAMPING * cooling;
+            });
+
+            // Apply velocities
+            nodeIds.forEach(id => {
+                const p = positions.get(id);
+                p.x += p.vx;
+                p.y += p.vy;
+            });
+        }
+
+        // Apply final positions with animation
+        nodeIds.forEach(id => {
+            const node = this.nodes.get(id);
+            const p = positions.get(id);
+            const el = node.element;
+            el.style.transition = 'left 0.5s ease, top 0.5s ease';
+            el.style.left = (Math.round(p.x) + this.canvasCenter) + 'px';
+            el.style.top = (Math.round(p.y) + this.canvasCenter) + 'px';
+
+            // Remove transition after animation
+            setTimeout(() => { el.style.transition = ''; }, 600);
+        });
+
+        // Redraw edges after layout
+        setTimeout(() => this.redrawEdges(), 50);
+        // Redraw again after animation completes
+        setTimeout(() => this.redrawEdges(), 550);
+
+        // Center the view on the laid-out nodes
+        this.centerOnNodes();
+    }
+
+    /**
+     * Center the viewport on all nodes.
+     */
+    centerOnNodes() {
+        if (this.nodes.size === 0) return;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.nodes.forEach(node => {
+            const x = parseInt(node.element.style.left) || 0;
+            const y = parseInt(node.element.style.top) || 0;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + (node.element.offsetWidth || this.nodeWidth));
+            maxY = Math.max(maxY, y + (node.element.offsetHeight || this.nodeHeight));
+        });
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const rect = this.container.getBoundingClientRect();
+
+        this.panX = rect.width / 2 - centerX * this.scale;
+        this.panY = rect.height / 2 - centerY * this.scale;
+        this.updateTransform();
     }
 
     // ========================================================================
@@ -841,6 +1061,123 @@ class UniverseCanvas {
     }
 
     /**
+     * Handle structured content update (tables, formatted content)
+     * Called when format_idea_as_table or similar tools update node content
+     */
+    onNodeStructuredUpdate(nodeId, structuredContent) {
+        const node = this.findNodeById(nodeId);
+        if (!node) {
+            console.warn('[UniverseCanvas] Node not found for structured update:', nodeId);
+            return;
+        }
+
+        console.log('[UniverseCanvas] Structured content update:', nodeId, structuredContent);
+
+        // Find or create the content container
+        let contentContainer = node.element.querySelector('.node-body, .node-content');
+        if (!contentContainer) {
+            contentContainer = node.element;
+        }
+
+        // Check if we have a RichContentRenderer available
+        if (window.RichContentRenderer) {
+            const renderer = new window.RichContentRenderer(contentContainer);
+            const contentType = structuredContent.type;
+
+            // Use RichContentRenderer for all supported content types
+            if (renderer.contentTypes && renderer.contentTypes[contentType]) {
+                // Clear existing structured content
+                const existing = contentContainer.querySelector('.structured-content, .rich-content, .table-content, .action-list');
+                if (existing) existing.remove();
+
+                const rendered = renderer.contentTypes[contentType](structuredContent);
+                if (rendered) {
+                    rendered.classList.add('structured-content');
+                    const titleEl = contentContainer.querySelector('.node-title');
+                    if (titleEl && titleEl.nextSibling) {
+                        contentContainer.insertBefore(rendered, titleEl.nextSibling);
+                    } else {
+                        contentContainer.appendChild(rendered);
+                    }
+                }
+                console.log(`[UniverseCanvas] Rendered ${contentType} via RichContentRenderer`);
+            } else if (structuredContent.type === 'table' || (structuredContent.headers && structuredContent.rows)) {
+                // Fallback for table-like data
+                const existingTable = contentContainer.querySelector('.table-content');
+                if (existingTable) existingTable.remove();
+
+                const tableElement = renderer.renderTable({
+                    headers: structuredContent.headers || structuredContent.columns,
+                    rows: structuredContent.rows || structuredContent.data
+                });
+
+                const titleEl = contentContainer.querySelector('.node-title');
+                if (titleEl && titleEl.nextSibling) {
+                    contentContainer.insertBefore(tableElement, titleEl.nextSibling);
+                } else {
+                    contentContainer.appendChild(tableElement);
+                }
+            } else {
+                // Generic fallback - render as formatted text
+                const textDiv = contentContainer.querySelector('.node-text, textarea');
+                if (textDiv) {
+                    textDiv.textContent = JSON.stringify(structuredContent, null, 2);
+                }
+            }
+        } else {
+            // Fallback: Simple table rendering without RichContentRenderer
+            if (structuredContent.headers && structuredContent.rows) {
+                const existingTable = contentContainer.querySelector('table');
+                if (existingTable) {
+                    existingTable.remove();
+                }
+
+                const table = document.createElement('table');
+                table.className = 'structured-table';
+                table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;';
+
+                // Header
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                structuredContent.headers.forEach(h => {
+                    const th = document.createElement('th');
+                    th.textContent = h;
+                    th.style.cssText = 'border:1px solid #444;padding:4px 6px;background:#2a2a2a;text-align:left;';
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                // Rows
+                const tbody = document.createElement('tbody');
+                structuredContent.rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    row.forEach(cell => {
+                        const td = document.createElement('td');
+                        td.textContent = cell;
+                        td.style.cssText = 'border:1px solid #444;padding:4px 6px;';
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+
+                contentContainer.appendChild(table);
+            }
+        }
+
+        // Store structured content in data model
+        if (typeof node.data.content !== 'object') {
+            node.data.content = { text: node.data.content || '' };
+        }
+        node.data.content.structured = structuredContent;
+
+        // Flash animation for visual feedback
+        node.element.classList.add('updated');
+        setTimeout(() => node.element.classList.remove('updated'), 500);
+    }
+
+    /**
      * Handle edge added from backend (voice command linking)
      * BUG FIX: Visual feedback when linking ideas
      */
@@ -904,6 +1241,55 @@ class UniverseCanvas {
             x: x + this.canvasCenter,
             y: y + this.canvasCenter
         };
+    }
+
+    /**
+     * Update node title elements to show voice index numbers.
+     * Called when ideas_listed message is received.
+     * @param {Array} indexedIdeas - Array of {index, id, title} objects
+     */
+    updateNodeIndices(indexedIdeas) {
+        if (!indexedIdeas || !Array.isArray(indexedIdeas)) {
+            console.warn('[UniverseCanvas] updateNodeIndices: Invalid data');
+            return;
+        }
+
+        console.log('[UniverseCanvas] Updating node indices for', indexedIdeas.length, 'ideas');
+
+        // Create a map of id -> index for quick lookup
+        const indexMap = new Map();
+        indexedIdeas.forEach(idea => {
+            indexMap.set(idea.id, idea.index);
+        });
+
+        // Update each node's title display
+        this.nodes.forEach((nodeInfo, nodeId) => {
+            const voiceIndex = indexMap.get(nodeId);
+            if (voiceIndex !== undefined) {
+                const titleEl = nodeInfo.element.querySelector('.node-title');
+                if (titleEl) {
+                    const originalTitle = nodeInfo.data.content?.title || this.getNodeTitle(nodeInfo.data);
+                    // Add index badge before the title
+                    titleEl.innerHTML = `<span class="voice-index">${voiceIndex}</span> ${originalTitle}`;
+                    // Store the index in data for later reference
+                    nodeInfo.data.voice_index = voiceIndex;
+                }
+            }
+        });
+    }
+
+    /**
+     * Clear voice index badges from all nodes.
+     */
+    clearNodeIndices() {
+        this.nodes.forEach((nodeInfo) => {
+            const titleEl = nodeInfo.element.querySelector('.node-title');
+            if (titleEl && nodeInfo.data.voice_index !== undefined) {
+                const originalTitle = nodeInfo.data.content?.title || this.getNodeTitle(nodeInfo.data);
+                titleEl.textContent = originalTitle;
+                delete nodeInfo.data.voice_index;
+            }
+        });
     }
 }
 

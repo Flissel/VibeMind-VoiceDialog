@@ -21,6 +21,20 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Callable, Any
 import logging
 
+# Load .env file FIRST before any other imports that might need env vars
+try:
+    from dotenv import load_dotenv
+    # Load from project root .env
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        # Debug: log key env vars
+        force_sync = os.getenv("FORCE_SYNC_MODE", "false")
+        use_v2 = os.getenv("USE_VOICE_BRIDGE_V2", "false")
+        print(f"[Python DEBUG] .env loaded: FORCE_SYNC_MODE={force_sync}, USE_VOICE_BRIDGE_V2={use_v2}", file=sys.stderr)
+except ImportError:
+    print("[Python DEBUG] dotenv not installed, using system env vars", file=sys.stderr)
+
 # Try to import requests for HTTP communication with Coding Engine
 try:
     import requests
@@ -143,6 +157,15 @@ except ImportError as e:
     get_pending_agent_switch = None
     logger.warning(f"Transfer handler not available: {e}")
 
+# Import session tools for speech tracking
+try:
+    from tools.session_tools import mark_user_speech
+    HAS_SESSION_TOOLS = True
+except ImportError as e:
+    HAS_SESSION_TOOLS = False
+    mark_user_speech = None
+    logger.warning(f"Session tools not available: {e}")
+
 # Try to import coding tools and runner
 try:
     from tools.coding_tools import set_electron_sender as set_coding_sender, set_coding_engine_runner
@@ -156,6 +179,19 @@ except ImportError as e:
     CodingEngineRunner = None
     get_coding_engine_runner = None
     logger.warning(f"Coding engine not available: {e}")
+
+# Try to import VoiceBridgeV2 for new async architecture
+try:
+    from swarm.voice_bridge_v2 import VoiceBridgeV2, create_voice_bridge_v2
+    HAS_VOICE_BRIDGE_V2 = True
+except ImportError as e:
+    HAS_VOICE_BRIDGE_V2 = False
+    VoiceBridgeV2 = None
+    create_voice_bridge_v2 = None
+    logger.warning(f"VoiceBridgeV2 not available: {e}")
+
+# Environment flag for VoiceBridgeV2 opt-in
+USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "false").lower() == "true"
 
 
 # ==============================================================================
@@ -221,6 +257,9 @@ class ElectronBackend:
         self.elevenlabs_client = None   # ElevenLabs API client
         self.audio_interface = None     # Audio interface for voice
         self.transfer_handler = None    # Agent transfer handler
+
+        # VoiceBridgeV2 (new async architecture with NotificationQueue)
+        self.voice_bridge = None  # VoiceBridgeV2 instance when USE_VOICE_BRIDGE_V2=true
         
         # Project Preview State (Coding Engine Integration)
         self.active_previews: Dict[str, Dict] = {}  # project_id -> preview_info
@@ -308,9 +347,99 @@ class ElectronBackend:
         self._load_bubbles_from_db()
         
         debug_log(f"ElectronBackend initialized with {len(self.bubbles)} bubbles")
-        
+
         # No default bubbles - bubbles are created via voice commands
         # and stored in the database
+
+        # Pre-load embedding model in background thread to avoid
+        # timeout on first use of auto_link, explore, etc.
+        import threading
+        def _preload_embedding_model():
+            try:
+                from data.embedding_service import _get_model
+                model = _get_model()  # Blocks until loaded (thread-safe)
+                if model is not None:
+                    debug_log(f"Embedding model pre-loaded: {type(model).__name__}")
+                else:
+                    debug_log("Embedding model failed to load (will use hash fallback)")
+            except Exception as e:
+                debug_log(f"Embedding model pre-load failed: {e}")
+        threading.Thread(target=_preload_embedding_model, daemon=True, name="embedding-preload").start()
+
+        # Pre-warm voice components in background to speed up "Start Voice"
+        # Only pre-warms synchronous operations (ElevenLabs client, audio interface)
+        # VoiceBridgeV2 is async and created when voice starts
+        def _prewarm_voice_components():
+            try:
+                api_key = os.getenv("ELEVENLABS_API_KEY")
+                if not api_key:
+                    debug_log("No ELEVENLABS_API_KEY - skipping voice pre-warm")
+                    return
+
+                # 1. Pre-create ElevenLabs client (slow network auth)
+                if HAS_VOICE_TOOLS:
+                    debug_log("Pre-warming ElevenLabs client...")
+                    from elevenlabs.client import ElevenLabs
+                    self.elevenlabs_client = ElevenLabs(api_key=api_key)
+                    debug_log("ElevenLabs client pre-warmed")
+
+                    # 2. Pre-create audio interface (slow device enumeration)
+                    debug_log("Pre-warming audio interface...")
+                    from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
+                    self.audio_interface = DefaultAudioInterface()
+                    debug_log("Audio interface pre-warmed")
+
+                    # 3. Pre-initialize tools manager
+                    debug_log("Pre-warming tools manager...")
+                    self.tools_manager = setup_tools_manager()
+                    debug_log("Tools manager pre-warmed")
+
+            except Exception as e:
+                debug_log(f"Voice pre-warm failed (will init on first use): {e}")
+        threading.Thread(target=_prewarm_voice_components, daemon=True, name="voice-prewarm").start()
+
+    def _check_collision(self, new_pos: Dict[str, float], min_distance: float = 1.2) -> bool:
+        """Check if a position collides with existing bubbles."""
+        for bubble in self.bubbles.values():
+            dx = new_pos["x"] - bubble.position["x"]
+            dy = new_pos["y"] - bubble.position["y"]
+            dz = new_pos["z"] - bubble.position["z"]
+            distance = (dx*dx + dy*dy + dz*dz) ** 0.5
+
+            # Check against bubble radius + minimum spacing
+            bubble_radius = bubble.radius
+            if distance < (bubble_radius + min_distance):
+                return True
+        return False
+
+    def _find_free_position(self, angle: float, base_radius: float, max_attempts: int = 20) -> Dict[str, float]:
+        """Find a collision-free position using spiral pattern with collision avoidance."""
+        import math
+        import random
+
+        for attempt in range(max_attempts):
+            # Increase radius slightly for each attempt
+            radius_pos = base_radius + (attempt * 0.4)
+            # Add some randomness to angle to avoid patterns
+            adjusted_angle = angle + (attempt * 0.3) + (random.random() - 0.5) * 0.5
+
+            x = math.cos(adjusted_angle) * radius_pos
+            z = math.sin(adjusted_angle) * radius_pos
+            y = (attempt % 4 - 1.5) * 0.6  # More varied heights
+
+            new_pos = {"x": x, "y": y, "z": z}
+
+            if not self._check_collision(new_pos):
+                return new_pos
+
+        # If no free position found, use a fallback with larger spacing
+        fallback_angle = angle + random.random() * math.pi * 2
+        fallback_radius = base_radius + max_attempts * 0.5
+        return {
+            "x": math.cos(fallback_angle) * fallback_radius,
+            "y": (random.random() - 0.5) * 2.0,
+            "z": math.sin(fallback_angle) * fallback_radius
+        }
 
     def _load_bubbles_from_db(self):
         """Load bubbles from IdeasRepository into in-memory state."""
@@ -334,16 +463,35 @@ class ElectronBackend:
                     stored_pos = idea.metadata.get("position")
 
                 if stored_pos and all(k in stored_pos for k in ["x", "y", "z"]):
-                    # Use stored position
+                    # Use stored position but check if it still works
                     x, y, z = stored_pos["x"], stored_pos["y"], stored_pos["z"]
-                    debug_log(f"Using stored position for '{idea.title}': ({x}, {y}, {z})")
+                    test_pos = {"x": x, "y": y, "z": z}
+
+                    if not self._check_collision(test_pos):
+                        debug_log(f"Using stored position for '{idea.title}': ({x}, {y}, {z})")
+                    else:
+                        # Stored position collides, find a new one
+                        debug_log(f"Stored position collides for '{idea.title}', finding new position")
+                        base_angle = i * 0.8
+                        base_radius = 1.5 + (i * 0.3)
+                        new_pos = self._find_free_position(base_angle, base_radius)
+                        x, y, z = new_pos["x"], new_pos["y"], new_pos["z"]
+
+                        # Update stored position
+                        new_metadata = idea.metadata.copy() if idea.metadata else {}
+                        new_metadata["position"] = {"x": x, "y": y, "z": z}
+                        try:
+                            idea.metadata = new_metadata
+                            self.ideas_repo.update(idea)
+                            debug_log(f"Updated position for '{idea.title}': ({x}, {y}, {z})")
+                        except Exception as e:
+                            debug_log(f"Failed to update position for '{idea.title}': {e}")
                 else:
-                    # Generate position in a spiral pattern
-                    angle = i * 0.8
-                    radius_pos = 1.5 + (i * 0.3)
-                    x = math.cos(angle) * radius_pos
-                    z = math.sin(angle) * radius_pos
-                    y = (i % 3 - 1) * 0.5  # Vary height
+                    # Generate new position with collision avoidance
+                    base_angle = i * 0.8
+                    base_radius = 1.5 + (i * 0.3)
+                    new_pos = self._find_free_position(base_angle, base_radius)
+                    x, y, z = new_pos["x"], new_pos["y"], new_pos["z"]
 
                     # Save generated position to metadata for persistence
                     new_metadata = idea.metadata.copy() if idea.metadata else {}
@@ -419,8 +567,73 @@ class ElectronBackend:
         return False
 
     def get_all_bubbles(self) -> List[dict]:
-        """Get all bubbles as dictionaries."""
-        return [b.to_dict() for b in self.bubbles.values()]
+        """Get all bubbles as dictionaries with numbered titles."""
+        bubbles_list = []
+        for i, bubble in enumerate(self.bubbles.values(), 1):
+            bubble_dict = bubble.to_dict()
+            # Add numbered title for navigation (e.g., "1. Universe A")
+            bubble_dict["numbered_title"] = f"{i}. {bubble.title}"
+            bubbles_list.append(bubble_dict)
+        return bubbles_list
+
+    def get_all_bubbles_with_embeddings(self) -> List[dict]:
+        """Get all bubbles with their embeddings for exploration.
+
+        Returns list of dicts with id, title, description, embedding.
+        """
+        if not self.ideas_repo:
+            return []
+
+        try:
+            import json
+            ideas = self.ideas_repo.list(limit=100)
+            bubbles = []
+
+            for idea in ideas:
+                # Only top-level ideas (bubbles) - no parent_id
+                if idea.parent_id:
+                    continue
+
+                bubble = {
+                    "id": idea.id,
+                    "title": idea.title,
+                    "description": idea.description or "",
+                }
+
+                # Parse embedding if available
+                if idea.embedding_vector:
+                    try:
+                        bubble["embedding"] = json.loads(idea.embedding_vector)
+                    except (json.JSONDecodeError, TypeError):
+                        bubble["embedding"] = None
+                else:
+                    bubble["embedding"] = None
+
+                bubbles.append(bubble)
+
+            debug_log(f"get_all_bubbles_with_embeddings: Found {len(bubbles)} bubbles")
+            return bubbles
+
+        except Exception as e:
+            debug_log(f"Failed to get bubbles with embeddings: {e}")
+            logger.warning(f"Failed to get bubbles with embeddings: {e}")
+            return []
+
+    @property
+    def current_bubble(self) -> Optional[dict]:
+        """Get the current bubble as a dict (for exploration tools)."""
+        if self.current_bubble_id is None:
+            return None
+
+        bubble = self.bubbles.get(self.current_bubble_id)
+        if not bubble:
+            return None
+
+        return {
+            "id": bubble.db_id,
+            "title": bubble.title,
+            "local_id": self.current_bubble_id,
+        }
 
     def _get_bubble_position_by_db_id(self, bubble_db_id: str) -> Optional[dict]:
         """Get bubble position by database ID. Used by tools to store positions."""
@@ -705,8 +918,14 @@ class ElectronBackend:
     async def start_voice_with_agent(self, agent_id: str):
         """Start voice dialog with a specific agent ID."""
         debug_log(f"start_voice_with_agent({agent_id})")
-        
-        # Prefer full voice tools setup (connects to Electron IPC)
+
+        # Option A: VoiceBridgeV2 (new async architecture with NotificationQueue)
+        if USE_VOICE_BRIDGE_V2 and HAS_VOICE_BRIDGE_V2:
+            debug_log("Using VoiceBridgeV2 mode (USE_VOICE_BRIDGE_V2=true)")
+            await self._start_voice_bridge_v2(agent_id)
+            return
+
+        # Option B: Legacy - full voice tools setup (connects to Electron IPC)
         if HAS_VOICE_TOOLS:
             try:
                 # Get API key
@@ -723,21 +942,30 @@ class ElectronBackend:
                     })
                     return
                 
-                # Initialize tools manager with all registered tools
-                debug_log("Initializing tools manager...")
-                self.tools_manager = setup_tools_manager()
-                debug_log(f"Tools manager initialized: {self.tools_manager}")
-                logger.info("Voice tools manager initialized with Electron IPC")
-                
-                # Create ElevenLabs client
-                debug_log("Creating ElevenLabs client...")
-                self.elevenlabs_client = ElevenLabs(api_key=api_key)
-                debug_log("ElevenLabs client created")
-                
-                # Create audio interface
-                debug_log("Creating audio interface...")
-                self.audio_interface = DefaultAudioInterface()
-                debug_log("Audio interface created")
+                # Initialize tools manager (use pre-warmed if available)
+                if not self.tools_manager:
+                    debug_log("Initializing tools manager...")
+                    self.tools_manager = setup_tools_manager()
+                    debug_log(f"Tools manager initialized: {self.tools_manager}")
+                else:
+                    debug_log("Using pre-warmed tools manager")
+                logger.info("Voice tools manager ready")
+
+                # Create ElevenLabs client (use pre-warmed if available)
+                if not self.elevenlabs_client:
+                    debug_log("Creating ElevenLabs client...")
+                    self.elevenlabs_client = ElevenLabs(api_key=api_key)
+                    debug_log("ElevenLabs client created")
+                else:
+                    debug_log("Using pre-warmed ElevenLabs client")
+
+                # Create audio interface (use pre-warmed if available)
+                if not self.audio_interface:
+                    debug_log("Creating audio interface...")
+                    self.audio_interface = DefaultAudioInterface()
+                    debug_log("Audio interface created")
+                else:
+                    debug_log("Using pre-warmed audio interface")
                 
                 # Create conversation with full tool support
                 debug_log("Creating conversation...")
@@ -747,6 +975,8 @@ class ElectronBackend:
                     requires_auth=False,
                     audio_interface=self.audio_interface,
                     client_tools=self.tools_manager.get_client_tools(),
+                    callback_user_transcript=self._handle_user_transcript,
+                    callback_agent_response=self._handle_agent_response,
                 )
                 debug_log("Conversation created")
                 
@@ -835,6 +1065,231 @@ class ElectronBackend:
                 "error": "Voice dialog not available"
             })
 
+    async def _start_voice_bridge_v2(self, agent_id: str):
+        """
+        Start voice with VoiceBridgeV2 architecture.
+
+        This uses the new async architecture with:
+        - Rachel as pure voice interface (only send_intent tool)
+        - NotificationQueue for deferred feedback
+        - Backend agents for async tool execution
+        """
+        try:
+            debug_log("Initializing VoiceBridgeV2...")
+
+            # 1. Create VoiceBridge
+            self.voice_bridge = await create_voice_bridge_v2(
+                model_client=None,  # Auto-detect Cloud/Ollama
+                event_manager=None  # Optional Redis
+            )
+            debug_log("VoiceBridgeV2 created")
+
+            # 2. Get API key for ElevenLabs
+            api_key = os.getenv("ELEVENLABS_API_KEY")
+            if not api_key:
+                debug_log("ERROR: ELEVENLABS_API_KEY not set")
+                self.send_message({
+                    "type": "voice_error",
+                    "error": "ELEVENLABS_API_KEY not set"
+                })
+                return
+
+            # 3. Create ElevenLabs client and audio interface (use pre-warmed if available)
+            if not self.elevenlabs_client:
+                debug_log("Creating ElevenLabs client...")
+                self.elevenlabs_client = ElevenLabs(api_key=api_key)
+            else:
+                debug_log("Using pre-warmed ElevenLabs client")
+
+            if not self.audio_interface:
+                debug_log("Creating audio interface...")
+                self.audio_interface = DefaultAudioInterface()
+            else:
+                debug_log("Using pre-warmed audio interface")
+
+            # 4. Create conversation with bridge tools (only send_intent)
+            debug_log("Creating conversation with VoiceBridgeV2 tools...")
+            self.voice_conversation = Conversation(
+                client=self.elevenlabs_client,
+                agent_id=agent_id,
+                requires_auth=False,
+                audio_interface=self.audio_interface,
+                client_tools=self._create_bridge_tools(),
+                callback_user_transcript=self._handle_user_transcript,
+                callback_agent_response=self._handle_agent_response,
+            )
+
+            # 5. Start conversation thread
+            def run_voice_session():
+                try:
+                    debug_log("VoiceBridgeV2 session thread starting...")
+                    self.voice_conversation.start_session()
+                    debug_log("VoiceBridgeV2 session started, waiting for end...")
+                    conversation_id = self.voice_conversation.wait_for_session_end()
+                    debug_log(f"VoiceBridgeV2 session ended: {conversation_id}")
+                    self.voice_active = False
+                    self.send_message({"type": "voice_stopped"})
+                except Exception as e:
+                    debug_log(f"VoiceBridgeV2 session error: {e}")
+                    self.voice_active = False
+                    self.send_message({
+                        "type": "voice_error",
+                        "error": str(e)
+                    })
+
+            debug_log("Starting VoiceBridgeV2 thread...")
+            voice_thread = threading.Thread(target=run_voice_session, daemon=True)
+            voice_thread.start()
+
+            self.voice_active = True
+            self.send_message({
+                "type": "voice_started",
+                "agent_id": agent_id,
+                "agent_name": "Rachel",
+                "mode": "voice_bridge_v2"
+            })
+
+            debug_log("VoiceBridgeV2 started successfully")
+
+        except Exception as e:
+            debug_log(f"VoiceBridgeV2 start failed: {e}")
+            import traceback
+            debug_log(traceback.format_exc())
+            self.send_message({
+                "type": "voice_error",
+                "error": str(e)
+            })
+
+    def _create_bridge_tools(self):
+        """
+        Create ClientTools with 5 domain-specific tools.
+
+        Returns a ClientTools instance with domain tools:
+        - send_bubbles_intent: Space/bubble navigation
+        - send_ideas_intent: Idea management
+        - send_desktop_intent: Desktop automation
+        - send_coding_intent: Code generation
+        - send_shuttles_intent: Requirements pipeline
+        """
+        from elevenlabs.conversational_ai.conversation import ClientTools
+
+        backend = self  # Capture reference for closure
+        client_tools = ClientTools()
+
+        def _create_domain_handler(domain: str):
+            """Factory to create domain-specific intent handlers."""
+            def handler(params: dict) -> str:
+                """
+                Send domain-specific intent to the orchestrator.
+
+                The domain_hint enables optimized routing to the correct
+                backend agent (BubblesAgent, IdeasAgent, etc.).
+                """
+                import time as _time
+                # Accept both 'command' and 'user_request' for backwards compat
+                user_request = params.get("command") or params.get("user_request", "")
+
+                # Debug logging
+                debug_log(f"[VOICE INPUT] [{domain.upper()}] {user_request}")
+
+                if not user_request:
+                    domain_prompts = {
+                        "bubbles": "Was moechtest du mit deinen Spaces machen?",
+                        "ideas": "Was moechtest du mit deinen Ideen machen?",
+                        "desktop": "Was soll ich auf dem Desktop machen?",
+                        "coding": "Was soll ich programmieren?",
+                        "shuttles": "Was moechtest du mit dem Shuttle machen?",
+                    }
+                    return domain_prompts.get(domain, "Ich habe dich nicht verstanden.")
+
+                try:
+                    # Get orchestrator and context store
+                    from swarm.orchestrator import get_orchestrator
+                    from swarm.orchestrator.system_context_store import get_system_context_store
+
+                    orchestrator = get_orchestrator()
+                    context_store = get_system_context_store()
+
+                    # Process intent with domain hint for optimized routing
+                    result = orchestrator.process_intent_sync(user_request, domain_hint=domain)
+
+                    debug_log(f"send_{domain}_intent: {result.event_type} -> {result.response_hint[:200]}{'...' if len(result.response_hint) > 200 else ''}")
+
+                    # Store result for context (Smart Rachel)
+                    if not result.is_conversational and not result.error:
+                        context_store.store(
+                            event_type=result.event_type,
+                            result=result.response_hint
+                        )
+
+                    # Notify Electron if task was queued
+                    if not result.is_conversational:
+                        backend.send_message({
+                            "type": "task_queued",
+                            "task_type": "backend_agent",
+                            "domain": domain
+                        })
+
+                    if result.error:
+                        return f"Es gab ein Problem: {result.error}"
+
+                    # Enrich response with relevant context
+                    response = result.response_hint
+                    if not result.is_conversational:
+                        relevant = context_store.get_relevant(user_request, limit=2)
+                        context_texts = []
+                        for entry in relevant:
+                            if entry.result == result.response_hint:
+                                continue
+                            if _time.time() - entry.timestamp > 120:
+                                continue
+                            context_texts.append(entry.result)
+
+                        if context_texts:
+                            response = f"{result.response_hint} Ausserdem: {'. '.join(context_texts)}"
+
+                    return response
+
+                except Exception as e:
+                    debug_log(f"send_{domain}_intent error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return f"Es gab ein Problem bei der Verarbeitung: {str(e)}"
+
+            return handler
+
+        # Register all 5 domain-specific tools
+        domains = ["bubbles", "ideas", "desktop", "coding", "shuttles"]
+        for domain in domains:
+            tool_name = f"send_{domain}_intent"
+            handler = _create_domain_handler(domain)
+            client_tools.register(tool_name, handler, is_async=False)
+            debug_log(f"Registered tool: {tool_name}")
+
+        # Also register legacy send_intent for backwards compatibility
+        def send_intent_handler(params: dict) -> str:
+            """Legacy send_intent - routes through orchestrator without domain hint."""
+            user_request = params.get("user_request", "")
+            debug_log(f"[VOICE INPUT] [LEGACY] {user_request}")
+
+            if not user_request:
+                return "Ich habe dich nicht verstanden. Was soll ich tun?"
+
+            try:
+                from swarm.orchestrator import get_orchestrator
+                orchestrator = get_orchestrator()
+                result = orchestrator.process_intent_sync(user_request)
+                debug_log(f"send_intent (legacy): {result.event_type} -> {result.response_hint[:100]}...")
+                return result.response_hint if not result.error else f"Fehler: {result.error}"
+            except Exception as e:
+                debug_log(f"send_intent error: {e}")
+                return f"Es gab ein Problem: {str(e)}"
+
+        client_tools.register("send_intent", send_intent_handler, is_async=False)
+        debug_log("Registered tool: send_intent (legacy)")
+
+        return client_tools
+
     def _end_voice_session_sync(self):
         """Synchronously end the current voice session (for transfer handler)."""
         if self.voice_conversation:
@@ -882,6 +1337,15 @@ class ElectronBackend:
             self.transfer_handler.stop()
             self.transfer_handler = None
 
+        # Stop VoiceBridgeV2 if active
+        if self.voice_bridge:
+            try:
+                await self.voice_bridge.shutdown()
+                debug_log("VoiceBridgeV2 shutdown complete")
+            except Exception as e:
+                debug_log(f"Error shutting down VoiceBridgeV2: {e}")
+            self.voice_bridge = None
+
         # Stop new conversation-based voice (with tools)
         if self.voice_conversation:
             try:
@@ -900,6 +1364,12 @@ class ElectronBackend:
 
     def _handle_user_transcript(self, text: str):
         """Handle transcribed user speech."""
+        debug_log(f"[USER SPEECH] {text}")
+
+        # Track user speech time to suppress "Bist du noch da?" keepalives
+        if HAS_SESSION_TOOLS and mark_user_speech:
+            mark_user_speech()
+
         self.send_message({
             "type": "user_transcript",
             "text": text
@@ -910,6 +1380,7 @@ class ElectronBackend:
 
     def _handle_agent_response(self, text: str):
         """Handle agent text response."""
+        debug_log(f"[AGENT RESPONSE] {text}")
         self.send_message({
             "type": "agent_response",
             "text": text
@@ -1237,6 +1708,91 @@ class ElectronBackend:
                     "success": False,
                     "error": str(e)
                 })
+
+        # ====================================================================
+        # EXPLORATION IPC Handlers (AI-Scientist Tree Search)
+        # ====================================================================
+
+        elif msg_type == "exploration_start":
+            # Start exploration from Electron UI
+            bubble_id = message.get("bubble_id")
+            depth = message.get("depth", 4)
+            mode = message.get("mode", "auto")
+            context = message.get("context")
+            debug_log(f"Starting exploration: bubble={bubble_id}, mode={mode}, depth={depth}")
+            asyncio.create_task(self._handle_exploration_start(bubble_id, depth, mode, context))
+
+        elif msg_type == "exploration_stop":
+            # Stop exploration
+            debug_log("Stopping exploration")
+            asyncio.create_task(self._handle_exploration_stop())
+
+        elif msg_type == "exploration_respond":
+            # Handle response to exploration question
+            question_id = message.get("question_id")
+            response_type = message.get("response_type")
+            selected_option = message.get("selected_option")
+            custom_text = message.get("custom_text")
+            debug_log(f"Exploration response: {response_type} for question {question_id}")
+            asyncio.create_task(self._handle_exploration_respond(
+                question_id, response_type, selected_option, custom_text
+            ))
+
+        elif msg_type == "exploration_direction":
+            # Set exploration direction (guided mode)
+            direction = message.get("direction")
+            bubble_id = message.get("bubble_id")
+            debug_log(f"Setting exploration direction: {direction}")
+            asyncio.create_task(self._handle_exploration_direction(direction, bubble_id))
+
+        elif msg_type == "exploration_status":
+            # Get exploration status
+            asyncio.create_task(self._handle_exploration_status())
+
+        # ====================================================================
+        # UI TOOLBAR - Direct Tool Execution (user clicks tool in sidebar)
+        # ====================================================================
+
+        elif msg_type == "tool_action":
+            event_type = message.get("event_type")
+            payload = message.get("payload", {})
+            debug_log(f"Tool action from UI toolbar: {event_type} with {payload}")
+            asyncio.create_task(self._handle_tool_action(event_type, payload))
+
+    # ========================================================================
+    # UI TOOLBAR HANDLER
+    # ========================================================================
+
+    async def _handle_tool_action(self, event_type: str, payload: dict):
+        """Execute a tool action triggered from the UI toolbar."""
+        try:
+            from swarm.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            if not orchestrator:
+                debug_log("No orchestrator available for tool action")
+                return
+
+            # Execute via orchestrator sync path (same as voice commands in FORCE_SYNC_MODE)
+            result = await orchestrator._process_sync(
+                event_type=event_type,
+                payload=payload or {},
+                response_hint="",
+                user_id="ui_toolbar",
+                session_id="ui"
+            )
+
+            if result and result.response_hint:
+                debug_log(f"Tool action result: {result.response_hint[:100]}")
+                self.send_message({
+                    "type": "agent_response",
+                    "text": result.response_hint
+                })
+        except Exception as e:
+            logger.error(f"Tool action failed: {e}")
+            self.send_message({
+                "type": "agent_response",
+                "text": f"Tool action failed: {str(e)}"
+            })
 
     # ========================================================================
     # PROJECTS SPACE IPC Handlers
@@ -1637,6 +2193,100 @@ class ElectronBackend:
                 "error": str(e)
             })
 
+    # ========================================================================
+    # EXPLORATION IPC Handler Methods (AI-Scientist Tree Search)
+    # ========================================================================
+
+    async def _handle_exploration_start(self, bubble_id, depth, mode, context):
+        """Handle exploration start from Electron."""
+        try:
+            from swarm.tools.exploration_tools import start_exploration
+            result = await start_exploration(
+                bubble_id=bubble_id,
+                depth=depth,
+                mode=mode,
+                context=context,
+            )
+            self.send_message({
+                "type": "exploration_started",
+                **result
+            })
+        except Exception as e:
+            logger.error(f"Exploration start error: {e}")
+            self.send_message({
+                "type": "exploration_error",
+                "error": str(e)
+            })
+
+    async def _handle_exploration_stop(self):
+        """Handle exploration stop."""
+        try:
+            from swarm.tools.exploration_tools import stop_exploration
+            result = await stop_exploration()
+            self.send_message({
+                "type": "exploration_stopped",
+                **result
+            })
+        except Exception as e:
+            logger.error(f"Exploration stop error: {e}")
+            self.send_message({
+                "type": "exploration_error",
+                "error": str(e)
+            })
+
+    async def _handle_exploration_respond(self, question_id, response_type, selected_option, custom_text):
+        """Handle response to exploration question."""
+        try:
+            from swarm.tools.exploration_tools import respond_to_exploration_question
+            result = await respond_to_exploration_question(
+                question_id=question_id,
+                response_type=response_type,
+                selected_option=selected_option,
+                custom_text=custom_text,
+            )
+            debug_log(f"Exploration response processed: {result}")
+            # The exploration will continue automatically after response
+        except Exception as e:
+            logger.error(f"Exploration respond error: {e}")
+            self.send_message({
+                "type": "exploration_error",
+                "error": str(e)
+            })
+
+    async def _handle_exploration_direction(self, direction, bubble_id):
+        """Handle exploration direction setting."""
+        try:
+            from swarm.tools.exploration_tools import set_exploration_direction
+            result = await set_exploration_direction(
+                direction=direction,
+                bubble_id=bubble_id,
+            )
+            self.send_message({
+                "type": "exploration_direction_set",
+                **result
+            })
+        except Exception as e:
+            logger.error(f"Exploration direction error: {e}")
+            self.send_message({
+                "type": "exploration_error",
+                "error": str(e)
+            })
+
+    async def _handle_exploration_status(self):
+        """Get current exploration status."""
+        try:
+            from swarm.tools.exploration_tools import get_exploration_status
+            result = await get_exploration_status()
+            self.send_message({
+                "type": "exploration_status",
+                **result
+            })
+        except Exception as e:
+            logger.error(f"Exploration status error: {e}")
+            self.send_message({
+                "type": "exploration_error",
+                "error": str(e)
+            })
 
     # ========================================================================
     # PROJECT PREVIEW (Coding Engine Integration)
@@ -1842,25 +2492,47 @@ async def main():
     debug_log("stdin reader thread started")
     
     # Main message processing loop
-    while True:
-        try:
-            message = await message_queue.get()
-            
-            if message is None:
-                debug_log("Received exit signal, shutting down")
+    try:
+        while True:
+            try:
+                message = await message_queue.get()
+
+                if message is None:
+                    debug_log("Received exit signal, shutting down")
+                    break
+
+                debug_log(f"Processing message: {message.get('type', 'unknown')}")
+                backend.handle_message(message)
+
+            except asyncio.CancelledError:
+                debug_log("main() cancelled")
                 break
-            
-            debug_log(f"Processing message: {message.get('type', 'unknown')}")
-            backend.handle_message(message)
-            
-        except asyncio.CancelledError:
-            debug_log("main() cancelled")
-            break
+            except Exception as e:
+                debug_log(f"Error processing message: {e}")
+                import traceback
+                debug_log(traceback.format_exc())
+    finally:
+        # Graceful shutdown - prevent Windows asyncio errors
+        debug_log("Performing graceful shutdown...")
+
+        # Force reset EventBus to close Redis connections cleanly
+        try:
+            from swarm.event_bus import force_reset_event_bus
+            force_reset_event_bus()
+            debug_log("EventBus reset complete")
         except Exception as e:
-            debug_log(f"Error processing message: {e}")
-            import traceback
-            debug_log(traceback.format_exc())
-    
+            debug_log(f"EventBus reset error (ignored): {e}")
+
+        # Cancel any pending asyncio tasks
+        pending_tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if pending_tasks:
+            debug_log(f"Cancelling {len(pending_tasks)} pending tasks...")
+            for task in pending_tasks:
+                task.cancel()
+            # Wait briefly for tasks to finish
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+            debug_log("All tasks cancelled")
+
     debug_log("main() finished")
 
 

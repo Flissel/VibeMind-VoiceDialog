@@ -65,3 +65,4 @@ python/logs/
 # Virtual environments
 .venv/
 .venv*/
+.env

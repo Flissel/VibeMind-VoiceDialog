@@ -293,6 +293,25 @@ class MultiverseApp {
         
         // Click handler for bubble/project selection
         this.container.addEventListener('click', (e) => this.onContainerClick(e));
+
+        // Hover handler for bubble tooltip
+        this.container.addEventListener('mousemove', (e) => this.onContainerMouseMove(e));
+        this.hoveredBubbleIndex = -1;
+        this.tooltipPinned = false; // Keep tooltip visible after click
+        this.tooltipBubbleId = null; // ID of bubble currently shown in tooltip
+
+        // Prevent tooltip hide when mouse is over the info panel
+        const infoPanel = document.getElementById('info-panel');
+        if (infoPanel) {
+            infoPanel.addEventListener('mouseenter', () => { this.tooltipPinned = true; });
+            infoPanel.addEventListener('mouseleave', () => {
+                this.tooltipPinned = false;
+                // Hide after leaving panel if not hovering a bubble
+                if (this.hoveredBubbleIndex < 0 && this.selectedBubbleIndex < 0) {
+                    this.hideBubbleTooltip();
+                }
+            });
+        }
         
         // Connect to hand tracking WebSocket
         this.connectHandTracking();
@@ -1225,6 +1244,13 @@ class MultiverseApp {
     // ========================================================================
     
     onContainerClick(event) {
+        // Ignore clicks on UI elements (info-panel, buttons, etc.)
+        const target = event.target;
+        if (target.closest('#info-panel') || target.closest('#enter-btn') ||
+            target.closest('.shuttle-info-panel') || target.closest('button')) {
+            return; // Let the button handle it
+        }
+
         // Raycasting for bubble/project selection
         const rect = this.container.getBoundingClientRect();
         const mouse = new THREE.Vector2(
@@ -1253,6 +1279,12 @@ class MultiverseApp {
                 const bubble = intersects[0].object;
                 const index = bubbles.indexOf(bubble);
                 this.selectBubble(index);
+            } else {
+                // Clicked empty space - deselect and hide tooltip
+                this.tooltipPinned = false;
+                this.selectedBubbleIndex = -1;
+                this.selectedBubbleId = null;
+                this.hideBubbleTooltip();
             }
         } else if (this.currentSpace === 'projects') {
             // Check Project Space nodes
@@ -1270,15 +1302,127 @@ class MultiverseApp {
         }
     }
     
+    /**
+     * Project a 3D world position to 2D screen coordinates.
+     */
+    worldToScreen(position) {
+        const vec = position.clone();
+        vec.project(this.camera);
+        const rect = this.container.getBoundingClientRect();
+        return {
+            x: (vec.x * 0.5 + 0.5) * rect.width + rect.left,
+            y: (-vec.y * 0.5 + 0.5) * rect.height + rect.top
+        };
+    }
+
+    onContainerMouseMove(event) {
+        if (this.isInsideBubble) return;
+
+        const rect = this.container.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+
+        if (this.currentSpace === 'ideas') {
+            const bubbles = (this.spaces.ideas?.objects || []).filter(
+                obj => obj.userData && obj.userData.type === 'bubble'
+            );
+            const intersects = raycaster.intersectObjects(bubbles);
+
+            if (intersects.length > 0) {
+                const bubble = intersects[0].object;
+                const index = bubbles.indexOf(bubble);
+                if (index !== this.hoveredBubbleIndex) {
+                    this.hoveredBubbleIndex = index;
+                    this.showBubbleTooltip(bubble);
+                } else {
+                    // Update tooltip position to follow bubble
+                    this.positionTooltipAtBubble(bubble);
+                }
+            } else if (this.hoveredBubbleIndex >= 0 && !this.tooltipPinned) {
+                this.hoveredBubbleIndex = -1;
+                this.hideBubbleTooltip();
+            }
+        }
+    }
+
+    showBubbleTooltip(bubble) {
+        const infoPanel = document.getElementById('info-panel');
+        const titleEl = document.getElementById('selected-title');
+        const descEl = document.getElementById('selected-description');
+        const enterBtn = document.getElementById('enter-btn');
+        const bubbleInfo = document.getElementById('bubble-info');
+
+        // Store the bubble ID for the Enter button to use
+        this.tooltipBubbleId = bubble.userData.id || null;
+
+        if (titleEl) titleEl.textContent = bubble.userData.title || 'Bubble';
+        // Show bubble content stats
+        const data = bubble.userData.data || {};
+        const stats = [];
+        if (data.description) stats.push(data.description);
+        if (data.node_count) stats.push(`${data.node_count} ideas`);
+        if (data.numbered_title) stats.push(data.numbered_title);
+        if (descEl) descEl.textContent = stats.length ? stats.join(' · ') : '';
+        if (enterBtn) enterBtn.classList.remove('hidden');
+        if (bubbleInfo) bubbleInfo.classList.remove('hidden');
+        if (infoPanel) infoPanel.classList.remove('hidden');
+
+        this.positionTooltipAtBubble(bubble);
+    }
+
+    /**
+     * Get the bubble ID currently shown in the tooltip
+     * @returns {string|null} The bubble ID or null if no tooltip is shown
+     */
+    getTooltipBubbleId() {
+        return this.tooltipBubbleId || null;
+    }
+
+    positionTooltipAtBubble(bubble) {
+        const infoPanel = document.getElementById('info-panel');
+        if (!infoPanel) return;
+
+        const worldPos = new THREE.Vector3();
+        bubble.getWorldPosition(worldPos);
+        const screen = this.worldToScreen(worldPos);
+
+        // Position above the bubble
+        infoPanel.style.position = 'absolute';
+        infoPanel.style.left = `${screen.x}px`;
+        infoPanel.style.top = `${screen.y - 60}px`;
+        infoPanel.style.transform = 'translate(-50%, -100%)';
+        infoPanel.style.right = 'auto';
+    }
+
+    hideBubbleTooltip() {
+        const infoPanel = document.getElementById('info-panel');
+        const bubbleInfo = document.getElementById('bubble-info');
+        if (bubbleInfo) bubbleInfo.classList.add('hidden');
+        if (infoPanel) infoPanel.classList.add('hidden');
+        // Clear the tooltip bubble ID
+        this.tooltipBubbleId = null;
+        // Reset positioning
+        if (infoPanel) {
+            infoPanel.style.transform = '';
+            infoPanel.style.left = '';
+            infoPanel.style.right = '';
+        }
+    }
+
     selectBubble(index) {
         const bubbles = this.spaces.ideas.objects.filter(
             obj => obj.userData && obj.userData.type === 'bubble'
         );
-        
+
         if (index < 0 || index >= bubbles.length) {
             return;
         }
-        
+
         // Deselect previous
         if (this.selectedBubbleIndex >= 0 && this.selectedBubbleIndex < bubbles.length) {
             const prev = bubbles[this.selectedBubbleIndex];
@@ -1286,27 +1430,20 @@ class MultiverseApp {
                 prev.material.emissive?.setHex(0x000000);
             }
         }
-        
+
         // Select new
         this.selectedBubbleIndex = index;
         const bubble = bubbles[index];
         this.selectedBubbleId = bubble.userData.id || bubble.userData.title || index;
-        
+
         // Visual feedback
         if (bubble.material && bubble.material.emissive) {
             bubble.material.emissive.setHex(0x333333);
         }
-        // Update info panel
-        const titleEl = document.getElementById('selected-title');
-        const descEl = document.getElementById('selected-description');
-        const enterBtn = document.getElementById('enter-btn');
-        const infoPanel = document.getElementById('bubble-info');
-        
-        if (titleEl) titleEl.textContent = bubble.userData.title || 'Bubble';
-        if (descEl) descEl.textContent = `Click Enter or press Enter key to explore`;
-        if (enterBtn) enterBtn.classList.remove('hidden');
-        if (infoPanel) infoPanel.classList.remove('hidden');
-        
+        // Show tooltip at bubble position and pin it (click = persistent)
+        this.tooltipPinned = true;
+        this.showBubbleTooltip(bubble);
+
         console.log('[Multiverse] Selected bubble:', bubble.userData.title, 'index:', index);
     }
     
@@ -1643,7 +1780,7 @@ class MultiverseApp {
             );
         }
         
-        const geometry = new THREE.IicosahedronGeometry(radius, 3);
+        const geometry = new THREE.IcosahedronGeometry(radius, 3);
         const material = new THREE.MeshPhysicalMaterial({
             color: color,
             metalness: 0.1,
@@ -1667,10 +1804,158 @@ class MultiverseApp {
         this.spaces.ideas.objects.push(bubble);
         
         console.log('[Multiverse] Bubble added successfully:', bubble.userData.title);
-        
+
         return bubble;
     }
-    
+
+    /**
+     * Remove a bubble from the Ideas space
+     * @param {string|number} id - Bubble ID, db_id, or title
+     * @returns {boolean} True if removed successfully
+     */
+    removeBubble(id) {
+        console.log('[Multiverse] removeBubble called with id:', id, 'type:', typeof id);
+
+        const ideasGroup = this.spaces.ideas.group;
+        if (!ideasGroup) {
+            console.warn('[Multiverse] removeBubble: Ideas group not initialized');
+            return false;
+        }
+
+        const objects = this.spaces.ideas.objects;
+        console.log('[Multiverse] Current bubbles:', objects.map(b => ({
+            id: b.userData.id,
+            db_id: b.userData.db_id,
+            title: b.userData.title
+        })));
+
+        // Try multiple matching strategies
+        let index = -1;
+
+        // 1. Direct ID match
+        index = objects.findIndex(b => b.userData.id === id);
+
+        // 2. db_id match
+        if (index === -1) {
+            index = objects.findIndex(b => b.userData.db_id === id);
+        }
+
+        // 3. String conversion for type mismatch
+        if (index === -1) {
+            index = objects.findIndex(b => String(b.userData.id) === String(id));
+        }
+
+        // 4. db_id string conversion
+        if (index === -1) {
+            index = objects.findIndex(b => String(b.userData.db_id) === String(id));
+        }
+
+        // 5. Partial UUID match (first 8 chars)
+        if (index === -1 && typeof id === 'string' && id.length >= 8) {
+            index = objects.findIndex(b => {
+                const dbId = String(b.userData.db_id || '');
+                return dbId.startsWith(id) || id.startsWith(dbId.substring(0, 8));
+            });
+        }
+
+        // 6. Title match (case-insensitive)
+        if (index === -1 && typeof id === 'string') {
+            const idLower = id.toLowerCase();
+            index = objects.findIndex(b =>
+                b.userData.title && b.userData.title.toLowerCase() === idLower
+            );
+        }
+
+        if (index !== -1) {
+            const bubble = objects[index];
+            console.log('[Multiverse] Removing bubble:', bubble.userData.title, 'id:', bubble.userData.id);
+
+            // Remove from scene group
+            ideasGroup.remove(bubble);
+
+            // Dispose geometry and material
+            if (bubble.geometry) bubble.geometry.dispose();
+            if (bubble.material) bubble.material.dispose();
+
+            // Remove from objects array
+            objects.splice(index, 1);
+
+            // Clear selection if this was the selected bubble
+            if (this.selectedBubbleId === bubble.userData.id ||
+                this.selectedBubbleId === bubble.userData.db_id) {
+                this.selectedBubbleId = null;
+                this.selectedBubbleIndex = -1;
+            }
+
+            console.log('[Multiverse] Bubble removed successfully');
+            return true;
+        } else {
+            console.warn('[Multiverse] Bubble not found for removal:', id);
+            return false;
+        }
+    }
+
+    /**
+     * Update a bubble's properties
+     * @param {string|number} id - Bubble ID or db_id
+     * @param {Object} updates - Properties to update (title, color, position)
+     * @returns {boolean} True if updated successfully
+     */
+    updateBubble(id, updates) {
+        console.log('[Multiverse] updateBubble called with id:', id, 'updates:', updates);
+
+        const objects = this.spaces.ideas.objects;
+
+        // Find the bubble using multiple matching strategies
+        let bubble = objects.find(b => b.userData.id === id || b.userData.db_id === id);
+
+        if (!bubble && typeof id === 'string') {
+            bubble = objects.find(b =>
+                String(b.userData.id) === id ||
+                String(b.userData.db_id) === id ||
+                (b.userData.title && b.userData.title.toLowerCase() === id.toLowerCase())
+            );
+        }
+
+        if (bubble) {
+            console.log('[Multiverse] Updating bubble:', bubble.userData.title, '->', updates);
+
+            // Update title
+            if (updates.title) {
+                bubble.userData.title = updates.title;
+                if (bubble.userData.data) {
+                    bubble.userData.data.title = updates.title;
+                }
+            }
+
+            // Update position
+            if (updates.position) {
+                bubble.position.set(
+                    updates.position.x || bubble.position.x,
+                    updates.position.y || bubble.position.y,
+                    updates.position.z || bubble.position.z
+                );
+            }
+
+            // Update color
+            if (updates.color !== undefined) {
+                let color = updates.color;
+                if (typeof color === 'string') {
+                    color = parseInt(color.replace(/^#0x?/, ''), 16);
+                }
+                if (bubble.material) {
+                    bubble.material.color.setHex(color);
+                }
+            }
+
+            console.log('[Multiverse] Bubble updated successfully');
+            return true;
+        } else {
+            console.warn('[Multiverse] Bubble not found for update:', id);
+            return false;
+        }
+    }
+
     /**
      * Update agent status display
      * @param {string} agentSlug - The agent slug

@@ -24,7 +24,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 8
+    SCHEMA_VERSION = 13
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -40,6 +40,9 @@ class Database:
         tags TEXT,
         metadata TEXT,
         agent_id TEXT,
+        parent_id TEXT,
+        embedding_vector TEXT,
+        embedding_hash TEXT,
         FOREIGN KEY (promoted_to_project_id) REFERENCES projects(id)
     );
 
@@ -135,6 +138,84 @@ class Database:
         FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
+    -- Exploration sessions: tracks AI-Scientist exploration runs
+    CREATE TABLE IF NOT EXISTS exploration_sessions (
+        id TEXT PRIMARY KEY,
+        root_bubble_id TEXT NOT NULL,
+        root_bubble_title TEXT,
+        exploration_query TEXT,
+        status TEXT DEFAULT 'running',
+        current_stage INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        total_nodes_explored INTEGER DEFAULT 0,
+        best_score REAL DEFAULT 0.0,
+        metadata TEXT,
+        FOREIGN KEY (root_bubble_id) REFERENCES ideas(id)
+    );
+
+    -- Exploration nodes: discovered connections during exploration
+    CREATE TABLE IF NOT EXISTS exploration_nodes (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        step INTEGER DEFAULT 0,
+        parent_node_id TEXT,
+        source_bubble_id TEXT NOT NULL,
+        source_bubble_title TEXT,
+        target_bubble_id TEXT NOT NULL,
+        target_bubble_title TEXT,
+        connection_type TEXT DEFAULT 'semantic',
+        reasoning TEXT,
+        edge_label TEXT,
+        embedding_similarity REAL DEFAULT 0.0,
+        llm_confidence REAL DEFAULT 0.0,
+        combined_score REAL DEFAULT 0.0,
+        exploration_depth INTEGER DEFAULT 1,
+        is_accepted INTEGER DEFAULT 0,
+        is_rejected INTEGER DEFAULT 0,
+        is_valid INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        metadata TEXT,
+        FOREIGN KEY (session_id) REFERENCES exploration_sessions(id),
+        FOREIGN KEY (parent_node_id) REFERENCES exploration_nodes(id)
+    );
+
+    -- Discovered edges: permanent connections from accepted exploration nodes
+    CREATE TABLE IF NOT EXISTS discovered_edges (
+        id TEXT PRIMARY KEY,
+        from_idea_id TEXT NOT NULL,
+        to_idea_id TEXT NOT NULL,
+        edge_type TEXT DEFAULT 'discovered',
+        edge_label TEXT,
+        reasoning TEXT,
+        confidence REAL DEFAULT 0.0,
+        connection_type TEXT,
+        exploration_session_id TEXT,
+        exploration_node_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        metadata TEXT,
+        UNIQUE(from_idea_id, to_idea_id),
+        FOREIGN KEY (from_idea_id) REFERENCES ideas(id),
+        FOREIGN KEY (to_idea_id) REFERENCES ideas(id)
+    );
+
+    -- Mermaid diagrams: stores generated mermaid diagrams from requirements/ideas
+    CREATE TABLE IF NOT EXISTS mermaid_diagrams (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        diagram_type TEXT NOT NULL DEFAULT 'flowchart',
+        content TEXT NOT NULL,
+        source_idea_id TEXT,
+        source_shuttle_id TEXT,
+        source_requirement_ids TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP,
+        version INTEGER DEFAULT 1,
+        metadata TEXT,
+        FOREIGN KEY (source_idea_id) REFERENCES ideas(id),
+        FOREIGN KEY (source_shuttle_id) REFERENCES shuttles(id)
+    );
+
     -- Schema version tracking
     CREATE TABLE IF NOT EXISTS schema_version (
         version INTEGER PRIMARY KEY
@@ -157,6 +238,20 @@ class Database:
     CREATE INDEX IF NOT EXISTS idx_shuttles_status ON shuttles(status);
     CREATE INDEX IF NOT EXISTS idx_shuttles_created_at ON shuttles(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_shuttles_project_id ON shuttles(project_id);
+
+    -- Exploration indexes
+    CREATE INDEX IF NOT EXISTS idx_exploration_sessions_status ON exploration_sessions(status);
+    CREATE INDEX IF NOT EXISTS idx_exploration_sessions_root ON exploration_sessions(root_bubble_id);
+    CREATE INDEX IF NOT EXISTS idx_exploration_nodes_session ON exploration_nodes(session_id);
+    CREATE INDEX IF NOT EXISTS idx_exploration_nodes_score ON exploration_nodes(combined_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_exploration_nodes_accepted ON exploration_nodes(is_accepted);
+    CREATE INDEX IF NOT EXISTS idx_discovered_edges_from ON discovered_edges(from_idea_id);
+    CREATE INDEX IF NOT EXISTS idx_discovered_edges_to ON discovered_edges(to_idea_id);
+
+    -- Mermaid diagrams indexes
+    CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_type ON mermaid_diagrams(diagram_type);
+    CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_source_idea ON mermaid_diagrams(source_idea_id);
+    CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_created ON mermaid_diagrams(created_at DESC);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -293,6 +388,178 @@ class Database:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_shuttles_bubble_stage ON shuttles(bubble_id, stage_type)")
             except Exception:
                 pass  # Index may already exist
+
+        # Migration 8 -> 9: Add parent_id column to ideas table for bubble hierarchy
+        if from_version < 9:
+            try:
+                conn.execute("ALTER TABLE ideas ADD COLUMN parent_id TEXT")
+            except Exception:
+                pass  # Column may already exist
+            # Index for efficient hierarchy queries
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_parent_id ON ideas(parent_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_ideas_parent_title ON ideas(parent_id, title)")
+            except Exception:
+                pass  # Index may already exist
+
+        # Migration 9 -> 10: Add embedding columns for semantic search
+        if from_version < 10:
+            try:
+                conn.execute("ALTER TABLE ideas ADD COLUMN embedding_vector TEXT")
+            except Exception:
+                pass  # Column may already exist
+            try:
+                conn.execute("ALTER TABLE ideas ADD COLUMN embedding_hash TEXT")
+            except Exception:
+                pass  # Column may already exist
+
+        # Migration 10 -> 11: Add structured formatting columns to canvas_nodes
+        if from_version < 11:
+            try:
+                conn.execute("ALTER TABLE canvas_nodes ADD COLUMN format_schema TEXT")
+            except Exception:
+                pass  # Column may already exist
+            try:
+                conn.execute("ALTER TABLE canvas_nodes ADD COLUMN content_json TEXT")
+            except Exception:
+                pass  # Column may already exist
+            try:
+                conn.execute("ALTER TABLE canvas_nodes ADD COLUMN last_formatted TEXT")
+            except Exception:
+                pass  # Column may already exist
+            # Indexes for efficient queries on structured content
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_canvas_nodes_format_schema ON canvas_nodes(format_schema) WHERE format_schema IS NOT NULL")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_canvas_nodes_last_formatted ON canvas_nodes(last_formatted) WHERE last_formatted IS NOT NULL")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_canvas_nodes_structured ON canvas_nodes(id) WHERE content_json IS NOT NULL")
+            except Exception:
+                pass  # Indexes may already exist
+
+        # Migration 11 -> 12: Add exploration tables for AI-Scientist Tree Search
+        if from_version < 12:
+            # Create exploration_sessions table
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS exploration_sessions (
+                        id TEXT PRIMARY KEY,
+                        root_bubble_id TEXT NOT NULL,
+                        root_bubble_title TEXT,
+                        exploration_query TEXT,
+                        status TEXT DEFAULT 'running',
+                        current_stage INTEGER DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        total_nodes_explored INTEGER DEFAULT 0,
+                        best_score REAL DEFAULT 0.0,
+                        metadata TEXT,
+                        FOREIGN KEY (root_bubble_id) REFERENCES ideas(id)
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+
+            # Create exploration_nodes table
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS exploration_nodes (
+                        id TEXT PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        step INTEGER DEFAULT 0,
+                        parent_node_id TEXT,
+                        source_bubble_id TEXT NOT NULL,
+                        source_bubble_title TEXT,
+                        target_bubble_id TEXT NOT NULL,
+                        target_bubble_title TEXT,
+                        connection_type TEXT DEFAULT 'semantic',
+                        reasoning TEXT,
+                        edge_label TEXT,
+                        embedding_similarity REAL DEFAULT 0.0,
+                        llm_confidence REAL DEFAULT 0.0,
+                        combined_score REAL DEFAULT 0.0,
+                        exploration_depth INTEGER DEFAULT 1,
+                        is_accepted INTEGER DEFAULT 0,
+                        is_rejected INTEGER DEFAULT 0,
+                        is_valid INTEGER DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        metadata TEXT,
+                        FOREIGN KEY (session_id) REFERENCES exploration_sessions(id),
+                        FOREIGN KEY (parent_node_id) REFERENCES exploration_nodes(id)
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+
+            # Add step column if missing (for existing tables)
+            try:
+                conn.execute("ALTER TABLE exploration_nodes ADD COLUMN step INTEGER DEFAULT 0")
+            except Exception:
+                pass  # Column may already exist
+
+            # Create discovered_edges table
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS discovered_edges (
+                        id TEXT PRIMARY KEY,
+                        from_idea_id TEXT NOT NULL,
+                        to_idea_id TEXT NOT NULL,
+                        edge_type TEXT DEFAULT 'discovered',
+                        edge_label TEXT,
+                        reasoning TEXT,
+                        confidence REAL DEFAULT 0.0,
+                        connection_type TEXT,
+                        exploration_session_id TEXT,
+                        exploration_node_id TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        metadata TEXT,
+                        UNIQUE(from_idea_id, to_idea_id),
+                        FOREIGN KEY (from_idea_id) REFERENCES ideas(id),
+                        FOREIGN KEY (to_idea_id) REFERENCES ideas(id)
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+
+            # Create indexes
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_exploration_sessions_status ON exploration_sessions(status)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_exploration_sessions_root ON exploration_sessions(root_bubble_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_exploration_nodes_session ON exploration_nodes(session_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_exploration_nodes_score ON exploration_nodes(combined_score DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_exploration_nodes_accepted ON exploration_nodes(is_accepted)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_discovered_edges_from ON discovered_edges(from_idea_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_discovered_edges_to ON discovered_edges(to_idea_id)")
+            except Exception:
+                pass  # Indexes may already exist
+
+        # Migration 12 -> 13: Add mermaid_diagrams table for diagram persistence
+        if from_version < 13:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS mermaid_diagrams (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        diagram_type TEXT NOT NULL DEFAULT 'flowchart',
+                        content TEXT NOT NULL,
+                        source_idea_id TEXT,
+                        source_shuttle_id TEXT,
+                        source_requirement_ids TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP,
+                        version INTEGER DEFAULT 1,
+                        metadata TEXT,
+                        FOREIGN KEY (source_idea_id) REFERENCES ideas(id),
+                        FOREIGN KEY (source_shuttle_id) REFERENCES shuttles(id)
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+            # Create indexes
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_type ON mermaid_diagrams(diagram_type)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_source_idea ON mermaid_diagrams(source_idea_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_created ON mermaid_diagrams(created_at DESC)")
+            except Exception:
+                pass  # Indexes may already exist
 
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))

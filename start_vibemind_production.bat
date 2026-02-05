@@ -31,7 +31,8 @@ if %errorlevel%==0 (
 REM ================================================
 REM Check Redis for Claude Orchestrator (port 6379)
 REM ================================================
-netstat -an | findstr ":6379" | findstr "LISTENING" > nul
+REM Check for port 6379 (works on English "LISTENING" and German "ABHÖREN")
+netstat -an | findstr "0.0.0.0:6379" > nul
 if %errorlevel%==0 (
     echo Redis running on port 6379
 ) else (

@@ -313,10 +313,10 @@ async def create_voice_bridge(
         create_planning_agent,
     )
 
-    ideas_agent = create_ideas_agent(model_client)
+    ideas_agent, ideas_subs = create_ideas_agent(model_client)
     shuttle_agent = create_shuttle_agent(model_client)
-    coding_agent = create_coding_agent(model_client)
-    desktop_agent = create_desktop_agent(model_client)
+    coding_agent, coding_subs = create_coding_agent(model_client)
+    desktop_agent, desktop_subs = create_desktop_agent(model_client)
 
     # Create background data agent (silent operation)
     data_agent = create_data_agent(model_client)
@@ -339,8 +339,12 @@ async def create_voice_bridge(
 
     # Create Swarm team with termination condition
     # Note: data_agent is not included in the main team - it runs independently
+    # Sub-agents are registered as participants so handoffs can reach them
     team = Swarm(
-        participants=[planning_agent, ideas_agent, shuttle_agent, coding_agent, desktop_agent, query_agent],
+        participants=[
+            planning_agent, ideas_agent, shuttle_agent, coding_agent, desktop_agent, query_agent,
+            *ideas_subs, *coding_subs, *desktop_subs,
+        ],
         termination_condition=termination,
     )
 

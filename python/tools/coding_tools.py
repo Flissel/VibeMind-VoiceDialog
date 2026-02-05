@@ -471,6 +471,37 @@ def cancel_generation(params: Dict[str, Any]) -> str:
         return f"Error cancelling: {str(e)}"
 
 
+def exit_project(params: Dict[str, Any]) -> str:
+    """
+    Exit the Projects/Coding Space and return to Ideas Space.
+
+    Called when user says things like:
+    - "Zurueck" (from coding space)
+    - "Exit project space"
+    - "Back to Ideas"
+    - "Verlasse Coding Space"
+    - "Geh zurueck"
+
+    Args (via params):
+        None required
+
+    Returns:
+        Confirmation message
+    """
+    # Broadcast exit to Electron
+    _broadcast_to_electron({
+        "type": "exit_project_space",
+    })
+
+    # Also send navigate_to_space for consistency
+    _broadcast_to_electron({
+        "type": "navigate_to_space",
+        "space": "ideas",
+    })
+
+    return "Ich wechsle zurueck zum Ideas Space."
+
+
 # ==============================================================================
 # TOOL REGISTRY
 # ==============================================================================
@@ -486,6 +517,8 @@ CODING_TOOLS = {
     # Management
     "list_generated_projects": list_generated_projects,
     "cancel_generation": cancel_generation,
+    # Navigation
+    "exit_project": exit_project,
 }
 
 
@@ -509,8 +542,9 @@ __all__ = [
     "stop_preview",
     "list_generated_projects",
     "cancel_generation",
+    "exit_project",
     "CODING_TOOLS",
     "register_coding_tools",
     "set_electron_sender",
     "set_coding_engine_runner",
-    ]
+]

@@ -11,6 +11,7 @@ This enables:
 """
 
 import os
+import json
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -114,21 +115,18 @@ class ConversationRouter:
         conversation_id = f"{self.user_id}_{self.session_id}_{now.strftime('%Y%m%d%H%M%S')}"
 
         try:
-            await self._client.conversations.ingest(
-                conversation_id=conversation_id,
-                container_tags=[self.container_tag, self.session_tag],
-                messages=[
-                    {"role": "user", "content": user_input},
-                    {
-                        "role": "assistant",
-                        "content": agent_response,
-                        "name": "rachel"
-                    }
-                ],
+            # Format conversation as content string (SDK uses memories.add, not conversations.ingest)
+            conversation_content = f"user: {user_input}\nassistant: {agent_response}"
+
+            await self._client.memories.add(
+                content=conversation_content,
+                container_tag=self.container_tag,
                 metadata={
+                    "conversation_id": conversation_id,
+                    "session_tag": self.session_tag,
                     "intent": classified_intent,
                     "confidence": confidence,
-                    "parameters": parameters or {},
+                    "parameters": json.dumps(parameters) if parameters else "{}",
                     "timestamp": now.isoformat(),
                     "user_id": self.user_id,
                     "session_id": self.session_id,
@@ -166,15 +164,17 @@ class ConversationRouter:
             # Search in user's conversations
             tags = [self.container_tag]
 
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=current_input,
                 container_tags=tags,
-                top_k=limit * 2  # Get more for filtering
+                limit=limit * 2  # Get more for filtering
             )
 
             results = []
-            for r in getattr(response, 'results', []):
-                meta = getattr(r, 'metadata', {})
+            # Null-safe handling - response or response.results may be None
+            results_list = getattr(response, 'results', None) or []
+            for r in results_list:
+                meta = getattr(r, 'metadata', None) or {}
                 if not isinstance(meta, dict):
                     continue
 
@@ -189,7 +189,7 @@ class ConversationRouter:
                         continue
 
                 results.append(PastIntent(
-                    past_input=getattr(r, 'content', '')[:100],
+                    past_input=(getattr(r, 'content', '') or '')[:100],
                     past_intent=intent,
                     confidence=meta.get('confidence', 0.0),
                     timestamp=meta.get('timestamp')
@@ -250,18 +250,20 @@ class ConversationRouter:
 
         try:
             # Search for all user interactions
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=f"user {self.user_id} intent",
                 container_tags=[self.container_tag],
-                top_k=100
+                limit=100
             )
 
             # Count intents
             from collections import Counter
             intent_counts: Counter = Counter()
 
-            for r in getattr(response, 'results', []):
-                meta = getattr(r, 'metadata', {})
+            # Null-safe handling
+            results_list = getattr(response, 'results', None) or []
+            for r in results_list:
+                meta = getattr(r, 'metadata', None) or {}
                 if isinstance(meta, dict):
                     intent = meta.get('intent')
                     if intent:
@@ -287,18 +289,20 @@ class ConversationRouter:
             return []
 
         try:
-            response = await self._client.search.documents(
+            response = await self._client.search.execute(
                 q=f"session {self.session_id}",
                 container_tags=[self.session_tag],
-                top_k=limit
+                limit=limit
             )
 
             history = []
-            for r in getattr(response, 'results', []):
-                meta = getattr(r, 'metadata', {})
+            # Null-safe handling
+            results_list = getattr(response, 'results', None) or []
+            for r in results_list:
+                meta = getattr(r, 'metadata', None) or {}
                 if isinstance(meta, dict):
                     history.append({
-                        "input": getattr(r, 'content', ''),
+                        "input": getattr(r, 'content', '') or '',
                         "intent": meta.get('intent'),
                         "confidence": meta.get('confidence'),
                         "timestamp": meta.get('timestamp')

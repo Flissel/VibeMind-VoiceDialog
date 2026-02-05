@@ -21,6 +21,19 @@ from swarm.reasoning.reasoning_event import ReasoningEvent, ReasoningContext
 logger = logging.getLogger(__name__)
 
 
+# ANSI Color Codes for Terminal Output
+class Colors:
+    """ANSI escape codes for colored terminal output."""
+    INTENT = "\033[94m"      # Blau - Intent Classification
+    TOOL_START = "\033[93m"  # Gelb - Tool Started
+    TOOL_OK = "\033[92m"     # Grün - Tool Success
+    TOOL_ERR = "\033[91m"    # Rot - Tool Error
+    REASONING = "\033[95m"   # Magenta - Reasoning
+    DEPENDENCY = "\033[96m"  # Cyan - Dependency ordering
+    DIM = "\033[2m"          # Dim - Less important info
+    RESET = "\033[0m"
+
+
 class ReasoningLogger:
     """
     Central service for capturing and publishing reasoning events.
@@ -370,8 +383,56 @@ class ReasoningLogger:
                 safe[key] = value
         return safe
 
+    def _print_to_terminal(self, event: ReasoningEvent):
+        """Print reasoning event to terminal with colors for debugging."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+
+        # Determine color and prefix based on event level and phase
+        # Using ASCII-compatible symbols for Windows compatibility
+        if event.level == "intent":
+            color = Colors.INTENT
+            prefix = "[INTENT]"
+        elif event.level == "dependency":
+            color = Colors.DEPENDENCY
+            prefix = "[STEPS]"
+        elif event.level == "tool":
+            if event.phase == "started":
+                color = Colors.TOOL_START
+                prefix = "[TOOL>>]"
+            elif event.phase == "completed":
+                color = Colors.TOOL_OK
+                prefix = "[DONE]"
+            else:  # error
+                color = Colors.TOOL_ERR
+                prefix = "[ERROR]"
+        elif event.level == "result":
+            color = Colors.REASONING
+            prefix = "[RESULT]"
+        else:
+            color = Colors.DIM
+            prefix = "[LOG]"
+
+        # Build metadata string (confidence or latency)
+        meta = ""
+        if event.confidence and event.confidence > 0:
+            meta = f" ({event.confidence:.0%})"
+        if event.metadata and "latency_ms" in event.metadata:
+            latency = event.metadata["latency_ms"]
+            meta = f" ({latency:.0f}ms)"
+
+        # Print formatted line - handle encoding errors gracefully
+        try:
+            print(f"{color}[{timestamp}] {prefix} {event.title}{meta}{Colors.RESET}")
+        except UnicodeEncodeError:
+            # Fallback for terminals that don't support special characters
+            safe_title = event.title.encode('ascii', 'replace').decode('ascii')
+            print(f"{color}[{timestamp}] {prefix} {safe_title}{meta}{Colors.RESET}")
+
     async def _publish_and_store(self, event: ReasoningEvent):
-        """Publish to Redis and persist to JSONL."""
+        """Publish to Redis, persist to JSONL, and print to terminal."""
+        # Print to terminal for debugging
+        self._print_to_terminal(event)
+
         # Add to context
         ctx = self._contexts.get(event.job_id)
         if ctx:
