@@ -11,12 +11,16 @@
     <script defer src="shuttle_manager.js"></script>
     <script defer src="multiverse.js"></script>
     <script defer src="universe_canvas.js"></script>
+    <script defer src="rich_content_renderer.js"></script>
+    <!-- AI-Scientist Exploration Dialogs -->
+    <script defer src="exploration_dialog.js"></script>
 </head>
 <body>
     <!-- Custom Titlebar -->
     <div id="titlebar">
         <div class="titlebar-drag">
             <span class="titlebar-title">VibeMind</span>
+            <span id="titlebar-space" class="titlebar-space"></span>
         </div>
         <div class="titlebar-controls">
             <button class="titlebar-btn" id="minimize-btn">─</button>
@@ -112,12 +116,12 @@
             <button id="voice-btn">Start Voice</button>
         </div>
 
-        <!-- Info Panel -->
-        <div id="info-panel">
+        <!-- Info Panel (hover tooltip on bubbles) -->
+        <div id="info-panel" class="hidden">
             <div id="bubble-info" class="hidden">
                 <h3 id="selected-title">No Selection</h3>
                 <p id="selected-description"></p>
-                <button id="enter-btn" class="hidden">Enter Space</button>
+                <button id="enter-btn" class="hidden">▶</button>
             </div>
             
             <!-- Project Info Panel (NEW) -->
@@ -438,7 +442,7 @@
         // ========================================
         // MULTIVERSE INITIALIZATION
         // ========================================
-        
+
         // Create MultiverseApp instance on DOMContentLoaded
         document.addEventListener('DOMContentLoaded', () => {
             console.log('[Index] Creating MultiverseApp...');
@@ -479,10 +483,17 @@
         const canvasContainer = document.getElementById('canvas-container');
 
         enterBtn.onclick = () => {
+            // Use tooltip bubble ID (hovered) first, then fall back to selected
+            const tooltipId = window.multiverseApp?.getTooltipBubbleId();
             const selectedId = window.multiverseApp?.getSelectedBubbleId();
-            if (selectedId !== null && selectedId !== undefined) {
-                window.vibemind.enterBubble(selectedId);
-                enterSpace(selectedId);
+            const bubbleId = tooltipId || selectedId;
+            console.log('[Enter Button] Clicked, tooltipId:', tooltipId, 'selectedId:', selectedId, 'using:', bubbleId);
+            if (bubbleId !== null && bubbleId !== undefined) {
+                console.log('[Enter Button] Entering bubble:', bubbleId);
+                window.vibemind.enterBubble(bubbleId);
+                enterSpace(bubbleId);
+            } else {
+                console.warn('[Enter Button] No bubble in tooltip or selected!');
             }
         };
 
@@ -490,12 +501,31 @@
 
         // Space Canvas instance
         let spaceCanvas = null;
+        // Flag to prevent race condition between enterSpace() and entered_bubble message
+        let isEnteringBubble = false;
+        // Store pending content from entered_bubble that arrives before spaceCanvas is ready
+        let pendingBubbleContent = null;
 
         function enterSpace(bubbleId) {
             try {
+                // Set flag to prevent entered_bubble handler from duplicating work
+                isEnteringBubble = true;
+                pendingBubbleContent = null;  // Clear any old pending content
+
+                // Hide bubble hover tooltip and reset multiverse state
+                const infoPanel = document.getElementById('info-panel');
+                if (infoPanel) infoPanel.classList.add('hidden');
+                if (window.multiverseApp) {
+                    window.multiverseApp.tooltipPinned = false;
+                    window.multiverseApp.hoveredBubbleIndex = -1;
+                }
+
                 const bubble = window.multiverseApp?.getBubbleById(bubbleId);
                 const bubbleTitle = bubble ? bubble.title : 'Space';
                 document.getElementById('space-title').textContent = bubbleTitle;
+                // Show space name in titlebar
+                const titlebarSpace = document.getElementById('titlebar-space');
+                if (titlebarSpace) titlebarSpace.textContent = '› ' + bubbleTitle;
 
                 // Get bubble index for animation
                 const bubbleIndex = window.multiverseApp?.getBubbleIndexById(bubbleId);
@@ -511,7 +541,18 @@
                         if (!spaceCanvas) {
                             spaceCanvas = new UniverseCanvas('space-canvas');
                         }
-                        spaceCanvas.loadBubble(bubbleId);
+
+                        // Load pending content if Python sent it during animation
+                        if (pendingBubbleContent) {
+                            console.log('[Enter] Loading pending content:', pendingBubbleContent.content?.length, 'nodes');
+                            spaceCanvas.loadNodes(pendingBubbleContent.content, pendingBubbleContent.edges || []);
+                            pendingBubbleContent = null;
+                        } else {
+                            spaceCanvas.loadBubble(bubbleId);
+                        }
+
+                        // Clear flag after view switch complete
+                        isEnteringBubble = false;
 
                         // Hide overlay after view switch
                         setTimeout(() => {
@@ -528,16 +569,32 @@
                     if (!spaceCanvas) {
                         spaceCanvas = new UniverseCanvas('space-canvas');
                     }
-                    spaceCanvas.loadBubble(bubbleId);
+
+                    // Load pending content if available
+                    if (pendingBubbleContent) {
+                        spaceCanvas.loadNodes(pendingBubbleContent.content, pendingBubbleContent.edges || []);
+                        pendingBubbleContent = null;
+                    } else {
+                        spaceCanvas.loadBubble(bubbleId);
+                    }
+
+                    // Clear flag
+                    isEnteringBubble = false;
                 }
             } catch(e) {
                 console.error('[Enter] Error:', e);
+                isEnteringBubble = false;
             }
         }
 
         function exitSpace(fromPython = false) {
             try {
                 console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ')');
+                console.trace('[Exit] Call stack:');
+
+                // Clear space name from titlebar
+                const titlebarSpace = document.getElementById('titlebar-space');
+                if (titlebarSpace) titlebarSpace.textContent = '';
 
                 // Show transition overlay
                 const overlay = document.getElementById('transition-overlay');
@@ -717,6 +774,55 @@
                     }
                     break;
 
+                case 'bubble_updated':
+                    // Bubble renamed/updated via voice
+                    if (window.multiverseApp && message.bubble) {
+                        const b = message.bubble;
+                        window.multiverseApp.updateBubble(b.id, { title: b.title });
+                        console.log('[UI] Updated bubble:', b.old_title, '->', b.title);
+                        showTranscript('System', `Space umbenannt: "${b.old_title}" -> "${b.title}"`);
+
+                        // Update space title if we're currently in this space
+                        const spaceTitle = document.getElementById('space-title');
+                        if (spaceTitle && spaceTitle.textContent === b.old_title) {
+                            spaceTitle.textContent = b.title;
+                        }
+                    }
+                    break;
+
+                case 'bubbles_listed':
+                    // Update bubbles with index numbers for voice reference
+                    if (window.multiverseApp && message.bubbles) {
+                        console.log('[UI] Bubbles listed with indices:', message.bubbles.length);
+                        // Update each bubble's numbered_title based on the index
+                        message.bubbles.forEach(b => {
+                            window.multiverseApp.updateBubble(b.id, {
+                                numbered_title: `${b.index}. ${b.title}`,
+                                voice_index: b.index
+                            });
+                        });
+                        // Show notification with quick reference
+                        const indexList = message.bubbles.slice(0, 5).map(b => `${b.index}. ${b.title}`).join(', ');
+                        showTranscript('System', `Spaces: ${indexList}${message.total > 5 ? '...' : ''} - Sag "geh in [Nummer]" zum Navigieren.`);
+                    }
+                    break;
+
+                case 'ideas_listed':
+                    // Update canvas with index numbers for voice reference
+                    if (message.ideas && message.bubble_id) {
+                        console.log('[UI] Ideas listed with indices:', message.ideas.length, 'in bubble', message.bubble_id);
+                        // Store the index mapping for the current space view
+                        window.currentIdeaIndices = message.ideas;
+                        // If universe canvas is active, update node labels
+                        if (window.universeCanvas && window.universeCanvas.updateNodeIndices) {
+                            window.universeCanvas.updateNodeIndices(message.ideas);
+                        }
+                        // Show notification
+                        const indexList = message.ideas.slice(0, 5).map(i => `${i.index}. ${i.title}`).join(', ');
+                        showTranscript('System', `Ideen: ${indexList}${message.total > 5 ? '...' : ''} - Nutze Nummern: "verbinde 1 und 2"`);
+                    }
+                    break;
+
                 case 'user_transcript':
                     showTranscript('You', message.text);
                     break;
@@ -738,6 +844,7 @@
                     break;
 
                 case 'exit_bubble':
+                    console.log('[Python] Received exit_bubble message');
                     exitSpace();
                     break;
 
@@ -757,28 +864,52 @@
 
                 // Canvas events
                 case 'entered_bubble':
+                    // Hide bubble tooltip
+                    const ipanel = document.getElementById('info-panel');
+                    if (ipanel) ipanel.classList.add('hidden');
+                    if (window.multiverseApp) {
+                        window.multiverseApp.tooltipPinned = false;
+                        window.multiverseApp.hoveredBubbleIndex = -1;
+                    }
+
+                    // If enterSpace() already started the transition, store content for later
+                    if (isEnteringBubble) {
+                        console.log('[Python] entered_bubble - storing content for enterSpace() to load:', message.content?.length, 'nodes');
+                        // Store content - enterSpace() callback will load it when spaceCanvas is ready
+                        if (message.content) {
+                            pendingBubbleContent = {
+                                content: message.content,
+                                edges: message.edges || []
+                            };
+                        }
+                        break;
+                    }
+
                     // First switch views if not already in space view
                     if (spaceView.classList.contains('hidden')) {
                         console.log('[Python] entered_bubble - switching to space view');
                         const bubbleTitle = message.bubble_title || 'Space';
                         document.getElementById('space-title').textContent = bubbleTitle;
-                        
+                        // Show space name in titlebar
+                        const tbSpace = document.getElementById('titlebar-space');
+                        if (tbSpace) tbSpace.textContent = '› ' + bubbleTitle;
+
                         // Get bubble index for animation (if available)
                         const bubbleIndex = window.multiverseApp?.getBubbleIndexById(message.bubble_id);
-                        
+
                         if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
                             // Use animated entry
                             window.multiverseApp.enterBubbleWithAnimation(bubbleIndex, () => {
                                 canvasContainer.classList.add('hidden');
                                 spaceView.classList.remove('hidden');
-                                
+
                                 if (!spaceCanvas) {
                                     spaceCanvas = new UniverseCanvas('space-canvas');
                                 }
                                 if (message.content) {
                                     spaceCanvas.loadNodes(message.content, message.edges || []);
                                 }
-                                
+
                                 setTimeout(() => {
                                     const overlay = document.getElementById('transition-overlay');
                                     if (overlay) overlay.classList.remove('active');
@@ -788,7 +919,7 @@
                             // Fallback: immediate switch
                             canvasContainer.classList.add('hidden');
                             spaceView.classList.remove('hidden');
-                            
+
                             if (!spaceCanvas) {
                                 spaceCanvas = new UniverseCanvas('space-canvas');
                             }
@@ -832,6 +963,7 @@
 
                 // Handle exited_bubble from Python backend
                 case 'exited_bubble':
+                    console.log('[Python] Received exited_bubble message');
                     exitSpace(true);  // Pass true to indicate this came from Python
                     break;
 
@@ -866,6 +998,15 @@
                     console.log('[Tool] Delete node:', message.node_id);
                     if (spaceCanvas) {
                         spaceCanvas.onNodeDeleted(message.node_id);
+                    }
+                    break;
+
+                case 'node_structured_update':
+                    // Structured content update (table, action_list, etc.)
+                    const structuredContent = message.content || message.structured_content;
+                    console.log('[Tool] Structured content update:', message.node_id, structuredContent);
+                    if (spaceCanvas && message.node_id && structuredContent) {
+                        spaceCanvas.onNodeStructuredUpdate(message.node_id, structuredContent);
                     }
                     break;
 

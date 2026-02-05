@@ -68,20 +68,87 @@ def exit_bubble() -> str:
     return _exit_bubble({})
 
 
-def delete_bubble(bubble_name: str = None) -> str:
+def delete_bubble(bubble_name: str = None, _targets: list = None, _target_type: str = None) -> str:
     """
     Delete a bubble/space and all its content.
 
     Args:
         bubble_name: Name of bubble to delete
+        _targets: List of bubble names to delete (from context resolution)
+        _target_type: "all" if deleting multiple items from context
 
     Returns:
         Confirmation message
     """
+    from tools.bubble_tools import delete_bubble as _delete_bubble
+
+    # Handle batch deletion from context resolution
+    if _targets and _target_type == "all":
+        deleted = []
+        failed = []
+        for target in _targets:
+            try:
+                result = _delete_bubble({"bubble_name": target})
+                if "gelöscht" in result.lower() or "deleted" in result.lower():
+                    deleted.append(target)
+                else:
+                    failed.append(target)
+            except Exception as e:
+                failed.append(f"{target} ({e})")
+
+        if deleted:
+            msg = f"Ich habe {len(deleted)} Spaces gelöscht: {', '.join(deleted)}."
+            if failed:
+                msg += f" Fehlgeschlagen: {', '.join(failed)}."
+            return msg
+        elif failed:
+            return f"Konnte keine Spaces löschen. Fehlgeschlagen: {', '.join(failed)}."
+        else:
+            return "Keine Spaces zum Löschen gefunden."
+
+    # Single bubble deletion
     if not bubble_name:
         return "Fehler: Kein Space-Name angegeben. Bitte sag mir welchen Space du loeschen moechtest."
-    from tools.bubble_tools import delete_bubble as _delete_bubble
     return _delete_bubble({"bubble_name": bubble_name})
+
+
+def delete_all_bubbles_except(exceptions: str = None, keep: str = None) -> str:
+    """
+    Delete all bubbles/spaces EXCEPT the specified ones.
+
+    Voice triggers:
+    - "Lösche alle Bubbles außer debug information"
+    - "Delete all spaces except VibeMind"
+
+    Args:
+        exceptions: Bubble names to keep (comma-separated or single)
+        keep: Alternative parameter name for exceptions
+
+    Returns:
+        Summary of what was deleted
+    """
+    from tools.bubble_tools import delete_all_bubbles_except as _delete_all_except
+
+    # Try to get exceptions from session context if not provided
+    if not exceptions and not keep:
+        try:
+            from swarm.context.session_context import get_session_context
+            ctx = get_session_context()
+            # Check user input for "außer X" pattern
+            import re
+            user_input = ctx.user_input or ""
+            match = re.search(r'außer\s+["\']?([^"\']+)["\']?', user_input, re.IGNORECASE)
+            if match:
+                exceptions = match.group(1).strip()
+        except Exception:
+            pass
+
+    params = {}
+    if exceptions:
+        params["exceptions"] = exceptions
+    elif keep:
+        params["exceptions"] = keep
+    return _delete_all_except(params)
 
 
 def get_bubble_stats(bubble_name: str = "") -> str:

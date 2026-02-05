@@ -40,20 +40,41 @@ Beispiele:
 
 def create_ideas_agent(model_client, handoff_targets: List[str] = None):
     """
-    Create the Ideas Agent with all bubble and idea tools.
+    Create the Ideas Agent with all bubble and idea tools, plus sub-agents.
 
     Args:
         model_client: The LLM client (Ollama or OpenAI-compatible)
         handoff_targets: List of agent names this agent can hand off to
 
     Returns:
-        AssistantAgent instance
+        Tuple of (AssistantAgent, list of sub-agent AssistantAgents)
     """
     from autogen_agentchat.agents import AssistantAgent
 
     # Import adapted tools
     from swarm.tools.adapted_bubble_tools import BUBBLE_TOOLS
     from swarm.tools.adapted_idea_tools import IDEA_TOOLS
+
+    # Import sub-agent factories
+    from swarm.sub_agents.base_sub_agent import (
+        create_memory_sub_agent,
+        create_context_sub_agent,
+    )
+    from swarm.sub_agents.ideas_sub_agents import (
+        create_ideas_link_analyst,
+        create_ideas_structurer,
+        create_ideas_summarizer,
+    )
+
+    # Create sub-agents
+    memory_sub = create_memory_sub_agent("ideas_agent", "ideas", model_client)
+    context_sub = create_context_sub_agent("ideas_agent", "ideas", model_client)
+    link_analyst = create_ideas_link_analyst(model_client)
+    structurer = create_ideas_structurer(model_client)
+    summarizer = create_ideas_summarizer(model_client)
+
+    sub_agents = [memory_sub, context_sub, link_analyst, structurer, summarizer]
+    sub_agent_names = [sa.name for sa in sub_agents]
 
     # Combine tools
     all_tools = BUBBLE_TOOLS + IDEA_TOOLS
@@ -62,16 +83,22 @@ def create_ideas_agent(model_client, handoff_targets: List[str] = None):
     if handoff_targets is None:
         handoff_targets = ["shuttle_agent", "user"]
 
+    # Extend handoffs with sub-agent names
+    all_handoffs = handoff_targets + sub_agent_names
+
     agent = AssistantAgent(
         name="ideas_agent",
         model_client=model_client,
         tools=all_tools,
-        handoffs=handoff_targets,
+        handoffs=all_handoffs,
         system_message=IDEAS_SYSTEM_MESSAGE,
     )
 
-    logger.info(f"Created Ideas Agent with {len(all_tools)} tools, handoffs: {handoff_targets}")
-    return agent
+    logger.info(
+        f"Created Ideas Agent with {len(all_tools)} tools, "
+        f"{len(sub_agents)} sub-agents, handoffs: {all_handoffs}"
+    )
+    return agent, sub_agents
 
 
 def get_ideas_tools() -> List[Callable]:

@@ -33,32 +33,59 @@ Ask what the user wants automated if the request is unclear."""
 
 def create_desktop_agent(model_client, handoff_targets: List[str] = None):
     """
-    Create the Desktop Agent for automation tasks.
+    Create the Desktop Agent for automation tasks, plus sub-agents.
 
     Args:
         model_client: The LLM client (Ollama or OpenAI-compatible)
         handoff_targets: List of agent names this agent can hand off to
 
     Returns:
-        AssistantAgent instance
+        Tuple of (AssistantAgent, list of sub-agent AssistantAgents)
     """
     from autogen_agentchat.agents import AssistantAgent
     from swarm.tools.adapted_desktop_tools import DESKTOP_TOOLS
+
+    # Import sub-agent factories
+    from swarm.sub_agents.base_sub_agent import (
+        create_memory_sub_agent,
+        create_context_sub_agent,
+    )
+    from swarm.sub_agents.desktop_sub_agents import (
+        create_desktop_planner,
+        create_desktop_verifier,
+        create_desktop_recorder,
+    )
+
+    # Create sub-agents
+    memory_sub = create_memory_sub_agent("desktop_agent", "desktop", model_client)
+    context_sub = create_context_sub_agent("desktop_agent", "desktop", model_client)
+    planner = create_desktop_planner(model_client)
+    verifier = create_desktop_verifier(model_client)
+    recorder = create_desktop_recorder(model_client)
+
+    sub_agents = [memory_sub, context_sub, planner, verifier, recorder]
+    sub_agent_names = [sa.name for sa in sub_agents]
 
     # Default handoff targets
     if handoff_targets is None:
         handoff_targets = ["shuttle_agent", "user"]
 
+    # Extend handoffs with sub-agent names
+    all_handoffs = handoff_targets + sub_agent_names
+
     agent = AssistantAgent(
         name="desktop_agent",
         model_client=model_client,
         tools=DESKTOP_TOOLS,
-        handoffs=handoff_targets,
+        handoffs=all_handoffs,
         system_message=DESKTOP_SYSTEM_MESSAGE,
     )
 
-    logger.info(f"Created Desktop Agent with {len(DESKTOP_TOOLS)} tools, handoffs: {handoff_targets}")
-    return agent
+    logger.info(
+        f"Created Desktop Agent with {len(DESKTOP_TOOLS)} tools, "
+        f"{len(sub_agents)} sub-agents, handoffs: {all_handoffs}"
+    )
+    return agent, sub_agents
 
 
 def get_desktop_tools() -> List[Callable]:

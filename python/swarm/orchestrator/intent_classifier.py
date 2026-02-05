@@ -95,6 +95,40 @@ Der Bereich fuer Ideen-Management. Bubbles sind Themen-Container fuer Ideen.
   → "Organisiere die Ideen hierarchisch", "Erstelle Übersicht aller Konzepte"
   → "Strukturiere alle Ideen systematisch"
   → Payload: {"operation": "complex_structure", "original_request": "..."}
+- idea.summarize: Idee/Bubble zusammenfassen (KI-Zusammenfassung)
+  → "Fasse die Idee zusammen", "Zusammenfassung von [NAME]", "Summarize [NAME]"
+  → "Erstelle eine Zusammenfassung", "Fass das kurz zusammen"
+  → Payload: {"idea_name": "[NAME]", "style": "concise|detailed|actionable"}
+  WICHTIG: Wenn der User eine ZUSAMMENFASSUNG einer Idee/Notiz will → idea.summarize!
+  Wenn der User STATISTIK/INFO ueber eine Bubble will → bubble.stats!
+- idea.whitepaper: White Paper aus verknuepften Ideen generieren
+  → "Erstelle ein White Paper", "Generiere ein Whitepaper aus den Ideen"
+  → "Mach eine Projektuebersicht", "White Paper generieren"
+  → Payload: {"start_node": "[NAME]", "task": "project overview"}
+- idea.explain: Idee erklaeren lassen (KI-Erklaerung)
+  → "Erklaere die Idee [NAME]", "Was bedeutet [NAME]?", "Was ist [NAME]?"
+  → Payload: {"idea_name": "[NAME]"}
+
+**Idee Exploration Event-Types (AI-Scientist Tree Search):**
+- idea.explore.start: Starte tiefe Verbindungssuche zwischen Ideen
+  → "Finde tiefere Verbindungen", "Erforsche Zusammenhaenge"
+  → "Suche nach versteckten Verbindungen", "Erkunde diese Idee"
+  → "Analysiere Verbindungen tiefer", "Entdecke Zusammenhaenge"
+  Payload: {"bubble_id": "optional", "depth": 1-4, "context": "optional"}
+- idea.explore.stop: Exploration stoppen
+  → "Stopp Exploration", "Beende Suche", "Abbrechen Verbindungssuche"
+- idea.explore.status: Status der laufenden Exploration abfragen
+  → "Exploration Status", "Wie weit bist du?"
+- idea.explore.accept: Entdeckte Verbindung akzeptieren
+  → "Akzeptiere diese Verbindung", "Speichere Verbindung"
+  → "Das ist eine gute Verbindung", "Behalte diese"
+- idea.explore.reject: Entdeckte Verbindung ablehnen
+  → "Lehne ab", "Diese Verbindung ist nicht gut", "Verwerfen"
+- idea.explore.depth: Eine Stufe tiefer erkunden
+  → "Gehe tiefer", "Erkunde weiter", "Naechste Stufe"
+- idea.explore.visualize: Exploration-Ergebnisse anzeigen
+  → "Zeige gefundene Verbindungen", "Visualisiere Exploration"
+  → "Was hast du gefunden?"
 
 ### 2. CODING SPACE (DNA) - Antoni
 Der Bereich fuer Code-Generierung und Projekte.
@@ -482,15 +516,29 @@ class IntentClassifier:
                     logger.debug(f"Post-process: -> idea.list (query)")
 
         # =====================================================================
-        # Rule 11: Stats/Summary Keywords -> bubble.stats
-        # Fixes: "Gib mir eine Zusammenfassung dieses Bereichs" -> bubble.list
+        # Rule 11: Stats Keywords -> bubble.stats (but NOT summary of ideas)
+        # Fixes: "Gib mir eine Zusammenfassung dieses Bereichs" -> bubble.stats
+        # Note: "zusammenfassung" with idea context -> idea.summarize (handled by LLM)
         # =====================================================================
         if intent in ["bubble.list", "conversation.unknown", "idea.list"]:
-            stats_keywords = ["zusammenfassung", "statistik", "wie viele", "info", "übersicht über", "uebersicht"]
+            # Pure stats keywords (no overlap with idea.summarize)
+            stats_keywords = ["statistik", "wie viele", "info", "übersicht über", "uebersicht"]
+            # "zusammenfassung" only for bubble.stats when it's about the bubble/bereich itself
+            summary_bubble_keywords = ["zusammenfassung dieses bereichs", "zusammenfassung der bubble",
+                                       "zusammenfassung des space"]
             if any(kw in text_lower for kw in stats_keywords):
                 result["event_type"] = "bubble.stats"
                 result["payload"] = {}
                 logger.debug(f"Post-process: -> bubble.stats (stats)")
+            elif any(kw in text_lower for kw in summary_bubble_keywords):
+                result["event_type"] = "bubble.stats"
+                result["payload"] = {}
+                logger.debug(f"Post-process: -> bubble.stats (summary of bubble)")
+            elif "zusammenfass" in text_lower:
+                # Generic "zusammenfassung" -> idea.summarize (let LLM extract idea_name)
+                result["event_type"] = "idea.summarize"
+                result["payload"] = {}
+                logger.debug(f"Post-process: -> idea.summarize (summary keyword)")
 
         # =====================================================================
         # Rule 12: Search Keywords -> idea.find (not bubble.enter)
@@ -817,6 +865,88 @@ class IntentClassifier:
                 result["payload"] = {"operation": "complex_structure", "original_request": user_input}
                 self._applied_rules.append("rule_26_complex_structure")
                 logger.debug(f"Post-process: -> idea.structure (complex organization)")
+
+        # =====================================================================
+        # Rule 28: Exploration Keywords -> idea.explore.*
+        # Fixes: "Finde tiefere Verbindungen" -> idea.explore.start
+        # AI-Scientist-style deep connection discovery with interactive modes
+        # =====================================================================
+        if intent in ["conversation.unknown", "idea.auto_link", "idea.analyze_links", "idea.find"]:
+            # Start keywords with mode detection
+            explore_start_auto = ["verbindungen automatisch", "finde verbindungen auto"]
+            explore_start_interactive = ["verbindungen interaktiv", "finde verbindungen interaktiv",
+                                         "interaktive exploration", "erkunde interaktiv"]
+            explore_start_guided = ["verbindungen guided", "erkunde richtung", "fokussiere auf",
+                                    "geh in richtung"]
+            explore_start_keywords = ["tiefere verbindungen", "erforsche zusammenhänge", "erforsche zusammenhaenge",
+                                      "versteckte verbindungen", "erkunde diese idee", "entdecke zusammenhänge",
+                                      "entdecke zusammenhaenge", "analysiere verbindungen tiefer",
+                                      "finde tiefere", "suche versteckte", "finde verbindungen"]
+            explore_stop_keywords = ["stopp exploration", "beende suche", "abbrechen verbindungssuche"]
+            explore_accept_keywords = ["akzeptiere diese verbindung", "speichere verbindung", "gute verbindung",
+                                       "behalte diese", "ja behalten", "ja gut", "nehme ich"]
+            explore_reject_keywords = ["lehne ab", "verbindung ist nicht gut", "verwerfen",
+                                       "nein danke", "nicht gut", "überspringe", "ueberspringe"]
+            explore_depth_keywords = ["gehe tiefer", "erkunde weiter", "nächste stufe", "naechste stufe",
+                                      "tiefer erkunden", "mehr davon"]
+            explore_status_keywords = ["exploration status", "wie weit bist du"]
+            explore_visualize_keywords = ["zeige gefundene verbindungen", "visualisiere exploration", "was hast du gefunden"]
+            explore_continue_keywords = ["weitermachen", "mach weiter", "weiter suchen"]
+            explore_direction_keywords = ["erkunde richtung", "fokus auf", "geh richtung"]
+
+            # Check interactive mode first (more specific)
+            if any(kw in text_lower for kw in explore_start_interactive):
+                result["event_type"] = "idea.explore.start"
+                result["payload"] = {"mode": "interactive"}
+                self._applied_rules.append("rule_28_explore_start_interactive")
+                logger.debug(f"Post-process: -> idea.explore.start (interactive)")
+            elif any(kw in text_lower for kw in explore_start_guided):
+                result["event_type"] = "idea.explore.start"
+                result["payload"] = {"mode": "guided"}
+                self._applied_rules.append("rule_28_explore_start_guided")
+                logger.debug(f"Post-process: -> idea.explore.start (guided)")
+            elif any(kw in text_lower for kw in explore_start_auto):
+                result["event_type"] = "idea.explore.start"
+                result["payload"] = {"mode": "auto"}
+                self._applied_rules.append("rule_28_explore_start_auto")
+                logger.debug(f"Post-process: -> idea.explore.start (auto)")
+            elif any(kw in text_lower for kw in explore_start_keywords):
+                result["event_type"] = "idea.explore.start"
+                result["payload"] = {}  # Default mode
+                self._applied_rules.append("rule_28_explore_start")
+                logger.debug(f"Post-process: -> idea.explore.start")
+            elif any(kw in text_lower for kw in explore_stop_keywords):
+                result["event_type"] = "idea.explore.stop"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_stop")
+            elif any(kw in text_lower for kw in explore_accept_keywords):
+                result["event_type"] = "idea.explore.accept"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_accept")
+            elif any(kw in text_lower for kw in explore_reject_keywords):
+                result["event_type"] = "idea.explore.reject"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_reject")
+            elif any(kw in text_lower for kw in explore_depth_keywords):
+                result["event_type"] = "idea.explore.depth"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_depth")
+            elif any(kw in text_lower for kw in explore_status_keywords):
+                result["event_type"] = "idea.explore.status"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_status")
+            elif any(kw in text_lower for kw in explore_visualize_keywords):
+                result["event_type"] = "idea.explore.visualize"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_visualize")
+            elif any(kw in text_lower for kw in explore_continue_keywords):
+                result["event_type"] = "idea.explore.continue"
+                result["payload"] = {}
+                self._applied_rules.append("rule_28_explore_continue")
+            elif any(kw in text_lower for kw in explore_direction_keywords):
+                result["event_type"] = "idea.explore.direction"
+                result["payload"] = {"direction": text}
+                self._applied_rules.append("rule_28_explore_direction")
 
         # =====================================================================
         # Rule 24: Detect potential multi-step patterns LLM missed

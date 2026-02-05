@@ -20,11 +20,175 @@ Tool Categories:
 """
 
 import sys
+import math
+import uuid
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# FUZZY MATCHING HELPERS
+# =============================================================================
+
+def _similarity_ratio(s1: str, s2: str) -> float:
+    """
+    Calculate similarity ratio between two strings using sequence matching.
+
+    Returns a value between 0.0 and 1.0 where 1.0 means identical.
+    """
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, s1, s2).ratio()
+
+
+def _normalize_for_matching(text: str) -> str:
+    """
+    Normalize text for matching by removing hyphens, spaces, underscores.
+
+    This helps match "In-Hand-Analyse" with "In Hand Analyse" or "InHandAnalyse".
+    """
+    import re
+    return re.sub(r'[-\s_]', '', text.lower())
+
+
+def _fuzzy_find_idea(nodes: List, name: str) -> Optional:
+    """
+    Find an idea by name with fuzzy matching.
+
+    Tries matching in order:
+    1. Exact match (case-insensitive)
+    2. Normalized match (remove hyphens/spaces - finds "In-Hand-Analyse" when searching "In Hand Analyse")
+    3. Substring match (name contained in title)
+    4. Reverse substring (title contained in name)
+    5. Fuzzy similarity match (>70% similar)
+
+    Args:
+        nodes: List of canvas nodes to search
+        name: Name to search for
+
+    Returns:
+        Matching node or None
+    """
+    if not name:
+        return None
+
+    name_lower = name.lower().strip()
+    name_normalized = _normalize_for_matching(name)
+
+    # 1. Exact match
+    for n in nodes:
+        title_lower = (n.title or "").lower()
+        if title_lower == name_lower:
+            return n
+
+    # 2. Normalized match (ignores hyphens, spaces, underscores)
+    for n in nodes:
+        title_normalized = _normalize_for_matching(n.title or "")
+        if title_normalized == name_normalized:
+            logger.debug(f"Normalized match: '{name}' -> '{n.title}'")
+            return n
+
+    # 3. Substring match (search term in title)
+    for n in nodes:
+        title_lower = (n.title or "").lower()
+        if name_lower in title_lower:
+            return n
+
+    # 4. Reverse substring (title in search term - for multi-word queries)
+    for n in nodes:
+        title_lower = (n.title or "").lower()
+        if title_lower and title_lower in name_lower:
+            return n
+
+    # 5. Fuzzy match (>70% similarity)
+    best_match = None
+    best_ratio = 0.0
+    for n in nodes:
+        title_lower = (n.title or "").lower()
+        if not title_lower:
+            continue
+        ratio = _similarity_ratio(name_lower, title_lower)
+        if ratio > best_ratio and ratio > 0.7:
+            best_ratio = ratio
+            best_match = n
+
+    return best_match
+
+
+def _get_available_idea_names(nodes: List, exclude: Optional = None, limit: int = 5) -> str:
+    """
+    Get a formatted string of available idea names for error messages.
+
+    Args:
+        nodes: List of nodes
+        exclude: Node to exclude from list
+        limit: Max number of names to return
+
+    Returns:
+        Comma-separated string of idea titles
+    """
+    names = []
+    for n in nodes[:limit + 1]:
+        if n != exclude and n.title:
+            names.append(n.title)
+        if len(names) >= limit:
+            break
+    return ", ".join(names) if names else "keine"
+
+
+def calculate_spiral_position(
+    count: int,
+    existing_positions: List[Tuple[float, float]],
+    center_x: float = 300,
+    center_y: float = 300,
+    min_distance: float = 150
+) -> Tuple[int, int]:
+    """
+    Calculate non-overlapping spiral position for a new node.
+
+    Uses Archimedean spiral to distribute nodes outward from center,
+    with collision detection to avoid overlapping existing nodes.
+
+    Args:
+        count: Number of existing nodes (determines spiral position)
+        existing_positions: List of (x, y) tuples of existing nodes
+        center_x: Center X coordinate
+        center_y: Center Y coordinate
+        min_distance: Minimum distance between nodes
+
+    Returns:
+        Tuple of (x, y) coordinates for the new node
+    """
+    angle_step = 0.7  # radians per node (golden angle approximation)
+    radius_step = 35  # pixels per loop
+
+    # Calculate initial position on spiral
+    angle = count * angle_step
+    radius = 80 + (count * radius_step)
+
+    x = center_x + radius * math.cos(angle)
+    y = center_y + radius * math.sin(angle)
+
+    # Check collision with existing positions and adjust if needed
+    max_iterations = 10
+    for _ in range(max_iterations):
+        collision = False
+        for ex_x, ex_y in existing_positions:
+            distance = math.sqrt((x - ex_x) ** 2 + (y - ex_y) ** 2)
+            if distance < min_distance:
+                collision = True
+                # Move further out on the spiral
+                radius += min_distance
+                x = center_x + radius * math.cos(angle)
+                y = center_y + radius * math.sin(angle)
+                break
+
+        if not collision:
+            break
+
+    return int(x), int(y)
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -59,16 +223,24 @@ def _get_current_bubble_id() -> Optional[str]:
     return get_current_bubble_db_id()
 
 
-def _get_bubble_info(bubble_id: int) -> Optional[Dict[str, Any]]:
-    """Get bubble info from electron backend state."""
+def _get_bubble_info(bubble_id: str) -> Optional[Dict[str, Any]]:
+    """Get bubble info from database by UUID.
+
+    Args:
+        bubble_id: The database UUID string of the bubble/idea
+
+    Returns:
+        Dict with 'id' and 'title' keys, or None if not found
+    """
     try:
-        import electron_backend
-        bubbles = electron_backend._bubbles
-        if bubbles and bubble_id in bubbles:
-            bubble = bubbles[bubble_id]
-            return {"id": bubble.id, "title": bubble.title}
+        from data import IdeasRepository
+        repo = IdeasRepository()
+        idea = repo.get(bubble_id)
+        if idea:
+            return {"id": idea.id, "title": idea.title}
         return None
-    except (ImportError, AttributeError):
+    except Exception as e:
+        logger.warning(f"Could not get bubble info for {bubble_id}: {e}")
         return None
 
 
@@ -118,13 +290,80 @@ def list_ideas(params: Dict[str, Any]) -> str:
     if not nodes:
         return "This space is empty. Would you like me to add a note? Say 'Add a note about...'."
 
-    # Get titles or first 30 chars of content
-    titles = []
-    for n in nodes[:10]:
-        title = n.title or (n.content[:30] if n.content else "Untitled")
-        titles.append(title)
+    # Store mapping for index-based voice referencing
+    from tools.index_mapping import set_idea_mapping
+    set_idea_mapping(nodes[:10], bubble_id)
 
-    return f"In this space you have {len(nodes)} notes: {', '.join(titles)}"
+    # Get titles or first 30 chars of content (with numbering for voice reference)
+    titles = []
+    indexed_ideas = []
+    for i, n in enumerate(nodes[:10], 1):
+        title = n.title or (n.content[:30] if n.content else "Untitled")
+        titles.append(f"{i}. {title}")
+        indexed_ideas.append({
+            "index": i,
+            "id": n.id,
+            "title": title,
+            "node_type": n.node_type
+        })
+
+    # Broadcast indexed list to Electron UI so numbers are visible
+    _broadcast_to_electron({
+        "type": "ideas_listed",
+        "ideas": indexed_ideas,
+        "bubble_id": bubble_id,
+        "total": len(nodes)
+    })
+
+    return f"In this space you have {len(nodes)} notes: {', '.join(titles)}. Reference by number: 'connect 1 and 2' or 'add to 3'."
+
+
+def count_ideas(params: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Count the number of ideas/notes in the current space.
+
+    Voice triggers: "How many ideas do I have?", "Wie viele Ideen?",
+                   "Count the ideas", "Anzahl der Ideen"
+
+    Returns:
+        Dict with count, success status, and a message for voice response
+    """
+    bubble_id = _get_current_bubble_id()
+
+    logger.info("=" * 50)
+    logger.info(">>> count_ideas() CALLED <<<")
+    logger.info(f"    bubble_id = {bubble_id}")
+    logger.info("=" * 50)
+
+    if bubble_id is None:
+        logger.info("    Result: User is in multiverse view")
+        return {
+            "success": True,
+            "count": 0,
+            "message": "Du bist im Multiverse. Betrete einen Space, um Ideen zu zählen."
+        }
+
+    repo = _get_canvas_repo()
+
+    # Get all nodes and filter by linked_idea_id
+    all_nodes = repo.list_nodes(limit=1000)
+    count = len([n for n in all_nodes if n.linked_idea_id == bubble_id])
+
+    logger.info(f"    Count: {count} ideas in bubble {bubble_id}")
+
+    # Construct German message with proper grammar
+    if count == 0:
+        message = "In diesem Space sind keine Ideen."
+    elif count == 1:
+        message = "Du hast 1 Idee in diesem Space."
+    else:
+        message = f"Du hast {count} Ideen in diesem Space."
+
+    return {
+        "success": True,
+        "count": count,
+        "message": message
+    }
 
 
 def create_idea(params: Dict[str, Any]) -> str:
@@ -155,18 +394,22 @@ def create_idea(params: Dict[str, Any]) -> str:
 
     repo = _get_canvas_repo()
 
-    # Count existing nodes for positioning
+    # Get existing nodes for positioning
     all_nodes = repo.list_nodes(limit=1000)
     bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
     count = len(bubble_nodes)
+
+    # Calculate spiral position to avoid overlapping
+    existing_positions = [(n.x or 0, n.y or 0) for n in bubble_nodes]
+    x, y = calculate_spiral_position(count, existing_positions)
 
     # Create node in database with linked_idea_id pointing to parent bubble
     node = repo.create_node(
         node_type=node_type,
         title=title,
         content=content or title,
-        x=100 + (count * 50) % 400,
-        y=100 + (count * 30) % 300,
+        x=x,
+        y=y,
         linked_idea_id=bubble_id  # Link to parent Idea/Bubble
     )
 
@@ -182,6 +425,22 @@ def create_idea(params: Dict[str, Any]) -> str:
             "connections": []
         }
     })
+
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_idea_created
+        idea_data = {
+            "id": str(node.id),
+            "bubble_id": bubble_id,
+            "title": node.title,
+            "content": node.content,
+            "type": node.node_type,
+            "position": {"x": node.x, "y": node.y}
+        }
+        asyncio.create_task(on_idea_created(idea_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for idea creation: {e}")
 
     logger.info(f"Created note '{title}' in bubble {bubble_id}")
     return f"Added '{title}'"
@@ -217,18 +476,22 @@ def add_image(params: Dict[str, Any]) -> str:
 
     repo = _get_canvas_repo()
 
-    # Count existing nodes for positioning
+    # Get existing nodes for positioning
     all_nodes = repo.list_nodes(limit=1000)
     bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
     count = len(bubble_nodes)
+
+    # Calculate spiral position to avoid overlapping
+    existing_positions = [(n.x or 0, n.y or 0) for n in bubble_nodes]
+    x, y = calculate_spiral_position(count, existing_positions)
 
     # Create image node in database
     node = repo.create_node(
         node_type="image",
         title=title,
         content=url,  # Store URL in content field
-        x=100 + (count * 50) % 400,
-        y=100 + (count * 30) % 300,
+        x=x,
+        y=y,
         linked_idea_id=bubble_id,
         metadata={"url": url, "caption": title}  # Also store in metadata
     )
@@ -279,11 +542,26 @@ def find_idea(params: Dict[str, Any]) -> str:
     else:
         nodes = all_nodes
 
-    # Filter by query
-    matches = [
-        n for n in nodes
-        if query in (n.title or "").lower() or query in (n.content or "").lower()
-    ]
+    # Filter by query with fuzzy matching support
+    query_normalized = _normalize_for_matching(query)
+    matches = []
+    for n in nodes:
+        title_lower = (n.title or "").lower()
+        content_lower = (n.content or "").lower()
+        title_normalized = _normalize_for_matching(n.title or "")
+
+        # Match if query in title, content, or normalized title matches
+        if (query in title_lower or
+            query in content_lower or
+            query_normalized == title_normalized or
+            query_normalized in title_normalized):
+            matches.append(n)
+
+    if not matches:
+        # Try fuzzy match as fallback
+        fuzzy_match = _fuzzy_find_idea(nodes, query)
+        if fuzzy_match:
+            matches = [fuzzy_match]
 
     if not matches:
         return f"No notes found matching '{query}'"
@@ -296,6 +574,55 @@ def find_idea(params: Dict[str, Any]) -> str:
     return f"Found {len(matches)} notes: {', '.join(titles)}"
 
 
+def _generate_content_for_topic(topic: str, idea_title: str) -> str:
+    """
+    Generate content for a topic using OpenRouter LLM.
+
+    Args:
+        topic: What to generate content about
+        idea_title: Title of the idea (for context)
+
+    Returns:
+        Generated content string
+    """
+    try:
+        from openai import OpenAI
+        import os
+
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return f"[Konnte keinen Content generieren - OPENROUTER_API_KEY fehlt]\n\nTopic: {topic}"
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+
+        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Du bist ein hilfreicher Assistent. Generiere strukturierten, informativen Content auf Deutsch. Nutze Bullet Points und klare Struktur."
+                },
+                {
+                    "role": "user",
+                    "content": f"Erstelle Content für die Idee '{idea_title}' zum Thema: {topic}\n\nSchreibe in deutscher Sprache, strukturiert und informativ."
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        logger.warning(f"Content generation failed: {e}")
+        return f"[Content-Generierung fehlgeschlagen: {e}]\n\nTopic: {topic}"
+
+
 def update_idea(params: Dict[str, Any]) -> str:
     """
     Update an existing idea.
@@ -304,8 +631,10 @@ def update_idea(params: Dict[str, Any]) -> str:
 
     Args (via params):
         idea_name: Name/title of the idea to update (required)
-        new_content: New content (optional)
+        new_content: New content for literal mode (optional)
         new_title: New title (optional)
+        mode: "literal" (default) or "generate"
+        topic: What to generate content about (when mode="generate")
 
     Returns:
         str: Confirmation message
@@ -313,11 +642,18 @@ def update_idea(params: Dict[str, Any]) -> str:
     idea_name = params.get("idea_name", "").strip().lower()
     new_content = params.get("new_content", "").strip()
     new_title = params.get("new_title", "").strip()
+    mode = params.get("mode", "literal")
+    topic = params.get("topic", "").strip()
 
     if not idea_name:
         return "Which idea should I update?"
 
-    if not new_content and not new_title:
+    # For generate mode, we need a topic instead of new_content
+    if mode == "generate" and not topic:
+        return "Was soll ich generieren? Bitte gib ein Thema an."
+
+    # For literal mode, we need new_content or new_title
+    if mode != "generate" and not new_content and not new_title:
         return "What should I change it to?"
 
     bubble_id = _get_current_bubble_id()
@@ -330,20 +666,26 @@ def update_idea(params: Dict[str, Any]) -> str:
     else:
         nodes = all_nodes
 
-    # Find matching node
-    match = None
-    for n in nodes:
-        if idea_name in (n.title or "").lower():
-            match = n
-            break
+    # Find matching node using fuzzy matching (handles "In-Hand-Analyse" vs "In Hand Analyse")
+    match = _fuzzy_find_idea(nodes, idea_name)
 
     if not match:
-        return f"Couldn't find an idea called '{idea_name}'"
+        available = _get_available_idea_names(nodes)
+        return f"Couldn't find an idea called '{idea_name}'. Available: {available}"
 
     # Update
     if new_title:
         match.title = new_title
-    if new_content:
+
+    # Handle content based on mode
+    if mode == "generate":
+        # Generate content using LLM
+        logger.info(f"Generating content for '{match.title}' with topic: {topic}")
+        generated_content = _generate_content_for_topic(topic, match.title)
+        match.content = generated_content
+        logger.info(f"Generated {len(generated_content)} chars of content")
+    elif new_content:
+        # Literal mode - use provided content directly
         match.content = new_content
 
     repo.update_node(match)
@@ -361,52 +703,181 @@ def update_idea(params: Dict[str, Any]) -> str:
         }
     })
 
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_idea_updated
+        idea_data = {
+            "id": str(match.id),
+            "bubble_id": bubble_id,
+            "title": match.title,
+            "content": match.content,
+            "type": match.node_type,
+            "position": {"x": match.x, "y": match.y}
+        }
+        asyncio.create_task(on_idea_updated(idea_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for idea update: {e}")
+
     logger.info(f"Updated idea '{match.title}'")
     return f"Updated '{match.title}'"
 
 
-def connect_ideas(params: Dict[str, Any]) -> str:
+def classify_idea(params: Dict[str, Any]) -> str:
     """
-    Connect two ideas with an edge.
+    Classify an idea using AI backend analysis.
 
-    Voice triggers: "Link cooking to recipes", "Connect Python to coding"
+    Voice triggers: "Klassifiziere die Idee", "Send to backend", "Analyze this idea"
 
     Args (via params):
-        idea1: First idea name (required)
-        idea2: Second idea name (required)
+        idea_name: Name/title of the idea to classify (optional - uses current if not specified)
 
     Returns:
-        str: Confirmation message
+        str: Classification result
     """
-    idea1 = params.get("idea1", "").strip().lower()
-    idea2 = params.get("idea2", "").strip().lower()
-
-    if not idea1 or not idea2:
-        return "Which two ideas should I connect?"
+    idea_name = params.get("idea_name", "").strip().lower()
 
     bubble_id = _get_current_bubble_id()
     repo = _get_canvas_repo()
 
-    # Get nodes
+    # Get nodes in current bubble
     all_nodes = repo.list_nodes(limit=1000)
     if bubble_id:
         nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
     else:
         nodes = all_nodes
 
-    # Find both nodes
-    node1 = node2 = None
-    for n in nodes:
-        title_lower = (n.title or "").lower()
-        if idea1 in title_lower:
-            node1 = n
-        if idea2 in title_lower:
-            node2 = n
+    if not nodes:
+        return "Keine Ideen zum Klassifizieren gefunden."
 
+    # Find specific idea or use first one
+    if idea_name:
+        match = _fuzzy_find_idea(nodes, idea_name)
+        if not match:
+            available = _get_available_idea_names(nodes)
+            return f"Idee '{idea_name}' nicht gefunden. Verfuegbar: {available}"
+    else:
+        # Use root node or first node
+        match = nodes[0]
+        for n in nodes:
+            if n.title and "root" in n.title.lower():
+                match = n
+                break
+
+    # Call backend for classification
+    try:
+        from openai import OpenAI
+        import os
+
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return f"Klassifizierung nicht moeglich - OPENROUTER_API_KEY fehlt. Idee: {match.title}"
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+
+        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+
+        # Build content for classification
+        content_text = f"Titel: {match.title}\n\nInhalt: {match.content or 'Kein Inhalt'}"
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Du bist ein Klassifizierungs-Assistent. Analysiere die Idee und gib zurueck:
+1. Kategorie (z.B. Projekt, Aufgabe, Notiz, Feature, Bug, Frage, Konzept)
+2. Prioritaet (Hoch, Mittel, Niedrig)
+3. Stichwoerter (3-5 relevante Tags)
+4. Naechster Schritt (eine konkrete Empfehlung)
+
+Antworte kurz und strukturiert auf Deutsch."""
+                },
+                {
+                    "role": "user",
+                    "content": f"Klassifiziere folgende Idee:\n\n{content_text}"
+                }
+            ],
+            max_tokens=300,
+            temperature=0.3
+        )
+
+        classification = response.choices[0].message.content.strip()
+        logger.info(f"Classified idea '{match.title}'")
+
+        return f"Klassifizierung fuer '{match.title}':\n\n{classification}"
+
+    except Exception as e:
+        logger.warning(f"Classification failed: {e}")
+        return f"Klassifizierung fehlgeschlagen: {e}"
+
+
+def connect_ideas(params: Dict[str, Any]) -> str:
+    """
+    Connect two ideas with an edge.
+
+    Voice triggers: "Link cooking to recipes", "Connect Python to coding",
+                   "Verbinde Marketing mit Social Media"
+
+    Args (via params):
+        idea1 / source: First idea name (fuzzy matched)
+        idea2 / target: Second idea name (fuzzy matched)
+
+    Returns:
+        str: Confirmation message or helpful error with available ideas
+    """
+    # Support both parameter naming conventions
+    idea1 = params.get("idea1", params.get("source", "")).strip()
+    idea2 = params.get("idea2", params.get("target", "")).strip()
+
+    bubble_id = _get_current_bubble_id()
+    repo = _get_canvas_repo()
+
+    # Get nodes in current bubble
+    all_nodes = repo.list_nodes(limit=1000)
+    if bubble_id:
+        nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    else:
+        nodes = all_nodes
+
+    # If no ideas provided or very few, show available ideas
+    if not idea1 or not idea2:
+        if not nodes:
+            return "Diese Bubble hat noch keine Ideen. Erstelle zuerst ein paar Ideen."
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Welche Ideen soll ich verbinden? Verfuegbar: {available}"
+
+    # Helper: Resolve numeric index (e.g., "1", "2") or fuzzy match
+    def resolve_idea(ref: str):
+        # Check for numeric reference (matches list_ideas() numbering)
+        ref_clean = ref.strip().rstrip('.')
+        if ref_clean.isdigit():
+            idx = int(ref_clean) - 1  # 1-based to 0-based
+            if 0 <= idx < len(nodes):
+                return nodes[idx]
+            return None
+        # Fall back to fuzzy matching
+        return _fuzzy_find_idea(nodes, ref)
+
+    # Find both nodes using numeric index or fuzzy matching
+    node1 = resolve_idea(idea1)
+    node2 = resolve_idea(idea2)
+
+    # Helpful error messages with available ideas
     if not node1:
-        return f"Couldn't find '{idea1}'"
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"'{idea1}' nicht gefunden. Verfuegbare Ideen: {available}"
+
     if not node2:
-        return f"Couldn't find '{idea2}'"
+        available = _get_available_idea_names(nodes, exclude=node1, limit=5)
+        return f"'{idea2}' nicht gefunden. Verfuegbare Ideen: {available}"
+
+    # Don't connect an idea to itself
+    if node1.id == node2.id:
+        return f"'{node1.title}' kann nicht mit sich selbst verbunden werden."
 
     # Create edge
     edge = repo.create_edge(node1.id, node2.id, "related")
@@ -421,8 +892,322 @@ def connect_ideas(params: Dict[str, Any]) -> str:
         }
     })
 
+    # Trigger PostgreSQL synchronization
+    try:
+        import asyncio
+        from swarm.tools.data_event_handler import on_edge_created
+        edge_data = {
+            "id": str(edge.id),
+            "bubble_id": bubble_id,
+            "source_id": str(node1.id),
+            "target_id": str(node2.id),
+            "type": "related",
+            "weight": 1.0
+        }
+        asyncio.create_task(on_edge_created(edge_data))
+    except Exception as e:
+        logger.warning(f"Failed to trigger PostgreSQL sync for edge creation: {e}")
+
     logger.info(f"Connected '{node1.title}' to '{node2.title}'")
-    return f"Connected '{node1.title}' to '{node2.title}'"
+    return f"'{node1.title}' und '{node2.title}' sind jetzt verbunden."
+
+
+def disconnect_ideas(params: Dict[str, Any]) -> str:
+    """
+    Disconnect/unlink two ideas by removing their edge.
+
+    Voice triggers: "Trenne Tools von Frontend", "Entferne Verbindung zwischen X und Y",
+                   "Disconnect A from B", "Unlink these ideas"
+
+    Args (via params):
+        idea1 / source / from_idea: First idea name (fuzzy matched)
+        idea2 / target / to_idea: Second idea name (fuzzy matched)
+
+    Returns:
+        str: Confirmation message or error if not connected
+    """
+    # Support multiple parameter naming conventions
+    idea1 = (
+        params.get("idea1") or
+        params.get("source") or
+        params.get("from_idea") or
+        params.get("von") or
+        ""
+    ).strip()
+
+    idea2 = (
+        params.get("idea2") or
+        params.get("target") or
+        params.get("to_idea") or
+        params.get("zu") or
+        ""
+    ).strip()
+
+    bubble_id = _get_current_bubble_id()
+    repo = _get_canvas_repo()
+
+    # Get nodes in current bubble
+    all_nodes = repo.list_nodes(limit=1000)
+    if bubble_id:
+        nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    else:
+        nodes = all_nodes
+
+    # If no ideas provided, show available ideas
+    if not idea1 or not idea2:
+        if not nodes:
+            return "Diese Bubble hat noch keine Ideen."
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Welche Ideen soll ich trennen? Verfuegbar: {available}"
+
+    # Helper: Resolve numeric index or fuzzy match
+    def resolve_idea(ref: str):
+        ref_clean = ref.strip().rstrip('.')
+        if ref_clean.isdigit():
+            idx = int(ref_clean) - 1
+            if 0 <= idx < len(nodes):
+                return nodes[idx]
+            return None
+
+        # Fall back to fuzzy matching
+        return _fuzzy_find_idea(nodes, ref)
+
+    # Resolve both ideas
+    node1 = resolve_idea(idea1)
+    node2 = resolve_idea(idea2)
+
+    if not node1:
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Idee '{idea1}' nicht gefunden. Verfuegbar: {available}"
+
+    if not node2:
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Idee '{idea2}' nicht gefunden. Verfuegbar: {available}"
+
+    # Find and delete the edge between them
+    all_edges = repo.list_edges(limit=1000)
+    edge_found = None
+    for edge in all_edges:
+        # Check both directions
+        if (edge.from_node_id == node1.id and edge.to_node_id == node2.id) or \
+           (edge.from_node_id == node2.id and edge.to_node_id == node1.id):
+            edge_found = edge
+            break
+
+    if not edge_found:
+        return f"'{node1.title}' und '{node2.title}' sind nicht verbunden."
+
+    # Delete the edge
+    repo.delete_edge(edge_found.id)
+
+    # Broadcast to Electron
+    _broadcast_to_electron({
+        "type": "edge_deleted",
+        "edge_id": str(edge_found.id),
+        "from_node_id": str(edge_found.from_node_id),
+        "to_node_id": str(edge_found.to_node_id)
+    })
+
+    logger.info(f"Disconnected '{node1.title}' from '{node2.title}'")
+    return f"Verbindung zwischen '{node1.title}' und '{node2.title}' wurde entfernt."
+
+
+def connect_ideas_multi(params: Dict[str, Any]) -> str:
+    """
+    Connect one idea to multiple others by index or name.
+
+    Voice triggers: "Verbinde 2 mit 3, 4 und 5", "Link 1 to 2, 3, 4",
+                   "Connect 3 to 4 and 5 and 6"
+
+    Args (via params):
+        source: Source idea (index or name)
+        targets: Target ideas (list or comma-separated string)
+
+    Returns:
+        str: Confirmation message listing successful connections
+    """
+    import re
+    from tools.index_mapping import resolve_idea_index
+
+    source = params.get("source", "").strip()
+    targets = params.get("targets", [])
+
+    # Handle string targets (comma-separated or "and"/"und" separated)
+    if isinstance(targets, str):
+        targets = re.split(r'[,]|\s+and\s+|\s+und\s+', targets)
+        targets = [t.strip() for t in targets if t.strip()]
+
+    if not source:
+        return "Bitte gib die Quell-Idee an (z.B. 'Verbinde 2 mit 3, 4, 5')."
+
+    if not targets:
+        return "Bitte gib mindestens ein Ziel an (z.B. 'Verbinde 2 mit 3, 4, 5')."
+
+    bubble_id = _get_current_bubble_id()
+    repo = _get_canvas_repo()
+
+    # Get nodes in current bubble
+    all_nodes = repo.list_nodes(limit=1000)
+    if bubble_id:
+        nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    else:
+        nodes = all_nodes
+
+    if not nodes:
+        return "Diese Bubble hat noch keine Ideen. Erstelle zuerst ein paar Ideen."
+
+    # Helper: Resolve numeric index (via index_mapping) or fuzzy match
+    def resolve(ref: str):
+        ref_clean = ref.strip().rstrip('.')
+        # First try the persistent index mapping
+        if ref_clean.isdigit():
+            idea_id = resolve_idea_index(ref_clean)
+            if idea_id:
+                return next((n for n in nodes if n.id == idea_id), None)
+            # Fallback to position-based (1-based to 0-based)
+            idx = int(ref_clean) - 1
+            if 0 <= idx < len(nodes):
+                return nodes[idx]
+            return None
+        # Fuzzy match by name
+        return _fuzzy_find_idea(nodes, ref)
+
+    # Resolve source
+    source_node = resolve(source)
+    if not source_node:
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Quelle '{source}' nicht gefunden. Verfuegbar: {available}"
+
+    # Connect to each target
+    created = []
+    failed = []
+    already_connected = []
+
+    # Get existing edges to avoid duplicates
+    existing_edges = repo.list_edges(limit=1000)
+
+    for target in targets:
+        target_node = resolve(target)
+        if not target_node:
+            failed.append(target)
+            continue
+
+        if target_node.id == source_node.id:
+            continue  # Skip self-connection silently
+
+        # Check if already connected
+        is_connected = any(
+            (e.from_node_id == source_node.id and e.to_node_id == target_node.id) or
+            (e.from_node_id == target_node.id and e.to_node_id == source_node.id)
+            for e in existing_edges
+        )
+        if is_connected:
+            already_connected.append(target_node.title or target)
+            continue
+
+        # Create edge
+        repo.create_edge(source_node.id, target_node.id, "related")
+        _broadcast_to_electron({
+            "type": "edge_added",
+            "edge": {
+                "from_node_id": source_node.id,
+                "to_node_id": target_node.id,
+                "label": "related"
+            }
+        })
+        created.append(target_node.title or target)
+
+    # Build response message
+    parts = []
+    if created:
+        parts.append(f"'{source_node.title}' mit {len(created)} Ideen verbunden: {', '.join(created)}")
+    if already_connected:
+        parts.append(f"Bereits verbunden: {', '.join(already_connected)}")
+    if failed:
+        parts.append(f"Nicht gefunden: {', '.join(failed)}")
+
+    if not parts:
+        return "Keine Verbindungen erstellt."
+
+    logger.info(f"Multi-connect from '{source_node.title}': {len(created)} created")
+    return ". ".join(parts)
+
+
+def link_idea_to_root(params: Dict[str, Any]) -> str:
+    """
+    Link an idea to the root node of the current bubble.
+
+    Voice triggers: "Verknüpfe das mit dem Root", "Link to root", "Connect to main node"
+
+    Args (via params):
+        idea_name: Name of idea to link (required)
+        bubble_id: Optional bubble ID (uses current if not provided)
+
+    Returns:
+        str: Confirmation message
+    """
+    idea_name = params.get("idea_name", "").strip()
+    bubble_id = params.get("bubble_id") or _get_current_bubble_id()
+
+    if not idea_name:
+        return "Bitte gib den Namen der Idee an, die mit dem Root verknüpft werden soll."
+
+    repo = _get_canvas_repo()
+
+    # Get nodes in this bubble first
+    all_nodes = repo.list_nodes(limit=1000)
+    if bubble_id:
+        nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    else:
+        nodes = all_nodes
+
+    # Find the idea using fuzzy matching (pass nodes first, then name)
+    idea = _fuzzy_find_idea(nodes, idea_name)
+    if not idea:
+        return f"Idee '{idea_name}' nicht gefunden."
+
+    # Find root node in this bubble
+    root = next((n for n in nodes if n.node_type == "root"), None)
+    if not root:
+        return "Kein Root-Node in dieser Bubble gefunden."
+
+    # Check if idea is the root itself
+    if idea.id == root.id:
+        return "Der Root-Node kann nicht mit sich selbst verknüpft werden."
+
+    # Check if already linked
+    all_edges = repo.list_edges(limit=1000)
+    already_linked = any(
+        (e.from_node_id == root.id and e.to_node_id == idea.id) or
+        (e.from_node_id == idea.id and e.to_node_id == root.id)
+        for e in all_edges
+    )
+    if already_linked:
+        return f"'{idea.title}' ist bereits mit dem Root-Node verbunden."
+
+    # Create edge from root to idea
+    from data.models import CanvasEdge
+    edge = CanvasEdge(
+        id=str(uuid.uuid4()),
+        from_node_id=root.id,
+        to_node_id=idea.id,
+        edge_type="hierarchy"
+    )
+    repo.create_edge(edge)
+
+    # Broadcast to UI
+    _broadcast_to_electron({
+        "type": "edge_created",
+        "edge": {
+            "id": edge.id,
+            "from_node_id": edge.from_node_id,
+            "to_node_id": edge.to_node_id,
+            "edge_type": edge.edge_type,
+        }
+    })
+
+    logger.info(f"Linked '{idea.title}' to root node '{root.title}'")
+    return f"'{idea.title}' mit Root-Node '{root.title}' verknüpft."
 
 
 def delete_idea(params: Dict[str, Any]) -> str:
@@ -437,7 +1222,7 @@ def delete_idea(params: Dict[str, Any]) -> str:
     Returns:
         str: Confirmation message
     """
-    idea_name = params.get("idea_name", "").strip().lower()
+    idea_name = params.get("idea_name", "").strip()
 
     if not idea_name:
         return "Which idea should I delete?"
@@ -445,25 +1230,32 @@ def delete_idea(params: Dict[str, Any]) -> str:
     bubble_id = _get_current_bubble_id()
     repo = _get_canvas_repo()
 
-    # Get nodes
+    # Get nodes in this bubble first
     all_nodes = repo.list_nodes(limit=1000)
     if bubble_id:
         nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
     else:
         nodes = all_nodes
 
-    # Find matching node
-    match = None
-    for n in nodes:
-        if idea_name in (n.title or "").lower():
-            match = n
-            break
+    # Use fuzzy matching (pass nodes first, then name)
+    match = _fuzzy_find_idea(nodes, idea_name)
 
     if not match:
         return f"Couldn't find an idea called '{idea_name}'"
 
+    # Prevent root node deletion
+    if match.node_type == "root":
+        return "The root node cannot be deleted."
+
     title = match.title
     node_id = match.id
+
+    # Delete connected edges first to avoid orphans
+    all_edges = repo.list_edges(limit=1000)
+    for edge in all_edges:
+        if edge.from_node_id == node_id or edge.to_node_id == node_id:
+            repo.delete_edge(edge.id)
+
     repo.delete_node(node_id)
 
     # Broadcast
@@ -497,6 +1289,700 @@ def get_current_space(params: Dict[str, Any]) -> str:
     return f"You're in space {bubble_id}"
 
 
+def expand_ideas(params: Dict[str, Any]) -> str:
+    """
+    Expand existing ideas using AI to generate related concepts.
+
+    Voice triggers: "Erweitere die Ideen", "Generiere verwandte Ideen",
+                   "Mach mehr Ideen aus den bestehenden"
+
+    Args (via params):
+        source_idea: Optional - specific idea to expand
+        count: Number of ideas to generate (default: 3)
+
+    Returns:
+        str: Summary of generated ideas
+    """
+    import asyncio
+
+    source_idea = params.get("source_idea", "").strip()
+    count = params.get("count", 3)
+
+    # 1. Get current bubble
+    bubble_id = _get_current_bubble_id()
+    if bubble_id is None:
+        return "Bitte betrete zuerst einen Space."
+
+    # 2. Get existing ideas
+    repo = _get_canvas_repo()
+    all_nodes = repo.list_nodes(limit=1000)
+    nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+
+    if not nodes:
+        return "Keine Ideen zum Erweitern vorhanden."
+
+    # Filter by source_idea if specified
+    if source_idea:
+        nodes = [n for n in nodes if source_idea.lower() in (n.title or "").lower()]
+        if not nodes:
+            return f"Keine Idee mit Namen '{source_idea}' gefunden."
+
+    # 3. Build context for LLM
+    ideas_context = "\n".join([
+        f"- {n.title}: {(n.content or '')[:200]}" for n in nodes
+    ])
+
+    # Create node ID lookup for linking
+    node_lookup = {(n.title or "").lower(): n.id for n in nodes}
+
+    # 4. Call LLM for expansion
+    try:
+        # Run async function in sync context - handle nested event loop case
+        try:
+            # Check if there's already a running loop
+            asyncio.get_running_loop()
+            # If we get here, there's a running loop - use thread pool
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                def run_in_thread():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(_generate_expansions(ideas_context, count))
+                    finally:
+                        loop.close()
+                future = pool.submit(run_in_thread)
+                expansions = future.result(timeout=30)
+        except RuntimeError:
+            # No running loop - safe to create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                expansions = loop.run_until_complete(_generate_expansions(ideas_context, count))
+            finally:
+                loop.close()
+    except Exception as e:
+        logger.error(f"LLM expansion failed: {e}")
+        return f"Fehler bei der Ideen-Generierung: {str(e)}"
+
+    if not expansions:
+        return "Konnte keine neuen Ideen generieren."
+
+    # 5. Create new ideas and links
+    # Get all existing positions for collision detection (re-fetch to include any recent additions)
+    all_nodes_fresh = repo.list_nodes(limit=1000)
+    bubble_nodes_fresh = [n for n in all_nodes_fresh if n.linked_idea_id == bubble_id]
+    existing_positions = [(n.x or 0, n.y or 0) for n in bubble_nodes_fresh]
+
+    created = []
+    for exp in expansions:
+        try:
+            # Calculate spiral position for this new node
+            node_count = len(bubble_nodes_fresh) + len(created)
+            x, y = calculate_spiral_position(node_count, existing_positions)
+
+            # Create new node
+            new_node = repo.create_node(
+                node_type="note",
+                title=exp.get("title", "Neue Idee"),
+                content=exp.get("content", ""),
+                x=x,
+                y=y,
+                linked_idea_id=bubble_id,
+                metadata={"ai_generated": True, "source_title": exp.get("source_title")}
+            )
+
+            # Add position to existing for next iteration's collision detection
+            existing_positions.append((x, y))
+
+            # Create edge to source if we can find it
+            source_title = exp.get("source_title", "").lower()
+            if source_title and source_title in node_lookup:
+                source_node_id = node_lookup[source_title]
+                repo.create_edge(
+                    from_node_id=source_node_id,
+                    to_node_id=new_node.id,
+                    edge_type="expanded_from"
+                )
+
+                # Broadcast edge
+                _broadcast_to_electron({
+                    "type": "edge_added",
+                    "edge": {
+                        "from_node_id": source_node_id,
+                        "to_node_id": new_node.id,
+                        "label": "expanded_from"
+                    }
+                })
+
+            # Broadcast to UI
+            _broadcast_to_electron({
+                "type": "node_added",
+                "bubble_id": bubble_id,
+                "node": {
+                    "id": new_node.id,
+                    "type": new_node.node_type,
+                    "position": {"x": new_node.x, "y": new_node.y},
+                    "content": {"title": new_node.title, "text": new_node.content},
+                    "connections": []
+                }
+            })
+
+            created.append(new_node.title)
+            logger.info(f"Created expanded idea: {new_node.title}")
+
+        except Exception as e:
+            logger.error(f"Failed to create idea: {e}")
+
+    if not created:
+        return "Konnte keine neuen Ideen erstellen."
+
+    return f"Ich habe {len(created)} neue Ideen generiert: {', '.join(created)}"
+
+
+async def _generate_expansions(ideas_context: str, count: int) -> List[Dict]:
+    """
+    Call LLM to generate idea expansions.
+
+    Args:
+        ideas_context: Formatted string of existing ideas
+        count: Number of expansions to generate
+
+    Returns:
+        List of dicts with title, content, source_title
+    """
+    import os
+    import json
+    import re
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        logger.error("OpenAI package not installed")
+        return []
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        logger.error("OPENROUTER_API_KEY not set")
+        return []
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1"
+    )
+
+    prompt = f"""Analysiere diese bestehenden Ideen und generiere {count} verwandte/erweiterte Ideen.
+
+Bestehende Ideen:
+{ideas_context}
+
+Generiere fuer jede neue Idee:
+- title: Kurzer Titel (max 50 Zeichen)
+- content: Beschreibung (2-3 Saetze)
+- source_title: Exakter Titel der Quell-Idee (aus der Liste oben)
+
+Antworte NUR als JSON-Array, keine Erklaerungen:
+[{{"title": "...", "content": "...", "source_title": "..."}}]
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="anthropic/claude-sonnet-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1000,
+        )
+
+        content = response.choices[0].message.content
+        logger.info(f"LLM expansion response: {content[:200]}...")
+
+        # Extract JSON from response
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+
+        logger.warning("No JSON array found in LLM response")
+        return []
+
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        return []
+
+
+# =============================================================================
+# MOVE IDEA TOOL
+# =============================================================================
+
+def move_idea(params: Dict[str, Any]) -> str:
+    """
+    Move an idea/note from current space to another space.
+
+    Voice triggers: "Verschiebe X nach Y", "Move idea X to space Y",
+                   "Bringe X in den Space Y"
+
+    Args (via params):
+        idea_name: Name of the idea to move (fuzzy match)
+        target_space: Name of destination space (fuzzy match)
+
+    Returns:
+        str: Confirmation or error message
+    """
+    idea_name = params.get("idea_name", "").strip().lower()
+    target_space = params.get("target_space", "").strip().lower()
+
+    if not idea_name:
+        return "Welche Idee soll ich verschieben?"
+    if not target_space:
+        return "In welchen Space soll ich die Idee verschieben?"
+
+    # 1. Get current bubble
+    source_bubble_id = _get_current_bubble_id()
+    if source_bubble_id is None:
+        return "Bitte betrete zuerst einen Space."
+
+    # 2. Get repositories
+    repo = _get_canvas_repo()
+    ideas_repo = _get_ideas_repo()
+
+    # 3. Find the node by name in current space
+    all_nodes = repo.list_nodes(limit=1000)
+    nodes_in_space = [n for n in all_nodes if n.linked_idea_id == source_bubble_id]
+
+    match = None
+    for n in nodes_in_space:
+        if idea_name in (n.title or "").lower():
+            match = n
+            break
+
+    if not match:
+        return f"Keine Idee mit Namen '{idea_name}' in diesem Space gefunden."
+
+    # 4. Find target space by name
+    all_ideas = ideas_repo.list()
+    target_idea = None
+    for idea in all_ideas:
+        if target_space in (idea.title or "").lower():
+            target_idea = idea
+            break
+
+    if not target_idea:
+        return f"Space '{target_space}' nicht gefunden."
+
+    if target_idea.id == source_bubble_id:
+        return "Die Idee ist bereits in diesem Space."
+
+    # 5. Move: Update linked_idea_id
+    old_bubble_id = match.linked_idea_id
+    match.linked_idea_id = target_idea.id
+    repo.update_node(match)
+
+    # 6. Broadcast to Electron UI
+    _broadcast_to_electron({
+        "type": "node_moved",
+        "node_id": match.id,
+        "from_bubble_id": old_bubble_id,
+        "to_bubble_id": target_idea.id,
+        "node": {
+            "id": match.id,
+            "type": match.node_type,
+            "position": {"x": match.x, "y": match.y},
+            "content": {"title": match.title, "text": match.content}
+        }
+    })
+
+    logger.info(f"Moved idea '{match.title}' from {old_bubble_id} to {target_idea.id}")
+    return f"Ich habe '{match.title}' nach '{target_idea.title}' verschoben."
+
+
+def _get_ideas_repo():
+    """Get the ideas repository for looking up spaces."""
+    from tools.bubble_tools import _get_ideas_repo as get_repo
+    return get_repo()
+
+
+# =============================================================================
+# AUTO-LINK IDEAS (Semantic Similarity)
+# =============================================================================
+
+def auto_link_ideas(params: Dict[str, Any]) -> str:
+    """
+    Automatically analyze all ideas in current bubble and create links
+    between semantically related pairs.
+
+    Voice triggers: "Verlinke die Ideen sinnvoll", "Link related ideas",
+                   "Verbinde ähnliche Notizen automatisch"
+
+    Uses embedding-based semantic similarity to find related ideas.
+    Creates edges for pairs with similarity score > threshold.
+
+    Args (via params):
+        threshold: Minimum similarity score (0-1), default 0.5
+        max_links: Maximum number of links to create, default 10
+
+    Returns:
+        str: Summary of created links
+    """
+    logger.info("=" * 50)
+    logger.info(">>> auto_link_ideas() CALLED <<<")
+    logger.info(f"    params = {params}")
+    logger.info("=" * 50)
+
+    threshold = params.get("threshold", 0.5)
+    max_links = params.get("max_links", 10)
+
+    # 1. Get current bubble
+    bubble_id = _get_current_bubble_id()
+    if bubble_id is None:
+        return "Bitte betrete zuerst einen Space."
+
+    # 2. Get all ideas/nodes in this bubble
+    repo = _get_canvas_repo()
+    all_nodes = repo.list_nodes(limit=1000)
+    nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+
+    if len(nodes) < 2:
+        return "Zu wenige Ideen zum Verlinken. Erstelle mindestens 2 Ideen."
+
+    logger.info(f"[auto_link_ideas] Found {len(nodes)} nodes in bubble {bubble_id}")
+
+    # 3. Get existing edges to avoid duplicates
+    existing_edges = set()
+    try:
+        edges = repo.list_edges()
+        for edge in edges:
+            # Store both directions to check
+            existing_edges.add((edge.from_node_id, edge.to_node_id))
+            existing_edges.add((edge.to_node_id, edge.from_node_id))
+    except Exception as e:
+        logger.warning(f"Could not load existing edges: {e}")
+
+    # 4. Import embedding service and monitoring
+    try:
+        from data.embedding_service import get_embedding_service
+        embedding_service = get_embedding_service()
+    except ImportError as e:
+        logger.error(f"Could not import embedding service: {e}")
+        return "Embedding-Service nicht verfügbar. Installiere: pip install sentence-transformers"
+
+    # Import monitoring
+    try:
+        from swarm.monitoring.system_status import get_status_monitor
+        _monitor = get_status_monitor()
+    except ImportError:
+        _monitor = None
+
+    if not embedding_service.is_available:
+        return "Embedding-Service nicht verfügbar. Installiere: pip install sentence-transformers"
+
+    # 5. Generate embeddings for all nodes
+    node_texts = []
+    for n in nodes:
+        # Combine title and content for better semantic representation
+        text = f"{n.title or ''} {n.content or ''}".strip()
+        node_texts.append(text)
+
+    # Track embedding generation with monitoring
+    embed_op_id = None
+    if _monitor:
+        embed_op_id = _monitor.start_operation(
+            "embedding",
+            f"Generating embeddings for {len(node_texts)} ideas",
+            {"count": len(node_texts)}
+        )
+
+    try:
+        embeddings = embedding_service.embed_batch(node_texts)
+        if _monitor and embed_op_id:
+            _monitor.complete_operation(embed_op_id, success=True)
+    except Exception as e:
+        if _monitor and embed_op_id:
+            _monitor.complete_operation(embed_op_id, success=False, error=str(e))
+        logger.error(f"[auto_link_ideas] Embedding generation failed: {e}")
+        return f"Fehler bei der Embedding-Generierung: {e}"
+
+    logger.info(f"[auto_link_ideas] Generated {len([e for e in embeddings if e])} embeddings")
+
+    # 6. Calculate pairwise similarities
+    similarity_pairs = []
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            if embeddings[i] is None or embeddings[j] is None:
+                continue
+
+            # Skip if edge already exists
+            if (nodes[i].id, nodes[j].id) in existing_edges:
+                continue
+
+            similarity = embedding_service.similarity(embeddings[i], embeddings[j])
+            if similarity >= threshold:
+                similarity_pairs.append((i, j, similarity))
+
+    # Sort by similarity descending
+    similarity_pairs.sort(key=lambda x: x[2], reverse=True)
+
+    # Limit number of links
+    similarity_pairs = similarity_pairs[:max_links]
+
+    logger.info(f"[auto_link_ideas] Found {len(similarity_pairs)} pairs above threshold {threshold}")
+
+    # 7. Create edges for similar pairs
+    created_links = []
+    for i, j, score in similarity_pairs:
+        node1 = nodes[i]
+        node2 = nodes[j]
+
+        try:
+            # Create edge
+            edge = repo.create_edge(node1.id, node2.id, "related")
+
+            # Broadcast to Electron UI
+            _broadcast_to_electron({
+                "type": "edge_added",
+                "edge": {
+                    "from_node_id": node1.id,
+                    "to_node_id": node2.id,
+                    "label": "related"
+                }
+            })
+
+            link_info = f"'{node1.title}' ↔ '{node2.title}' ({score:.0%})"
+            created_links.append(link_info)
+            logger.info(f"[auto_link_ideas] Created: {link_info}")
+
+        except Exception as e:
+            logger.error(f"Failed to create edge: {e}")
+
+    # 8. Return summary
+    if not created_links:
+        return f"Keine passenden Verbindungen gefunden (Threshold: {threshold:.0%}). Die Ideen sind zu unterschiedlich oder bereits verbunden."
+
+    summary = f"Ich habe {len(created_links)} Verbindungen erstellt:\n"
+    for link in created_links[:5]:  # Show max 5 in response
+        summary += f"  • {link}\n"
+
+    if len(created_links) > 5:
+        summary += f"  ... und {len(created_links) - 5} weitere."
+
+    return summary.strip()
+
+
+def analyze_and_suggest_links(params: Dict[str, Any]) -> str:
+    """
+    Analyze all ideas in current bubble and suggest meaningful links
+    WITHOUT creating them. User can confirm to create links.
+
+    Voice triggers: "Analysiere die Ideen", "Schlage Verlinkungen vor",
+                   "Welche Ideen gehören zusammen"
+
+    Returns top 5 suggested link pairs with reasoning.
+
+    Args (via params):
+        threshold: Minimum similarity score (0-1), default 0.4
+        max_suggestions: Maximum suggestions to return, default 5
+
+    Returns:
+        str: List of suggested links with similarity scores
+    """
+    threshold = params.get("threshold", 0.4)
+    max_suggestions = params.get("max_suggestions", 5)
+
+    # 1. Get current bubble
+    bubble_id = _get_current_bubble_id()
+    if bubble_id is None:
+        return "Bitte betrete zuerst einen Space."
+
+    # Get bubble name for context
+    ideas_repo = _get_ideas_repo()
+    bubble = ideas_repo.get(bubble_id)
+    bubble_name = bubble.title if bubble else "Aktueller Space"
+
+    # 2. Get all ideas/nodes in this bubble
+    repo = _get_canvas_repo()
+    all_nodes = repo.list_nodes(limit=1000)
+    nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+
+    if len(nodes) < 2:
+        return f"Im Space '{bubble_name}' gibt es {len(nodes)} Ideen - mindestens 2 werden benötigt."
+
+    logger.info(f"[analyze_links] Found {len(nodes)} nodes in bubble {bubble_id}")
+
+    # 3. Get existing edges to exclude
+    existing_edges = set()
+    try:
+        edges = repo.list_edges()
+        for edge in edges:
+            existing_edges.add((edge.from_node_id, edge.to_node_id))
+            existing_edges.add((edge.to_node_id, edge.from_node_id))
+    except Exception as e:
+        logger.warning(f"Could not load existing edges: {e}")
+
+    # 4. Import embedding service
+    try:
+        from data.embedding_service import get_embedding_service, EmbeddingService
+        embedding_service = get_embedding_service()
+    except ImportError as e:
+        logger.error(f"Could not import embedding service: {e}")
+        embedding_service = None
+
+    # 5. Generate text list for all nodes
+    node_texts = []
+    for n in nodes:
+        text = f"{n.title or ''} {n.content or ''}".strip()
+        node_texts.append(text)
+
+    # 6. Calculate pairwise similarities
+    similarity_pairs = []
+    use_embeddings = embedding_service and embedding_service.is_available
+
+    if use_embeddings:
+        # Use semantic embeddings
+        logger.info("[analyze_links] Using embedding-based similarity")
+        embeddings = embedding_service.embed_batch(node_texts)
+
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                if embeddings[i] is None or embeddings[j] is None:
+                    continue
+
+                # Skip if edge already exists
+                if (nodes[i].id, nodes[j].id) in existing_edges:
+                    continue
+
+                similarity = embedding_service.similarity(embeddings[i], embeddings[j])
+                if similarity >= threshold:
+                    similarity_pairs.append((i, j, similarity))
+    else:
+        # Fallback to text-based similarity (Jaccard)
+        logger.info("[analyze_links] Using text-based similarity (fallback)")
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                # Skip if edge already exists
+                if (nodes[i].id, nodes[j].id) in existing_edges:
+                    continue
+
+                similarity = EmbeddingService.text_similarity(node_texts[i], node_texts[j])
+                if similarity >= threshold:
+                    similarity_pairs.append((i, j, similarity))
+
+    # Sort by similarity descending
+    similarity_pairs.sort(key=lambda x: x[2], reverse=True)
+    similarity_pairs = similarity_pairs[:max_suggestions]
+
+    # 7. Format suggestions
+    if not similarity_pairs:
+        return f"Keine passenden Verlinkungen gefunden im Space '{bubble_name}'. Die Ideen sind zu unterschiedlich oder bereits verlinkt."
+
+    method_note = "" if use_embeddings else " (Wort-basiert)"
+    suggestions = [f"Im Space '{bubble_name}' schlage ich {len(similarity_pairs)} Verlinkungen vor{method_note}:\n"]
+
+    for idx, (i, j, score) in enumerate(similarity_pairs, 1):
+        node1 = nodes[i]
+        node2 = nodes[j]
+        title1 = (node1.title or "Unbenannt")[:40]
+        title2 = (node2.title or "Unbenannt")[:40]
+        suggestions.append(f"{idx}. '{title1}' <-> '{title2}' ({score:.0%} Aehnlichkeit)")
+
+    suggestions.append("\nSage 'Ja, verlinke sie' um die Verbindungen zu erstellen.")
+
+    return "\n".join(suggestions)
+
+
+# =============================================================================
+# EXPLAIN IDEA
+# =============================================================================
+
+def explain_idea(params: Dict[str, Any]) -> str:
+    """
+    Explain what an idea is about using AI analysis.
+
+    Voice triggers: "Erkläre die Idee X", "Was bedeutet X?", "Explain the idea X"
+
+    Args (via params):
+        idea_name: Name of the idea to explain (fuzzy matched)
+
+    Returns:
+        str: AI-generated explanation of the idea
+    """
+    idea_name = params.get("idea_name", "").strip()
+
+    if not idea_name:
+        return "Welche Idee soll ich erklären?"
+
+    bubble_id = _get_current_bubble_id()
+    repo = _get_canvas_repo()
+
+    # Get nodes in current bubble
+    all_nodes = repo.list_nodes(limit=1000)
+    if bubble_id:
+        nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    else:
+        nodes = all_nodes
+
+    if not nodes:
+        return "Keine Ideen in diesem Space gefunden."
+
+    # Find the idea using fuzzy matching
+    match = _fuzzy_find_idea(nodes, idea_name)
+
+    if not match:
+        available = _get_available_idea_names(nodes, limit=5)
+        return f"Idee '{idea_name}' nicht gefunden. Verfügbar: {available}"
+
+    # Build context from the idea
+    title = match.title or "Unbenannt"
+    content = match.content or ""
+
+    # If content is very short, just return it directly
+    if len(content) < 100 and content:
+        return f"'{title}': {content}"
+
+    # Use LLM to explain the idea
+    try:
+        from openai import OpenAI
+        import os
+
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            # Fallback: return raw content
+            if content:
+                return f"'{title}': {content[:500]}"
+            return f"Die Idee '{title}' hat noch keinen Inhalt."
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+
+        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Du bist ein hilfreicher Assistent. Erkläre die Idee kurz und verständlich auf Deutsch. Maximal 2-3 Sätze."
+                },
+                {
+                    "role": "user",
+                    "content": f"Erkläre diese Idee:\n\nTitel: {title}\nInhalt: {content or 'Kein Inhalt vorhanden'}"
+                }
+            ],
+            max_tokens=200,
+            temperature=0.5
+        )
+
+        explanation = response.choices[0].message.content.strip()
+        logger.info(f"Explained idea '{title}'")
+        return f"'{title}': {explanation}"
+
+    except Exception as e:
+        logger.warning(f"Explanation failed: {e}")
+        # Fallback: return raw content
+        if content:
+            return f"'{title}': {content[:500]}"
+        return f"Die Idee '{title}' hat noch keinen Inhalt."
+
+
 # =============================================================================
 # TOOL REGISTRY
 # =============================================================================
@@ -510,6 +1996,11 @@ IDEA_TOOLS = {
     "connect_ideas": connect_ideas,
     "delete_idea": delete_idea,
     "get_current_space": get_current_space,
+    "expand_ideas": expand_ideas,
+    "move_idea": move_idea,
+    "auto_link_ideas": auto_link_ideas,
+    "analyze_and_suggest_links": analyze_and_suggest_links,
+    "explain_idea": explain_idea,
 }
 
 
@@ -534,6 +2025,11 @@ __all__ = [
     "connect_ideas",
     "delete_idea",
     "get_current_space",
+    "expand_ideas",
+    "move_idea",
+    "auto_link_ideas",
+    "analyze_and_suggest_links",
+    "explain_idea",
     "IDEA_TOOLS",
     "register_idea_tools",
 ]

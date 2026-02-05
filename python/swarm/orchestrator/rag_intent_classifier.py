@@ -25,6 +25,13 @@ from data.intent_rule_repository import (
     get_intent_rule_repository,
 )
 
+# Import status monitor for operation tracking
+try:
+    from swarm.monitoring.system_status import get_status_monitor
+    _monitor = get_status_monitor()
+except ImportError:
+    _monitor = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,20 +74,46 @@ KREATION vs EXPANSION:
 - Der INHALT der Idee (z.B. "beheben", "verbessern", "ändern") bestimmt NICHT den Intent!
 - idea.expand ist NUR wenn der User explizit sagt "erweitere die bestehenden Ideen"
 
-## MULTI-STEP ERKENNUNG
+## MULTI-STEP ERKENNUNG (VOLLSTÄNDIGER ACTION PLAN)
 
 Wenn die Anfrage MEHRERE unterschiedliche Aktionen enthält, setze "is_multi_step": true.
 
+Für Multi-Step MUSS jeder Step haben:
+- event_type: Die Capability
+- payload: ALLE extrahierten Parameter (KRITISCH!)
+- depends_on: Index des vorherigen Steps (wenn Ergebnis benötigt)
+- output_ref: Was dieser Step produziert (optional, für Verkettung)
+
+WICHTIG: Extrahiere die Parameter für JEDEN Step separat aus dem User-Text!
+
 Beispiele für Multi-Step:
-- "Liste alle Ideen und lösche sie" → is_multi_step: true
-  - Step 1: idea.list
-  - Step 2: idea.delete (benötigt Ergebnis von Step 1)
-- "Erstelle Bubble Marketing und füge drei Ideen hinzu" → is_multi_step: true
-  - Step 1: bubble.create
-  - Step 2-4: idea.create (hängt von bubble.create ab)
-- "Gehe in den Space Test und zeige die Ideen" → is_multi_step: true
-  - Step 1: bubble.enter
-  - Step 2: idea.list
+
+1. "Finde die In-Hand-Analyse und klassifiziere sie"
+{{
+    "is_multi_step": true,
+    "steps": [
+        {{"event_type": "idea.find", "payload": {{"query": "In-Hand-Analyse"}}, "output_ref": "found_idea"}},
+        {{"event_type": "idea.classify", "payload": {{"idea_name": "In-Hand-Analyse"}}, "depends_on": 0}}
+    ]
+}}
+
+2. "Update Desktop Automation mit Features und formatiere als Tabelle"
+{{
+    "is_multi_step": true,
+    "steps": [
+        {{"event_type": "idea.update", "payload": {{"idea_name": "Desktop Automation", "topic": "Features fuer Desktop Automatisierung", "mode": "generate"}}}},
+        {{"event_type": "idea.format_table", "payload": {{"idea_name": "Desktop Automation"}}, "depends_on": 0}}
+    ]
+}}
+
+3. "Gehe in den Space Test und zeige die Ideen"
+{{
+    "is_multi_step": true,
+    "steps": [
+        {{"event_type": "bubble.enter", "payload": {{"bubble_name": "Test"}}}},
+        {{"event_type": "idea.list", "payload": {{}}, "depends_on": 0}}
+    ]
+}}
 
 Einzelne Aktionen sind KEIN Multi-Step:
 - "Lösche alle Ideen" → KEIN Multi-Step (eine Aktion)
@@ -103,11 +136,16 @@ Parameter-Referenz:
 - idea.delete: {{"idea_name": "Idee-Name"}} oder {{}} für alle
 - idea.find: {{"query": "Suchbegriff"}}
 - idea.connect: {{"source": "Idee A", "target": "Idee B"}}
-- idea.update: {{"idea_name": "Name", "new_content": "Neuer Inhalt"}}
+- idea.update:
+  - Literal (User gibt expliziten Text): {{"idea_name": "Name", "new_content": "Der exakte neue Text", "mode": "literal"}}
+  - Generieren (User will Content erzeugen lassen): {{"idea_name": "Name", "topic": "Was generiert werden soll", "mode": "generate"}}
+  WICHTIG: Bei "update mit Features über X" oder "schreib X" → mode="generate", topic="X"
+  NIEMALS den User-Prompt als new_content kopieren!
 - idea.format_table: {{"idea_name": "Name", "custom_columns": ["Spalte1", "Spalte2"]}}
 - idea.summarize: {{"idea_name": "Name", "style": "concise"}} (style: concise|detailed|actionable)
 - idea.whitepaper: {{"start_node": "Idee-Name"}}
 - idea.expand: {{"idea_name": "Name", "count": 3}}
+- idea.classify: {{"idea_name": "Name"}} (optional - wenn leer, nutze aktuelle/Root-Idee)
 - idea.auto_link: {{}} (keine Parameter nötig)
 - idea.analyze_links: {{}} (keine Parameter nötig)
 
@@ -179,7 +217,7 @@ class RAGIntentClassifier:
     def __init__(
         self,
         rule_repo: Optional[IntentRuleRepository] = None,
-        model: str = "openai/gpt-4o-mini",
+        model: str = None,
         top_k: int = 5,
     ):
         """
@@ -187,11 +225,12 @@ class RAGIntentClassifier:
 
         Args:
             rule_repo: IntentRuleRepository instance (or use singleton)
-            model: LLM model to use for classification
+            model: LLM model to use for classification (default: RAG_CLASSIFIER_MODEL env or Claude Opus 4.5)
             top_k: Number of rules to retrieve for context
         """
         self.rule_repo = rule_repo or get_intent_rule_repository()
-        self.model = model
+        # Use env var for model, default to Claude Opus 4.5 (best quality)
+        self.model = model or os.getenv("RAG_CLASSIFIER_MODEL", "anthropic/claude-opus-4.5")
         self.top_k = top_k
 
         # LLM client (lazy init)
@@ -202,18 +241,24 @@ class RAGIntentClassifier:
     @property
     def llm_client(self):
         """Lazy-load the LLM client."""
+        import sys as _sys
         if self._llm_client is None:
             try:
                 from openai import OpenAI
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if api_key:
+                    print(f"[Python DEBUG] [RAG] Creating OpenRouter client (key={api_key[:20]}...)", file=_sys.stderr, flush=True)
                     self._llm_client = OpenAI(
                         api_key=api_key,
                         base_url="https://openrouter.ai/api/v1",
+                        timeout=10.0,  # 10 second timeout for ElevenLabs compatibility
                     )
+                    print(f"[Python DEBUG] [RAG] OpenRouter client created successfully", file=_sys.stderr, flush=True)
                 else:
+                    print(f"[Python DEBUG] [RAG] ERROR: OPENROUTER_API_KEY not set!", file=_sys.stderr, flush=True)
                     logger.warning("[RAGIntentClassifier] OPENROUTER_API_KEY not set")
-            except ImportError:
+            except ImportError as e:
+                print(f"[Python DEBUG] [RAG] ERROR: OpenAI library not installed: {e}", file=_sys.stderr, flush=True)
                 logger.error("[RAGIntentClassifier] OpenAI library not installed")
         return self._llm_client
 
@@ -232,25 +277,41 @@ class RAGIntentClassifier:
         Returns:
             RAGClassificationResult with event_type, confidence, etc.
         """
+        import sys as _sys
+        print(f"[Python DEBUG] [RAG] classify() called: {user_input[:50]}...", file=_sys.stderr, flush=True)
+
         # 1. Retrieve relevant rules from Supermemory
+        print(f"[Python DEBUG] [RAG] Step 1: Searching rules...", file=_sys.stderr, flush=True)
         relevant_rules = self.rule_repo.search_similar(user_input, top_k=self.top_k)
 
         if not relevant_rules:
+            print(f"[Python DEBUG] [RAG] No rules found - using fallback", file=_sys.stderr, flush=True)
             logger.warning(f"[RAGIntentClassifier] No rules found for: {user_input[:50]}...")
             return self._fallback_classification(user_input)
 
         # 2. Build context from rules
         rules_context = self._build_rules_context(relevant_rules)
         used_rule_types = [rule.intent_type for rule in relevant_rules]
+        print(f"[Python DEBUG] [RAG] Step 2: Found {len(relevant_rules)} rules: {used_rule_types}", file=_sys.stderr, flush=True)
 
         logger.info(f"[RAGIntentClassifier] Retrieved rules: {used_rule_types}")
 
         # 3. Call LLM with rules as context
+        print(f"[Python DEBUG] [RAG] Step 3: Calling LLM (model={self.model})...", file=_sys.stderr, flush=True)
         try:
+            # Check LLM client availability
+            if not self.llm_client:
+                print(f"[Python DEBUG] [RAG] ERROR: LLM client is None! Check OPENROUTER_API_KEY", file=_sys.stderr, flush=True)
+                raise ValueError("LLM client not available - check OPENROUTER_API_KEY")
+
             result = await self._call_llm(user_input, rules_context, bubble_context)
             result.used_rules = used_rule_types
+            print(f"[Python DEBUG] [RAG] Step 4: LLM returned: {result.event_type} ({result.confidence:.0%})", file=_sys.stderr, flush=True)
             return result
         except Exception as e:
+            print(f"[Python DEBUG] [RAG] ERROR in LLM call: {type(e).__name__}: {e}", file=_sys.stderr, flush=True)
+            import traceback
+            traceback.print_exc(file=_sys.stderr)
             logger.error(f"[RAGIntentClassifier] LLM call failed: {e}")
             return self._fallback_classification(user_input, relevant_rules)
 
@@ -295,16 +356,41 @@ class RAGIntentClassifier:
         )
 
         # Run sync OpenAI call in thread pool to avoid blocking event loop
+        import time as _time
+        import sys as _sys
+
         def _sync_llm_call():
-            return self.llm_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "Du bist ein präziser Intent-Classifier. Antworte nur mit JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=2048,  # Sufficient for 30+ step multi-step responses
-            )
+            start = _time.perf_counter()
+            # Track with status monitor
+            op_id = None
+            if _monitor:
+                op_id = _monitor.start_operation(
+                    "llm_call",
+                    f"RAG classify: {user_input[:40]}...",
+                    {"model": self.model}
+                )
+            print(f"[Python DEBUG] [RAG LLM] Calling {self.model}...", file=_sys.stderr, flush=True)
+            try:
+                result = self.llm_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "Du bist ein präziser Intent-Classifier. Antworte nur mit JSON."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=2048,  # Sufficient for 30+ step multi-step responses
+                )
+                elapsed = _time.perf_counter() - start
+                print(f"[Python DEBUG] [RAG LLM] Completed in {elapsed:.2f}s", file=_sys.stderr, flush=True)
+                if _monitor and op_id:
+                    _monitor.complete_operation(op_id, success=True)
+                return result
+            except Exception as e:
+                elapsed = _time.perf_counter() - start
+                print(f"[Python DEBUG] [RAG LLM] FAILED after {elapsed:.2f}s: {e}", file=_sys.stderr, flush=True)
+                if _monitor and op_id:
+                    _monitor.complete_operation(op_id, success=False, error=str(e))
+                raise
 
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:

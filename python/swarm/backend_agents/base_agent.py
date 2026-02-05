@@ -13,7 +13,7 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, List
 
 from swarm.event_bus import EventBus, SwarmEvent, get_event_bus
 from swarm.debugging.agent_execution_logger import get_agent_execution_logger
@@ -372,6 +372,92 @@ class BaseBackendAgent(ABC):
 
         return extracted
 
+    def _resolve_context_references(
+        self,
+        event_type: str,
+        user_input: str,
+        tool_params: Dict[str, Any],
+        conversation_history: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Resolve contextual references (alle, die, das, sie) from conversation history.
+
+        Examples:
+            User: "Zeig mir meine Bubbles" → Rachel lists: Marketing, Sales, Ideas
+            User: "Lösche die alle" → Should resolve to delete all listed bubbles
+
+        Args:
+            event_type: The event type being processed
+            user_input: Current user input
+            tool_params: Already extracted parameters
+            conversation_history: List of recent conversation messages
+
+        Returns:
+            Dictionary of resolved parameters
+        """
+        resolved = {}
+        user_input_lower = user_input.lower() if user_input else ""
+
+        # Check for contextual references
+        context_keywords = ["alle", "die", "das", "sie", "es", "diese", "jene", "davon"]
+        has_context_reference = any(kw in user_input_lower for kw in context_keywords)
+
+        if not has_context_reference:
+            return resolved
+
+        # For delete operations, look for recently listed items
+        if event_type in ["bubble.delete", "idea.delete", "bubble.list"]:
+            # Look for list responses in conversation history (Rachel's messages)
+            for msg in reversed(conversation_history):
+                if msg.get("speaker") in ["rachel", "assistant", "agent"]:
+                    text = msg.get("text", "")
+                    text_lower = text.lower()
+
+                    # Check if this was a list response
+                    list_indicators = ["hier sind", "du hast", "folgende", "diese bubbles", "diese spaces"]
+                    if any(ind in text_lower for ind in list_indicators):
+                        # Try to extract bubble/space names from the list
+                        # Common patterns: "- Marketing", "• Sales", "1. Ideas"
+                        import re
+                        names = re.findall(r'(?:^|\n)\s*[-•●\d.)\]]\s*([A-Za-zäöüÄÖÜß][A-Za-zäöüÄÖÜß0-9\s-]+?)(?:\s*[-–:(\n]|$)', text)
+                        if names:
+                            # Clean up extracted names
+                            cleaned = [n.strip() for n in names if n.strip() and len(n.strip()) > 1]
+                            if cleaned:
+                                if "alle" in user_input_lower:
+                                    # User wants to delete ALL items
+                                    resolved["_targets"] = cleaned
+                                    resolved["_target_type"] = "all"
+                                    logger.info(f"{self.name}: Resolved 'alle' to {len(cleaned)} items: {cleaned}")
+                                break
+
+                        # Also try: "Marketing, Sales und Ideas"
+                        comma_pattern = r'([A-Za-zäöüÄÖÜß][A-Za-zäöüÄÖÜß0-9-]+(?:\s*,\s*[A-Za-zäöüÄÖÜß][A-Za-zäöüÄÖÜß0-9-]+)+(?:\s+und\s+[A-Za-zäöüÄÖÜß][A-Za-zäöüÄÖÜß0-9-]+)?)'
+                        comma_match = re.search(comma_pattern, text)
+                        if comma_match:
+                            items = re.split(r'\s*,\s*|\s+und\s+', comma_match.group(1))
+                            cleaned = [n.strip() for n in items if n.strip() and len(n.strip()) > 1]
+                            if cleaned:
+                                resolved["_targets"] = cleaned
+                                resolved["_target_type"] = "all"
+                                logger.info(f"{self.name}: Resolved 'alle' from comma list to: {cleaned}")
+                                break
+
+        # For navigation, look for recently mentioned bubbles
+        elif event_type == "bubble.enter":
+            for msg in reversed(conversation_history):
+                text = msg.get("text", "")
+                # Look for bubble names in context
+                # This is simpler - just get the most recently mentioned space
+                import re
+                mentions = re.findall(r'(?:space|bubble|bereich)\s+["\']?([A-Za-zäöüÄÖÜß][A-Za-zäöüÄÖÜß0-9\s-]+)', text, re.IGNORECASE)
+                if mentions:
+                    resolved["bubble_name"] = mentions[-1].strip()
+                    logger.info(f"{self.name}: Resolved context reference to bubble: {resolved['bubble_name']}")
+                    break
+
+        return resolved
+
     async def start(self):
         """Start listening to the stream."""
         if self._running:
@@ -446,8 +532,23 @@ class BaseBackendAgent(ABC):
             # Extract user_input for fallback parameter extraction
             user_input = tool_params.pop("_user_input", "")
 
+            # Extract conversation history for contextual resolution
+            conversation_history = tool_params.pop("_conversation_history", [])
+            if conversation_history:
+                logger.debug(f"{self.name}: Received {len(conversation_history)} messages of conversation history")
+
             # Normalize parameter names (e.g., "title" -> "bubble_name" for bubble.enter)
             tool_params = self._normalize_params(event_type, tool_params)
+
+            # Resolve contextual references using conversation history
+            if conversation_history:
+                context_resolved = self._resolve_context_references(
+                    event_type, user_input, tool_params, conversation_history
+                )
+                for key, value in context_resolved.items():
+                    if key not in tool_params or not tool_params.get(key):
+                        tool_params[key] = value
+                        logger.info(f"{self.name}: Resolved '{key}' from conversation context: {value}")
 
             # Fallback: extract missing params from transcript
             if user_input:
@@ -566,6 +667,43 @@ class BaseBackendAgent(ABC):
         )
         await self.bus.publish(event)
         logger.error(f"{self.name}: Error for job {job_id}: {error}")
+
+    async def _ask_question(
+        self,
+        job_id: str,
+        question: str,
+        options: List[str] = None,
+        context: str = "",
+        priority: int = 0
+    ) -> None:
+        """
+        Ask the user a question via Rachel.
+
+        The question will be queued and Rachel will ask
+        at the next opportunity when processing user input.
+
+        Args:
+            job_id: Job ID for response correlation
+            question: Question text (German or English)
+            options: Optional list of answer options to present
+            context: Additional context for Rachel
+            priority: 0=normal, 1=high, 2=urgent
+        """
+        event = SwarmEvent(
+            stream=EventBus.STREAM_QUESTIONS,
+            event_type="question.clarification",
+            payload={
+                "question": question,
+                "options": options or [],
+                "context": context,
+                "agent": self.name,
+                "priority": priority
+            },
+            job_id=job_id
+        )
+
+        await self.bus.publish(event)
+        logger.info(f"{self.name}: Asked question for job {job_id}: {question[:50]}...")
 
 
 __all__ = ["BaseBackendAgent"]

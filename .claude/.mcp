@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "handoff": {
+      "command": "python",
+      "args": ["c:\\Users\\User\\Desktop\\Moire_tracker_v1\\MoireTracker_v2\\python\\mcp_server_handoff.py"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "desktop-commander": {
+      "command": "npx.cmd",
+      "args": ["@wonderwhy-er/desktop-commander@latest"]
+    }
+  }
+}

@@ -25,6 +25,14 @@ from swarm.orchestrator.intent_classifier import IntentClassifier, get_intent_cl
 from swarm.event_team import get_task_seeder, get_event_router, TaskContext
 from swarm.event_team.job_manager import get_job_manager
 
+# Import EventBus for stream constants
+try:
+    from swarm.event_bus import EventBus, STREAM_TASKS_SHUTTLES
+    HAS_EVENT_BUS = True
+except ImportError:
+    HAS_EVENT_BUS = False
+    STREAM_TASKS_SHUTTLES = "events:tasks:shuttles"  # Fallback constant
+
 # Task Memory for persistent task tracking (SQLite-based)
 try:
     from data.task_memory_repository import get_task_memory_repository
@@ -54,6 +62,13 @@ try:
     HAS_REALTIME_EVAL = True
 except ImportError:
     HAS_REALTIME_EVAL = False
+
+# System status monitoring
+try:
+    from swarm.monitoring.system_status import get_status_monitor
+    _status_monitor = get_status_monitor()
+except ImportError:
+    _status_monitor = None
 
 # Optional ToolOrchestrator import (Phase 11)
 try:
@@ -87,6 +102,14 @@ try:
 except ImportError:
     HAS_TOOL_LOGGER = False
     get_tool_logger = None
+
+# UI event broadcasting for tool_failed events
+try:
+    from tools.workspace_tools import _broadcast_to_electron
+    HAS_BROADCAST = True
+except ImportError:
+    HAS_BROADCAST = False
+    _broadcast_to_electron = None
 
 # Reasoning Logger for multi-step execution tracking
 try:
@@ -133,6 +156,39 @@ try:
 except ImportError:
     HAS_REAL_TIME_STATE = False
     get_real_time_state = None
+
+# Session context for system-wide context availability
+try:
+    from swarm.context.session_context import (
+        set_session_context,
+        clear_session_context,
+        get_session_context,
+    )
+    HAS_SESSION_CONTEXT = True
+except ImportError:
+    HAS_SESSION_CONTEXT = False
+    set_session_context = None
+    clear_session_context = None
+    get_session_context = None
+
+# DroPE Reference Resolver (for "das", "nochmal", "es" resolution)
+try:
+    from swarm.orchestrator.reference_resolver import get_reference_resolver
+    HAS_DROPE_RESOLVER = True
+except ImportError:
+    HAS_DROPE_RESOLVER = False
+    get_reference_resolver = None
+
+# Broadcast Dispatcher (Fan-Out architecture for parallel agent evaluation + profiling)
+try:
+    from swarm.broadcast.dispatcher import BroadcastDispatcher, IntentPayload, BroadcastResult
+    from swarm.broadcast.ideas_broadcast_agent import IdeasBroadcastAgent
+    from swarm.broadcast.coding_broadcast_agent import CodingBroadcastAgent
+    from swarm.broadcast.desktop_broadcast_agent import DesktopBroadcastAgent
+    HAS_BROADCAST = True
+except ImportError as e:
+    HAS_BROADCAST = False
+    logger.debug(f"Broadcast dispatcher not available: {e}")
 
 
 @dataclass
@@ -336,12 +392,59 @@ class IntentOrchestrator:
         self._tool_executors: Dict[str, Callable] = {}
         self._load_direct_tools()  # Always load - needed for multi-step execution
 
-        if not self._redis_available and not self._use_tool_orchestrator:
+        # Broadcast Dispatcher (Fan-Out architecture)
+        # When enabled, every classified intent is broadcast to ALL domain agents.
+        # The responsible agent executes; non-responsible agents do user profiling.
+        self._use_broadcast_mode = (
+            os.getenv("USE_BROADCAST_MODE", "false").lower() == "true"
+            and HAS_BROADCAST
+        )
+        self._broadcast_dispatcher = None
+        if self._use_broadcast_mode:
+            try:
+                self._broadcast_dispatcher = BroadcastDispatcher()
+                self._broadcast_dispatcher.register_agent(IdeasBroadcastAgent())
+                self._broadcast_dispatcher.register_agent(CodingBroadcastAgent())
+                self._broadcast_dispatcher.register_agent(DesktopBroadcastAgent())
+                logger.info("BroadcastDispatcher initialized with 3 domain agents (Fan-Out mode)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize BroadcastDispatcher: {e}")
+                self._use_broadcast_mode = False
+
+        if self._use_broadcast_mode:
+            logger.info("IntentOrchestrator initialized (BROADCAST Fan-Out mode)")
+        elif not self._redis_available and not self._use_tool_orchestrator:
             logger.info("IntentOrchestrator initialized (SYNC fallback mode - no Redis)")
         elif not self._use_tool_orchestrator:
             logger.info("IntentOrchestrator initialized (Redis mode)")
         else:
             logger.info("IntentOrchestrator initialized (Tool orchestrator mode + multi-step tools)")
+
+    def _looks_like_multi_step(self, text: str) -> bool:
+        """
+        Quick heuristic to detect multi-action sentences.
+
+        Multi-step commands should bypass the CollectorAgent since they are
+        already complete sentences with multiple actions.
+
+        Examples:
+        - "Geh in Space X und erstelle eine Idee"
+        - "Navigate to Marketing and create a note"
+        - "Lösche den Space dann erstelle einen neuen"
+        """
+        text_lower = text.lower()
+        # German and English connectors indicating multiple actions
+        connectors = [
+            ' und ', ' and ',           # "X and Y"
+            ' dann ', ' then ',          # "X then Y"
+            ' danach ', ' after ',       # "after X do Y"
+            ' sowie ', ' also ',         # "X also Y"
+            ', erstelle ', ', create ',  # "go to X, create Y"
+            ', lösche ', ', delete ',    # "do X, delete Y"
+            ' und erstelle ', ' and create ',  # Combined
+            ' und lösche ', ' and delete ',    # Combined
+        ]
+        return any(c in text_lower for c in connectors)
 
     def _check_redis(self) -> bool:
         """Check if Redis is available.
@@ -378,20 +481,26 @@ class IntentOrchestrator:
         try:
             from tools.bubble_tools import (
                 list_bubbles, create_bubble, enter_bubble,
-                exit_bubble, delete_bubble, get_bubble_stats,
-                score_bubble, promote_bubble
+                exit_bubble, delete_bubble, delete_all_bubbles_except,
+                get_bubble_stats, score_bubble, promote_bubble,
+                update_bubble, find_bubble, evaluate_bubble_evolution
             )
             self._tool_executors.update({
                 "bubble.list": list_bubbles,
                 "bubble.create": create_bubble,
                 "bubble.enter": enter_bubble,
                 "bubble.exit": exit_bubble,
+                "bubble.back": exit_bubble,  # Alias for bubble.exit
                 "bubble.delete": delete_bubble,
+                "bubble.delete_all_except": delete_all_bubbles_except,
                 "bubble.stats": get_bubble_stats,
                 "bubble.score": score_bubble,
                 "bubble.promote": promote_bubble,
+                "bubble.update": update_bubble,
+                "bubble.find": find_bubble,
+                "bubble.evaluate": evaluate_bubble_evolution,
             })
-            logger.info("Loaded bubble tools for sync fallback (8 tools)")
+            logger.info("Loaded bubble tools for sync fallback (12 tools)")
         except ImportError as e:
             logger.warning(f"Could not load bubble tools: {e}")
 
@@ -400,8 +509,12 @@ class IntentOrchestrator:
             from tools.idea_tools import (
                 create_idea, list_ideas, find_idea, delete_idea,
                 update_idea, connect_ideas, add_image, get_current_space,
-                expand_ideas, move_idea, auto_link_ideas, analyze_and_suggest_links
+                expand_ideas, move_idea, auto_link_ideas, analyze_and_suggest_links,
+                count_ideas, classify_idea, link_idea_to_root, connect_ideas_multi,
+                disconnect_ideas, explain_idea
             )
+            from tools.structured_formatting_tools import format_idea_as_table
+            from tools.summary_tools import summarize_idea, generate_white_paper
             self._tool_executors.update({
                 "idea.create": create_idea,
                 "idea.list": list_ideas,
@@ -409,14 +522,25 @@ class IntentOrchestrator:
                 "idea.delete": delete_idea,
                 "idea.update": update_idea,
                 "idea.connect": connect_ideas,
+                "idea.disconnect": disconnect_ideas,
+                "idea.connect_multi": connect_ideas_multi,
                 "idea.add_image": add_image,
                 "idea.expand": expand_ideas,
                 "idea.move": move_idea,
                 "idea.auto_link": auto_link_ideas,
                 "idea.analyze_links": analyze_and_suggest_links,
+                "idea.count": count_ideas,
+                "idea.classify": classify_idea,
+                "idea.link_to_root": link_idea_to_root,
+                "idea.format_table": format_idea_as_table,
+                "idea.summarize": summarize_idea,
+                "idea.whitepaper": generate_white_paper,
+                "idea.white_paper": generate_white_paper,  # Alias
+                "idea.explain": explain_idea,
                 "bubble.current": get_current_space,
+                "idea.current_space": get_current_space,  # Alias for intent rule
             })
-            logger.info("Loaded idea tools for sync fallback (12 tools)")
+            logger.info("Loaded idea tools for sync fallback (20 tools)")
         except ImportError as e:
             logger.warning(f"Could not load idea tools: {e}")
 
@@ -541,6 +665,14 @@ class IntentOrchestrator:
         except ImportError as e:
             logger.warning(f"Could not load summary tools: {e}")
 
+        # === FORMAT TOOLS (structured formatting) ===
+        try:
+            from tools.format_dispatcher import FORMAT_EXECUTORS
+            self._tool_executors.update(FORMAT_EXECUTORS)
+            logger.info(f"Loaded format tools for sync fallback ({len(FORMAT_EXECUTORS)} tools)")
+        except ImportError as e:
+            logger.warning(f"Could not load format tools: {e}")
+
         # === TASK MEMORY TOOLS (Supermemory-based) ===
         try:
             from tools.task_memory_tools import (
@@ -571,6 +703,202 @@ class IntentOrchestrator:
             logger.info("Loaded task status tools for sync fallback (3 tools)")
         except ImportError as e:
             logger.debug(f"Could not load task status tools: {e}")
+
+        # === SYSTEM STATUS MONITORING TOOLS ===
+        try:
+            from tools.system_status_tools import SYSTEM_STATUS_TOOLS
+            self._tool_executors.update(SYSTEM_STATUS_TOOLS)
+            logger.info(f"Loaded system status tools ({len(SYSTEM_STATUS_TOOLS)} tools)")
+        except ImportError as e:
+            logger.debug(f"Could not load system status tools: {e}")
+
+        # === EXPLORATION TOOLS (AI-Scientist Tree Search) ===
+        try:
+            from swarm.tools.exploration_tools import (
+                start_exploration,
+                stop_exploration,
+                get_exploration_status,
+                accept_connection,
+                reject_connection,
+                explore_deeper,
+                visualize_exploration,
+                respond_to_exploration_question,
+                set_exploration_direction,
+            )
+            import asyncio
+            import concurrent.futures
+
+            def _run_async_exploration(coro):
+                """Run async exploration function synchronously."""
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            future = pool.submit(asyncio.run, coro)
+                            return future.result()
+                    return loop.run_until_complete(coro)
+                except RuntimeError:
+                    return asyncio.run(coro)
+
+            def _format_exploration_result(result):
+                """Format exploration result for voice output."""
+                if isinstance(result, dict):
+                    if result.get("success"):
+                        return result.get("message", "Exploration gestartet.")
+                    else:
+                        return result.get("message", "Exploration fehlgeschlagen.")
+                return str(result)
+
+            def explore_start_sync(params):
+                result = _run_async_exploration(start_exploration(
+                    bubble_id=params.get("bubble_id"),
+                    depth=params.get("depth", 4),
+                    context=params.get("context"),
+                    mode=params.get("mode", "auto"),
+                ))
+                return _format_exploration_result(result)
+
+            def explore_stop_sync(params):
+                result = _run_async_exploration(stop_exploration())
+                return _format_exploration_result(result)
+
+            def explore_status_sync(params):
+                result = _run_async_exploration(get_exploration_status())
+                return _format_exploration_result(result)
+
+            def explore_accept_sync(params):
+                result = _run_async_exploration(accept_connection(
+                    connection_id=params.get("connection_id")
+                ))
+                return _format_exploration_result(result)
+
+            def explore_reject_sync(params):
+                result = _run_async_exploration(reject_connection(
+                    connection_id=params.get("connection_id")
+                ))
+                return _format_exploration_result(result)
+
+            def explore_deeper_sync(params):
+                result = _run_async_exploration(explore_deeper())
+                return _format_exploration_result(result)
+
+            def explore_visualize_sync(params):
+                result = _run_async_exploration(visualize_exploration())
+                return _format_exploration_result(result)
+
+            def explore_respond_sync(params):
+                result = _run_async_exploration(respond_to_exploration_question(
+                    question_id=params.get("question_id"),
+                    response_type=params.get("response_type"),
+                    selected_option=params.get("selected_option"),
+                    custom_text=params.get("custom_text"),
+                ))
+                return _format_exploration_result(result)
+
+            def explore_direction_sync(params):
+                result = _run_async_exploration(set_exploration_direction(
+                    direction=params.get("direction"),
+                    bubble_id=params.get("bubble_id"),
+                ))
+                return _format_exploration_result(result)
+
+            self._tool_executors.update({
+                "idea.explore.start": explore_start_sync,
+                "idea.explore.stop": explore_stop_sync,
+                "idea.explore.status": explore_status_sync,
+                "idea.explore.accept": explore_accept_sync,
+                "idea.explore.reject": explore_reject_sync,
+                "idea.explore.depth": explore_deeper_sync,
+                "idea.explore.visualize": explore_visualize_sync,
+                "idea.explore.respond": explore_respond_sync,
+                "idea.explore.direction": explore_direction_sync,
+                "idea.explore.continue": explore_start_sync,  # Alias
+            })
+            logger.info("Loaded exploration tools for sync fallback (10 tools)")
+        except ImportError as e:
+            logger.warning(f"Could not load exploration tools: {e}")
+
+        # === BUBBLE REQUIREMENTS TOOLS ===
+        try:
+            from tools.bubble_requirements_tool import (
+                process_bubble_requirements,
+                get_bubble_requirements,
+                list_bubbles_with_requirements
+            )
+            import asyncio
+            import concurrent.futures
+
+            def _run_async_requirements(coro):
+                """Run async requirements function synchronously."""
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            future = pool.submit(asyncio.run, coro)
+                            return future.result()
+                    return loop.run_until_complete(coro)
+                except RuntimeError:
+                    return asyncio.run(coro)
+
+            def _format_requirements_result(result):
+                """Format requirements result for voice output."""
+                if isinstance(result, dict):
+                    if result.get("error"):
+                        return f"Fehler: {result.get('error', 'Unbekannter Fehler')}"
+                    elif "bubbles" in result:
+                        bubbles = result.get("bubbles", [])
+                        if not bubbles:
+                            return "Du hast noch keine Bubbles mit Requirements."
+                        count = len(bubbles)
+                        names = [b.get("bubble_title", b.get("title", "Unbenannt")) for b in bubbles[:5]]
+                        if count <= 5:
+                            return f"Du hast {count} Bubbles mit Requirements: {', '.join(names)}."
+                        return f"Du hast {count} Bubbles mit Requirements. Die ersten sind: {', '.join(names)}."
+                    elif "requirements" in result:
+                        requirements = result.get("requirements", [])
+                        if not requirements:
+                            return "Keine Requirements gefunden."
+                        count = len(requirements)
+                        return f"Ich habe {count} Requirements generiert."
+                    elif "metadata" in result:
+                        metadata = result.get("metadata", {})
+                        bubble_title = metadata.get("bubble_title", "Unbenannt")
+                        node_count = metadata.get("node_count", 0)
+                        total_words = metadata.get("total_words", 0)
+                        return f"Für Bubble '{bubble_title}': {node_count} Nodes mit {total_words} Wörtern."
+                    else:
+                        return str(result)
+                return str(result)
+
+            def shuttle_list_sync(params):
+                """Liste alle Bubbles mit ihren Requirements."""
+                result = _run_async_requirements(list_bubbles_with_requirements())
+                return _format_requirements_result(result)
+
+            def shuttle_get_sync(params):
+                """Hole die Requirements für eine spezifische Bubble."""
+                bubble_id = params.get("bubble_id")
+                if not bubble_id:
+                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
+                result = _run_async_requirements(get_bubble_requirements(bubble_id))
+                return _format_requirements_result(result)
+
+            def shuttle_process_sync(params):
+                """Verarbeite die Inhalte einer Bubble und generiere Requirements."""
+                bubble_id = params.get("bubble_id")
+                if not bubble_id:
+                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
+                result = _run_async_requirements(process_bubble_requirements(bubble_id))
+                return _format_requirements_result(result)
+
+            self._tool_executors.update({
+                "shuttle.list": shuttle_list_sync,
+                "shuttle.get": shuttle_get_sync,
+                "shuttle.process": shuttle_process_sync,
+            })
+            logger.info("Loaded bubble requirements tools for sync fallback (3 tools)")
+        except ImportError as e:
+            logger.warning(f"Could not load bubble requirements tools: {e}")
 
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 
@@ -608,7 +936,8 @@ class IntentOrchestrator:
     async def process_intent(
         self,
         intent_text: str,
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
+        domain_hint: Optional[str] = None
     ) -> OrchestrationResult:
         """
         Process user intent through the full orchestration pipeline.
@@ -630,6 +959,8 @@ class IntentOrchestrator:
         Args:
             intent_text: Natural language user request
             context: Optional task context (user_id, session_id, etc.)
+            domain_hint: Optional domain hint for direct routing (ideas, bubbles, desktop, coding, shuttles)
+                        If provided, skips domain detection and routes to the specified domain stream.
 
         Returns:
             OrchestrationResult with job_id, event_type, and response_hint
@@ -639,7 +970,48 @@ class IntentOrchestrator:
         if not context.user_input:
             context.user_input = intent_text
 
+        # Set system-wide session context for tools to access
+        if HAS_SESSION_CONTEXT and set_session_context:
+            try:
+                # Get conversation history if available
+                conv_history = []
+                if context.session_id:
+                    try:
+                        from data import ConversationRepository
+                        conv_repo = ConversationRepository()
+                        recent_msgs = conv_repo.get_messages_for_session(
+                            context.session_id,
+                            limit=10
+                        )
+                        conv_history = [
+                            {"speaker": m.speaker, "text": m.text, "timestamp": m.timestamp}
+                            for m in recent_msgs
+                        ]
+                    except Exception:
+                        pass
+
+                set_session_context(
+                    session_id=context.session_id or "default",
+                    user_id=context.user_id or "default",
+                    user_input=intent_text,
+                    conversation_history=conv_history,
+                )
+            except Exception as ctx_err:
+                logger.debug(f"[SessionContext] Setup error: {ctx_err}")
+
         try:
+            # =================================================================
+            # PHASE 0: DOMAIN-SPECIFIC ROUTING (if domain_hint provided)
+            # =================================================================
+            if domain_hint:
+                logger.info(f"[DomainRouter] Direct routing to domain: {domain_hint}")
+                domain_result = await self._route_to_domain(intent_text, domain_hint, context)
+                if domain_result:
+                    self._log_classification(intent_text, domain_result, context)
+                    return domain_result
+                # If domain routing failed, continue to normal analysis
+                logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
+
             # =================================================================
             # PHASE 1: CORE ANALYSIS - IntentAnalysisTeam (Always runs first)
             # =================================================================
@@ -680,6 +1052,131 @@ class IntentOrchestrator:
             self._log_classification(intent_text, error_result, context)
             return error_result
 
+    async def _route_to_domain(
+        self,
+        intent_text: str,
+        domain: str,
+        context: TaskContext
+    ) -> Optional[OrchestrationResult]:
+        """
+        Route intent directly to a specific domain stream.
+
+        Used when domain_hint is provided from domain-specific tools
+        (send_ideas_intent, send_bubbles_intent, etc.)
+
+        Args:
+            intent_text: User input
+            domain: Target domain (ideas, bubbles, desktop, coding, shuttles)
+            context: Task context
+
+        Returns:
+            OrchestrationResult if successful, None if failed
+        """
+        logger.info(f"[DomainRouter] Routing to domain: {domain}")
+
+        try:
+            # Special handling for Shuttle domain
+            if domain == "shuttles":
+                logger.info(f"[DomainRouter] Shuttle domain detected, using shuttle tools")
+                
+                # Map shuttle domain to shuttle event types
+                # shuttle.list -> list_bubbles_with_requirements
+                # shuttle.get -> get_bubble_requirements
+                # shuttle.process -> process_bubble_requirements
+                
+                # Try to extract bubble_id from intent text
+                bubble_id = None
+                if "bubble" in intent_text.lower():
+                    # Try to extract bubble ID or name
+                    import re
+                    bubble_match = re.search(r'bubble\s+(?:id\s*[:=]\s*|name\s*[:=]\s*)?([a-zA-Z0-9_]+)', intent_text, re.IGNORECASE)
+                    if bubble_match:
+                        bubble_id = bubble_match.group(1)
+                        logger.info(f"[DomainRouter] Extracted bubble_id: {bubble_id}")
+                
+                # Determine shuttle event type based on intent
+                event_type = "shuttle.list"  # Default
+                if "anforderungen" in intent_text.lower() or "requirements" in intent_text.lower():
+                    if bubble_id:
+                        event_type = "shuttle.get"
+                    else:
+                        event_type = "shuttle.list"
+                elif "generieren" in intent_text.lower() or "erstellen" in intent_text.lower() or "create" in intent_text.lower():
+                    event_type = "shuttle.process"
+                
+                # Build payload
+                payload = {}
+                if bubble_id:
+                    payload["bubble_id"] = bubble_id
+                
+                # Add user input to payload
+                payload["_user_input"] = intent_text
+                
+                # Execute via sync mode
+                return await self._process_sync(
+                    event_type=event_type,
+                    payload=payload,
+                    response_hint=f"Ich verarbeite deine Shuttle-Anfrage... ({event_type})",
+                    user_id=context.user_id if context else "default",
+                    session_id=context.session_id if context else "default"
+                )
+
+            # Use RAG classifier for classification (it's domain-agnostic anyway)
+            if self._use_rag_classifier and self.rag_classifier:
+                # Get bubble context for classifier
+                bubble_context = None
+                try:
+                    from swarm.context import get_bubble_context_provider
+                    bubble_context = get_bubble_context_provider().get_current_context()
+                except Exception:
+                    pass
+
+                rag_result = await self.rag_classifier.classify(intent_text, bubble_context=bubble_context)
+
+                if rag_result and rag_result.confidence >= 0.4:
+                    event_type = rag_result.event_type
+                    payload = rag_result.payload.copy() if rag_result.payload else {}
+                    response_hint = rag_result.reasoning or "Ich verarbeite deine Anfrage..."
+
+                    logger.info(f"[DomainRouter] RAG classified: {event_type} ({rag_result.confidence:.0%})")
+
+                    # Add user input to payload
+                    payload["_user_input"] = intent_text
+
+                    # Execute via sync mode
+                    return await self._process_sync(
+                        event_type=event_type,
+                        payload=payload,
+                        response_hint=response_hint,
+                        user_id=context.user_id if context else "default",
+                        session_id=context.session_id if context else "default"
+                    )
+
+            # Fallback: Use standard classifier
+            classification = await self.classifier.classify(intent_text)
+            if classification:
+                event_type = classification.get("event_type", "unknown")
+                payload = classification.get("payload", {})
+                response_hint = classification.get("response_hint", "Ich verarbeite deine Anfrage...")
+
+                # Add user input to payload
+                payload["_user_input"] = intent_text
+
+                logger.info(f"[DomainRouter] Standard classified: {event_type}")
+
+                return await self._process_sync(
+                    event_type=event_type,
+                    payload=payload,
+                    response_hint=response_hint,
+                    user_id=context.user_id if context else "default",
+                    session_id=context.session_id if context else "default"
+                )
+
+        except Exception as e:
+            logger.error(f"[DomainRouter] Error routing to {domain}: {e}")
+
+        return None
+
     async def _run_core_analysis(
         self,
         intent_text: str,
@@ -717,17 +1214,22 @@ class IntentOrchestrator:
         if self._use_enhancement_pipeline and self.collector_agent and self.intent_enhancer:
             try:
                 # Step 1: Collector - check if we should accumulate short inputs
-                collected = await self.collector_agent.collect(intent_text)
-                if collected is None:
-                    # Input is being accumulated, return a "listening" response
-                    logger.info(f"[Enhancement] Collector accumulating: '{intent_text[:30]}...'")
-                    return OrchestrationResult(
-                        job_id="",
-                        event_type="conversation.listening",
-                        stream="",
-                        response_hint="Ich hoere zu... (mehr?)",
-                        is_conversational=True
-                    )
+                # BUT skip collector for multi-step commands (they're already complete)
+                if self._looks_like_multi_step(intent_text):
+                    logger.debug(f"[Enhancement] Multi-step detected, skipping collector: '{intent_text[:40]}...'")
+                    collected = intent_text  # Pass through directly
+                else:
+                    collected = await self.collector_agent.collect(intent_text)
+                    if collected is None:
+                        # Input is being accumulated, return a "listening" response
+                        logger.info(f"[Enhancement] Collector accumulating: '{intent_text[:100]}...'")
+                        return OrchestrationResult(
+                            job_id="",
+                            event_type="conversation.listening",
+                            stream="",
+                            response_hint="Ich hoere zu... (mehr?)",
+                            is_conversational=True
+                        )
                 # Use collected (possibly combined) input
                 intent_text = collected
 
@@ -741,7 +1243,7 @@ class IntentOrchestrator:
                 enhanced = await self.intent_enhancer.enhance(intent_text, bubble_ctx)
                 if enhanced.was_enhanced:
                     logger.info(
-                        f"[Enhancement] Enhanced: '{intent_text[:40]}' -> '{enhanced.normalized_text[:40]}' "
+                        f"[Enhancement] Enhanced: '{intent_text[:100]}' -> '{enhanced.normalized_text[:100]}' "
                         f"(rules: {enhanced.rules_applied})"
                     )
                     print(f"[Python DEBUG] [ENHANCER] Applied rules: {enhanced.rules_applied}", file=sys.stderr)
@@ -756,14 +1258,14 @@ class IntentOrchestrator:
         if self._use_rag_classifier and self.rag_classifier:
             try:
                 logger.info("Running RAG classification with Supermemory")
-                print(f"[Python DEBUG] [RAG CLASSIFIER] Processing: {intent_text[:60]}...", file=sys.stderr)
+                print(f"[Python DEBUG] [RAG CLASSIFIER] Processing: {intent_text[:100]}...", file=sys.stderr, flush=True)
 
                 # Get bubble context for classifier
                 try:
                     from swarm.context import get_bubble_context_provider
                     bubble_context = get_bubble_context_provider().get_current_context()
                     print(f"[Python DEBUG] [CONTEXT] Current: {bubble_context.get('bubble_name')}, "
-                          f"Ideas: {bubble_context.get('idea_count', 0)}", file=sys.stderr)
+                          f"Ideas: {bubble_context.get('idea_count', 0)}", file=sys.stderr, flush=True)
                 except Exception as ctx_error:
                     logger.debug(f"[RAG] Could not get bubble context: {ctx_error}")
                     bubble_context = None
@@ -774,17 +1276,51 @@ class IntentOrchestrator:
                     try:
                         routing_context = await self.conversation_router.get_routing_context(intent_text)
                         if routing_context:
-                            print(f"[Python DEBUG] [ROUTING CONTEXT] Found similar past intents", file=sys.stderr)
+                            print(f"[Python DEBUG] [ROUTING CONTEXT] Found similar past intents", file=sys.stderr, flush=True)
                             logger.debug(f"[ConversationRouter] Context: {routing_context[:100]}...")
                     except Exception as router_err:
                         logger.debug(f"[ConversationRouter] Could not get routing context: {router_err}")
 
+                # === DroPE Reference Resolution ===
+                # Resolve ambiguous references like "das", "nochmal", "es" using conversation history
+                print(f"[Python DEBUG] [DroPE] Checking... HAS_DROPE={HAS_DROPE_RESOLVER}", file=sys.stderr, flush=True)
+                if HAS_DROPE_RESOLVER and get_reference_resolver:
+                    print(f"[Python DEBUG] [DroPE] Getting resolver...", file=sys.stderr, flush=True)
+                    resolver = get_reference_resolver()
+                    if resolver and resolver.is_available:
+                        print(f"[Python DEBUG] [DroPE] Resolver available, calling resolve()...", file=sys.stderr, flush=True)
+                        try:
+                            resolved_text = resolver.resolve(intent_text, routing_context)
+                            if resolved_text != intent_text:
+                                print(f"[Python DEBUG] [DroPE] Resolved: '{intent_text}' → '{resolved_text}'", file=sys.stderr)
+                                logger.info(f"[DroPE] Resolved reference: '{intent_text}' → '{resolved_text}'")
+                                intent_text = resolved_text
+                            else:
+                                print(f"[Python DEBUG] [DroPE] No change needed", file=sys.stderr, flush=True)
+                        except Exception as drope_err:
+                            print(f"[Python DEBUG] [DroPE] ERROR: {drope_err}", file=sys.stderr, flush=True)
+                            logger.debug(f"[DroPE] Resolution skipped: {drope_err}")
+                    else:
+                        print(f"[Python DEBUG] [DroPE] Resolver not available", file=sys.stderr, flush=True)
+                else:
+                    print(f"[Python DEBUG] [DroPE] Skipped (disabled)", file=sys.stderr, flush=True)
+                # === End DroPE ===
+
                 # Enrich intent with routing context if available
+                print(f"[Python DEBUG] [ORCHESTRATOR] Enriching intent...", file=sys.stderr, flush=True)
                 enriched_for_rag = intent_text
                 if routing_context:
                     enriched_for_rag = f"{routing_context}\n\nAktueller Input: {intent_text}"
 
-                result = await self.rag_classifier.classify(enriched_for_rag, bubble_context=bubble_context)
+                print(f"[Python DEBUG] [ORCHESTRATOR] Calling RAG classifier...", file=sys.stderr, flush=True)
+                try:
+                    result = await self.rag_classifier.classify(enriched_for_rag, bubble_context=bubble_context)
+                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier returned: {result.event_type if result else 'None'}", file=sys.stderr, flush=True)
+                except Exception as rag_err:
+                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier EXCEPTION: {type(rag_err).__name__}: {rag_err}", file=sys.stderr, flush=True)
+                    import traceback
+                    traceback.print_exc(file=sys.stderr)
+                    raise
 
                 # Apply confidence boost from enhancement if rules were applied
                 if enhanced_input and enhanced_input.confidence_boost > 0 and result:
@@ -878,6 +1414,28 @@ class IntentOrchestrator:
                     enriched_payload = result.payload.copy() if result.payload else {}
                     if result.user_input:
                         enriched_payload["_user_input"] = result.user_input
+
+                    # Include conversation history for contextual resolution
+                    if context and context.session_id:
+                        try:
+                            from data import ConversationRepository
+                            conv_repo = ConversationRepository()
+                            recent_messages = conv_repo.get_messages_for_session(
+                                context.session_id,
+                                limit=10  # Last 10 messages for context
+                            )
+                            if recent_messages:
+                                enriched_payload["_conversation_history"] = [
+                                    {
+                                        "speaker": msg.speaker,
+                                        "text": msg.text,
+                                        "timestamp": msg.timestamp
+                                    }
+                                    for msg in recent_messages
+                                ]
+                                logger.debug(f"[Orchestrator] Added {len(recent_messages)} messages to payload")
+                        except Exception as conv_err:
+                            logger.debug(f"[Orchestrator] Could not add conversation history: {conv_err}")
 
                     # Execute via sync fallback or Redis
                     if not self._redis_available:
@@ -1534,6 +2092,91 @@ class IntentOrchestrator:
                 error=str(e)
             )
 
+    async def _process_via_broadcast(
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        response_hint: str,
+        user_input: str = "",
+        conversation_history: List[Dict[str, Any]] = None,
+        session_id: str = None,
+    ) -> OrchestrationResult:
+        """
+        Execute via BroadcastDispatcher (Fan-Out to all domain agents).
+
+        The responsible agent executes the tool; non-responsible agents
+        analyze the intent from their domain perspective and upload
+        user-profiling insights to Supermemory.
+
+        Args:
+            event_type: Classified event type (e.g., "bubble.list")
+            payload: Tool parameters
+            response_hint: Default response hint from classifier
+            user_input: Original user text
+            conversation_history: Recent conversation messages
+            session_id: Session ID for context
+
+        Returns:
+            OrchestrationResult with execution result
+        """
+        if not self._broadcast_dispatcher:
+            logger.warning("BroadcastDispatcher not available, falling back to sync")
+            return await self._process_sync(
+                event_type=event_type,
+                payload=payload,
+                response_hint=response_hint,
+                session_id=session_id,
+            )
+
+        try:
+            intent = IntentPayload(
+                event_type=event_type,
+                payload=payload or {},
+                user_input=user_input,
+                conversation_history=conversation_history or [],
+                session_id=session_id or "",
+                job_id=f"broadcast-{str(uuid.uuid4())[:8]}",
+            )
+
+            logger.info(f"[Broadcast] Fan-Out for {event_type}")
+            result = await self._broadcast_dispatcher.broadcast(intent)
+
+            if result.error:
+                logger.warning(f"[Broadcast] Execution error: {result.error}")
+                # Fall back to sync execution on broadcast error
+                return await self._process_sync(
+                    event_type=event_type,
+                    payload=payload,
+                    response_hint=response_hint,
+                    session_id=session_id,
+                )
+
+            # Log profiling insights count
+            if result.profiling_insights:
+                logger.info(
+                    f"[Broadcast] {len(result.profiling_insights)} profiling insights "
+                    f"from non-responsible agents ({result.duration_ms:.0f}ms)"
+                )
+
+            response_text = result.response_text or response_hint
+
+            return OrchestrationResult(
+                job_id=intent.job_id,
+                event_type=event_type,
+                stream="broadcast",
+                response_hint=response_text,
+                is_conversational=False,
+            )
+
+        except Exception as e:
+            logger.error(f"[Broadcast] Error: {e}, falling back to sync")
+            return await self._process_sync(
+                event_type=event_type,
+                payload=payload,
+                response_hint=response_hint,
+                session_id=session_id,
+            )
+
     async def _process_sync(
         self,
         event_type: str,
@@ -1545,6 +2188,9 @@ class IntentOrchestrator:
         """
         Execute tool directly without Redis (synchronous fallback).
 
+        If USE_BROADCAST_MODE is enabled, delegates to _process_via_broadcast
+        for fan-out execution with parallel user profiling.
+
         Args:
             event_type: Classified event type (e.g., "bubble.list")
             payload: Tool parameters
@@ -1555,6 +2201,24 @@ class IntentOrchestrator:
         Returns:
             OrchestrationResult with actual tool result in response_hint
         """
+        # Broadcast mode: delegate to fan-out dispatcher
+        if self._use_broadcast_mode and self._broadcast_dispatcher:
+            # Extract user_input and conversation_history from payload if available
+            user_input = ""
+            conversation_history = []
+            if payload:
+                user_input = payload.pop("_user_input", "")
+                conversation_history = payload.pop("_conversation_history", [])
+
+            return await self._process_via_broadcast(
+                event_type=event_type,
+                payload=payload,
+                response_hint=response_hint,
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id,
+            )
+
         executor = self._tool_executors.get(event_type)
         task_id = None
 
@@ -1587,10 +2251,42 @@ class IntentOrchestrator:
         if executor:
             try:
                 logger.info(f"SYNC fallback: Executing {event_type} directly")
+                print(f"[Python DEBUG] [TOOL EXEC] {event_type} with payload: {payload}", file=sys.stderr, flush=True)
+
+                # Track with status monitor
+                monitor_op_id = None
+                if _status_monitor:
+                    tool_desc = f"{event_type}"
+                    if payload:
+                        for key in ["title", "name", "bubble_name", "idea_name"]:
+                            if key in payload and payload[key]:
+                                tool_desc += f": {str(payload[key])[:30]}"
+                                break
+                    monitor_op_id = _status_monitor.start_operation("tool_exec", tool_desc, {"event_type": event_type})
+
+                # Mark tool execution start (prevents "Bist du noch da?" interrupts)
+                try:
+                    from tools.session_tools import mark_tool_start, mark_tool_end
+                    mark_tool_start()
+                except ImportError:
+                    mark_tool_end = None
+
                 # Tools expect a single params dict, not keyword arguments
                 start_time = time.perf_counter()
-                result = executor(payload) if payload else executor({})
+                try:
+                    result = executor(payload) if payload else executor({})
+                finally:
+                    # Always mark tool end, even if execution fails
+    
+                    if 'mark_tool_end' in dir() and mark_tool_end:
+                        mark_tool_end()
+
                 latency_ms = (time.perf_counter() - start_time) * 1000
+                print(f"[Python DEBUG] [TOOL EXEC] {event_type} completed in {latency_ms:.1f}ms", file=sys.stderr, flush=True)
+
+                # Complete monitoring
+                if _status_monitor and monitor_op_id:
+                    _status_monitor.complete_operation(monitor_op_id, success=True)
 
                 # Format result for voice output
                 result_str = self._format_result_for_voice(event_type, result)
@@ -1676,6 +2372,15 @@ class IntentOrchestrator:
                     )
                 except Exception as e2:
                     logger.error(f"Sync execution failed: {e2}")
+                    # Emit tool_failed event to UI
+                    if HAS_BROADCAST and _broadcast_to_electron:
+                        _broadcast_to_electron({
+                            "type": "tool_failed",
+                            "event_type": event_type,
+                            "payload": {},
+                            "error": str(e2),
+                            "timestamp": time.time()
+                        })
                     # Log failed execution
                     if HAS_TOOL_LOGGER and get_tool_logger:
                         get_tool_logger().log_error(
@@ -1698,6 +2403,19 @@ class IntentOrchestrator:
                         ))
             except Exception as e:
                 logger.error(f"Sync execution failed for {event_type}: {e}")
+                print(f"[Python DEBUG] [TOOL EXEC] FAILED {event_type}: {e}", file=sys.stderr, flush=True)
+                # Complete monitoring with error
+                if _status_monitor and monitor_op_id:
+                    _status_monitor.complete_operation(monitor_op_id, success=False, error=str(e))
+                # Emit tool_failed event to UI
+                if HAS_BROADCAST and _broadcast_to_electron:
+                    _broadcast_to_electron({
+                        "type": "tool_failed",
+                        "event_type": event_type,
+                        "payload": payload or {},
+                        "error": str(e),
+                        "timestamp": time.time()
+                    })
                 # Log failed execution
                 if HAS_TOOL_LOGGER and get_tool_logger:
                     get_tool_logger().log_error(
@@ -1721,6 +2439,7 @@ class IntentOrchestrator:
 
         # Fallback response if tool not available
         logger.warning(f"No sync executor for {event_type}")
+        print(f"[Python DEBUG] [TOOL EXEC] NO EXECUTOR for {event_type}!", file=sys.stderr, flush=True)
         return OrchestrationResult(
             job_id="",
             event_type=event_type,
@@ -1855,9 +2574,19 @@ class IntentOrchestrator:
                     except Exception as e:
                         logger.debug(f"Reasoning log failed (non-critical): {e}")
 
-                # Execute tool with timing
+                # Execute tool with timing (with tool state tracking)
+                try:
+                    from tools.session_tools import mark_tool_start, mark_tool_end
+                    mark_tool_start()
+                except ImportError:
+                    mark_tool_end = None
+
                 start_time = time.perf_counter()
-                result = executor(payload) if payload else executor({})
+                try:
+                    result = executor(payload) if payload else executor({})
+                finally:
+                    if 'mark_tool_end' in dir() and mark_tool_end:
+                        mark_tool_end()
                 latency_ms = (time.perf_counter() - start_time) * 1000
 
                 # Track created entities for dependency resolution
@@ -2202,7 +2931,8 @@ class IntentOrchestrator:
     def process_intent_sync(
         self,
         intent_text: str,
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
+        domain_hint: Optional[str] = None
     ) -> OrchestrationResult:
         """
         Synchronous wrapper for process_intent.
@@ -2210,6 +2940,7 @@ class IntentOrchestrator:
         Args:
             intent_text: Natural language user request
             context: Optional task context
+            domain_hint: Optional domain hint for direct routing (ideas, bubbles, desktop, coding, shuttles)
 
         Returns:
             OrchestrationResult
@@ -2224,24 +2955,26 @@ class IntentOrchestrator:
                 future = pool.submit(
                     self._run_in_new_loop,
                     intent_text,
-                    context
+                    context,
+                    domain_hint
                 )
                 return future.result()
         except RuntimeError:
             # No running loop - safe to use asyncio.run
-            return asyncio.run(self.process_intent(intent_text, context))
+            return asyncio.run(self.process_intent(intent_text, context, domain_hint=domain_hint))
 
     def _run_in_new_loop(
         self,
         intent_text: str,
-        context: Optional[TaskContext]
+        context: Optional[TaskContext],
+        domain_hint: Optional[str] = None
     ) -> OrchestrationResult:
         """Run async code in a new event loop (for thread pool)."""
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.process_intent(intent_text, context))
+            return loop.run_until_complete(self.process_intent(intent_text, context, domain_hint=domain_hint))
         finally:
             loop.close()
 

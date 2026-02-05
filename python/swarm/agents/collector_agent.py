@@ -62,6 +62,20 @@ class CollectorConfig:
     llm_model: str = "openai/gpt-4o-mini"  # OpenRouter model path
     use_llm_detection: bool = True  # Enable/disable LLM-based detection
 
+    # Action verbs that indicate a complete command (skip accumulation)
+    # Commands starting with these words are executed immediately
+    action_verbs: tuple = (
+        # German action verbs
+        "geh", "gehe", "zeig", "zeige", "liste", "erstelle", "lösche", "loesche",
+        "navigiere", "zurück", "zurueck", "öffne", "oeffne", "schließe", "schliesse",
+        "starte", "stoppe", "beende", "speichere", "verbinde", "finde", "suche",
+        "aktualisiere", "bearbeite", "ändere", "aendere", "wechsle", "alle",
+        # English action verbs
+        "go", "show", "list", "create", "delete", "navigate", "back", "open",
+        "close", "start", "stop", "end", "save", "connect", "find", "search",
+        "update", "edit", "change", "switch", "all",
+    )
+
 
 class CollectorAgent:
     """
@@ -141,14 +155,20 @@ class CollectorAgent:
                     "content": """Classify if this voice input is a COMPLETE command or INCOMPLETE.
 
 COMPLETE: Clear action request in any language that can be executed:
-- "Delete the bubble" (English)
-- "Alle Bubbles auflisten" (German)
-- "Créer une nouvelle idée" (French)
+- "Delete the bubble" (English single action)
+- "Alle Bubbles auflisten" (German single action)
+- "Créer une nouvelle idée" (French single action)
 - "Show me the projects"
 - "Navigiere mich in den Marketing Space" (German navigation)
 - "Gehe in den Debug Space" (German navigation)
 - "Take me to the Ideas space" (English navigation)
 - "Go to the Projects area" (English navigation)
+- "Navigate to space X and create idea Y" (English multi-action)
+- "Geh in Space X und erstelle eine Idee" (German multi-action)
+- "Lösche den Space Test dann erstelle einen neuen" (German sequential)
+- "First show me the projects, then create a new one" (English sequential)
+- "Take me to Ideas space and add a note" (English compound)
+- "Navigiere in den Space und erstelle dort eine Notiz" (German compound)
 
 INCOMPLETE: Fragment, hesitation, correction, or unclear:
 - "äh..." / "um..."
@@ -197,7 +217,13 @@ Reply ONLY with: COMPLETE or INCOMPLETE"""
             logger.debug(f"[Collector] Long input ({word_count} words) - skip accumulation")
             return False
 
-        # Very short inputs always accumulate (1-2 words)
+        # Action verb at the beginning = execute immediately (even for short inputs)
+        # This handles commands like "geh rein", "zeig alle", "zurück"
+        if words and words[0] in self.config.action_verbs:
+            logger.debug(f"[Collector] Action verb '{words[0]}' detected - skip accumulation")
+            return False
+
+        # Very short inputs always accumulate (1-2 words) - unless they have action verbs (checked above)
         if word_count < self.config.min_words_threshold:
             logger.debug(f"[Collector] Short input ({word_count} words) - accumulate")
             return True

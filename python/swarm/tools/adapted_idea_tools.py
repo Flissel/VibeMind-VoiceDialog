@@ -116,6 +116,25 @@ def connect_ideas(idea1: str = None, idea2: str = None) -> str:
     return _connect_ideas({"idea1": idea1, "idea2": idea2})
 
 
+def disconnect_ideas(idea1: str = None, idea2: str = None) -> str:
+    """
+    Disconnect/unlink two ideas by removing their edge.
+
+    Voice triggers: "Trenne Tools von Frontend", "Entferne Verbindung"
+
+    Args:
+        idea1: First idea name
+        idea2: Second idea name
+
+    Returns:
+        Confirmation message
+    """
+    if not idea1 or not idea2:
+        return "Fehler: Zwei Ideen-Namen benoetigt. Bitte sag mir welche Verbindung entfernt werden soll."
+    from tools.idea_tools import disconnect_ideas as _disconnect_ideas
+    return _disconnect_ideas({"idea1": idea1, "idea2": idea2})
+
+
 def delete_idea(idea_name: str = None) -> str:
     """
     Delete a note/idea.
@@ -262,15 +281,135 @@ def analyze_and_suggest_links() -> str:
     return _analyze_and_suggest_links({})
 
 
+def explain_idea(idea_name: str) -> str:
+    """
+    Explain what an idea is about using AI analysis.
+
+    Voice triggers: "Erkläre die Idee X", "Was bedeutet X?", "Explain the idea X"
+
+    Args:
+        idea_name: Name of the idea to explain (fuzzy matched)
+
+    Returns:
+        AI-generated explanation of the idea
+    """
+    from tools.idea_tools import explain_idea as _explain_idea
+    return _explain_idea({"idea_name": idea_name})
+
+
+def count_ideas() -> str:
+    """
+    Count the number of ideas/notes in the current bubble/space.
+
+    Voice triggers: "Wie viele Ideen?", "How many ideas?", "Anzahl der Ideen"
+
+    Returns:
+        Count of ideas in current space
+    """
+    from tools.idea_tools import count_ideas as _count_ideas
+    result = _count_ideas()
+    if isinstance(result, dict):
+        return result.get("message", str(result))
+    return str(result)
+
+
+def move_idea(idea_name: str = None, target_space: str = None) -> str:
+    """
+    Move an idea/note from the current space to another space.
+
+    Voice triggers: "Verschiebe X nach Y", "Move idea X to space Y"
+
+    Args:
+        idea_name: Name of the idea to move (fuzzy matched)
+        target_space: Name of the destination space (fuzzy matched)
+
+    Returns:
+        Confirmation or error message
+    """
+    if not idea_name:
+        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee verschoben werden soll."
+    if not target_space:
+        return "Fehler: Kein Ziel-Space angegeben. Bitte sag mir wohin die Idee verschoben werden soll."
+    from tools.idea_tools import move_idea as _move_idea
+    return _move_idea({"idea_name": idea_name, "target_space": target_space})
+
+
+def connect_ideas_multi(source: str = None, targets: list = None) -> str:
+    """
+    Connect one idea to multiple others by name or index.
+
+    Voice triggers: "Verbinde 2 mit 3, 4 und 5", "Link 1 to 2, 3, 4"
+
+    Args:
+        source: Source idea (name or index)
+        targets: Target ideas (list of names/indices)
+
+    Returns:
+        Confirmation message listing successful connections
+    """
+    if not source:
+        return "Fehler: Keine Quell-Idee angegeben. Bitte sag mir welche Idee verbunden werden soll."
+    if not targets:
+        return "Fehler: Keine Ziel-Ideen angegeben. Bitte sag mir mit welchen Ideen verbunden werden soll."
+    from tools.idea_tools import connect_ideas_multi as _connect_ideas_multi
+    return _connect_ideas_multi({"source": source, "targets": targets})
+
+
+def link_idea_to_root(idea_name: str = None, bubble_id: str = None) -> str:
+    """
+    Link an idea to the root node of the current bubble.
+
+    Voice triggers: "Verknüpfe das mit dem Root", "Link to root"
+
+    Args:
+        idea_name: Name of the idea to link (required)
+        bubble_id: Optional bubble ID (uses current if not provided)
+
+    Returns:
+        Confirmation message
+    """
+    if not idea_name:
+        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee mit Root verbunden werden soll."
+    from tools.idea_tools import link_idea_to_root as _link_idea_to_root
+    params = {"idea_name": idea_name}
+    if bubble_id:
+        params["bubble_id"] = bubble_id
+    return _link_idea_to_root(params)
+
+
+def classify_idea(idea_name: str = None) -> str:
+    """
+    Classify an idea using AI backend analysis.
+
+    Voice triggers: "Klassifiziere die Idee", "Analyze this idea"
+
+    Args:
+        idea_name: Name/title of the idea to classify
+
+    Returns:
+        Classification result
+    """
+    if not idea_name:
+        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee klassifiziert werden soll."
+    from tools.idea_tools import classify_idea as _classify_idea
+    return _classify_idea({"idea_name": idea_name})
+
+
 # Collect all tools for export
 IDEA_TOOLS = [
     list_ideas,
+    count_ideas,
     create_idea,
     add_image,
     find_idea,
     update_idea,
-    connect_ideas,
     delete_idea,
+    move_idea,
+    connect_ideas,
+    disconnect_ideas,
+    connect_ideas_multi,
+    link_idea_to_root,
+    classify_idea,
     get_current_space,
     auto_link_ideas,
     format_idea_as_table,
@@ -278,17 +417,24 @@ IDEA_TOOLS = [
     generate_white_paper,
     expand_ideas,
     analyze_and_suggest_links,
+    explain_idea,
 ]
 
 
 __all__ = [
     "list_ideas",
+    "count_ideas",
     "create_idea",
     "add_image",
     "find_idea",
     "update_idea",
-    "connect_ideas",
     "delete_idea",
+    "move_idea",
+    "connect_ideas",
+    "disconnect_ideas",
+    "connect_ideas_multi",
+    "link_idea_to_root",
+    "classify_idea",
     "get_current_space",
     "auto_link_ideas",
     "format_idea_as_table",
@@ -296,5 +442,6 @@ __all__ = [
     "generate_white_paper",
     "expand_ideas",
     "analyze_and_suggest_links",
+    "explain_idea",
     "IDEA_TOOLS",
 ]

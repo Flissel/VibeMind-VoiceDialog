@@ -31,6 +31,11 @@ _session_start_time: Optional[float] = None
 _session_active: bool = False
 _last_interaction_time: Optional[float] = None
 
+# Tool execution state tracking (prevents "Bist du noch da?" during tool execution)
+_is_tool_running: bool = False
+_last_user_speech_time: float = 0.0
+TOOL_RUNNING_KEEPALIVE_BLOCK_SECONDS = 15  # Don't send keepalive within 15s of user speech
+
 # Configurable timeout (in seconds) - ElevenLabs default is ~10 minutes
 SESSION_TIMEOUT_SECONDS = int(os.getenv("VOICE_SESSION_TIMEOUT", 540))  # 9 minutes default (before 10 min limit)
 INACTIVITY_WARNING_SECONDS = int(os.getenv("VOICE_INACTIVITY_WARNING", 300))  # 5 minutes of inactivity
@@ -70,6 +75,62 @@ def get_inactivity_seconds() -> float:
     if _last_interaction_time is None:
         return 0
     return time.time() - _last_interaction_time
+
+
+# =============================================================================
+# TOOL EXECUTION STATE (prevents "Bist du noch da?" during tool runs)
+# =============================================================================
+
+def mark_tool_start():
+    """Called when a tool starts executing."""
+    global _is_tool_running
+    _is_tool_running = True
+    logger.debug("Tool execution started")
+
+
+def mark_tool_end():
+    """Called when a tool finishes executing."""
+    global _is_tool_running
+    _is_tool_running = False
+    logger.debug("Tool execution ended")
+
+
+def mark_user_speech():
+    """Called when user speaks - tracks time for keepalive blocking."""
+    global _last_user_speech_time
+    _last_user_speech_time = time.time()
+    mark_interaction()  # Also reset inactivity timer
+
+
+def is_tool_running() -> bool:
+    """Check if a tool is currently running."""
+    return _is_tool_running
+
+
+def should_send_keepalive() -> bool:
+    """
+    Check if it's appropriate to send a keepalive prompt like "Bist du noch da?".
+
+    Returns False if:
+    - A tool is currently running
+    - User spoke within the last 15 seconds
+
+    This prevents interrupting the user while they're thinking or while
+    tools are executing.
+    """
+    # Don't interrupt if tool is running
+    if _is_tool_running:
+        logger.debug("Blocking keepalive: tool running")
+        return False
+
+    # Don't interrupt if user spoke recently
+    if _last_user_speech_time > 0:
+        seconds_since_speech = time.time() - _last_user_speech_time
+        if seconds_since_speech < TOOL_RUNNING_KEEPALIVE_BLOCK_SECONDS:
+            logger.debug(f"Blocking keepalive: user spoke {seconds_since_speech:.1f}s ago")
+            return False
+
+    return True
 
 
 # =============================================================================

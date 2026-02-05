@@ -1,0 +1,410 @@
+{
+  "metadata": {
+    "bubble_id": "a4b29800",
+    "bubble_title": "Verbesserung der Conversion AI",
+    "bubble_description": "",
+    "node_count": 15,
+    "edge_count": 1,
+    "total_words": 189,
+    "total_chars": 1279,
+    "generated_at": "2026-01-29T04:46:20.970037"
+  },
+  "categories": {
+    "conversion_optimization": {
+      "description": "Conversion Optimierung",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "title": "Ideen zum Aufschreiben",
+          "description": "Ideen zum Aufschreiben",
+          "details": {
+            "word_count": 3,
+            "char_count": 22,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 2
+          },
+          "acceptance_criteria": [
+            "Das System muss ideen zum aufschreiben unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich ideen zum aufschreiben nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich ideen zum aufschreiben konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-002",
+          "title": "Verbesserung der Conversion AI",
+          "description": "Du als Conversion AI bist der Mittelpunkt. Du kannst dein Tool gleich als Idee mal bei der Verbesserung der Conversion AI machen.",
+          "details": {
+            "word_count": 22,
+            "char_count": 129,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 7
+          },
+          "acceptance_criteria": [
+            "Das System muss verbesserung der conversion ai unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich verbesserung der conversion ai nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich verbesserung der conversion ai konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-003",
+          "title": "Conversion AI",
+          "description": "Conversion AI",
+          "details": {
+            "word_count": 2,
+            "char_count": 13,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 2
+          },
+          "acceptance_criteria": [
+            "Das System muss conversion ai unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich conversion ai nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich conversion ai konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-004",
+          "title": "Conversion AI",
+          "description": "Conversion AI",
+          "details": {
+            "word_count": 2,
+            "char_count": 13,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 2
+          },
+          "acceptance_criteria": [
+            "Das System muss conversion ai unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich conversion ai nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich conversion ai konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-005",
+          "title": "Conversion Nell",
+          "description": "Conversion Nell",
+          "details": {
+            "word_count": 2,
+            "char_count": 15,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 2
+          },
+          "acceptance_criteria": [
+            "Das System muss conversion nell unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich conversion nell nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich conversion nell konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-006",
+          "title": "Voice Agent",
+          "description": "Voice Agent",
+          "details": {
+            "word_count": 2,
+            "char_count": 11,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 0
+          },
+          "acceptance_criteria": [
+            "Das System muss voice agent unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich voice agent nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich voice agent konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-007",
+          "title": "meine funktionen: spaces und bubblees verwalten",
+          "description": "ich kann spaces auflisten, neue spaces erstellen, in bestehende spaces wechseln und spaces löscheen. innerhalb von spaces kann ich bubblees verwalten, inklusive der zugehörigen tools, aufgaben und tasks.",
+          "details": {
+            "word_count": 28,
+            "char_count": 203,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 15
+          },
+          "acceptance_criteria": [
+            "Das System muss meine funktionen: spaces und bubblees verwalten unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich meine funktionen: spaces und bubblees verwalten nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich meine funktionen: spaces und bubblees verwalten konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-008",
+          "title": "Meine Funktionen: Ideen und Notizen verwalten",
+          "description": "Ich kann neue Ideen und Notizen erstellen, nach bestehenden Ideen suchen und alle vorhandenen Ideen anzeigen.",
+          "details": {
+            "word_count": 16,
+            "char_count": 109,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 6
+          },
+          "acceptance_criteria": [
+            "Das System muss meine funktionen: ideen und notizen verwalten unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich meine funktionen: ideen und notizen verwalten nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich meine funktionen: ideen und notizen verwalten konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-009",
+          "title": "Meine Funktionen: Desktop Automation",
+          "description": "Ich kann Anwendungen wie Chrome öffnen, auf Elemente klicken, Text eingeben und Screenshots erstellen.",
+          "details": {
+            "word_count": 14,
+            "char_count": 102,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 7
+          },
+          "acceptance_criteria": [
+            "Das System muss meine funktionen: desktop automation unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich meine funktionen: desktop automation nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich meine funktionen: desktop automation konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-010",
+          "title": "Meine Funktionen: Code Generierung",
+          "description": "Ich kann Code für Anwendungen generieren, den Fortschritt der Generierung abfragen, Previews anzeigen und Änderungen wie das Hinzufügen eines Dark Modes vornehmen.",
+          "details": {
+            "word_count": 22,
+            "char_count": 163,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 8
+          },
+          "acceptance_criteria": [
+            "Das System muss meine funktionen: code generierung unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich meine funktionen: code generierung nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich meine funktionen: code generierung konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-011",
+          "title": "Mein Systemwissen",
+          "description": "Ich bin Rachel, die VibeMind Sprachassistentin. Meine Aufgabe ist es, Benutzeranfragen zu verstehen und an das Backend-System weiterzuleiten. Ich führe keine Tools direkt aus, sondern nutze send_intent, um Aktionen zu initiieren. Ich informiere den Benutzer über den Status der Anfrage und gebe Feedback, sobald Ergebnisse vorliegen.",
+          "details": {
+            "word_count": 46,
+            "char_count": 333,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 14
+          },
+          "acceptance_criteria": [
+            "Das System muss mein systemwissen unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich mein systemwissen nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich mein systemwissen konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-012",
+          "title": "Neue Idee für Tool 1",
+          "description": "Inhalt für Tool 1",
+          "details": {
+            "word_count": 4,
+            "char_count": 17,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 1
+          },
+          "acceptance_criteria": [
+            "Das System muss neue idee für tool 1 unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich neue idee für tool 1 nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich neue idee für tool 1 konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-013",
+          "title": "Neue Idee für Tool 2",
+          "description": "Inhalt für Tool 2",
+          "details": {
+            "word_count": 4,
+            "char_count": 17,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 1
+          },
+          "acceptance_criteria": [
+            "Das System muss neue idee für tool 2 unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich neue idee für tool 2 nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich neue idee für tool 2 konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-014",
+          "title": "Neue Idee für Tool 3",
+          "description": "Inhalt für Tool 3",
+          "details": {
+            "word_count": 4,
+            "char_count": 17,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 1
+          },
+          "acceptance_criteria": [
+            "Das System muss neue idee für tool 3 unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich neue idee für tool 3 nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich neue idee für tool 3 konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        },
+        {
+          "id": "REQ-015",
+          "title": "Tool-Request über das Frontend",
+          "description": "soll beschreiben, dass ein tool request über das frontend gemacht und die ai direkt damit aktualisiert werden kann.",
+          "details": {
+            "word_count": 18,
+            "char_count": 115,
+            "node_type": "note",
+            "url_count": 0,
+            "image_count": 0,
+            "code_block_count": 0,
+            "concept_count": 7
+          },
+          "acceptance_criteria": [
+            "Das System muss tool-request über das frontend unterstützen",
+            "Die Implementierung muss auf den Inhalten des Nodes basieren",
+            "Die Funktionalität muss getestet und validiert werden"
+          ],
+          "user_stories": [
+            "Als Benutzer möchte ich tool-request über das frontend nutzen, um meine Ziele zu erreichen",
+            "Als Administrator möchte ich tool-request über das frontend konfigurieren können"
+          ],
+          "priority": "medium",
+          "status": "pending"
+        }
+      ]
+    },
+    "user_experience": {
+      "description": "User Experience",
+      "requirements": []
+    },
+    "analytics": {
+      "description": "Analytics und Monitoring",
+      "requirements": []
+    },
+    "personalization": {
+      "description": "Personalisierung",
+      "requirements": []
+    },
+    "testing": {
+      "description": "A/B Testing und Experimente",
+      "requirements": []
+    }
+  }
+}

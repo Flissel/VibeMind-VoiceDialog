@@ -32,6 +32,7 @@ class EventRouter:
     STREAM_TASKS_CODING = "events:tasks:coding"
     STREAM_TASKS_DESKTOP = "events:tasks:desktop"
     STREAM_TASKS_IDEAS = "events:tasks:ideas"
+    STREAM_TASKS_BUBBLES = "events:tasks:bubbles"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -62,17 +63,23 @@ class EventRouter:
         "desktop.moire.scan": STREAM_TASKS_DESKTOP,
         "desktop.moire.find": STREAM_TASKS_DESKTOP,
 
-        # Ideas/bubbles tasks -> ideas stream
-        "bubble.list": STREAM_TASKS_IDEAS,
-        "bubble.create": STREAM_TASKS_IDEAS,
-        "bubble.enter": STREAM_TASKS_IDEAS,
-        "bubble.exit": STREAM_TASKS_IDEAS,
-        "bubble.delete": STREAM_TASKS_IDEAS,
-        "bubble.update": STREAM_TASKS_IDEAS,
-        "bubble.stats": STREAM_TASKS_IDEAS,
-        "bubble.score": STREAM_TASKS_IDEAS,
-        "bubble.evaluate": STREAM_TASKS_IDEAS,
-        "bubble.promote": STREAM_TASKS_IDEAS,
+        # Bubbles tasks -> bubbles stream (BubblesAgent)
+        "bubble.list": STREAM_TASKS_BUBBLES,
+        "bubble.create": STREAM_TASKS_BUBBLES,
+        "bubble.enter": STREAM_TASKS_BUBBLES,
+        "bubble.exit": STREAM_TASKS_BUBBLES,
+        "bubble.back": STREAM_TASKS_BUBBLES,
+        "bubble.delete": STREAM_TASKS_BUBBLES,
+        "bubble.delete_all_except": STREAM_TASKS_BUBBLES,
+        "bubble.update": STREAM_TASKS_BUBBLES,
+        "bubble.find": STREAM_TASKS_BUBBLES,
+        "bubble.stats": STREAM_TASKS_BUBBLES,
+        "bubble.score": STREAM_TASKS_BUBBLES,
+        "bubble.evaluate": STREAM_TASKS_BUBBLES,
+        "bubble.promote": STREAM_TASKS_BUBBLES,
+        "bubble.current": STREAM_TASKS_BUBBLES,
+
+        # Ideas tasks -> ideas stream (IdeasAgent)
         "idea.list": STREAM_TASKS_IDEAS,
         "idea.create": STREAM_TASKS_IDEAS,
         "idea.update": STREAM_TASKS_IDEAS,
@@ -82,11 +89,13 @@ class EventRouter:
         "idea.auto_link": STREAM_TASKS_IDEAS,
         "idea.add_image": STREAM_TASKS_IDEAS,
         "idea.current_space": STREAM_TASKS_IDEAS,
-        # Advanced idea tools (whitepaper, summarize, expand, etc.)
+        # Advanced idea tools (whitepaper, summarize, expand, explain, etc.)
         "idea.format_table": STREAM_TASKS_IDEAS,
         "idea.summarize": STREAM_TASKS_IDEAS,
         "idea.whitepaper": STREAM_TASKS_IDEAS,
+        "idea.white_paper": STREAM_TASKS_IDEAS,  # Alias
         "idea.expand": STREAM_TASKS_IDEAS,
+        "idea.explain": STREAM_TASKS_IDEAS,
         "idea.analyze_links": STREAM_TASKS_IDEAS,
         # Format conversion tools (format_dispatcher)
         "idea.format_note": STREAM_TASKS_IDEAS,
@@ -96,6 +105,17 @@ class EventRouter:
         "idea.format_specs": STREAM_TASKS_IDEAS,
         "idea.convert_format": STREAM_TASKS_IDEAS,
         "idea.list_formats": STREAM_TASKS_IDEAS,
+        # Idea Exploration (AI-Scientist Tree Search with Human-in-the-Loop)
+        "idea.explore.start": STREAM_TASKS_IDEAS,
+        "idea.explore.stop": STREAM_TASKS_IDEAS,
+        "idea.explore.status": STREAM_TASKS_IDEAS,
+        "idea.explore.accept": STREAM_TASKS_IDEAS,
+        "idea.explore.reject": STREAM_TASKS_IDEAS,
+        "idea.explore.depth": STREAM_TASKS_IDEAS,
+        "idea.explore.visualize": STREAM_TASKS_IDEAS,
+        "idea.explore.continue": STREAM_TASKS_IDEAS,
+        "idea.explore.direction": STREAM_TASKS_IDEAS,
+        "idea.explore.respond": STREAM_TASKS_IDEAS,
 
         # Status events -> status stream
         "task.started": STREAM_STATUS,
@@ -143,7 +163,7 @@ class EventRouter:
         """
         Get the category of an event type.
 
-        Categories: "coding", "desktop", "ideas", "status", "general"
+        Categories: "coding", "desktop", "ideas", "bubbles", "status", "general"
 
         Args:
             event_type: Event type
@@ -159,6 +179,8 @@ class EventRouter:
             return "desktop"
         elif stream == self.STREAM_TASKS_IDEAS:
             return "ideas"
+        elif stream == self.STREAM_TASKS_BUBBLES:
+            return "bubbles"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -172,6 +194,7 @@ class EventRouter:
             cls.STREAM_TASKS_CODING,
             cls.STREAM_TASKS_DESKTOP,
             cls.STREAM_TASKS_IDEAS,
+            cls.STREAM_TASKS_BUBBLES,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]

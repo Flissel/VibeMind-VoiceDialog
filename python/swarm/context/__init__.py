@@ -18,6 +18,15 @@ from .real_time_state import (
     reset_real_time_state,
 )
 
+from .session_context import (
+    SessionContext,
+    get_session_context,
+    set_session_context,
+    clear_session_context,
+    update_session_context,
+    resolve_context_reference,
+)
+
 __all__ = [
     # Bubble context
     "BubbleContextProvider",
@@ -27,4 +36,11 @@ __all__ = [
     "RealTimeStateStore",
     "get_real_time_state",
     "reset_real_time_state",
+    # Session context (system-wide)
+    "SessionContext",
+    "get_session_context",
+    "set_session_context",
+    "clear_session_context",
+    "update_session_context",
+    "resolve_context_reference",
 ]

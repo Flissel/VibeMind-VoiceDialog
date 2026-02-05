@@ -26,6 +26,13 @@ contextBridge.exposeInMainWorld('vibemind', {
     // Send generic message to Python
     sendToPython: (message) => ipcRenderer.send('to-python', message),
 
+    // Send tool action from UI toolbar (triggers intent orchestrator directly)
+    sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {
+        type: 'tool_action',
+        event_type: eventType,
+        payload: payload
+    }),
+
     // ===== SPACE NAVIGATION =====
     
     // Navigate to a specific space
@@ -88,6 +95,83 @@ contextBridge.exposeInMainWorld('vibemind', {
     onPythonMessage: (callback) => {
         ipcRenderer.on('python-message', (event, message) => {
             callback(message);
+        });
+    },
+
+    // ===== IDEA EXPLORATION (AI-Scientist Tree Search) =====
+
+    // Start exploration with mode (auto/interactive/guided)
+    startExploration: (options = {}) => ipcRenderer.send('to-python', {
+        type: 'exploration_start',
+        ...options
+    }),
+
+    // Stop current exploration
+    stopExploration: () => ipcRenderer.send('to-python', { type: 'exploration_stop' }),
+
+    // Respond to exploration question
+    respondToExplorationQuestion: (questionId, responseType, selectedOption, customText) => {
+        ipcRenderer.send('to-python', {
+            type: 'exploration_respond',
+            question_id: questionId,
+            response_type: responseType,
+            selected_option: selectedOption,
+            custom_text: customText
+        });
+    },
+
+    // Set exploration direction (guided mode)
+    setExplorationDirection: (direction, bubbleId) => ipcRenderer.send('to-python', {
+        type: 'exploration_direction',
+        direction: direction,
+        bubble_id: bubbleId
+    }),
+
+    // Listen for exploration events
+    onExplorationEvent: (callback) => {
+        ipcRenderer.on('python-message', (event, message) => {
+            if (message.type && message.type.startsWith('exploration')) {
+                callback(message);
+            }
+        });
+    },
+
+    // Listen for connection found (interactive mode question)
+    onExplorationQuestion: (callback) => {
+        ipcRenderer.on('python-message', (event, message) => {
+            if (message.type === 'exploration.connection_found' ||
+                message.type === 'exploration.direction_request' ||
+                message.type === 'exploration.stage_complete' ||
+                message.type === 'exploration.validation_request') {
+                callback(message);
+            }
+        });
+    },
+
+    // Listen for node discoveries
+    onExplorationNodeDiscovered: (callback) => {
+        ipcRenderer.on('python-message', (event, message) => {
+            if (message.type === 'exploration_node_discovered') {
+                callback(message);
+            }
+        });
+    },
+
+    // Listen for exploration completion
+    onExplorationComplete: (callback) => {
+        ipcRenderer.on('python-message', (event, message) => {
+            if (message.type === 'exploration_complete') {
+                callback(message);
+            }
+        });
+    },
+
+    // Listen for exploration voice (when TTS unavailable, shows text)
+    onExplorationVoice: (callback) => {
+        ipcRenderer.on('python-message', (event, message) => {
+            if (message.type === 'exploration_voice') {
+                callback(message);
+            }
         });
     },
 
@@ -227,4 +311,4 @@ contextBridge.exposeInMainWorld('vibemind', {
     },
 });
 
-console.log('[Preload] VibeMind API exposed to renderer (with Space Navigation + Hand Gestures + Project Preview + Shuttles + Dashboard)');
+console.log('[Preload] VibeMind API exposed to renderer (with Space Navigation + Hand Gestures + Project Preview + Shuttles + Dashboard + Exploration)');

@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 logger = logging.getLogger(__name__)
 
 # Import external MoireTracker bridge
-import moire
+import moire_external as moire
 
 
 # ==================== ElevenLabs Client Tool Functions ====================

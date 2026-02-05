@@ -4,7 +4,8 @@ Backend Agents - Tool Executors for VibeMind Swarm
 Backend agents listen to Redis streams and execute the actual tools.
 Each agent is responsible for a specific domain:
 
-- IdeasAgent: Bubbles and Ideas (17 tools)
+- BubblesAgent: Space/Bubble management (13 tools)
+- IdeasAgent: Ideas/Notes within bubbles (38 tools)
 - DesktopAgent: Desktop automation (12 tools)
 - CodingAgent: Code generation (8 tools)
 
@@ -17,12 +18,15 @@ Architecture:
 """
 
 from swarm.backend_agents.base_agent import BaseBackendAgent
+from swarm.backend_agents.bubbles_agent import BubblesAgent, get_bubbles_agent
 from swarm.backend_agents.ideas_agent import IdeasAgent, get_ideas_agent
 from swarm.backend_agents.desktop_agent import DesktopAgent, get_desktop_agent
 from swarm.backend_agents.coding_agent import CodingAgent, get_coding_agent
 
 __all__ = [
     "BaseBackendAgent",
+    "BubblesAgent",
+    "get_bubbles_agent",
     "IdeasAgent",
     "get_ideas_agent",
     "DesktopAgent",

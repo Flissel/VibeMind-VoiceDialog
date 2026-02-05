@@ -100,6 +100,26 @@ INITIAL_INTENT_RULES = [
         "priority": 10,
     },
     {
+        "intent_type": "idea.connect_multi",
+        "description": "Eine Idee mit mehreren anderen verbinden (per Index oder Name) / Connect one idea to multiple others",
+        "examples": [
+            # German - numeric references
+            "Verbinde 2 mit 3, 4 und 5",
+            "Verknüpfe 1 mit 2, 3, 4",
+            "Link 3 zu 4, 5, 6",
+            # German - mixed
+            "Verbinde Idee 1 mit 2, 3, 4, 5",
+            "Verknüpfe die erste mit der zweiten, dritten und vierten",
+            # English - numeric references
+            "Connect 3 to 4 and 5 and 6",
+            "Link 1 to 2, 3, 4",
+            "Link 2 to 3, 4, 5, 6",
+            # English - mixed
+            "Connect idea 1 with 2, 3, 4",
+        ],
+        "priority": 11,  # Higher priority than idea.connect for multi-target
+    },
+    {
         "intent_type": "idea.analyze_links",
         "description": "Verlinkungsvorschläge anzeigen ohne auszuführen / Show link suggestions without executing",
         "examples": [
@@ -135,6 +155,26 @@ INITIAL_INTENT_RULES = [
             "What ideas are here?",
             "Show ideas in this space",
             "List all ideas",
+        ],
+        "priority": 5,
+    },
+    {
+        "intent_type": "idea.count",
+        "description": "Anzahl der Ideen im Space abfragen / Count ideas in space",
+        "examples": [
+            # German
+            "Wie viele Ideen habe ich?",
+            "Anzahl der Ideen",
+            "Wie viele Notizen sind hier?",
+            "Zähle die Ideen",
+            "Wie viele Einträge gibt es?",
+            "Wie viele Ideen sind in diesem Space?",
+            # English
+            "How many ideas do I have?",
+            "Count the ideas",
+            "How many notes are here?",
+            "Number of ideas",
+            "How many ideas in this space?",
         ],
         "priority": 5,
     },
@@ -215,9 +255,9 @@ INITIAL_INTENT_RULES = [
     },
     {
         "intent_type": "idea.update",
-        "description": "Eine bestehende Idee bearbeiten oder aktualisieren / Edit or update an existing idea",
+        "description": "Eine bestehende Idee bearbeiten, umbenennen oder aktualisieren / Edit, rename or update an existing idea",
         "examples": [
-            # German
+            # German - Edit/Update
             "Ändere die Idee Marketing",
             "Bearbeite die Notiz",
             "Aktualisiere die Idee",
@@ -225,6 +265,15 @@ INITIAL_INTENT_RULES = [
             "Modifiziere den Inhalt",
             "Ergänze die Idee um",
             "Füge zur Idee hinzu",
+            # German - Rename (NEW)
+            "Benenne die Idee um",
+            "Benenne den Root-Node um",
+            "Benenne den Root-Node um in X",
+            "Benenne die Notiz um",
+            "Benenne den Node um in X",
+            "Nenne die Idee jetzt X",
+            "Die Idee soll jetzt X heißen",
+            "Gib der Idee einen neuen Namen",
             # English
             "Edit the marketing idea",
             "Update the note",
@@ -232,6 +281,11 @@ INITIAL_INTENT_RULES = [
             "Change idea X",
             "Update the content",
             "Add to the idea",
+            # English - Rename (NEW)
+            "Rename the idea to X",
+            "Rename the node",
+            "Rename the root node",
+            "Give the idea a new name",
         ],
         "priority": 8,
     },
@@ -288,6 +342,52 @@ INITIAL_INTENT_RULES = [
             "Develop sub-ideas",
             "Brainstorm new ideas",
             "Break down the idea",
+        ],
+        "priority": 7,
+    },
+    {
+        "intent_type": "idea.classify",
+        "description": "Idee klassifizieren oder ans Backend senden / Classify idea or send to backend for analysis",
+        "examples": [
+            # German
+            "Klassifiziere die Idee",
+            "Klassifiziere das",
+            "Send das ans Backend",
+            "Analysiere diese Idee",
+            "Kategorisiere den Node",
+            "Klassifiziere den Root-Node",
+            "Was fuer eine Art Idee ist das?",
+            "Ordne die Idee ein",
+            "Backend-Klassifizierung",
+            # English
+            "Classify the idea",
+            "Classify this",
+            "Send to backend",
+            "Analyze this idea",
+            "Categorize the node",
+            "What kind of idea is this?",
+            "Backend classification",
+        ],
+        "priority": 8,
+    },
+    {
+        "intent_type": "idea.link_to_root",
+        "description": "Idee mit Root-Node verknüpfen / Link idea to root node",
+        "examples": [
+            # German
+            "Verknüpfe das mit dem Root",
+            "Link zur Hauptidee",
+            "Mit Root verbinden",
+            "An Root anhängen",
+            "Verbinde das mit der Wurzel",
+            "Zum Root-Node verlinken",
+            "Mit dem Haupt-Node verbinden",
+            # English
+            "Connect to root",
+            "Link to root",
+            "Link to main node",
+            "Connect to main idea",
+            "Attach to root",
         ],
         "priority": 7,
     },
@@ -600,6 +700,27 @@ INITIAL_INTENT_RULES = [
         "priority": 10,
     },
     {
+        "intent_type": "bubble.delete_all_except",
+        "description": "Alle Spaces/Bubbles loeschen ausser bestimmten / Delete all spaces/bubbles except specified ones",
+        "examples": [
+            # German
+            "Loesche alle Bubbles ausser Langzeitspeicher",
+            "Loesche alle Spaces ausser VibeMind",
+            "Loesche alle Bubbles bis auf Marketing",
+            "Loesche alle ausser X und Y",
+            "Entferne alle Bubbles ausgenommen VibeMind",
+            "Alle Spaces loeschen ausser Projekte",
+            "Loesche alles bis auf Langzeitspeicher und VibeMind",
+            # English
+            "Delete all spaces except VibeMind",
+            "Delete all bubbles except Langzeitspeicher",
+            "Remove all bubbles but keep Ideas",
+            "Delete everything except X and Y",
+            "Delete all spaces but not Marketing",
+        ],
+        "priority": 12,  # Higher priority than bubble.delete to match first
+    },
+    {
         "intent_type": "bubble.stats",
         "description": "Statistiken des aktuellen Spaces anzeigen / Show statistics of the current space",
         "examples": [
@@ -819,6 +940,32 @@ INITIAL_INTENT_RULES = [
             "Completed tasks",
         ],
         "priority": 5,
+    },
+    {
+        "intent_type": "system.status",
+        "description": "System-Status und aktive Operationen anzeigen / Show system status and active operations",
+        "examples": [
+            # German
+            "System Status",
+            "Was macht das System?",
+            "Zeig mir den Systemstatus",
+            "Wie ist der Status?",
+            "Status anzeigen",
+            "Systeminfo",
+            "Was passiert gerade im System?",
+            "Gibt es hängende Operationen?",
+            "Was hängt?",
+            # English
+            "System status",
+            "What is the system doing?",
+            "Show me the system status",
+            "What's the status?",
+            "Show status",
+            "System info",
+            "What's happening in the system?",
+            "Are there stuck operations?",
+        ],
+        "priority": 7,
     },
 ]
 

@@ -26,6 +26,7 @@ from swarm.user_agents.base import (
 # Context sources for Rachel's awareness
 from swarm.orchestrator.system_context_store import get_system_context_store
 from swarm.executive.conversation_memory import ConversationMemory
+from swarm.orchestrator.question_queue import get_question_queue
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,13 @@ class RachelAgent(BaseUserAgent):
                 self._conversation_memory = None
         return self._conversation_memory
 
+    @property
+    def question_queue(self):
+        """Lazy-load QuestionQueue for backend questions."""
+        if not hasattr(self, '_question_queue') or self._question_queue is None:
+            self._question_queue = get_question_queue()
+        return self._question_queue
+
     def set_orchestrator(self, orchestrator):
         """Set the orchestrator instance."""
         self._orchestrator = orchestrator
@@ -312,6 +320,13 @@ class RachelAgent(BaseUserAgent):
             logger.info(f"Rachel: Found {len(pending_notifications)} pending notifications")
             notification_context = self._format_notifications(pending_notifications)
             context_parts.append(f"[TASK-ERGEBNIS: {notification_context}]")
+
+        # 1.5 QuestionQueue - pending questions from backend agents
+        pending_questions = self.question_queue.get_and_clear()
+        if pending_questions:
+            logger.info(f"Rachel: Found {len(pending_questions)} pending questions from backend")
+            question_context = self.question_queue.format_for_context(pending_questions)
+            context_parts.append(f"[OFFENE FRAGEN VOM SYSTEM:\n{question_context}]")
 
         # 2. SystemContextStore - recent actions (10-min window)
         try:

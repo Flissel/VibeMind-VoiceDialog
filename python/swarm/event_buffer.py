@@ -54,6 +54,7 @@ class InputEvent:
     corrects_input_id: Optional[str] = None
     processed: bool = False
     input_id: str = field(default_factory=lambda: f"input_{time.time_ns()}")
+    domain_hint: Optional[str] = None  # ideas, bubbles, desktop, coding, shuttles
 
 
 @dataclass

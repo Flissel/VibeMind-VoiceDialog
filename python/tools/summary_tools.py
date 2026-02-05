@@ -275,8 +275,8 @@ def summarize_idea(params: Dict[str, Any]) -> str:
     Returns:
         str: The generated summary or error message
     """
-    idea_name = params.get("idea_name", "").strip()
-    style = params.get("style", "concise")
+    idea_name = (params.get("idea_name") or "").strip()
+    style = params.get("style") or "concise"
     
     logger.info(f"summarize_idea called: idea_name='{idea_name}', style='{style}'")
     

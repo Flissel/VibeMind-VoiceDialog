@@ -40,6 +40,11 @@ class MultiverseApp {
         this.savedCameraPosition = null;
         this.savedCameraTarget = null;
 
+        // Canvas nodes and rich content renderer
+        this.canvasNodes = new Map(); // bubbleId -> Map of nodeId -> nodeData
+        this.richContentRenderer = null;
+        this.currentBubbleId = null; // Currently entered bubble
+
         this.init();
     }
 
@@ -127,10 +132,16 @@ class MultiverseApp {
         // this.createDefaultBubbles();
         this.createBackgroundParticles();
 
+        // Initialize rich content renderer for canvas nodes
+        this.initializeRichContentRenderer();
+
         // Events
         window.addEventListener('resize', () => this.onWindowResize());
         this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
         this.renderer.domElement.addEventListener('click', (e) => this.onClick(e));
+
+        // Canvas node event handlers
+        this.setupCanvasNodeEventHandlers();
 
             // Start animation
             this.animate();
@@ -271,6 +282,7 @@ class MultiverseApp {
             id: data.id,
             db_id: data.db_id || data.id,  // Store DB UUID separately if provided
             title: data.title,
+            numbered_title: data.numbered_title || data.title,  // Store numbered title for navigation
             baseColor: data.color,
             baseRadius: data.radius,
             shimmerPhase: Math.random() * Math.PI * 2,
@@ -280,7 +292,7 @@ class MultiverseApp {
 
         this.scene.add(mesh);
         this.bubbles.push(mesh);
-        console.log('[MultiverseApp] Added bubble:', data.id, 'title:', data.title, 'db_id:', mesh.userData.db_id);
+        console.log('[MultiverseApp] Added bubble:', data.id, 'title:', data.title, 'numbered_title:', mesh.userData.numbered_title, 'db_id:', mesh.userData.db_id);
         return mesh;
     }
 
@@ -322,6 +334,58 @@ class MultiverseApp {
             return true;
         } else {
             console.warn('[MultiverseApp] Bubble not found for removal:', id);
+            return false;
+        }
+    }
+
+    updateBubble(id, updates) {
+        // Find the bubble by id or db_id
+        let bubble = this.bubbles.find(b => b.userData.id === id || b.userData.db_id === id);
+
+        if (!bubble && typeof id === 'string') {
+            // Try string conversion
+            bubble = this.bubbles.find(b => String(b.userData.id) === id || String(b.userData.db_id) === id);
+        }
+
+        if (bubble) {
+            console.log('[MultiverseApp] Updating bubble:', bubble.userData.title, '->', updates);
+
+            // Update title if provided
+            if (updates.title) {
+                bubble.userData.title = updates.title;
+                // Only update numbered_title from title if not explicitly provided
+                if (!updates.numbered_title) {
+                    bubble.userData.numbered_title = updates.title;
+                }
+            }
+
+            // Update numbered_title independently (for voice index display)
+            if (updates.numbered_title) {
+                bubble.userData.numbered_title = updates.numbered_title;
+            }
+
+            // Update voice index for reference
+            if (updates.voice_index !== undefined) {
+                bubble.userData.voice_index = updates.voice_index;
+            }
+
+            // Update position if provided
+            if (updates.position) {
+                bubble.position.set(updates.position.x, updates.position.y, updates.position.z);
+            }
+
+            // Update color if provided
+            if (updates.color) {
+                bubble.userData.baseColor = updates.color;
+                // Recreate material with new color
+                const newMaterial = this.createGlassMaterial(updates.color);
+                bubble.material.dispose();
+                bubble.material = newMaterial;
+            }
+
+            return true;
+        } else {
+            console.warn('[MultiverseApp] Bubble not found for update:', id);
             return false;
         }
     }
@@ -486,7 +550,7 @@ class MultiverseApp {
 
             // Update UI
             const data = this.selectedBubble.userData;
-            document.getElementById('selected-title').textContent = data.title;
+            document.getElementById('selected-title').textContent = data.numbered_title || data.title;
             document.getElementById('selected-description').textContent = `Universe ID: ${data.id}`;
             document.getElementById('enter-btn').classList.remove('hidden');
             document.getElementById('bubble-info').classList.remove('hidden');
@@ -552,7 +616,7 @@ class MultiverseApp {
     }
 
     /**
-     * Enter a bubble with zoom animation
+     * Enter a bubble with zoom animation (legacy method - use enterBubbleWithCanvasNodes)
      * @param {number} bubbleIndex - Index of the bubble to enter
      * @param {Function} onComplete - Callback when animation completes
      */
@@ -677,7 +741,212 @@ class MultiverseApp {
             bubble.material.dispose();
         });
 
+        // Clean up rich content renderer
+        if (this.richContentRenderer) {
+            this.richContentRenderer.clear();
+        }
+
         this.renderer.dispose();
+    }
+
+    // ========================================
+    // RICH CONTENT RENDERER INTEGRATION
+    // ========================================
+
+    /**
+     * Initialize the rich content renderer for canvas nodes
+     */
+    initializeRichContentRenderer() {
+        // Create a container for canvas nodes (overlay on top of Three.js canvas)
+        const canvasNodeContainer = document.createElement('div');
+        canvasNodeContainer.id = 'canvas-node-container';
+        canvasNodeContainer.style.position = 'absolute';
+        canvasNodeContainer.style.top = '0';
+        canvasNodeContainer.style.left = '0';
+        canvasNodeContainer.style.width = '100%';
+        canvasNodeContainer.style.height = '100%';
+        canvasNodeContainer.style.pointerEvents = 'none'; // Let Three.js handle interactions
+        canvasNodeContainer.style.zIndex = '10';
+
+        // Insert after the Three.js canvas
+        this.container.appendChild(canvasNodeContainer);
+
+        // Initialize rich content renderer
+        this.richContentRenderer = new RichContentRenderer(canvasNodeContainer);
+
+        console.log('[MultiverseApp] Rich content renderer initialized');
+    }
+
+    /**
+     * Handle entering a bubble - show canvas nodes
+     * @param {number} bubbleIndex - Index of the bubble being entered
+     */
+    enterBubbleWithCanvasNodes(bubbleIndex, onComplete) {
+        const bubble = this.bubbles[bubbleIndex];
+        if (!bubble) {
+            console.warn('[MultiverseApp] Bubble not found at index:', bubbleIndex);
+            if (onComplete) onComplete();
+            return;
+        }
+
+        this.currentBubbleId = bubble.userData.id;
+
+        // Load canvas nodes for this bubble
+        this.loadCanvasNodesForBubble(this.currentBubbleId);
+
+        // Continue with normal bubble entry animation
+        this.enterBubbleWithAnimation(bubbleIndex, onComplete);
+    }
+
+    /**
+     * Handle exiting a bubble - hide canvas nodes
+     */
+    exitBubbleWithCanvasNodes(onComplete) {
+        // Clear canvas nodes
+        if (this.richContentRenderer) {
+            this.richContentRenderer.clear();
+        }
+
+        this.currentBubbleId = null;
+
+        // Continue with normal bubble exit animation
+        this.exitBubbleWithAnimation(onComplete);
+    }
+
+    /**
+     * Load canvas nodes for a specific bubble
+     * @param {string} bubbleId - Bubble identifier
+     */
+    loadCanvasNodesForBubble(bubbleId) {
+        console.log('[MultiverseApp] Loading canvas nodes for bubble:', bubbleId);
+
+        // Request canvas nodes from Python backend
+        if (window.vibemind) {
+            window.vibemind.sendToPython({
+                type: 'get_canvas_nodes',
+                bubble_id: bubbleId
+            });
+        }
+    }
+
+    /**
+     * Handle canvas node updates from Python
+     * @param {Object} message - Message containing node updates
+     */
+    handleCanvasNodeUpdate(message) {
+        if (!this.richContentRenderer) return;
+
+        const { bubble_id, nodes } = message;
+
+        // Only process if we're in the correct bubble
+        if (bubble_id !== this.currentBubbleId) return;
+
+        console.log('[MultiverseApp] Updating canvas nodes:', nodes);
+
+        // Clear existing nodes
+        this.richContentRenderer.clear();
+
+        // Render new nodes
+        if (nodes && Array.isArray(nodes)) {
+            nodes.forEach(nodeData => {
+                if (nodeData.id && nodeData.content) {
+                    this.richContentRenderer.renderNode(nodeData.id, nodeData);
+                }
+            });
+        }
+    }
+
+    /**
+     * Handle individual canvas node updates
+     * @param {Object} message - Message containing single node update
+     */
+    handleCanvasNodeSingleUpdate(message) {
+        if (!this.richContentRenderer) return;
+
+        const { bubble_id, node_id, node_data, action } = message;
+
+        // Only process if we're in the correct bubble
+        if (bubble_id !== this.currentBubbleId) return;
+
+        console.log('[MultiverseApp] Single node update:', action, node_id);
+
+        switch (action) {
+            case 'add':
+            case 'update':
+                if (node_data) {
+                    this.richContentRenderer.renderNode(node_id, node_data);
+                }
+                break;
+            case 'delete':
+                this.richContentRenderer.removeNode(node_id);
+                break;
+        }
+    }
+
+    /**
+     * Add a new canvas node programmatically
+     * @param {string} bubbleId - Bubble identifier
+     * @param {Object} nodeData - Node data
+     */
+    addCanvasNode(bubbleId, nodeData) {
+        if (window.vibemind) {
+            window.vibemind.addCanvasNode(bubbleId, nodeData);
+        }
+    }
+
+    /**
+     * Update an existing canvas node
+     * @param {string} bubbleId - Bubble identifier
+     * @param {string} nodeId - Node identifier
+     * @param {Object} updates - Node updates
+     */
+    updateCanvasNode(bubbleId, nodeId, updates) {
+        if (window.vibemind) {
+            window.vibemind.updateCanvasNode(bubbleId, nodeId, updates);
+        }
+    }
+
+    /**
+     * Delete a canvas node
+     * @param {string} bubbleId - Bubble identifier
+     * @param {string} nodeId - Node identifier
+     */
+    deleteCanvasNode(bubbleId, nodeId) {
+        if (window.vibemind) {
+            window.vibemind.deleteCanvasNode(bubbleId, nodeId);
+        }
+    }
+
+    /**
+     * Setup event handlers for canvas node messages from Python
+     */
+    setupCanvasNodeEventHandlers() {
+        if (!window.vibemind) return;
+
+        window.vibemind.onPythonMessage((message) => {
+            switch (message.type) {
+                case 'canvas_nodes_update':
+                    this.handleCanvasNodeUpdate(message);
+                    break;
+                case 'canvas_node_update':
+                    this.handleCanvasNodeSingleUpdate(message);
+                    break;
+                case 'node_structured_update':
+                    // Handle structured content updates (accept both field names)
+                    const structContent = message.content || message.structured_content;
+                    if (message.node_id && structContent) {
+                        this.handleCanvasNodeSingleUpdate({
+                            bubble_id: this.currentBubbleId,
+                            node_id: message.node_id,
+                            node_data: { ...message, content: structContent },
+                            action: 'update'
+                        });
+                    }
+                    break;
+            }
+        });
+
+        console.log('[MultiverseApp] Canvas node event handlers setup');
     }
 }
 
