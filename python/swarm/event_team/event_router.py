@@ -63,6 +63,15 @@ class EventRouter:
         "desktop.moire.scan": STREAM_TASKS_DESKTOP,
         "desktop.moire.find": STREAM_TASKS_DESKTOP,
 
+        # Messaging tasks -> desktop stream (OpenClawDesktopAgent)
+        "messaging.whatsapp": STREAM_TASKS_DESKTOP,
+        "messaging.telegram": STREAM_TASKS_DESKTOP,
+        "messaging.send": STREAM_TASKS_DESKTOP,
+        "web.search": STREAM_TASKS_DESKTOP,
+        "web.fetch": STREAM_TASKS_DESKTOP,
+        "openclaw.status": STREAM_TASKS_DESKTOP,
+        "openclaw.notifications": STREAM_TASKS_DESKTOP,
+
         # Bubbles tasks -> bubbles stream (BubblesAgent)
         "bubble.list": STREAM_TASKS_BUBBLES,
         "bubble.create": STREAM_TASKS_BUBBLES,

@@ -73,10 +73,6 @@ Innerhalb des Ideas Space gibt es:
 - "Tippe X" → Tippt Text
 - "Screenshot" → Macht Screenshot
 
-### Code Generation (Antoni's Space)
-- "Erstelle eine Todo App" → Startet Code-Generierung
-- "Wie weit ist die Generation?" → Zeigt Status
-- "Zeig die Preview" → Startet Preview
 
 ## WICHTIG: Terminologie
 
