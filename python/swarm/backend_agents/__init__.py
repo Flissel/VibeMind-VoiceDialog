@@ -35,7 +35,22 @@ def get_ideas_agent():
 
 
 def get_desktop_agent():
-    """Get DesktopAgent singleton (lazy import)."""
+    """Get DesktopAgent singleton (lazy import).
+
+    When USE_AG2_DESKTOP_SWARM=true, returns OpenClawDesktopAgent
+    which uses AutoGen Society of Mind with Claude CLI for reasoning.
+    Otherwise returns standard DesktopAgent.
+    """
+    import os
+    use_swarm = os.getenv("USE_AG2_DESKTOP_SWARM", "true").lower() in ("true", "1", "yes")
+
+    if use_swarm:
+        try:
+            from spaces.OpenClaw import get_openclaw_desktop_agent
+            return get_openclaw_desktop_agent()
+        except ImportError:
+            pass  # Fall back to standard agent
+
     from swarm.backend_agents.desktop_agent import get_desktop_agent as _get
     return _get()
 
@@ -64,6 +79,12 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def get_openclaw_agent():
+    """Get OpenClawDesktopAgent singleton (Society of Mind with Claude CLI)."""
+    from spaces.OpenClaw import get_openclaw_desktop_agent
+    return get_openclaw_desktop_agent()
+
+
 __all__ = [
     "BaseBackendAgent",
     "BubblesAgent",
@@ -72,6 +93,7 @@ __all__ = [
     "get_ideas_agent",
     "DesktopAgent",
     "get_desktop_agent",
+    "get_openclaw_agent",
     "CodingAgent",
     "get_coding_agent",
 ]

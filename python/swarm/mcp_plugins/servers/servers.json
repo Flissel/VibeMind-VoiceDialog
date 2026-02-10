@@ -50,7 +50,7 @@
     },
     {
       "name": "desktop",
-      "active": true,
+      "active": false,
       "type": "stdio",
       "command": "C:\\Windows\\System32\\cmd.exe",
       "args": [
@@ -60,6 +60,18 @@
       ],
       "read_timeout_seconds": 120,
       "description": "Desktop Commander MCP for terminal control, file system operations, and process management"
+    },
+    {
+      "name": "moire-handoff",
+      "active": true,
+      "type": "stdio",
+      "command": "C:\\Users\\User\\.pyenv\\pyenv-win\\versions\\3.11.0\\python.exe",
+      "args": [
+        "C:\\Users\\User\\Desktop\\Moire_tracker_v1\\MoireTracker_v2\\python\\mcp_server_handoff.py"
+      ],
+      "cwd": "C:\\Users\\User\\Desktop\\Moire_tracker_v1\\MoireTracker_v2\\python",
+      "read_timeout_seconds": 120,
+      "description": "MoireTracker Handoff MCP - 43 tools (Python 3.11 + autogen v0.2) for screen vision, desktop automation, planning, document editing, and Claude CLI integration"
     },
     {
       "name": "context7",

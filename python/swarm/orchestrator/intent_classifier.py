@@ -172,6 +172,30 @@ Der Bereich fuer Desktop-Automatisierung. WICHTIG: Nur fuer echte Desktop-Aktion
 - desktop.task: Komplexe Desktop-Aufgabe
   → "Geh auf YouTube und spiele...", "Oeffne Browser und suche..."
 
+### MESSAGING (OpenClaw)
+
+Nachrichten senden via WhatsApp, Telegram, oder Web-Suche.
+
+**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web
+
+**Event-Types:**
+- messaging.whatsapp: WhatsApp Nachricht senden
+  → "Schicke WhatsApp an Max: Hallo", "WhatsApp Nachricht an +49...", "Sende per WhatsApp"
+  → payload: {"recipient": "...", "message": "..."}
+- messaging.telegram: Telegram Nachricht senden
+  → "Telegram an @user: Text", "Schicke Telegram Nachricht"
+  → payload: {"recipient": "...", "message": "..."}
+- web.search: Web-Suche durchfuehren
+  → "Such im Web nach X", "Google X", "Suche online nach"
+  → payload: {"query": "..."}
+- web.fetch: Webseite abrufen und zusammenfassen
+  → "Hol mir den Inhalt von URL", "Was steht auf der Seite X"
+  → payload: {"url": "..."}
+- openclaw.status: OpenClaw Gateway Status pruefen
+  → "OpenClaw Status", "Ist OpenClaw verbunden?"
+- openclaw.notifications: Benachrichtigungen abrufen
+  → "Zeig meine Benachrichtigungen", "Was gibt es Neues?"
+
 ### KONVERSATION
 
 **Event-Types:**
@@ -460,6 +484,15 @@ class IntentClassifier:
                 result["event_type"] = "desktop.screenshot"
                 result["payload"] = {}
                 logger.debug(f"Post-process: -> desktop.screenshot")
+
+        # Rule 6b: OpenClaw/Gateway status -> openclaw.status
+        if intent == "conversation.unknown":
+            openclaw_kw = ["openclaw", "gateway", "clawed"]
+            status_kw = ["status", "verbunden", "connected", "zustand"]
+            if any(kw in text_lower for kw in openclaw_kw) and any(kw in text_lower for kw in status_kw):
+                result["event_type"] = "openclaw.status"
+                result["payload"] = {}
+                logger.debug(f"Post-process: -> openclaw.status")
 
         # Rule 7: evaluation.clarify - "ich meinte" / "eigentlich wollte" - MUST NOT execute action
         clarify_keywords = ["meinte", "eigentlich wollte", "ich wollte eigentlich", "nicht das"]
@@ -1223,11 +1256,14 @@ class IntentClassifier:
                     error=f"JSON decode error: {e}",
                     latency_ms=latency_ms
                 )
-            return {
+            # Still try post-processing rules for known patterns
+            result = {
                 "event_type": "conversation.unknown",
                 "payload": {"original_text": intent_text, "error": str(e)},
                 "response_hint": "Ich habe dich nicht ganz verstanden."
             }
+            result = self._post_process_classification(result, intent_text)
+            return result
         except Exception as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
             logger.error(f"Classification error: {e}")
