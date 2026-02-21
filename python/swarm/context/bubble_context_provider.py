@@ -99,6 +99,42 @@ class BubbleContextProvider:
                 "idea_count": 0,
             }
 
+    def get_all_bubbles_summary(self) -> list:
+        """
+        Get summary of all top-level bubbles (spaces) for LLM context.
+
+        Returns:
+            List of dicts with title, id, idea_count for each bubble.
+        """
+        try:
+            from data import IdeasRepository, CanvasRepository
+            repo = IdeasRepository()
+            # Top-level ideas = bubbles (parent_id IS NULL)
+            rows = repo.db.fetch_all(
+                "SELECT * FROM ideas WHERE parent_id IS NULL ORDER BY created_at DESC LIMIT 20"
+            )
+            from data.models import Idea
+            bubbles = [Idea.from_dict(dict(r)) for r in rows]
+
+            # Count ideas per bubble
+            canvas_repo = CanvasRepository()
+            all_nodes = canvas_repo.list_nodes(limit=2000)
+
+            result = []
+            for b in bubbles:
+                idea_count = sum(1 for n in all_nodes if n.linked_idea_id == b.id)
+                idea_titles = [n.title for n in all_nodes if n.linked_idea_id == b.id and n.title][:5]
+                result.append({
+                    "title": b.title,
+                    "id": b.id,
+                    "idea_count": idea_count,
+                    "idea_titles": idea_titles,
+                })
+            return result
+        except Exception as e:
+            logger.warning(f"[BubbleContextProvider] get_all_bubbles_summary failed: {e}")
+            return []
+
     def format_for_prompt(self) -> str:
         """
         Get formatted context string for LLM prompt.

@@ -24,13 +24,13 @@ from swarm.backend_agents.base_agent import BaseBackendAgent
 
 def get_bubbles_agent():
     """Get BubblesAgent singleton (lazy import)."""
-    from swarm.backend_agents.bubbles_agent import get_bubbles_agent as _get
+    from spaces.ideas.agents.bubbles_agent import get_bubbles_agent as _get
     return _get()
 
 
 def get_ideas_agent():
     """Get IdeasAgent singleton (lazy import)."""
-    from swarm.backend_agents.ideas_agent import get_ideas_agent as _get
+    from spaces.ideas.agents.ideas_agent import get_ideas_agent as _get
     return _get()
 
 
@@ -51,13 +51,13 @@ def get_desktop_agent():
         except ImportError:
             pass  # Fall back to standard agent
 
-    from swarm.backend_agents.desktop_agent import get_desktop_agent as _get
+    from spaces.desktop.agents.desktop_agent import get_desktop_agent as _get
     return _get()
 
 
 def get_coding_agent():
     """Get CodingAgent singleton (lazy import)."""
-    from swarm.backend_agents.coding_agent import get_coding_agent as _get
+    from spaces.coding.agents.coding_agent import get_coding_agent as _get
     return _get()
 
 
@@ -65,16 +65,16 @@ def get_coding_agent():
 def __getattr__(name):
     """Lazy load agent classes to avoid circular imports."""
     if name == "BubblesAgent":
-        from swarm.backend_agents.bubbles_agent import BubblesAgent
+        from spaces.ideas.agents.bubbles_agent import BubblesAgent
         return BubblesAgent
     elif name == "IdeasAgent":
-        from swarm.backend_agents.ideas_agent import IdeasAgent
+        from spaces.ideas.agents.ideas_agent import IdeasAgent
         return IdeasAgent
     elif name == "DesktopAgent":
-        from swarm.backend_agents.desktop_agent import DesktopAgent
+        from spaces.desktop.agents.desktop_agent import DesktopAgent
         return DesktopAgent
     elif name == "CodingAgent":
-        from swarm.backend_agents.coding_agent import CodingAgent
+        from spaces.coding.agents.coding_agent import CodingAgent
         return CodingAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

@@ -2,8 +2,13 @@
 VibeMind Multiverse Spaces
 
 Verschiedene Spaces im Multiverse:
-- Ideas Space (Rachel's Bubbles) - Ideen-Verwaltung
-- Desktop Automation Space (Adam's Workspace) - Desktop-Kontrolle
+- Ideas Space - Ideen-Verwaltung
+- Coding Space - Code-Generierung
+- Desktop Space - Desktop-Kontrolle via Automation_ui
+- OpenClaw Space - AutoGen Desktop Swarm
+- Transformer Space - Bubble-to-Coding Pipeline
+- Roarboot Space - (Placeholder)
+- Minibook Space - (Placeholder)
 """
 
 from enum import Enum
@@ -14,10 +19,12 @@ from typing import Optional, Dict, Any
 class SpaceType(Enum):
     """Verfügbare Space-Typen im Multiverse."""
     IDEAS = "ideas"
+    CODING = "coding"
     DESKTOP_SPACE = "desktop_space"
-    # Zukünftige Spaces:
-    # CODING_WORKSHOP = "coding_workshop"  # Antoni's Space
-    # PROJECT_HUB = "project_hub"  # Alice's Space
+    OPENCLAW = "openclaw"
+    TRANSFORMER = "transformer"
+    ROARBOOT = "roarboot"
+    MINIBOOK = "minibook"
 
 
 @dataclass
@@ -52,14 +59,27 @@ SPACES = {
             "allows_creation": True,
         }
     ),
+    SpaceType.CODING: SpaceConfig(
+        type=SpaceType.CODING,
+        name="Coding Workshop",
+        description="Code-Werkstatt - Code-Generierung und Projekte",
+        position={"x": -8, "y": 2, "z": -3},
+        agent_slug=None,
+        color=0x44ff88,  # Grün
+        visualization="nebula",
+        metadata={
+            "entry_point": False,
+            "allows_creation": True,
+        }
+    ),
     SpaceType.DESKTOP_SPACE: SpaceConfig(
         type=SpaceType.DESKTOP_SPACE,
         name="Desktop Space",
-        description="Adams Desktop-Kontrolle - System-Operationen und App-Steuerung",
-        position={"x": 10, "y": 0, "z": -5},  # Weiter entfernt im Raum
-        agent_slug="adam",
+        description="Desktop-Kontrolle via Automation_ui - System-Operationen und App-Steuerung",
+        position={"x": 10, "y": 0, "z": -5},
+        agent_slug=None,
         color=0xff8844,  # Warmes Orange
-        visualization="light_planet",  # Spezieller Licht-Planet
+        visualization="light_planet",
         metadata={
             "entry_point": False,
             "requires_hand_motion": True,
@@ -68,6 +88,59 @@ SPACES = {
                 "pulsation_speed": 0.5,
                 "gravity_effect": True,
             }
+        }
+    ),
+    SpaceType.OPENCLAW: SpaceConfig(
+        type=SpaceType.OPENCLAW,
+        name="OpenClaw Desktop",
+        description="AutoGen Society of Mind - Desktop Swarm mit Claude CLI",
+        position={"x": 12, "y": 3, "z": -8},
+        agent_slug="openclaw",
+        color=0xff4444,  # Rot
+        visualization="planet",
+        metadata={
+            "entry_point": False,
+            "uses_autogen": True,
+            "uses_mcp": True,
+        }
+    ),
+    SpaceType.TRANSFORMER: SpaceConfig(
+        type=SpaceType.TRANSFORMER,
+        name="Transformer Pipeline",
+        description="Bubble-to-Coding Pipeline - Ideen zu Spezifikationen",
+        position={"x": -4, "y": 4, "z": -6},
+        agent_slug=None,
+        color=0xaa44ff,  # Lila
+        visualization="portal",
+        metadata={
+            "entry_point": False,
+            "pipeline": True,
+        }
+    ),
+    SpaceType.ROARBOOT: SpaceConfig(
+        type=SpaceType.ROARBOOT,
+        name="Roarboot",
+        description="Roarboot Space - (Placeholder)",
+        position={"x": -12, "y": -2, "z": -10},
+        agent_slug=None,
+        color=0xffaa00,  # Gold
+        visualization="nebula",
+        metadata={
+            "entry_point": False,
+            "placeholder": True,
+        }
+    ),
+    SpaceType.MINIBOOK: SpaceConfig(
+        type=SpaceType.MINIBOOK,
+        name="Minibook",
+        description="Minibook Space - (Placeholder)",
+        position={"x": 6, "y": -3, "z": -12},
+        agent_slug=None,
+        color=0x00aaff,  # Hellblau
+        visualization="nebula",
+        metadata={
+            "entry_point": False,
+            "placeholder": True,
         }
     ),
 }

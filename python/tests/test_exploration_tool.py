@@ -143,7 +143,7 @@ async def test_intent_to_tool_flow():
     # Check IdeasAgent mapping
     print("\n2. Checking IdeasAgent tool mapping...")
     try:
-        from swarm.backend_agents.ideas_agent import IdeasAgent
+        from spaces.ideas.agents.ideas_agent import IdeasAgent
         agent = IdeasAgent()
 
         exploration_events = [

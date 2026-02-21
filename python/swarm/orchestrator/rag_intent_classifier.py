@@ -47,113 +47,88 @@ class RAGClassificationResult:
     # Multi-step support
     is_multi_step: bool = False
     steps: List[Dict[str, Any]] = field(default_factory=list)
+    # Direct answer mode: LLM answers read queries from context without backend execution
+    mode: str = "execute"  # "direct_answer" or "execute"
+    direct_answer: str = ""  # Response text when mode=direct_answer
 
 
-# LLM Prompt Template for classification with retrieved rules
-RAG_CLASSIFIER_PROMPT = """Du bist ein Intent-Classifier für eine Voice-AI Anwendung.
+# LLM Prompt Template — Smart Router with direct answer + execute modes
+RAG_CLASSIFIER_PROMPT = """Du bist der intelligente Router fuer VibeMind, eine Voice-AI Anwendung.
+Du kannst Leseanfragen DIREKT beantworten oder Aktionen zur Ausfuehrung weiterleiten.
 
 {context_section}
-## Relevante Intent-Regeln (semantisch ähnlich zur Anfrage)
+
+## Relevante Intent-Regeln (semantisch aehnlich zur Anfrage)
 
 {rules_context}
-
-## Aufgabe
-
-Analysiere die Benutzeranfrage und klassifiziere sie basierend auf den obigen Regeln.
-
-WICHTIG:
-- Wähle den Intent-Typ mit der höchsten semantischen Übereinstimmung
-- Wenn KEINE spezifischen Namen genannt werden (wie "Idee A mit Idee B"), ist es KEIN idea.connect!
-- "die Ideen verlinken" (Plural, unspezifisch) -> idea.auto_link
-- "Verbinde X mit Y" (zwei Namen) -> idea.connect
-- Bei Unsicherheit: Wähle den Intent mit höherer Priorität
-
-KREATION vs EXPANSION:
-- "Neue Idee:" am Anfang -> idea.create (NICHT idea.expand!)
-- "Notiere", "Speichere", "Merke dir" -> idea.create
-- Der INHALT der Idee (z.B. "beheben", "verbessern", "ändern") bestimmt NICHT den Intent!
-- idea.expand ist NUR wenn der User explizit sagt "erweitere die bestehenden Ideen"
-
-## MULTI-STEP ERKENNUNG (VOLLSTÄNDIGER ACTION PLAN)
-
-Wenn die Anfrage MEHRERE unterschiedliche Aktionen enthält, setze "is_multi_step": true.
-
-Für Multi-Step MUSS jeder Step haben:
-- event_type: Die Capability
-- payload: ALLE extrahierten Parameter (KRITISCH!)
-- depends_on: Index des vorherigen Steps (wenn Ergebnis benötigt)
-- output_ref: Was dieser Step produziert (optional, für Verkettung)
-
-WICHTIG: Extrahiere die Parameter für JEDEN Step separat aus dem User-Text!
-
-Beispiele für Multi-Step:
-
-1. "Finde die In-Hand-Analyse und klassifiziere sie"
-{{
-    "is_multi_step": true,
-    "steps": [
-        {{"event_type": "idea.find", "payload": {{"query": "In-Hand-Analyse"}}, "output_ref": "found_idea"}},
-        {{"event_type": "idea.classify", "payload": {{"idea_name": "In-Hand-Analyse"}}, "depends_on": 0}}
-    ]
-}}
-
-2. "Update Desktop Automation mit Features und formatiere als Tabelle"
-{{
-    "is_multi_step": true,
-    "steps": [
-        {{"event_type": "idea.update", "payload": {{"idea_name": "Desktop Automation", "topic": "Features fuer Desktop Automatisierung", "mode": "generate"}}}},
-        {{"event_type": "idea.format_table", "payload": {{"idea_name": "Desktop Automation"}}, "depends_on": 0}}
-    ]
-}}
-
-3. "Gehe in den Space Test und zeige die Ideen"
-{{
-    "is_multi_step": true,
-    "steps": [
-        {{"event_type": "bubble.enter", "payload": {{"bubble_name": "Test"}}}},
-        {{"event_type": "idea.list", "payload": {{}}, "depends_on": 0}}
-    ]
-}}
-
-Einzelne Aktionen sind KEIN Multi-Step:
-- "Lösche alle Ideen" → KEIN Multi-Step (eine Aktion)
-- "Erstelle eine Idee über Marketing" → KEIN Multi-Step (eine Aktion)
 
 ## Benutzeranfrage
 
 "{user_input}"
 
-## PARAMETER EXTRAKTION (KRITISCH!)
+## Deine Aufgabe
 
-Du MUSST alle Parameter aus der Benutzeranfrage extrahieren und im payload zurückgeben!
+Entscheide: Kannst du die Anfrage aus dem Kontext oben DIREKT beantworten, oder muss eine Aktion ausgefuehrt werden?
+
+### MODUS 1: DIREKT ANTWORTEN (mode=direct_answer)
+
+Verwende diesen Modus wenn der User nach INFORMATION fragt die im Kontext steht:
+- Bubbles/Spaces auflisten, zaehlen, zeigen
+- Ideen auflisten, zaehlen, zeigen
+- Status-Abfragen ("wo bin ich?", "was gibt es?")
+- Zusammenfassungen aus vorhandenen Daten
+
+Antworte mit einer natuerlichen deutschen Phrase fuer Voice-Ausgabe (kurz, klar, sprechbar).
+
+Beispiel: User fragt "Welche Spaces habe ich?"
+{{
+    "mode": "direct_answer",
+    "answer": "Du hast 3 Spaces: Marketing, Design und Tech.",
+    "confidence": 0.95
+}}
+
+Beispiel: User fragt "Wie viele Ideen sind in Marketing?"
+{{
+    "mode": "direct_answer",
+    "answer": "Im Space Marketing sind 5 Ideen: API Design, Logo Redesign, Campaign Plan, Budget Overview und Timeline.",
+    "confidence": 0.90
+}}
+
+### MODUS 2: AKTION AUSFUEHREN (mode=execute)
+
+Verwende diesen Modus wenn der User etwas AENDERN will:
+- Erstellen, loeschen, aendern, verschieben, verlinken, erweitern, formatieren
+- Alles was den Zustand veraendert
+
+WICHTIG fuer Klassifizierung:
+- Wenn KEINE spezifischen Namen genannt werden -> idea.auto_link (nicht idea.connect)
+- "Neue Idee:" / "Notiere" / "Merke dir" -> idea.create (NICHT idea.expand!)
+- Der INHALT bestimmt NICHT den Intent!
+- idea.expand NUR bei "erweitere die bestehenden Ideen"
 
 Parameter-Referenz:
 - bubble.create: {{"title": "Space-Name"}}
 - bubble.enter: {{"bubble_name": "Space-Name"}}
 - bubble.delete: {{"bubble_name": "Space-Name"}}
-- bubble.update: {{"new_title": "Neuer-Name"}} (oder {{"new_description": "Neue Beschreibung"}})
+- bubble.update: {{"new_title": "Neuer-Name"}}
 - idea.create: {{"title": "Idee-Titel", "content": "Optionaler Inhalt"}}
-- idea.delete: {{"idea_name": "Idee-Name"}} oder {{}} für alle
+- idea.delete: {{"idea_name": "Idee-Name"}} oder {{}} fuer alle
 - idea.find: {{"query": "Suchbegriff"}}
 - idea.connect: {{"source": "Idee A", "target": "Idee B"}}
 - idea.update:
-  - Literal (User gibt expliziten Text): {{"idea_name": "Name", "new_content": "Der exakte neue Text", "mode": "literal"}}
-  - Generieren (User will Content erzeugen lassen): {{"idea_name": "Name", "topic": "Was generiert werden soll", "mode": "generate"}}
-  WICHTIG: Bei "update mit Features über X" oder "schreib X" → mode="generate", topic="X"
-  NIEMALS den User-Prompt als new_content kopieren!
+  - Literal: {{"idea_name": "Name", "new_content": "Text", "mode": "literal"}}
+  - Generieren: {{"idea_name": "Name", "topic": "Was generiert werden soll", "mode": "generate"}}
 - idea.format_table: {{"idea_name": "Name", "custom_columns": ["Spalte1", "Spalte2"]}}
-- idea.summarize: {{"idea_name": "Name", "style": "concise"}} (style: concise|detailed|actionable)
+- idea.summarize: {{"idea_name": "Name", "style": "concise"}}
 - idea.whitepaper: {{"start_node": "Idee-Name"}}
 - idea.expand: {{"idea_name": "Name", "count": 3}}
-- idea.classify: {{"idea_name": "Name"}} (optional - wenn leer, nutze aktuelle/Root-Idee)
-- idea.auto_link: {{}} (keine Parameter nötig)
-- idea.analyze_links: {{}} (keine Parameter nötig)
+- idea.classify: {{"idea_name": "Name"}}
+- idea.auto_link: {{}}
+- idea.analyze_links: {{}}
 
-## Antwortformat (NUR JSON)
-
-Für EINZELNE Aktionen - EXTRAHIERE ALLE PARAMETER:
-Eingabe: "Erstelle Space Marketing"
+Beispiel: User sagt "Erstelle Space Marketing"
 {{
+    "mode": "execute",
     "event_type": "bubble.create",
     "confidence": 0.95,
     "reasoning": "User will Space 'Marketing' erstellen",
@@ -161,46 +136,30 @@ Eingabe: "Erstelle Space Marketing"
     "is_multi_step": false
 }}
 
-Eingabe: "Gehe in den Space Projekte"
-{{
-    "event_type": "bubble.enter",
-    "confidence": 0.95,
-    "reasoning": "User will in Space 'Projekte' wechseln",
-    "payload": {{"bubble_name": "Projekte"}},
-    "is_multi_step": false
-}}
+### MODUS 2b: MULTI-STEP (mehrere Aktionen)
 
-Für MULTI-STEP - EXTRAHIERE ALLE PARAMETER PRO SCHRITT:
-Eingabe: "Erstelle Space Businessplan, gehe hinein und erstelle eine Idee Roadmap"
+Wenn die Anfrage MEHRERE Aktionen enthaelt:
+
+Beispiel: "Gehe in den Space Test und zeige die Ideen"
 {{
+    "mode": "execute",
     "event_type": "multi_step",
     "confidence": 0.90,
-    "reasoning": "3 Aktionen: Space erstellen, hinein gehen, Idee erstellen",
+    "reasoning": "2 Aktionen: Space betreten, Ideen anzeigen",
     "payload": {{}},
     "is_multi_step": true,
     "steps": [
-        {{"event_type": "bubble.create", "payload": {{"title": "Businessplan"}}}},
-        {{"event_type": "bubble.enter", "payload": {{"bubble_name": "Businessplan"}}, "depends_on": 0}},
-        {{"event_type": "idea.create", "payload": {{"title": "Roadmap"}}, "depends_on": 1}}
+        {{"event_type": "bubble.enter", "payload": {{"bubble_name": "Test"}}}},
+        {{"event_type": "idea.list", "payload": {{}}, "depends_on": 0}}
     ]
 }}
 
-Eingabe: "Liste alle Ideen und lösche sie"
-{{
-    "event_type": "multi_step",
-    "confidence": 0.90,
-    "reasoning": "2 Aktionen: Auflisten dann Löschen",
-    "payload": {{}},
-    "is_multi_step": true,
-    "steps": [
-        {{"event_type": "idea.list", "payload": {{}}}},
-        {{"event_type": "idea.delete", "payload": {{}}, "depends_on": 0}}
-    ]
-}}
+Einzelne Aktionen sind KEIN Multi-Step.
 
-WICHTIG: Wenn ein Name/Titel im Text genannt wird, MUSS er im payload stehen!
+## Antwortformat
 
-Antworte NUR mit dem JSON-Objekt:"""
+Antworte NUR mit einem JSON-Objekt (mode=direct_answer oder mode=execute).
+Wenn ein Name/Titel im Text steht, MUSS er im payload stehen!"""
 
 
 class RAGIntentClassifier:
@@ -265,14 +224,20 @@ class RAGIntentClassifier:
     async def classify(
         self,
         user_input: str,
-        bubble_context: Optional[Dict[str, Any]] = None
+        bubble_context: Optional[Dict[str, Any]] = None,
+        system_state: Optional[Any] = None,
     ) -> RAGClassificationResult:
         """
         Classify user intent using RAG approach.
 
+        The LLM can either answer read queries directly from context
+        (mode=direct_answer) or classify write actions for backend
+        execution (mode=execute).
+
         Args:
             user_input: The user's voice/text input
             bubble_context: Optional context about current bubble and ideas
+            system_state: Optional SystemState with current_space, current_bubble, etc.
 
         Returns:
             RAGClassificationResult with event_type, confidence, etc.
@@ -304,9 +269,10 @@ class RAGIntentClassifier:
                 print(f"[Python DEBUG] [RAG] ERROR: LLM client is None! Check OPENROUTER_API_KEY", file=_sys.stderr, flush=True)
                 raise ValueError("LLM client not available - check OPENROUTER_API_KEY")
 
-            result = await self._call_llm(user_input, rules_context, bubble_context)
+            result = await self._call_llm(user_input, rules_context, bubble_context, system_state)
             result.used_rules = used_rule_types
-            print(f"[Python DEBUG] [RAG] Step 4: LLM returned: {result.event_type} ({result.confidence:.0%})", file=_sys.stderr, flush=True)
+            mode_info = f"mode={result.mode}" if result.mode == "direct_answer" else f"{result.event_type}"
+            print(f"[Python DEBUG] [RAG] Step 4: LLM returned: {mode_info} ({result.confidence:.0%})", file=_sys.stderr, flush=True)
             return result
         except Exception as e:
             print(f"[Python DEBUG] [RAG] ERROR in LLM call: {type(e).__name__}: {e}", file=_sys.stderr, flush=True)
@@ -331,23 +297,51 @@ class RAGIntentClassifier:
         self,
         user_input: str,
         rules_context: str,
-        bubble_context: Optional[Dict[str, Any]] = None
+        bubble_context: Optional[Dict[str, Any]] = None,
+        system_state: Optional[Any] = None,
     ) -> RAGClassificationResult:
-        """Call the LLM for classification."""
+        """Call the LLM for classification or direct answer."""
         if not self.llm_client:
             raise ValueError("LLM client not available")
 
-        # Build context section from bubble context
-        context_section = ""
+        # Build rich context section so LLM can answer reads directly
+        context_parts = []
+
+        # System state (where are we?)
+        if system_state:
+            loc = system_state.current_space or "Hauptansicht"
+            if system_state.current_bubble:
+                loc += f" / Bubble: {system_state.current_bubble}"
+            context_parts.append(f"- Position: {loc}")
+
+        # Current bubble details
         if bubble_context and bubble_context.get("bubble_id"):
             idea_titles = bubble_context.get("idea_titles", [])
             ideas_str = ", ".join(idea_titles[:10]) if idea_titles else "keine"
-            context_section = (
-                f"## Aktueller Kontext\n\n"
+            context_parts.append(
                 f"- Aktueller Space: {bubble_context.get('bubble_name', 'Unbekannt')}\n"
-                f"- Anzahl Ideen: {bubble_context.get('idea_count', 0)}\n"
-                f"- Ideen: {ideas_str}\n\n"
+                f"- Ideen im Space ({bubble_context.get('idea_count', 0)}): {ideas_str}"
             )
+        else:
+            context_parts.append("- Kein Space betreten (Hauptansicht)")
+
+        # All bubbles overview (so LLM can answer "welche Spaces habe ich?")
+        try:
+            from swarm.context.bubble_context_provider import get_bubble_context_provider
+            all_bubbles = get_bubble_context_provider().get_all_bubbles_summary()
+            if all_bubbles:
+                bubble_lines = []
+                for b in all_bubbles:
+                    titles = ", ".join(b["idea_titles"][:3]) if b.get("idea_titles") else ""
+                    suffix = f" ({b['idea_count']} Ideen: {titles})" if titles else f" ({b['idea_count']} Ideen)"
+                    bubble_lines.append(f"  - {b['title']}{suffix}")
+                context_parts.append(f"- Alle Spaces ({len(all_bubbles)}):\n" + "\n".join(bubble_lines))
+            else:
+                context_parts.append("- Keine Spaces vorhanden")
+        except Exception as e:
+            logger.debug(f"[RAG] Could not load all bubbles: {e}")
+
+        context_section = "## Aktueller Kontext\n\n" + "\n".join(context_parts) + "\n\n" if context_parts else ""
 
         prompt = RAG_CLASSIFIER_PROMPT.format(
             context_section=context_section,
@@ -374,7 +368,7 @@ class RAGIntentClassifier:
                 result = self.llm_client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": "Du bist ein präziser Intent-Classifier. Antworte nur mit JSON."},
+                        {"role": "system", "content": "Du bist der VibeMind Smart Router. Beantworte Leseanfragen direkt oder klassifiziere Aktionen. Antworte nur mit JSON."},
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.1,
@@ -412,11 +406,28 @@ class RAGIntentClassifier:
 
             data = json.loads(response_text)
 
-            # Extract multi-step data
+            # Determine response mode
+            mode = data.get("mode", "execute")
+
+            # MODE: direct_answer — LLM answered the read query from context
+            if mode == "direct_answer":
+                answer = data.get("answer", "")
+                logger.info(f"[RAGIntentClassifier] Direct answer: {answer[:60]}...")
+                return RAGClassificationResult(
+                    event_type="direct_answer",
+                    confidence=float(data.get("confidence", 0.9)),
+                    reasoning=data.get("reasoning", "Direct answer from context"),
+                    used_rules=[],
+                    payload={},
+                    user_input=user_input,
+                    mode="direct_answer",
+                    direct_answer=answer,
+                )
+
+            # MODE: execute — classification for backend execution
             is_multi_step = data.get("is_multi_step", False)
             steps = data.get("steps", [])
 
-            # Log multi-step detection
             if is_multi_step:
                 logger.info(f"[RAGIntentClassifier] Multi-step detected: {len(steps)} steps")
 
@@ -426,9 +437,10 @@ class RAGIntentClassifier:
                 reasoning=data.get("reasoning", ""),
                 used_rules=[],  # Will be filled by caller
                 payload=data.get("payload", {}),
-                user_input=user_input,  # Preserve original transcript
+                user_input=user_input,
                 is_multi_step=is_multi_step,
                 steps=steps,
+                mode="execute",
             )
         except json.JSONDecodeError as e:
             logger.error(f"[RAGIntentClassifier] Failed to parse LLM response: {response_text[:100]}")

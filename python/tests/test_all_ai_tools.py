@@ -231,7 +231,7 @@ def main():
 
     print(f"\n  Checking ideas_swarm...", end=" ")
     try:
-        from swarm.backend_agents.ideas_swarm import create_ideas_swarm, get_ideas_swarm
+        from spaces.ideas.swarm.ideas_swarm import create_ideas_swarm, get_ideas_swarm
         print(f"OK (create_ideas_swarm, get_ideas_swarm)")
         results.append(("swarm:import", True, 0))
     except Exception as e:

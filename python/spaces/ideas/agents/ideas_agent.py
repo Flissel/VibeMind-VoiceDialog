@@ -325,7 +325,7 @@ class IdeasAgent(BaseBackendAgent):
 
         # Load core idea tools
         try:
-            from swarm.tools.adapted_idea_tools import (
+            from spaces.ideas.adapted.idea_tools import (
                 list_ideas,
                 create_idea,
                 find_idea,
@@ -503,7 +503,7 @@ class IdeasAgent(BaseBackendAgent):
 
         Returns the final response text from the Swarm.
         """
-        from swarm.backend_agents.ideas_swarm import get_ideas_swarm
+        from spaces.ideas.swarm.ideas_swarm import get_ideas_swarm
 
         swarm = get_ideas_swarm()
         task_result = await swarm.run(task=task)

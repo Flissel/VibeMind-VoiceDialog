@@ -29,7 +29,7 @@ import concurrent.futures
 # Import all components to test
 from super_memory_api import SuperMemoryAPI, MemoryQuery, MemoryEntry
 from swarm.execution_layer import ExecutionEngine, WorkflowPlanner, WorkflowStep
-from swarm.backend_agents.enhanced_ideas_agent import EnhancedIdeasAgent
+from spaces.ideas.enhanced.enhanced_ideas_agent import EnhancedIdeasAgent
 from vibemind_api import VibeMindAPI
 from swarm.orchestrator.intent_orchestrator import get_orchestrator
 from swarm.analysis.user_context import UserContext

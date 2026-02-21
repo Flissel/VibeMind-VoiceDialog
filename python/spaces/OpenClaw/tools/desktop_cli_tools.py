@@ -29,7 +29,7 @@ def _load_desktop_tools() -> List[Callable]:
     tools = []
 
     try:
-        from swarm.tools.adapted_desktop_tools import (
+        from spaces.desktop.tools.adapted_desktop_tools import (
             execute_desktop_task,
             click_element,
             type_text,
@@ -73,7 +73,7 @@ def _load_desktop_tools() -> List[Callable]:
 
 # Export individual tools for direct import
 try:
-    from swarm.tools.adapted_desktop_tools import (
+    from spaces.desktop.tools.adapted_desktop_tools import (
         execute_desktop_task,
         click_element,
         type_text,

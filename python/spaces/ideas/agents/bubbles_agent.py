@@ -128,7 +128,7 @@ class BubblesAgent(BaseBackendAgent):
         tools = {}
 
         try:
-            from swarm.tools.adapted_bubble_tools import (
+            from spaces.ideas.adapted.bubble_tools import (
                 list_bubbles,
                 create_bubble,
                 enter_bubble,

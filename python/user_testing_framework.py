@@ -28,7 +28,7 @@ from pathlib import Path
 from super_memory_api import get_super_memory, MemoryQuery
 from swarm.orchestrator.intent_orchestrator import get_orchestrator
 from swarm.execution_layer import get_execution_engine, WorkflowStep
-from swarm.backend_agents.enhanced_ideas_agent import create_enhanced_ideas_agent
+from spaces.ideas.enhanced.enhanced_ideas_agent import create_enhanced_ideas_agent
 from vibemind_api import get_api_server
 from swarm.event_team import TaskContext
 

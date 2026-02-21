@@ -383,11 +383,15 @@ class ElectronBackend:
                     self.elevenlabs_client = ElevenLabs(api_key=api_key)
                     debug_log("ElevenLabs client pre-warmed")
 
-                    # 2. Pre-create audio interface (slow device enumeration)
-                    debug_log("Pre-warming audio interface...")
-                    from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
-                    self.audio_interface = DefaultAudioInterface()
-                    debug_log("Audio interface pre-warmed")
+                    # 2. Audio interface: skip pre-warm, just pre-import pyaudio
+                    # DefaultAudioInterface.__init__ only does `import pyaudio`, so
+                    # pre-warming it adds no benefit. Creating it fresh avoids potential
+                    # cross-thread PortAudio issues on Windows.
+                    try:
+                        import pyaudio  # noqa: pre-import to cache module
+                        debug_log("PyAudio module pre-imported")
+                    except ImportError:
+                        debug_log("PyAudio not installed")
 
                     # 3. Pre-initialize tools manager
                     debug_log("Pre-warming tools manager...")
@@ -1075,14 +1079,17 @@ class ElectronBackend:
         - Backend agents for async tool execution
         """
         try:
+            import time as _time
+            _t_total = _time.time()
             debug_log("Initializing VoiceBridgeV2...")
 
-            # 1. Create VoiceBridge
+            # 1. Create VoiceBridge (6-step init: model client, queue, orchestrator, rachel, tts, agents)
+            _t0 = _time.time()
             self.voice_bridge = await create_voice_bridge_v2(
                 model_client=None,  # Auto-detect Cloud/Ollama
                 event_manager=None  # Optional Redis
             )
-            debug_log("VoiceBridgeV2 created")
+            debug_log(f"VoiceBridgeV2 created ({_time.time() - _t0:.2f}s)")
 
             # 2. Get API key for ElevenLabs
             api_key = os.getenv("ELEVENLABS_API_KEY")
@@ -1095,6 +1102,7 @@ class ElectronBackend:
                 return
 
             # 3. Create ElevenLabs client and audio interface (use pre-warmed if available)
+            _t0 = _time.time()
             if not self.elevenlabs_client:
                 debug_log("Creating ElevenLabs client...")
                 self.elevenlabs_client = ElevenLabs(api_key=api_key)
@@ -1106,25 +1114,52 @@ class ElectronBackend:
                 self.audio_interface = DefaultAudioInterface()
             else:
                 debug_log("Using pre-warmed audio interface")
+            debug_log(f"Client + audio ready ({_time.time() - _t0:.2f}s)")
 
-            # 4. Create conversation with bridge tools (only send_intent)
-            debug_log("Creating conversation with VoiceBridgeV2 tools...")
-            self.voice_conversation = Conversation(
-                client=self.elevenlabs_client,
-                agent_id=agent_id,
-                requires_auth=False,
-                audio_interface=self.audio_interface,
-                client_tools=self._create_bridge_tools(),
-                callback_user_transcript=self._handle_user_transcript,
-                callback_agent_response=self._handle_agent_response,
-            )
+            # 4. Create conversation with bridge tools
+            _t0 = _time.time()
+            bridge_tools = self._create_bridge_tools()
+            debug_log(f"Bridge tools created ({_time.time() - _t0:.2f}s)")
 
-            # 5. Start conversation thread
+            _t0 = _time.time()
+            debug_log("Creating ElevenLabs Conversation object...")
+
+            # run_in_executor doesn't work on Windows ProactorEventLoop.
+            # Use a direct thread with call_soon_threadsafe instead.
+            loop = asyncio.get_event_loop()
+            conv_future = loop.create_future()
+
+            def _create_conversation_thread():
+                debug_log(f"[Conv] Thread started ({threading.current_thread().name})")
+                try:
+                    conv = Conversation(
+                        client=self.elevenlabs_client,
+                        agent_id=agent_id,
+                        requires_auth=False,
+                        audio_interface=self.audio_interface,
+                        client_tools=bridge_tools,
+                        callback_user_transcript=self._handle_user_transcript,
+                        callback_agent_response=self._handle_agent_response,
+                    )
+                    debug_log("[Conv] Conversation() OK")
+                    loop.call_soon_threadsafe(conv_future.set_result, conv)
+                except Exception as e:
+                    debug_log(f"[Conv] Conversation() FAILED: {e}")
+                    loop.call_soon_threadsafe(conv_future.set_exception, e)
+
+            t = threading.Thread(target=_create_conversation_thread, daemon=True, name="conv-init")
+            t.start()
+            debug_log("[Conv] Thread launched, awaiting result...")
+            self.voice_conversation = await conv_future
+            debug_log(f"Conversation object created ({_time.time() - _t0:.2f}s)")
+
+            # 5. Start conversation thread (WebSocket connects in background)
             def run_voice_session():
                 try:
-                    debug_log("VoiceBridgeV2 session thread starting...")
+                    _t_ws = _time.time()
+                    debug_log("Connecting to ElevenLabs WebSocket...")
                     self.voice_conversation.start_session()
-                    debug_log("VoiceBridgeV2 session started, waiting for end...")
+                    debug_log(f"WebSocket session started ({_time.time() - _t_ws:.2f}s), waiting for end...")
                     conversation_id = self.voice_conversation.wait_for_session_end()
                     debug_log(f"VoiceBridgeV2 session ended: {conversation_id}")
                     self.voice_active = False
@@ -1137,7 +1172,6 @@ class ElectronBackend:
                         "error": str(e)
                     })
 
-            debug_log("Starting VoiceBridgeV2 thread...")
             voice_thread = threading.Thread(target=run_voice_session, daemon=True)
             voice_thread.start()
 
@@ -1149,7 +1183,7 @@ class ElectronBackend:
                 "mode": "voice_bridge_v2"
             })
 
-            debug_log("VoiceBridgeV2 started successfully")
+            debug_log(f"VoiceBridgeV2 started successfully (total: {_time.time() - _t_total:.2f}s)")
 
         except Exception as e:
             debug_log(f"VoiceBridgeV2 start failed: {e}")
@@ -1265,28 +1299,6 @@ class ElectronBackend:
             handler = _create_domain_handler(domain)
             client_tools.register(tool_name, handler, is_async=False)
             debug_log(f"Registered tool: {tool_name}")
-
-        # Also register legacy send_intent for backwards compatibility
-        def send_intent_handler(params: dict) -> str:
-            """Legacy send_intent - routes through orchestrator without domain hint."""
-            user_request = params.get("user_request", "")
-            debug_log(f"[VOICE INPUT] [LEGACY] {user_request}")
-
-            if not user_request:
-                return "Ich habe dich nicht verstanden. Was soll ich tun?"
-
-            try:
-                from swarm.orchestrator import get_orchestrator
-                orchestrator = get_orchestrator()
-                result = orchestrator.process_intent_sync(user_request)
-                debug_log(f"send_intent (legacy): {result.event_type} -> {result.response_hint[:100]}...")
-                return result.response_hint if not result.error else f"Fehler: {result.error}"
-            except Exception as e:
-                debug_log(f"send_intent error: {e}")
-                return f"Es gab ein Problem: {str(e)}"
-
-        client_tools.register("send_intent", send_intent_handler, is_async=False)
-        debug_log("Registered tool: send_intent (legacy)")
 
         return client_tools
 

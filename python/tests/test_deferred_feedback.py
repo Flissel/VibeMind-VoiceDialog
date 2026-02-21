@@ -91,7 +91,7 @@ def test_rachel_notification_check():
     print("=" * 60)
 
     from swarm.orchestrator.notification_queue import NotificationQueue
-    from swarm.user_agents.rachel import RachelAgent
+    from spaces.ideas.agents.rachel_agent import RachelAgent
 
     # Create queue with pending notification
     queue = NotificationQueue()
@@ -156,7 +156,7 @@ async def test_end_to_end_flow():
 
     from swarm.orchestrator.notification_queue import NotificationQueue
     from swarm.listeners.status_listener import StatusListener
-    from swarm.user_agents.rachel import RachelAgent
+    from spaces.ideas.agents.rachel_agent import RachelAgent
     from swarm.event_buffer import InputEvent
 
     # 1. Create shared queue

@@ -71,9 +71,6 @@ class TransferHandler:
         agent_vars = {
             "AGENT_MULTIVERSE": "Rachel",
             "AGENT_RACHEL": "Rachel",
-            "AGENT_ALICE": "Alice",
-            "AGENT_ADAM": "Adam",
-            "AGENT_ANTONI": "Antoni",
         }
         
         for env_var, name in agent_vars.items():

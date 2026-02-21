@@ -281,14 +281,14 @@ async def start_exploration(
                 }
 
         # Import and create searcher
-        from swarm.agents.idea_explorer import (
+        from spaces.ideas.explorer import (
             ConnectionEvaluator,
             ExplorationRepository,
             ExplorationClarificationAgent,
             ExplorationMode,
             InteractiveExplorationConfig,
         )
-        from swarm.agents.idea_explorer.idea_tree_search import (
+        from spaces.ideas.explorer.idea_tree_search import (
             IdeaTreeSearch,
             ExplorationConfig,
             ExplorationStage,
@@ -538,7 +538,7 @@ async def accept_connection(connection_id: Optional[str] = None) -> Dict[str, An
     # Save to discovered_edges
     db = _get_db_connection()
     if db:
-        from swarm.agents.idea_explorer import ExplorationRepository
+        from spaces.ideas.explorer import ExplorationRepository
         repo = ExplorationRepository(db)
         edge_id = repo.save_discovered_edge(
             node,
@@ -605,7 +605,7 @@ async def reject_connection(connection_id: Optional[str] = None) -> Dict[str, An
     # Update in database
     db = _get_db_connection()
     if db:
-        from swarm.agents.idea_explorer import ExplorationRepository
+        from spaces.ideas.explorer import ExplorationRepository
         repo = ExplorationRepository(db)
         repo.update_node_status(node.id, is_rejected=True)
 

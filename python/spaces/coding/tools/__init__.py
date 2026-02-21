@@ -2,11 +2,10 @@
 VibeMind Coding Space Tools
 
 Tools for code generation and project management.
-Re-exports from legacy tools/ module.
+Includes ElevenLabs client tools, adapted swarm tools, and voice coding tools.
 """
 
-# Re-export from legacy tools module
-from tools.coding_tools import (
+from .coding_tools import (
     generate_code,
     get_generation_status,
     cancel_generation,
@@ -14,9 +13,23 @@ from tools.coding_tools import (
     start_preview,
     stop_preview,
     exit_project,
+    CODING_TOOLS,
+    register_coding_tools,
+    set_electron_sender,
+    set_coding_engine_runner,
+)
+
+from .adapted_coding_tools import (
+    CODING_TOOLS as ADAPTED_CODING_TOOLS,
+)
+
+from .voice_coding_tools import (
+    VOICE_CODING_TOOLS,
+    VOICE_CODING_TOOLS_ASYNC,
 )
 
 __all__ = [
+    # Core coding tools
     "generate_code",
     "get_generation_status",
     "cancel_generation",
@@ -24,4 +37,13 @@ __all__ = [
     "start_preview",
     "stop_preview",
     "exit_project",
+    "CODING_TOOLS",
+    "register_coding_tools",
+    "set_electron_sender",
+    "set_coding_engine_runner",
+    # Adapted tools
+    "ADAPTED_CODING_TOOLS",
+    # Voice coding tools
+    "VOICE_CODING_TOOLS",
+    "VOICE_CODING_TOOLS_ASYNC",
 ]

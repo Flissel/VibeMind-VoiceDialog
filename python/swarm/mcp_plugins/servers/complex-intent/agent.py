@@ -136,7 +136,7 @@ async def _load_swarm_tools():
 
     try:
         # Load bubble tools
-        from swarm.tools.adapted_bubble_tools import BUBBLE_TOOLS
+        from spaces.ideas.adapted.bubble_tools import BUBBLE_TOOLS
         tools.extend(BUBBLE_TOOLS)
         print(f"Loaded {len(BUBBLE_TOOLS)} bubble tools", file=sys.stderr)
     except ImportError as e:
@@ -144,7 +144,7 @@ async def _load_swarm_tools():
 
     try:
         # Load idea tools
-        from swarm.tools.adapted_idea_tools import IDEA_TOOLS
+        from spaces.ideas.adapted.idea_tools import IDEA_TOOLS
         tools.extend(IDEA_TOOLS)
         print(f"Loaded {len(IDEA_TOOLS)} idea tools", file=sys.stderr)
     except ImportError as e:

@@ -131,7 +131,7 @@ def test_rachel_voice_interface():
     print("TEST 4: Rachel Voice Interface")
     print("="*60)
 
-    from swarm.user_agents.rachel import RachelAgent
+    from spaces.ideas.agents.rachel_agent import RachelAgent
 
     rachel = RachelAgent()
     tools = rachel.get_tools()

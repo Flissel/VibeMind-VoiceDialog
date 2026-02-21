@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from swarm.backend_agents.enhanced_ideas_agent import EnhancedIdeasAgent
+from spaces.ideas.enhanced.enhanced_ideas_agent import EnhancedIdeasAgent
 from swarm.backend_agents.plugins.learning_plugin import LearningPlugin
 from swarm.backend_agents.enhanced_base_agent import AgentState, AgentCapability
 

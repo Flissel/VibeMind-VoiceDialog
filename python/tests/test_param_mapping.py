@@ -18,7 +18,7 @@ def test_ideas_agent_param_mapping():
     print("TEST: IdeasAgent PARAM_MAPPING")
     print("="*60)
 
-    from swarm.backend_agents.ideas_agent import IdeasAgent
+    from spaces.ideas.agents.ideas_agent import IdeasAgent
 
     agent = IdeasAgent()
 
@@ -116,7 +116,7 @@ def test_transcript_extraction():
     print("TEST: Transcript Parameter Extraction")
     print("="*60)
 
-    from swarm.backend_agents.ideas_agent import IdeasAgent
+    from spaces.ideas.agents.ideas_agent import IdeasAgent
 
     agent = IdeasAgent()
 
@@ -192,11 +192,11 @@ def test_tool_signatures():
     print("="*60)
 
     import inspect
-    from swarm.tools.adapted_idea_tools import (
+    from spaces.ideas.adapted.idea_tools import (
         create_idea, list_ideas, find_idea, update_idea,
         delete_idea, connect_ideas, auto_link_ideas
     )
-    from swarm.tools.adapted_bubble_tools import (
+    from spaces.ideas.adapted.bubble_tools import (
         create_bubble, list_bubbles, enter_bubble, exit_bubble,
         delete_bubble
     )

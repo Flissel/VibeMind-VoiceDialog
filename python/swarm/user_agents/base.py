@@ -73,7 +73,7 @@ class UserAgentConfig:
 
 class BaseUserAgent(ABC):
     """
-    Base class for User Agents (Rachel, Antoni, Adam).
+    Base class for User Agents.
 
     User Agents:
     - Receive user input from their space's queue
