@@ -19,7 +19,7 @@ def test_bubble_tools():
     """Test bubble tools directly."""
     print("\n--- Bubble Tools ---")
 
-    from swarm.tools.adapted_bubble_tools import BUBBLE_TOOLS
+    from spaces.ideas.adapted.bubble_tools import BUBBLE_TOOLS
 
     # Find list_bubbles
     list_bubbles = next((t for t in BUBBLE_TOOLS if t.__name__ == "list_bubbles"), None)
@@ -40,7 +40,7 @@ def test_idea_tools():
     """Test idea tools directly."""
     print("\n--- Idea Tools ---")
 
-    from swarm.tools.adapted_idea_tools import IDEA_TOOLS
+    from spaces.ideas.adapted.idea_tools import IDEA_TOOLS
 
     # Find list_ideas
     list_ideas = next((t for t in IDEA_TOOLS if t.__name__ == "list_ideas"), None)
@@ -61,7 +61,7 @@ def test_coding_tools():
     """Test coding tools directly."""
     print("\n--- Coding Tools ---")
 
-    from swarm.tools.adapted_coding_tools import CODING_TOOLS
+    from spaces.coding.tools.adapted_coding_tools import CODING_TOOLS
 
     # Find list_generated_projects
     list_projects = next((t for t in CODING_TOOLS if t.__name__ == "list_generated_projects"), None)

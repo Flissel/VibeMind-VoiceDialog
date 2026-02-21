@@ -32,7 +32,7 @@ async def test_direct_exploration():
     # Test the connection evaluator
     print("\n2. Testing ConnectionEvaluator...")
     try:
-        from swarm.agents.idea_explorer.connection_evaluator import ConnectionEvaluator
+        from spaces.ideas.explorer.connection_evaluator import ConnectionEvaluator
         evaluator = ConnectionEvaluator()
         print("   ✓ ConnectionEvaluator loaded")
 
@@ -47,7 +47,7 @@ async def test_direct_exploration():
     # Test IdeaTreeSearch
     print("\n3. Testing IdeaTreeSearch...")
     try:
-        from swarm.agents.idea_explorer.idea_tree_search import IdeaTreeSearch
+        from spaces.ideas.explorer.idea_tree_search import IdeaTreeSearch
         print("   ✓ IdeaTreeSearch loaded")
 
         # Check what methods it has

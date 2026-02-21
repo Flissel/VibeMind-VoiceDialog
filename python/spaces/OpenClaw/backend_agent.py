@@ -21,18 +21,22 @@ import logging
 import os
 from typing import Dict, Callable, Optional, Any
 
+from swarm.backend_agents.base_agent import BaseBackendAgent
+from swarm.event_bus import SwarmEvent
+
 logger = logging.getLogger(__name__)
 
 # Check if AG2 Swarm should be used
 USE_AG2_DESKTOP_SWARM = os.getenv("USE_AG2_DESKTOP_SWARM", "true").lower() in ("true", "1", "yes")
 
 
-class OpenClawDesktopAgent:
+class OpenClawDesktopAgent(BaseBackendAgent):
     """
     Backend agent for Desktop Space with AutoGen Society of Mind.
 
-    Listens to Redis stream 'events:tasks:desktop' and routes events
-    through the Desktop Swarm for LLM-based reasoning and execution.
+    Extends BaseBackendAgent to use the standard event bus subscription.
+    When USE_AG2_DESKTOP_SWARM is enabled, routes complex tasks through
+    the AutoGen Desktop Swarm for LLM-based reasoning and execution.
     """
 
     # Event type to tool name mapping
@@ -130,24 +134,22 @@ class OpenClawDesktopAgent:
     }
 
     def __init__(self):
-        self.name = "OpenClawDesktopAgent"
-        self.stream = "events:tasks:desktop"
-        self._tools: Dict[str, Callable] = {}
-        self._running = False
+        super().__init__()
 
     @property
-    def tools(self) -> Dict[str, Callable]:
-        """Lazy-load tools on first access."""
-        if not self._tools:
-            self._tools = self._load_tools()
-        return self._tools
+    def name(self) -> str:
+        return "OpenClawDesktopAgent"
+
+    @property
+    def stream(self) -> str:
+        return "events:tasks:desktop"
 
     def _load_tools(self) -> Dict[str, Callable]:
         """Load desktop tools."""
         tools = {}
 
         try:
-            from swarm.tools.adapted_desktop_tools import (
+            from spaces.desktop.tools.adapted_desktop_tools import (
                 execute_desktop_task,
                 click_element,
                 type_text,
@@ -211,70 +213,29 @@ class OpenClawDesktopAgent:
         """Map event type to tool name."""
         return self.EVENT_TO_TOOL.get(event_type)
 
-    def _normalize_params(self, event_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize parameters from classifier output to tool expected format."""
-        mapping = self.PARAM_MAPPING.get(event_type, {})
-        normalized = {}
-
-        for key, value in params.items():
-            # Skip internal keys
-            if key.startswith("_"):
-                continue
-            # Apply mapping if exists
-            new_key = mapping.get(key, key)
-            normalized[new_key] = value
-
-        return normalized
-
-    async def handle_event(self, event) -> str:
+    async def _handle_event(self, event: SwarmEvent):
         """
-        Handle an incoming event.
+        Handle incoming event.
 
         When USE_AG2_DESKTOP_SWARM is enabled, routes through AutoGen Swarm.
-        Otherwise, executes tools directly.
-
-        Args:
-            event: SwarmEvent with event_type and payload
-
-        Returns:
-            Result string
+        Otherwise, delegates to BaseBackendAgent's standard tool execution.
         """
-        job_id = getattr(event, "job_id", "unknown")
-        event_type = event.event_type
-        payload = event.payload or {}
-
-        logger.info(f"{self.name}: Received {event_type} (job={job_id})")
-
         if USE_AG2_DESKTOP_SWARM:
-            return await self._handle_via_swarm(event_type, payload, job_id)
+            job_id = event.job_id or "unknown"
+            event_type = event.event_type
+            payload = event.payload or {}
+            logger.info(f"{self.name}: Received {event_type} (job={job_id}), routing via Swarm")
+
+            try:
+                await self._publish_status(job_id, "started", event_type=event_type)
+                result = await self._handle_via_swarm(event_type, payload, job_id)
+                await self._publish_status(job_id, "completed", result=result, event_type=event_type)
+            except Exception as e:
+                logger.error(f"{self.name}: Swarm error: {e}")
+                await self._publish_error(job_id, str(e), event_type=event_type)
         else:
-            return await self._handle_direct(event_type, payload, job_id)
-
-    async def _handle_direct(
-        self,
-        event_type: str,
-        payload: Dict[str, Any],
-        job_id: str
-    ) -> str:
-        """Handle event by direct tool execution (no Swarm)."""
-        tool_name = self._get_tool_name(event_type)
-        if not tool_name:
-            return f"Unbekannter Event-Typ: {event_type}"
-
-        tool = self.tools.get(tool_name)
-        if not tool:
-            return f"Tool nicht gefunden: {tool_name}"
-
-        # Normalize parameters
-        params = self._normalize_params(event_type, payload)
-
-        try:
-            result = tool(**params)
-            logger.info(f"{self.name}: {tool_name} completed")
-            return result if isinstance(result, str) else json.dumps(result)
-        except Exception as e:
-            logger.error(f"{self.name}: {tool_name} failed: {e}")
-            return f"Fehler: {str(e)}"
+            # Use BaseBackendAgent's standard tool execution
+            await super()._handle_event(event)
 
     async def _handle_via_swarm(
         self,
@@ -355,49 +316,7 @@ class OpenClawDesktopAgent:
 
         return f"Fuehre Desktop-Aktion aus: {event_type}"
 
-    async def start(self):
-        """Start listening to the Redis stream."""
-        from swarm.event_bus import EventBus
-
-        self._running = True
-        event_bus = EventBus()
-
-        logger.info(f"{self.name}: Starting listener on stream '{self.stream}'")
-
-        while self._running:
-            try:
-                # Read events from stream
-                events = await event_bus.read_events(self.stream, count=1, block=5000)
-
-                for event in events:
-                    try:
-                        result = await self.handle_event(event)
-
-                        # Publish result
-                        await event_bus.publish_result(
-                            stream="events:results",
-                            job_id=event.job_id,
-                            result=result,
-                            status="completed",
-                        )
-
-                    except Exception as e:
-                        logger.error(f"{self.name}: Event handling failed: {e}")
-                        await event_bus.publish_result(
-                            stream="events:results",
-                            job_id=event.job_id,
-                            result=str(e),
-                            status="failed",
-                        )
-
-            except Exception as e:
-                logger.error(f"{self.name}: Stream read error: {e}")
-                await asyncio.sleep(1)
-
-    def stop(self):
-        """Stop the agent."""
-        self._running = False
-        logger.info(f"{self.name}: Stopping")
+    # start() and stop() inherited from BaseBackendAgent
 
 
 # --- Singleton Pattern ---

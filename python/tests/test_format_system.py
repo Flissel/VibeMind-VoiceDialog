@@ -82,7 +82,7 @@ except Exception as e:
 # 6. Test IdeasAgent EVENT_TO_TOOL mapping
 print("\n6. Testing IdeasAgent mappings...")
 try:
-    from swarm.backend_agents.ideas_agent import IdeasAgent
+    from spaces.ideas.agents.ideas_agent import IdeasAgent
 
     format_events = [
         "idea.format_note", "idea.format_action_list", "idea.format_pros_cons",

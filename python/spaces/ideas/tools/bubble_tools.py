@@ -1274,84 +1274,6 @@ def exit_bubble(params: Dict[str, Any]) -> str:
 # AGENT TRANSFER TOOLS
 # =============================================================================
 
-def transfer_to_alice(params: Dict[str, Any]) -> str:
-    """
-    Transfer conversation to Alice, the coordinator.
-
-    Alice can delegate to Adam (desktop tasks) or Antoni (coding/writing).
-
-    Args (via params):
-        reason: Why transferring (optional)
-
-    Returns:
-        str: Confirmation that transfer is initiated
-    """
-    alice_agent_id = os.getenv("AGENT_ALICE")
-
-    if not alice_agent_id:
-        return "Cannot find Alice agent configuration. Please set AGENT_ALICE in .env"
-
-    reason = params.get("reason", "User request")
-
-    # Signal the switch
-    _signal_agent_switch(alice_agent_id, None, "Alice")
-
-    logger.info(f"Transfer to Alice initiated. Reason: {reason}")
-    return "Transferring to Alice..."
-
-
-def transfer_to_adam(params: Dict[str, Any]) -> str:
-    """
-    Transfer conversation to Adam for desktop operations.
-
-    Adam handles file management, system tasks, and desktop operations.
-
-    Args (via params):
-        reason: Why transferring (optional)
-
-    Returns:
-        str: Confirmation that transfer is initiated
-    """
-    adam_agent_id = os.getenv("AGENT_ADAM")
-
-    if not adam_agent_id:
-        return "Cannot find Adam agent configuration. Please set AGENT_ADAM in .env"
-
-    reason = params.get("reason", "Desktop task")
-
-    # Signal the switch
-    _signal_agent_switch(adam_agent_id, None, "Adam")
-
-    logger.info(f"Transfer to Adam initiated. Reason: {reason}")
-    return "Transferring to Adam..."
-
-
-def transfer_to_antoni(params: Dict[str, Any]) -> str:
-    """
-    Transfer conversation to Antoni for coding/writing tasks.
-
-    Antoni handles programming, code writing, and text composition.
-
-    Args (via params):
-        reason: Why transferring (optional)
-
-    Returns:
-        str: Confirmation that transfer is initiated
-    """
-    antoni_agent_id = os.getenv("AGENT_ANTONI")
-
-    if not antoni_agent_id:
-        return "Cannot find Antoni agent configuration. Please set AGENT_ANTONI in .env"
-
-    reason = params.get("reason", "Coding task")
-
-    # Signal the switch
-    _signal_agent_switch(antoni_agent_id, None, "Antoni")
-
-    logger.info(f"Transfer to Antoni initiated. Reason: {reason}")
-    return "Transferring to Antoni..."
-
-
 def transfer_to_rachel(params: Dict[str, Any]) -> str:
     """
     Transfer conversation to Rachel for creative/multiverse tasks.
@@ -1698,9 +1620,6 @@ BUBBLE_TOOLS = {
     "enter_bubble": enter_bubble,
     "exit_bubble": exit_bubble,
     # Agent transfer tools
-    "transfer_to_alice": transfer_to_alice,
-    "transfer_to_adam": transfer_to_adam,
-    "transfer_to_antoni": transfer_to_antoni,
     "transfer_to_rachel": transfer_to_rachel,
     "transfer_to_multiverse": transfer_to_multiverse,
     # Embedding generation tool
@@ -1729,9 +1648,6 @@ __all__ = [
     "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
-    "transfer_to_alice",
-    "transfer_to_adam",
-    "transfer_to_antoni",
     "transfer_to_rachel",
     "transfer_to_multiverse",
     "generate_bubble_embeddings",

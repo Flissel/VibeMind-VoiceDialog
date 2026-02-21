@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_exploration_module():
     print("=== Test 1: Exploration Module ===")
     try:
-        from swarm.agents.idea_explorer import IdeaTreeSearch, IdeaNode, IdeaJournal
+        from spaces.ideas.explorer import IdeaTreeSearch, IdeaNode, IdeaJournal
         print("✓ IdeaTreeSearch imported")
         print("✓ IdeaNode imported")
         print("✓ IdeaJournal imported")
@@ -46,7 +46,7 @@ def test_exploration_tools():
 def test_ideas_agent_mappings():
     print("\n=== Test 3: IdeasAgent EVENT_TO_TOOL ===")
     try:
-        from swarm.backend_agents.ideas_agent import IdeasAgent
+        from spaces.ideas.agents.ideas_agent import IdeasAgent
         agent = IdeasAgent()
 
         # Check for exploration mappings

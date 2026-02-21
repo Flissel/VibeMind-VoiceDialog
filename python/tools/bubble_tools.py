@@ -21,9 +21,6 @@ from spaces.ideas.tools.bubble_tools import (
     enter_bubble,
     exit_bubble,
     # Agent transfers
-    transfer_to_alice,
-    transfer_to_adam,
-    transfer_to_antoni,
     transfer_to_rachel,
     transfer_to_multiverse,
     # Utilities
@@ -49,9 +46,6 @@ __all__ = [
     "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
-    "transfer_to_alice",
-    "transfer_to_adam",
-    "transfer_to_antoni",
     "transfer_to_rachel",
     "transfer_to_multiverse",
     "generate_bubble_embeddings",

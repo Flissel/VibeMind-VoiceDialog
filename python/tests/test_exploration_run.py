@@ -55,10 +55,10 @@ async def run_exploration_demo():
     # Step 2: Initialize the exploration module
     print("\n🔬 Step 2: Initializing exploration components...")
     try:
-        from swarm.agents.idea_explorer.idea_tree_search import IdeaTreeSearch
-        from swarm.agents.idea_explorer.idea_node import IdeaNode
-        from swarm.agents.idea_explorer.idea_journal import IdeaJournal
-        from swarm.agents.idea_explorer.connection_evaluator import ConnectionEvaluator
+        from spaces.ideas.explorer.idea_tree_search import IdeaTreeSearch
+        from spaces.ideas.explorer.idea_node import IdeaNode
+        from spaces.ideas.explorer.idea_journal import IdeaJournal
+        from spaces.ideas.explorer.connection_evaluator import ConnectionEvaluator
         print("   ✓ IdeaTreeSearch loaded")
         print("   ✓ IdeaNode loaded")
         print("   ✓ IdeaJournal loaded")

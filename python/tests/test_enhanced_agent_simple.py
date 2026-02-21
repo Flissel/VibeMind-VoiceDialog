@@ -4,7 +4,7 @@ Simple Test for Enhanced Base Agent
 """
 
 import asyncio
-from swarm.backend_agents.enhanced_ideas_agent import EnhancedIdeasAgent
+from spaces.ideas.enhanced.enhanced_ideas_agent import EnhancedIdeasAgent
 from swarm.backend_agents.plugins.learning_plugin import LearningPlugin
 
 async def test_enhanced_agent():

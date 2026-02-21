@@ -34,7 +34,7 @@ except Exception as e:
 print()
 print('--- Rachel (Voice Interface) ---')
 try:
-    from swarm.user_agents.rachel import RachelAgent, create_rachel_agent
+    from spaces.ideas.agents.rachel_agent import RachelAgent, create_rachel_agent
     agent = RachelAgent()
     tools = agent.get_tools()
     print(f'RachelAgent: OK - {len(tools)} tool(s)')
@@ -85,11 +85,11 @@ except Exception as e:
 print()
 print('=== Tool Categories (Backend Agents) ===')
 try:
-    from swarm.tools.adapted_bubble_tools import BUBBLE_TOOLS
-    from swarm.tools.adapted_idea_tools import IDEA_TOOLS
-    from swarm.tools.adapted_desktop_tools import DESKTOP_TOOLS
-    from swarm.tools.adapted_coding_tools import CODING_TOOLS
-    from swarm.tools.voice_coding_tools import VOICE_CODING_TOOLS
+    from spaces.ideas.adapted.bubble_tools import BUBBLE_TOOLS
+    from spaces.ideas.adapted.idea_tools import IDEA_TOOLS
+    from spaces.desktop.adapted.desktop_tools import DESKTOP_TOOLS
+    from spaces.coding.tools.adapted_coding_tools import CODING_TOOLS
+    from spaces.coding.tools.voice_coding_tools import VOICE_CODING_TOOLS
 
     print(f'Bubble Tools: {len(BUBBLE_TOOLS)}')
     print(f'Idea Tools: {len(IDEA_TOOLS)}')

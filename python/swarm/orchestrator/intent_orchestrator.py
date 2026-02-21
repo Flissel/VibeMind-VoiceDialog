@@ -182,9 +182,9 @@ except ImportError:
 # Broadcast Dispatcher (Fan-Out architecture for parallel agent evaluation + profiling)
 try:
     from swarm.broadcast.dispatcher import BroadcastDispatcher, IntentPayload, BroadcastResult
-    from swarm.broadcast.ideas_broadcast_agent import IdeasBroadcastAgent
-    from swarm.broadcast.coding_broadcast_agent import CodingBroadcastAgent
-    from swarm.broadcast.desktop_broadcast_agent import DesktopBroadcastAgent
+    from spaces.ideas.broadcast.ideas_broadcast_agent import IdeasBroadcastAgent
+    from spaces.coding.broadcast.coding_broadcast_agent import CodingBroadcastAgent
+    from spaces.desktop.broadcast.desktop_broadcast_agent import DesktopBroadcastAgent
     HAS_BROADCAST = True
 except ImportError as e:
     HAS_BROADCAST = False
@@ -1121,19 +1121,37 @@ class IntentOrchestrator:
                     session_id=context.session_id if context else "default"
                 )
 
-            # Use RAG classifier for classification (it's domain-agnostic anyway)
+            # Use RAG classifier — smart router that can answer reads directly
             if self._use_rag_classifier and self.rag_classifier:
-                # Get bubble context for classifier
+                # Get bubble context + system state for classifier
                 bubble_context = None
+                system_state = None
                 try:
-                    from swarm.context import get_bubble_context_provider
+                    from swarm.context import get_bubble_context_provider, get_real_time_state
                     bubble_context = get_bubble_context_provider().get_current_context()
+                    system_state = get_real_time_state().state
                 except Exception:
                     pass
 
-                rag_result = await self.rag_classifier.classify(intent_text, bubble_context=bubble_context)
+                rag_result = await self.rag_classifier.classify(
+                    intent_text,
+                    bubble_context=bubble_context,
+                    system_state=system_state,
+                )
 
                 if rag_result and rag_result.confidence >= 0.4:
+                    # DIRECT ANSWER MODE: LLM answered a read query from context
+                    if rag_result.mode == "direct_answer" and rag_result.direct_answer:
+                        logger.info(f"[DomainRouter] Direct answer from LLM (no backend execution)")
+                        return OrchestrationResult(
+                            job_id=f"direct-{str(uuid.uuid4())[:8]}",
+                            event_type="direct_answer",
+                            stream="local",
+                            response_hint=rag_result.direct_answer,
+                            is_conversational=True
+                        )
+
+                    # EXECUTE MODE: classify and route to backend
                     event_type = rag_result.event_type
                     payload = rag_result.payload.copy() if rag_result.payload else {}
                     response_hint = rag_result.reasoning or "Ich verarbeite deine Anfrage..."

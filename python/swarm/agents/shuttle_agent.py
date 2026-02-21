@@ -70,7 +70,7 @@ def create_shuttle_agent(model_client, handoff_targets: List[str] = None):
     from autogen_agentchat.agents import AssistantAgent
 
     # Import promotion tool
-    from swarm.tools.adapted_bubble_tools import promote_bubble
+    from spaces.ideas.adapted.bubble_tools import promote_bubble
 
     # Shuttle agent tools (minimal - mainly routes)
     tools = [
