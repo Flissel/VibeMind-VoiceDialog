@@ -1,18 +1,11 @@
 """
 Swarm Agents Package
 
-Contains enhancement pipeline agents and utility agents.
+Enhancement pipeline agents for voice input pre-processing.
 Domain-specific agents are in spaces/.
 """
 
-from .shuttle_agent import create_shuttle_agent
-from .data_agent import create_data_agent
-from .query_agent import create_query_agent
-from .planning_agent import create_planning_agent
-
-__all__ = [
-    "create_shuttle_agent",
-    "create_data_agent",
-    "create_query_agent",
-    "create_planning_agent",
-]
+# Enhancement pipeline (optional, feature-flagged in orchestrator)
+# - collector_agent.py: Accumulates fragmented speech
+# - intent_enhancer.py: Fixes ASR errors, normalizes dialects
+# - execution_validator.py: Validates results, triggers learning feedback

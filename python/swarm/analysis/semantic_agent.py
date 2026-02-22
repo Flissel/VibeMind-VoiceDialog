@@ -17,7 +17,8 @@ import math
 
 from swarm.analysis.intent_analysis_team import IntentHypothesis
 from swarm.analysis.user_context import UserContext
-from swarm.elevenlabs_input import ElevenLabsInput
+# ElevenLabsInput removed (legacy module); using dict-based input instead
+ElevenLabsInput = dict  # type alias for backward compat
 
 logger = logging.getLogger(__name__)
 

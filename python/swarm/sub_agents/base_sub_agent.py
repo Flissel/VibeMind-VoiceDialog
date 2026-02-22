@@ -29,7 +29,7 @@ def create_memory_sub_agent(parent_name: str, domain: str, model_client):
         AssistantAgent configured as memory sub-agent
     """
     from autogen_agentchat.agents import AssistantAgent
-    from swarm.tools.memory_sub_agent_tools import MEMORY_SUB_AGENT_TOOLS
+    MEMORY_SUB_AGENT_TOOLS = []  # Legacy sub-agent tools removed
 
     agent_name = f"{domain}_memory"
 
@@ -77,7 +77,7 @@ def create_context_sub_agent(parent_name: str, domain: str, model_client):
         AssistantAgent configured as context sub-agent
     """
     from autogen_agentchat.agents import AssistantAgent
-    from swarm.tools.context_sub_agent_tools import CONTEXT_SUB_AGENT_TOOLS
+    CONTEXT_SUB_AGENT_TOOLS = []  # Legacy sub-agent tools removed
 
     agent_name = f"{domain}_context"
 

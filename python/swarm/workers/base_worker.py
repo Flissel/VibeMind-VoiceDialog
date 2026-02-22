@@ -19,7 +19,7 @@ from swarm.navigation import SpaceType
 from swarm.event_buffer import TaskInfo, TaskStatus, get_event_buffer
 
 if TYPE_CHECKING:
-    from swarm.event_streams import RedisEventManager
+    pass  # RedisEventManager removed (legacy event_streams)
 
 logger = logging.getLogger(__name__)
 
@@ -260,21 +260,20 @@ class BaseWorker(ABC):
             except Exception as e:
                 logger.error(f"Progress callback error: {e}")
 
-        # Publish to event stream
-        if self.event_manager:
+        # Publish to event stream (legacy event_streams removed)
+        if self.event_manager and hasattr(self.event_manager, 'publish_event'):
             try:
-                from swarm.event_streams import SpaceEvent, EventType
                 await self.event_manager.publish_event(
                     self.config.space_type.value,
-                    SpaceEvent(
-                        event_type=EventType.TASK_PROGRESS,
-                        agent=self.name,
-                        payload={
+                    {
+                        "event_type": "task_progress",
+                        "agent": self.name,
+                        "payload": {
                             "task_id": progress.task_id,
                             "progress": percent,
                             "message": message,
                         }
-                    )
+                    }
                 )
             except Exception as e:
                 logger.debug(f"Could not publish progress: {e}")

@@ -196,6 +196,48 @@ Nachrichten senden via WhatsApp, Telegram, oder Web-Suche.
 - openclaw.notifications: Benachrichtigungen abrufen
   → "Zeig meine Benachrichtigungen", "Was gibt es Neues?"
 
+### 4. ROARBOOT SPACE (Knowledge Graph) - Rowboat
+Der Bereich fuer Wissensmanagement. Durchsucht Knowledge Graph aus Emails, Meetings, Dokumenten.
+
+**Schluesselwoerter:** Wissen, Knowledge, Email, Meeting, Brief, Praesentation, Deck, Rowboat, Roarboot, Notiz verarbeiten
+
+**Event-Types:**
+- roarboot.search: Knowledge Graph durchsuchen
+  → "Durchsuche mein Wissen nach X", "Was weiss ich ueber X?", "Suche in meinem Wissen"
+  → payload: {"query": "..."}
+- roarboot.query: Wissen ueber Person/Projekt/Thema abfragen
+  → "Was weiss ich ueber Person X?", "Infos zu Projekt X", "Erzaehl mir ueber X"
+  → payload: {"subject": "...", "question": "..."}
+- roarboot.email_draft: Email-Entwurf erstellen (mit Wissenskontext)
+  → "Schreibe Email an X wegen Y", "Entwurf an X zum Thema Y"
+  → "Drafts eine Email an X", "Email an X schreiben"
+  → payload: {"recipient": "...", "topic": "...", "context": "..."}
+- roarboot.meeting_brief: Meeting-Brief vorbereiten
+  → "Bereite mein Meeting mit X vor", "Meeting-Brief fuer X"
+  → "Vorbereitung fuer das Meeting X"
+  → payload: {"meeting": "...", "participants": "..."}
+- roarboot.deck: Praesentation/Deck generieren
+  → "Erstelle eine Praesentation ueber X", "Generiere Deck zu X"
+  → "Mach eine Praesentation", "Erstelle Slides ueber X"
+  → payload: {"topic": "...", "context": "..."}
+- roarboot.voice_note: Sprachnotiz verarbeiten und Knowledge Graph aktualisieren
+  → "Verarbeite diese Notiz: X", "Merke dir fuer den Knowledge Graph: X"
+  → payload: {"text": "..."}
+- roarboot.status: Rowboat-Verbindungsstatus pruefen
+  → "Roarboot Status", "Ist Rowboat verbunden?", "Knowledge Graph Status"
+- roarboot.open: Roarboot WebView oeffnen
+  → "Oeffne Roarboot", "Zeig mir Rowboat", "Knowledge Graph anzeigen"
+- roarboot.reset: Neues Gespraech mit Roarboot starten (Kontext zuruecksetzen)
+  → "Neues Gespraech mit Roarboot", "Roarboot Reset", "Roarboot Kontext loeschen"
+- roarboot.docker.start: Rowboat Docker-Container starten
+  → "Starte Roarboot", "Starte Rowboat Docker", "Roarboot hochfahren"
+- roarboot.docker.stop: Rowboat Docker-Container stoppen
+  → "Stoppe Roarboot", "Roarboot runterfahren", "Rowboat Docker stoppen"
+- roarboot.docker.restart: Rowboat Docker-Container neu starten
+  → "Starte Roarboot neu", "Roarboot neustarten", "Rowboat Docker restart"
+- roarboot.docker.status: Docker-Container Status pruefen
+  → "Roarboot Docker Status", "Laufen die Roarboot Container?", "Docker Status Rowboat"
+
 ### KONVERSATION
 
 **Event-Types:**

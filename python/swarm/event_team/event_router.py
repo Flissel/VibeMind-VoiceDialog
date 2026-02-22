@@ -33,6 +33,7 @@ class EventRouter:
     STREAM_TASKS_DESKTOP = "events:tasks:desktop"
     STREAM_TASKS_IDEAS = "events:tasks:ideas"
     STREAM_TASKS_BUBBLES = "events:tasks:bubbles"
+    STREAM_TASKS_ROARBOOT = "events:tasks:roarboot"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -126,6 +127,22 @@ class EventRouter:
         "idea.explore.direction": STREAM_TASKS_IDEAS,
         "idea.explore.respond": STREAM_TASKS_IDEAS,
 
+        # Roarboot tasks -> roarboot stream (Rowboat Knowledge Graph)
+        "roarboot.search": STREAM_TASKS_ROARBOOT,
+        "roarboot.query": STREAM_TASKS_ROARBOOT,
+        "roarboot.email_draft": STREAM_TASKS_ROARBOOT,
+        "roarboot.meeting_brief": STREAM_TASKS_ROARBOOT,
+        "roarboot.deck": STREAM_TASKS_ROARBOOT,
+        "roarboot.voice_note": STREAM_TASKS_ROARBOOT,
+        "roarboot.status": STREAM_TASKS_ROARBOOT,
+        "roarboot.open": STREAM_TASKS_ROARBOOT,
+        "roarboot.reset": STREAM_TASKS_ROARBOOT,
+        # Docker management
+        "roarboot.docker.start": STREAM_TASKS_ROARBOOT,
+        "roarboot.docker.stop": STREAM_TASKS_ROARBOOT,
+        "roarboot.docker.restart": STREAM_TASKS_ROARBOOT,
+        "roarboot.docker.status": STREAM_TASKS_ROARBOOT,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -190,6 +207,8 @@ class EventRouter:
             return "ideas"
         elif stream == self.STREAM_TASKS_BUBBLES:
             return "bubbles"
+        elif stream == self.STREAM_TASKS_ROARBOOT:
+            return "roarboot"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -204,6 +223,7 @@ class EventRouter:
             cls.STREAM_TASKS_DESKTOP,
             cls.STREAM_TASKS_IDEAS,
             cls.STREAM_TASKS_BUBBLES,
+            cls.STREAM_TASKS_ROARBOOT,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]

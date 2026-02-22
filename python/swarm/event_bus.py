@@ -78,6 +78,7 @@ class EventBus:
     STREAM_TASKS_DESKTOP = "events:tasks:desktop"
     STREAM_TASKS_IDEAS = "events:tasks:ideas"
     STREAM_TASKS_BUBBLES = "events:tasks:bubbles"
+    STREAM_TASKS_ROARBOOT = "events:tasks:roarboot"
     STREAM_TASKS_SHUTTLES = "events:tasks:shuttles"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
