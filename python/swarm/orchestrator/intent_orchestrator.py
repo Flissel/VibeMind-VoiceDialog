@@ -900,6 +900,41 @@ class IntentOrchestrator:
         except ImportError as e:
             logger.warning(f"Could not load bubble requirements tools: {e}")
 
+        # === ROARBOOT TOOLS (Rowboat Knowledge Graph) ===
+        try:
+            from spaces.roarboot.tools.roarboot_tools import (
+                search_knowledge, query_knowledge, draft_email,
+                generate_meeting_brief, generate_deck, process_voice_note,
+                get_status as roarboot_get_status, open_webview, reset_conversation,
+            )
+            from spaces.roarboot.tools.docker_tools import (
+                start_docker, stop_docker, restart_docker, docker_status,
+            )
+
+            def _fmt_roarboot(result):
+                if isinstance(result, dict):
+                    return result.get("response_hint", result.get("message", "Erledigt."))
+                return str(result)
+
+            self._tool_executors.update({
+                "roarboot.search": lambda p: _fmt_roarboot(search_knowledge(p.get("query", ""))),
+                "roarboot.query": lambda p: _fmt_roarboot(query_knowledge(p.get("subject", ""), p.get("question"))),
+                "roarboot.email_draft": lambda p: _fmt_roarboot(draft_email(p.get("recipient", ""), p.get("topic", ""), p.get("context", ""))),
+                "roarboot.meeting_brief": lambda p: _fmt_roarboot(generate_meeting_brief(p.get("meeting", ""), p.get("participants", ""))),
+                "roarboot.deck": lambda p: _fmt_roarboot(generate_deck(p.get("topic", ""), p.get("context", ""))),
+                "roarboot.voice_note": lambda p: _fmt_roarboot(process_voice_note(p.get("text", ""))),
+                "roarboot.status": lambda p: _fmt_roarboot(roarboot_get_status()),
+                "roarboot.open": lambda p: _fmt_roarboot(open_webview(p.get("context", "default"))),
+                "roarboot.reset": lambda p: _fmt_roarboot(reset_conversation(p.get("context"))),
+                "roarboot.docker.start": lambda p: _fmt_roarboot(start_docker()),
+                "roarboot.docker.stop": lambda p: _fmt_roarboot(stop_docker()),
+                "roarboot.docker.restart": lambda p: _fmt_roarboot(restart_docker()),
+                "roarboot.docker.status": lambda p: _fmt_roarboot(docker_status()),
+            })
+            logger.info("Loaded roarboot tools for sync fallback (13 tools)")
+        except ImportError as e:
+            logger.warning(f"Could not load roarboot tools: {e}")
+
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 
     def _load_evaluation_tools(self):

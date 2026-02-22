@@ -21,14 +21,8 @@ def get_desktop_tools():
     return DESKTOP_TOOLS
 
 
-def get_event_tools():
-    from .event_query_tools import EVENT_TOOLS
-    return EVENT_TOOLS
-
-
 __all__ = [
     "get_bubble_tools",
     "get_idea_tools",
     "get_desktop_tools",
-    "get_event_tools",
 ]

@@ -39,10 +39,13 @@ class DataEventHandler:
             self._sync_engine = DataSyncEngine()
             await self._sync_engine._ensure_initialized()
             self._initialized = True
-            logger.info("Data event handler initialized")
+            logger.info("Data event handler initialized with sync engine")
+        except ImportError:
+            logger.info("Data sync engine not available — event handler runs without sync")
+            self._initialized = True
         except Exception as e:
             logger.error(f"Failed to initialize data event handler: {e}")
-            raise
+            self._initialized = True
 
     async def handle_bubble_created(self, bubble_data: Dict[str, Any]):
         """

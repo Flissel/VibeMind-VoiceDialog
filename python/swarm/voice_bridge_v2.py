@@ -91,6 +91,7 @@ class VoiceBridgeV2:
         self._ideas_agent = None
         self._desktop_agent = None
         self._coding_agent = None
+        self._roarboot_agent = None
 
         # Event bus and listeners
         self._event_bus = None
@@ -218,7 +219,8 @@ class VoiceBridgeV2:
                 get_bubbles_agent,
                 get_ideas_agent,
                 get_desktop_agent,
-                get_coding_agent
+                get_coding_agent,
+                get_roarboot_agent,
             )
             from swarm.event_bus import get_event_bus
             from swarm.listeners import get_status_listener, get_question_listener
@@ -236,6 +238,12 @@ class VoiceBridgeV2:
             self._ideas_agent = get_ideas_agent()
             self._desktop_agent = get_desktop_agent()
             self._coding_agent = get_coding_agent()
+
+            try:
+                self._roarboot_agent = get_roarboot_agent()
+            except Exception as e:
+                _debug_print(f"[BackendAgents] RoarbootAgent not available: {e}")
+
             _debug_print(f"[BackendAgents] Agents created ({time.time() - t0:.2f}s)")
 
             # Step 1: Subscribe all agents to their streams (no listeners yet)
@@ -254,6 +262,11 @@ class VoiceBridgeV2:
             _debug_print("[BackendAgents] Starting CodingAgent...")
             await self._coding_agent.start()
             _debug_print(f"[BackendAgents] CodingAgent started ({time.time() - t0:.2f}s)")
+
+            if self._roarboot_agent:
+                _debug_print("[BackendAgents] Starting RoarbootAgent...")
+                await self._roarboot_agent.start()
+                _debug_print(f"[BackendAgents] RoarbootAgent started ({time.time() - t0:.2f}s)")
 
             # Step 2: Subscribe StatusListener BEFORE starting listeners
             # This ensures events:status gets a listener task
@@ -277,8 +290,11 @@ class VoiceBridgeV2:
             _debug_print(f"[BackendAgents] Event bus listeners started ({time.time() - t0:.2f}s)")
 
             self._backend_available = True
-            _debug_print("Backend agents STARTED: BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent + Listeners")
-            logger.info("Backend agents started: BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent + Listeners")
+            agents_list = "BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent"
+            if self._roarboot_agent:
+                agents_list += ", RoarbootAgent"
+            _debug_print(f"Backend agents STARTED: {agents_list} + Listeners")
+            logger.info(f"Backend agents started: {agents_list} + Listeners")
 
         except Exception as e:
             # Set flag to indicate backend is not available
@@ -445,6 +461,8 @@ class VoiceBridgeV2:
             await self._desktop_agent.stop()
         if self._coding_agent:
             await self._coding_agent.stop()
+        if self._roarboot_agent:
+            await self._roarboot_agent.stop()
 
         # Stop status listener
         if self._status_listener:

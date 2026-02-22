@@ -8,6 +8,7 @@ Each agent is responsible for a specific domain:
 - IdeasAgent: Ideas/Notes within bubbles (38 tools)
 - DesktopAgent: Desktop automation (12 tools)
 - CodingAgent: Code generation (8 tools)
+- RoarbootAgent: Rowboat knowledge graph (13 tools)
 
 Architecture:
 1. Rachel (voice) sends intent to Orchestrator
@@ -61,6 +62,12 @@ def get_coding_agent():
     return _get()
 
 
+def get_roarboot_agent():
+    """Get RoarbootAgent singleton (lazy import)."""
+    from spaces.roarboot.agents.roarboot_agent import get_roarboot_agent as _get
+    return _get()
+
+
 # For backward compatibility, also provide the classes via __getattr__
 def __getattr__(name):
     """Lazy load agent classes to avoid circular imports."""
@@ -76,6 +83,9 @@ def __getattr__(name):
     elif name == "CodingAgent":
         from spaces.coding.agents.coding_agent import CodingAgent
         return CodingAgent
+    elif name == "RoarbootBackendAgent":
+        from spaces.roarboot.agents.roarboot_agent import RoarbootBackendAgent
+        return RoarbootBackendAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -96,4 +106,6 @@ __all__ = [
     "get_openclaw_agent",
     "CodingAgent",
     "get_coding_agent",
+    "RoarbootBackendAgent",
+    "get_roarboot_agent",
 ]

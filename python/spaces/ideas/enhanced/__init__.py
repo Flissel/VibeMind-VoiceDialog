@@ -1,1 +1,0 @@
-"""VibeMind Enhanced Ideas Agent."""
