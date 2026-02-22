@@ -1,17 +1,9 @@
 """
-VibeMind Intent Evaluation Framework
-
-Provides tools for:
-- Synthetic conversation generation for testing
-- Batch evaluation of intent classification
-- Real-time evaluation with user feedback
-- Accuracy reporting and metrics
+VibeMind Intent Evaluation - Real-time evaluation support.
 """
 
-from .intent_taxonomy import IntentCategory, INTENT_TAXONOMY, get_category
+from .realtime_evaluator import RealtimeEvaluator
 
 __all__ = [
-    "IntentCategory",
-    "INTENT_TAXONOMY",
-    "get_category",
+    "RealtimeEvaluator",
 ]
