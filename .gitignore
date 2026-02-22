@@ -52,6 +52,12 @@ nul
 *_debug.txt
 test_output/
 
+# Generated data/report files
+python/*_data.json
+python/*_results.json
+python/*_requirements.json
+python/*_report.json
+
 # Crash dumps
 *.stackdump
 
