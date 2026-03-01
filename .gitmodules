@@ -10,3 +10,6 @@
 [submodule "python/spaces/shuttles/swe_desgine"]
 	path = python/spaces/shuttles/swe_desgine
 	url = https://github.com/Flissel/swe_desgine.git
+[submodule "external/zeroclaw"]
+	path = external/zeroclaw
+	url = https://github.com/zeroclaw-labs/zeroclaw.git

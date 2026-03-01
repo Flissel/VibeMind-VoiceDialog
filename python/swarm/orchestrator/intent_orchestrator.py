@@ -935,6 +935,30 @@ class IntentOrchestrator:
         except ImportError as e:
             logger.warning(f"Could not load roarboot tools: {e}")
 
+        # === RESEARCH TOOLS (ZeroClaw Web Research) ===
+        if os.getenv("USE_ZEROCLAW", "false").lower() == "true":
+            try:
+                from spaces.research.tools.research_tools import (
+                    web_research, scrape_url, summarize_url,
+                    research_to_idea, research_to_rowboat,
+                )
+
+                def _fmt_research(result):
+                    if isinstance(result, dict):
+                        return result.get("response_hint", result.get("message", "Recherche abgeschlossen."))
+                    return str(result)
+
+                self._tool_executors.update({
+                    "research.web": lambda p: _fmt_research(web_research(p.get("query", ""))),
+                    "research.scrape": lambda p: _fmt_research(scrape_url(p.get("url", ""))),
+                    "research.summarize": lambda p: _fmt_research(summarize_url(p.get("url", ""))),
+                    "research.to_idea": lambda p: _fmt_research(research_to_idea(p.get("query", ""), p.get("title"))),
+                    "research.to_rowboat": lambda p: _fmt_research(research_to_rowboat(p.get("query", ""))),
+                })
+                logger.info("Loaded research tools for sync fallback (5 tools)")
+            except ImportError as e:
+                logger.warning(f"Could not load research tools: {e}")
+
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 
     def _load_evaluation_tools(self):

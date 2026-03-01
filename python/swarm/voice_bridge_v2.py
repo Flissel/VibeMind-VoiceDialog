@@ -92,6 +92,10 @@ class VoiceBridgeV2:
         self._desktop_agent = None
         self._coding_agent = None
         self._roarboot_agent = None
+        self._zeroclaw_agent = None
+
+        # ZeroClaw process manager (subprocess lifecycle)
+        self._zeroclaw_manager = None
 
         # Event bus and listeners
         self._event_bus = None
@@ -268,6 +272,27 @@ class VoiceBridgeV2:
                 await self._roarboot_agent.start()
                 _debug_print(f"[BackendAgents] RoarbootAgent started ({time.time() - t0:.2f}s)")
 
+            # ZeroClaw Research Agent (optional - requires USE_ZEROCLAW=true)
+            use_zeroclaw = os.getenv("USE_ZEROCLAW", "false").lower() == "true"
+            if use_zeroclaw:
+                try:
+                    from swarm.zeroclaw import get_zeroclaw_manager
+                    from spaces.research.agents import get_zeroclaw_research_agent
+
+                    # Start ZeroClaw subprocess
+                    _debug_print("[BackendAgents] Starting ZeroClaw subprocess...")
+                    self._zeroclaw_manager = get_zeroclaw_manager()
+                    await self._zeroclaw_manager.start_with_health_monitoring()
+                    _debug_print(f"[BackendAgents] ZeroClaw subprocess ready ({time.time() - t0:.2f}s)")
+
+                    # Start research agent
+                    self._zeroclaw_agent = get_zeroclaw_research_agent()
+                    await self._zeroclaw_agent.start()
+                    _debug_print(f"[BackendAgents] ZeroClawResearchAgent started ({time.time() - t0:.2f}s)")
+                except Exception as e:
+                    _debug_print(f"[BackendAgents] ZeroClaw not available: {e}")
+                    logger.warning(f"ZeroClaw Research Space not available: {e}")
+
             # Step 2: Subscribe StatusListener BEFORE starting listeners
             # This ensures events:status gets a listener task
             _debug_print("[BackendAgents] Starting StatusListener...")
@@ -293,6 +318,8 @@ class VoiceBridgeV2:
             agents_list = "BubblesAgent, IdeasAgent, DesktopAgent, CodingAgent"
             if self._roarboot_agent:
                 agents_list += ", RoarbootAgent"
+            if self._zeroclaw_agent:
+                agents_list += ", ZeroClawResearchAgent"
             _debug_print(f"Backend agents STARTED: {agents_list} + Listeners")
             logger.info(f"Backend agents started: {agents_list} + Listeners")
 
@@ -463,6 +490,12 @@ class VoiceBridgeV2:
             await self._coding_agent.stop()
         if self._roarboot_agent:
             await self._roarboot_agent.stop()
+        if self._zeroclaw_agent:
+            await self._zeroclaw_agent.stop()
+
+        # Stop ZeroClaw subprocess
+        if self._zeroclaw_manager:
+            await self._zeroclaw_manager.stop()
 
         # Stop status listener
         if self._status_listener:
