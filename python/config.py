@@ -33,16 +33,23 @@ class VoiceConfig:
     """Voice dialog configuration"""
     elevenlabs_api_key: Optional[str]
     elevenlabs_agent_id: Optional[str]  # Legacy single agent ID
-    openai_api_key: Optional[str]  # Optional fallback
+    openai_api_key: Optional[str]  # For OpenAI Realtime API
+
+    # Voice provider selection: "openai_realtime" or "elevenlabs"
+    voice_provider: str = "elevenlabs"
+
+    # OpenAI Realtime settings
+    openai_realtime_model: str = "gpt-4o-realtime-preview"
+    openai_realtime_voice: str = "alloy"
 
     # Multi-agent system IDs
-    agent_conversational_memory: Optional[str]
-    agent_project_manager: Optional[str]
-    agent_desktop_worker: Optional[str]
-    agent_project_writer: Optional[str]
+    agent_conversational_memory: Optional[str] = None
+    agent_project_manager: Optional[str] = None
+    agent_desktop_worker: Optional[str] = None
+    agent_project_writer: Optional[str] = None
 
-    logging: LoggingConfig
-    audio: AudioConfig
+    logging: LoggingConfig = None
+    audio: AudioConfig = None
     version: str = "2.0.0"
 
 
@@ -151,10 +158,22 @@ class ConfigManager:
             use_threshold_filtering=use_threshold_filtering
         )
 
+        # Voice provider selection
+        voice_provider = os.getenv('VOICE_PROVIDER', 'elevenlabs').lower()
+        if voice_provider not in ('openai_realtime', 'elevenlabs'):
+            voice_provider = 'elevenlabs'
+
+        # OpenAI Realtime settings
+        openai_realtime_model = os.getenv('OPENAI_REALTIME_MODEL', 'gpt-4o-realtime-preview')
+        openai_realtime_voice = os.getenv('OPENAI_REALTIME_VOICE', 'alloy')
+
         return VoiceConfig(
             elevenlabs_api_key=elevenlabs_key,
             elevenlabs_agent_id=agent_id,
             openai_api_key=openai_key,
+            voice_provider=voice_provider,
+            openai_realtime_model=openai_realtime_model,
+            openai_realtime_voice=openai_realtime_voice,
             agent_conversational_memory=agent_conversational_memory,
             agent_project_manager=agent_project_manager,
             agent_desktop_worker=agent_desktop_worker,
