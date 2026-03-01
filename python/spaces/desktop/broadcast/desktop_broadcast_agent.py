@@ -172,28 +172,6 @@ class DesktopBroadcastAgent(BaseBroadcastAgent):
         except ImportError as e:
             logger.warning(f"{self.name}: Could not load desktop tools: {e}")
 
-        # Load messaging tools (ClawedVoice/OpenClaw)
-        try:
-            from spaces.OpenClaw.tools.messaging_tools import (
-                send_whatsapp,
-                send_telegram,
-                web_search,
-                web_fetch,
-                get_pending_notifications,
-                get_openclaw_status,
-            )
-            tools.update({
-                "send_whatsapp": send_whatsapp,
-                "send_telegram": send_telegram,
-                "web_search": web_search,
-                "web_fetch": web_fetch,
-                "get_pending_notifications": get_pending_notifications,
-                "get_openclaw_status": get_openclaw_status,
-            })
-            logger.info(f"{self.name}: Loaded messaging tools (total: {len(tools)})")
-        except ImportError as e:
-            logger.warning(f"{self.name}: Could not load messaging tools: {e}")
-
         return tools
 
 

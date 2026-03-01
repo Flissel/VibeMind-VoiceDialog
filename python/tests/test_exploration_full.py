@@ -75,7 +75,7 @@ async def test_exploration_with_data():
     print("EXPLORATION TEST WITH REAL DATA")
     print("=" * 70)
 
-    from swarm.tools.exploration_tools import start_exploration, get_exploration_status
+    from spaces.ideas.tools.exploration_tools import start_exploration, get_exploration_status
 
     # Try to start exploration
     print("\n1. Starting exploration...")

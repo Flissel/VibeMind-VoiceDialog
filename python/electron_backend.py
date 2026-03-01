@@ -168,7 +168,7 @@ except ImportError as e:
 
 # Try to import coding tools and runner
 try:
-    from tools.coding_tools import set_electron_sender as set_coding_sender, set_coding_engine_runner
+    from spaces.coding.tools.coding_tools import set_electron_sender as set_coding_sender, set_coding_engine_runner
     from coding_engine_runner import CodingEngineRunner, get_coding_engine_runner
     from data import ProjectsRepository, GenerationStatus
     HAS_CODING_ENGINE = True
@@ -190,8 +190,8 @@ except ImportError as e:
     create_voice_bridge_v2 = None
     logger.warning(f"VoiceBridgeV2 not available: {e}")
 
-# Environment flag for VoiceBridgeV2 opt-in
-USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "false").lower() == "true"
+# VoiceBridgeV2 is the default (Swarm pipeline). Set USE_VOICE_BRIDGE_V2=false for legacy ClientTools.
+USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "true").lower() == "true"
 
 
 # ==============================================================================
@@ -265,7 +265,7 @@ class ElectronBackend:
         self.active_previews: Dict[str, Dict] = {}  # project_id -> preview_info
         self.coding_engine_path = os.environ.get(
             'CODING_ENGINE_PATH', 
-            str(Path(__file__).parent.parent.parent / 'Coding_engine')
+            str(Path(__file__).parent / 'spaces' / 'coding' / 'Coding_engine')
         )
         debug_log(f"Coding Engine path: {self.coding_engine_path}")
         
@@ -351,6 +351,18 @@ class ElectronBackend:
         # No default bubbles - bubbles are created via voice commands
         # and stored in the database
 
+        # Initial Rowboat sync (background, non-blocking)
+        import threading
+        def _sync_to_rowboat():
+            try:
+                import time
+                time.sleep(2)
+                from publishing import get_ideas_publisher
+                get_ideas_publisher().sync_all()
+            except Exception as e:
+                debug_log(f"Rowboat sync failed (non-critical): {e}")
+        threading.Thread(target=_sync_to_rowboat, daemon=True, name="rowboat-sync").start()
+
         # Pre-load embedding model in background thread to avoid
         # timeout on first use of auto_link, explore, etc.
         import threading
@@ -393,14 +405,179 @@ class ElectronBackend:
                     except ImportError:
                         debug_log("PyAudio not installed")
 
-                    # 3. Pre-initialize tools manager
-                    debug_log("Pre-warming tools manager...")
-                    self.tools_manager = setup_tools_manager()
-                    debug_log("Tools manager pre-warmed")
+                    # 3. Pre-initialize tools manager (only for legacy ClientTools path)
+                    if not USE_VOICE_BRIDGE_V2:
+                        debug_log("Pre-warming tools manager (legacy ClientTools)...")
+                        self.tools_manager = setup_tools_manager()
+                        debug_log("Tools manager pre-warmed")
+                    else:
+                        debug_log("Skipping tools manager pre-warm (VoiceBridgeV2 uses Swarm pipeline)")
 
             except Exception as e:
                 debug_log(f"Voice pre-warm failed (will init on first use): {e}")
         threading.Thread(target=_prewarm_voice_components, daemon=True, name="voice-prewarm").start()
+
+        # Roarboot autoconnect + self-healing loop
+        # Checks Rowboat Docker health at startup, auto-starts if configured,
+        # then monitors every 60s and restarts on failure.
+        def _roarboot_autoconnect():
+            import time
+            try:
+                from spaces.rowboat.config import get_config
+                config = get_config()
+
+                if not config.rowboat_enabled:
+                    debug_log("Roarboot: disabled via ROWBOAT_ENABLED=false")
+                    return
+
+                debug_log(f"Roarboot: autoconnect starting (url={config.rowboat_url}, auto_start={config.auto_start_docker})")
+
+                # Small delay to let Electron renderer initialize
+                time.sleep(3)
+
+                first_run = True
+                while True:
+                    try:
+                        from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+                        client = get_roarboot_client()
+                        status = client.get_status()
+
+                        if status.get("success"):
+                            debug_log("Roarboot: healthy (connected)")
+                            self.send_message({
+                                "type": "roarboot_status",
+                                "status": "connected",
+                                "message": status.get("message", "Rowboat verbunden"),
+                            })
+                        else:
+                            debug_log(f"Roarboot: unhealthy - {status.get('message')}")
+
+                            # Auto-start Docker if configured
+                            if config.auto_start_docker:
+                                debug_log("Roarboot: auto-starting Docker...")
+                                self.send_message({
+                                    "type": "roarboot_status",
+                                    "status": "starting",
+                                    "message": "Rowboat Docker wird gestartet...",
+                                })
+                                try:
+                                    from spaces.rowboat.tools.docker_tools import start_docker
+                                    result = start_docker()
+                                    if result.get("success"):
+                                        debug_log("Roarboot: Docker auto-start successful")
+                                        # Verify connection after Docker start
+                                        time.sleep(5)
+                                        verify = client.get_status()
+                                        if verify.get("success"):
+                                            self.send_message({
+                                                "type": "roarboot_status",
+                                                "status": "connected",
+                                                "message": "Rowboat verbunden nach Docker-Start",
+                                            })
+                                        else:
+                                            debug_log(f"Roarboot: Docker started but not yet reachable: {verify.get('message')}")
+                                            self.send_message({
+                                                "type": "roarboot_status",
+                                                "status": "starting",
+                                                "message": "Docker gestartet, warte auf Rowboat...",
+                                            })
+                                    else:
+                                        debug_log(f"Roarboot: Docker auto-start failed: {result.get('message')}")
+                                        self.send_message({
+                                            "type": "roarboot_status",
+                                            "status": "error",
+                                            "message": result.get("message", "Docker Start fehlgeschlagen"),
+                                        })
+                                except Exception as e:
+                                    debug_log(f"Roarboot: Docker auto-start error: {e}")
+                                    self.send_message({
+                                        "type": "roarboot_status",
+                                        "status": "error",
+                                        "message": f"Docker Fehler: {e}",
+                                    })
+                            else:
+                                self.send_message({
+                                    "type": "roarboot_status",
+                                    "status": "disconnected",
+                                    "message": status.get("message", "Rowboat nicht erreichbar"),
+                                })
+
+                    except Exception as e:
+                        debug_log(f"Roarboot: health check error: {e}")
+
+                    # Wait before next check (shorter on first run for faster startup)
+                    time.sleep(10 if first_run else 60)
+                    first_run = False
+
+            except ImportError as e:
+                debug_log(f"Roarboot: module not available ({e}), skipping autoconnect")
+            except Exception as e:
+                debug_log(f"Roarboot: autoconnect init error: {e}")
+        threading.Thread(target=_roarboot_autoconnect, daemon=True, name="roarboot-autoconnect").start()
+
+        # Rowboat update checker — periodically polls GitHub for new releases
+        try:
+            from spaces.rowboat.workers.update_checker import RowboatUpdateChecker
+            self._rowboat_update_checker = RowboatUpdateChecker(self.send_message)
+            self._rowboat_update_checker.start()
+            debug_log("Rowboat update checker started")
+        except ImportError as e:
+            debug_log(f"Rowboat update checker not available: {e}")
+        except Exception as e:
+            debug_log(f"Rowboat update checker init error: {e}")
+
+        # Automation_ui auto-start (Vapi Voice Control + MCP + Clawdbot)
+        # Starts the FastAPI backend at localhost:8007 if server.py exists
+        self._automation_ui_proc = None
+        def _autostart_automation_ui():
+            import time
+            time.sleep(2)  # Let other components init first
+            try:
+                self._start_automation_ui_backend()
+            except Exception as e:
+                debug_log(f"Automation_ui: auto-start error: {e}")
+        threading.Thread(target=_autostart_automation_ui, daemon=True, name="automation-ui-autostart").start()
+
+        # SWE Design server lifecycle is now handled by Electron-side embed.js
+        # (swe-design-manager.js → requirements_engineer/electron/embed.js)
+
+    def _start_automation_ui_backend(self):
+        """Start Automation_ui backend if not already running."""
+        from spaces.desktop.automation_ui_client import get_automation_client
+        client = get_automation_client()
+        if client.is_available():
+            debug_log("Automation_ui backend already running")
+            self.send_message({"type": "automation_ui_status", "status": "running"})
+            return True
+
+        debug_log("Starting Automation_ui backend...")
+        try:
+            server_path = Path(__file__).parent / "spaces" / "desktop" / "Automation_ui" / "backend" / "server.py"
+            if server_path.exists():
+                # Build env: inherit current env + set SQLite DB + non-debug mode
+                env = os.environ.copy()
+                db_path = server_path.parent / "automation_ui.db"
+                env["DATABASE_URL"] = f"sqlite:///{db_path}"
+                env["DEBUG"] = "False"  # Avoid uvicorn reload mode in subprocess
+                self._automation_ui_proc = subprocess.Popen(
+                    [sys.executable, str(server_path)],
+                    cwd=str(server_path.parent.parent),
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+                debug_log(f"Automation_ui backend started (PID: {self._automation_ui_proc.pid})")
+                self.send_message({"type": "automation_ui_status", "status": "starting"})
+                return True
+            else:
+                debug_log(f"Automation_ui server.py not found at {server_path}")
+                self.send_message({"type": "automation_ui_status", "status": "error", "error": "server.py not found"})
+                return False
+        except Exception as e:
+            logger.error(f"Failed to start Automation_ui: {e}")
+            self.send_message({"type": "automation_ui_status", "status": "error", "error": str(e)})
+            return False
+
 
     def _check_collision(self, new_pos: Dict[str, float], min_distance: float = 1.2) -> bool:
         """Check if a position collides with existing bubbles."""
@@ -929,7 +1106,8 @@ class ElectronBackend:
             await self._start_voice_bridge_v2(agent_id)
             return
 
-        # Option B: Legacy - full voice tools setup (connects to Electron IPC)
+        # Option B: Legacy ClientTools path (deprecated - use VoiceBridgeV2)
+        logger.warning("Legacy ClientTools path (USE_VOICE_BRIDGE_V2=false). Migrate to VoiceBridgeV2.")
         if HAS_VOICE_TOOLS:
             try:
                 # Get API key
@@ -1603,6 +1781,9 @@ class ElectronBackend:
             # Electron will respond with current state
 
         # ====================================================================
+        # (Roarboot chat is now handled via embedded Rowboat Web UI iframe —
+        #  no custom chat handlers needed. Status + URL sent via roarboot_status.)
+        # ====================================================================
         # SHUTTLE IPC Handlers (requirement pipeline visualization)
         # ====================================================================
 
@@ -1617,14 +1798,7 @@ class ElectronBackend:
             # Handle "Navigate with Alice" button click
             action = message.get("action")
             debug_log(f"Shuttle navigate: {action}")
-            if action == "transfer_to_alice":
-                try:
-                    from tools.bubble_tools import transfer_to_alice
-                    transfer_to_alice({
-                        "context": "User clicked 'Navigate with Alice' on a requirement shuttle"
-                    })
-                except Exception as e:
-                    logger.error(f"Failed to transfer to Alice: {e}")
+            logger.info(f"Shuttle navigate action: {action} (agent transfers removed)")
 
         elif msg_type == "get_shuttles":
             # Return active shuttles for visualization restoration
@@ -1646,6 +1820,14 @@ class ElectronBackend:
             shuttle_id = message.get("shuttle_id")
             debug_log(f"Getting stage shuttle data: {shuttle_id}")
             asyncio.create_task(self._handle_get_stage_shuttle_data(shuttle_id))
+
+        elif msg_type == "start_automation_ui":
+            # Start Automation_ui backend on-demand (for Vapi Voice Control)
+            self._start_automation_ui_backend()
+
+        elif msg_type == "start_swe_design":
+            # Server lifecycle now handled by Electron-side embed.js
+            debug_log("start_swe_design: ignored (managed by embed.js)")
 
         elif msg_type == "create_project_from_shuttle":
             # Create a project from a validated shuttle
@@ -2212,7 +2394,7 @@ class ElectronBackend:
     async def _handle_exploration_start(self, bubble_id, depth, mode, context):
         """Handle exploration start from Electron."""
         try:
-            from swarm.tools.exploration_tools import start_exploration
+            from spaces.ideas.tools.exploration_tools import start_exploration
             result = await start_exploration(
                 bubble_id=bubble_id,
                 depth=depth,
@@ -2233,7 +2415,7 @@ class ElectronBackend:
     async def _handle_exploration_stop(self):
         """Handle exploration stop."""
         try:
-            from swarm.tools.exploration_tools import stop_exploration
+            from spaces.ideas.tools.exploration_tools import stop_exploration
             result = await stop_exploration()
             self.send_message({
                 "type": "exploration_stopped",
@@ -2249,7 +2431,7 @@ class ElectronBackend:
     async def _handle_exploration_respond(self, question_id, response_type, selected_option, custom_text):
         """Handle response to exploration question."""
         try:
-            from swarm.tools.exploration_tools import respond_to_exploration_question
+            from spaces.ideas.tools.exploration_tools import respond_to_exploration_question
             result = await respond_to_exploration_question(
                 question_id=question_id,
                 response_type=response_type,
@@ -2268,7 +2450,7 @@ class ElectronBackend:
     async def _handle_exploration_direction(self, direction, bubble_id):
         """Handle exploration direction setting."""
         try:
-            from swarm.tools.exploration_tools import set_exploration_direction
+            from spaces.ideas.tools.exploration_tools import set_exploration_direction
             result = await set_exploration_direction(
                 direction=direction,
                 bubble_id=bubble_id,
@@ -2287,7 +2469,7 @@ class ElectronBackend:
     async def _handle_exploration_status(self):
         """Get current exploration status."""
         try:
-            from swarm.tools.exploration_tools import get_exploration_status
+            from spaces.ideas.tools.exploration_tools import get_exploration_status
             result = await get_exploration_status()
             self.send_message({
                 "type": "exploration_status",

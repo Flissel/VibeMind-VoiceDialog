@@ -52,7 +52,7 @@ class MultiverseApp {
             },
             projects: {
                 objects: [],
-                position: new THREE.Vector3(10, 0, 7), // Farther apart for better visual separation
+                position: new THREE.Vector3(16, 0, 11),
                 icon: '🧬',
                 name: 'Project Space',
                 agent: { name: 'Sofia', slug: 'sofia', role: 'Project Manager' },
@@ -60,11 +60,27 @@ class MultiverseApp {
             },
             desktop: {
                 objects: [],
-                position: new THREE.Vector3(15, 0, -10),
+                position: new THREE.Vector3(22, 0, -14),
                 icon: '🌟',
                 name: 'Desktop Automation',
                 agent: { name: 'Adam', slug: 'adam', role: 'Desktop Worker' },
                 color: 0xff8844
+            },
+            roarboot: {
+                objects: [],
+                position: new THREE.Vector3(-17, 0, -8),
+                icon: '\u{1F6A3}',
+                name: 'Rowboat',
+                agent: { name: 'Rowboat', slug: 'roarboot', role: 'Knowledge Navigator' },
+                color: 0x22ccaa
+            },
+            swedesign: {
+                objects: [],
+                position: new THREE.Vector3(8, 0, 5.5),
+                icon: '\u{1F3ED}',
+                name: 'SWE Design Factory',
+                agent: { name: 'Factory', slug: 'swedesign', role: 'Spec Generator' },
+                color: 0xff6633
             }
         };
         
@@ -278,6 +294,8 @@ class MultiverseApp {
         this.createIdeasSpace();
         this.createProjectSpace();
         this.createDesktopSpace();
+        this.createRoarbootSpace();
+        this.createSweDesignSpace();
         this.createEnvironment();
         this.createConnectionPaths();
 
@@ -353,6 +371,8 @@ class MultiverseApp {
             const bubble = new THREE.Mesh(geometry, material);
             bubble.position.set(data.pos.x, data.pos.y, data.pos.z);
             bubble.userData = { type: 'bubble', title: data.title };
+            spaceGroup.add(bubble);
+            this.spaces.ideas.objects.push(bubble);
         });
         
         // Central marker ring
@@ -758,7 +778,257 @@ class MultiverseApp {
         this.scene.add(spaceGroup);
         this.spaces.desktop.group = spaceGroup;
     }
-    
+
+    // ========================================================================
+    // ROARBOOT SPACE (Rowing Boat)
+    // ========================================================================
+
+    createRoarbootSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.roarboot.position);
+
+        const boatColor = 0x22ccaa;
+
+        // --- Hull (elongated half-ellipsoid) ---
+        const hullGeom = new THREE.SphereGeometry(1.2, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        const hullMat = new THREE.MeshPhongMaterial({
+            color: boatColor,
+            transparent: true,
+            opacity: 0.7,
+            emissive: boatColor,
+            emissiveIntensity: 0.3,
+            side: THREE.DoubleSide,
+        });
+        const hull = new THREE.Mesh(hullGeom, hullMat);
+        hull.scale.set(1, 0.4, 2.2);
+        hull.rotation.x = Math.PI;
+        hull.position.y = 0.1;
+        hull.userData = { type: 'rowboat', title: 'Rowboat' };
+        spaceGroup.add(hull);
+        this.spaces.roarboot.objects.push(hull);
+        this.spaces.roarboot.boat = hull;
+
+        // --- Mast ---
+        const mastGeom = new THREE.CylinderGeometry(0.03, 0.03, 2.0, 8);
+        const mastMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.6,
+        });
+        const mast = new THREE.Mesh(mastGeom, mastMat);
+        mast.position.set(0, 1.0, -0.3);
+        spaceGroup.add(mast);
+
+        // --- Sail (triangle) ---
+        const sailShape = new THREE.Shape();
+        sailShape.moveTo(0, 0);
+        sailShape.lineTo(0.8, 0.6);
+        sailShape.lineTo(0, 1.6);
+        sailShape.lineTo(0, 0);
+        const sailGeom = new THREE.ShapeGeometry(sailShape);
+        const sailMat = new THREE.MeshBasicMaterial({
+            color: 0x44ffcc, transparent: true, opacity: 0.35, side: THREE.DoubleSide,
+        });
+        const sail = new THREE.Mesh(sailGeom, sailMat);
+        sail.position.set(0.02, 0.2, -0.3);
+        sail.rotation.y = Math.PI / 2;
+        spaceGroup.add(sail);
+        this.spaces.roarboot.sail = sail;
+
+        // --- Water ripple ring ---
+        const rippleGeom = new THREE.RingGeometry(1.8, 2.6, 32);
+        const rippleMat = new THREE.MeshBasicMaterial({
+            color: boatColor, transparent: true, opacity: 0.15, side: THREE.DoubleSide,
+        });
+        const ripple = new THREE.Mesh(rippleGeom, rippleMat);
+        ripple.rotation.x = -Math.PI / 2;
+        ripple.position.y = -0.3;
+        spaceGroup.add(ripple);
+        this.spaces.roarboot.ripple = ripple;
+
+        // --- Glow sphere ---
+        const glowGeom = new THREE.IcosahedronGeometry(2.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: boatColor, transparent: true, opacity: 0.08, side: THREE.BackSide,
+        });
+        spaceGroup.add(new THREE.Mesh(glowGeom, glowMat));
+
+        // --- Knowledge particles ---
+        const pCount = 200;
+        const pPos = new Float32Array(pCount * 3);
+        for (let i = 0; i < pCount; i++) {
+            const r = 2 + Math.random() * 2;
+            const th = Math.random() * Math.PI * 2;
+            const ph = Math.acos(2 * Math.random() - 1);
+            pPos[i * 3]     = r * Math.sin(ph) * Math.cos(th);
+            pPos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
+            pPos[i * 3 + 2] = r * Math.cos(ph);
+        }
+        const pGeom = new THREE.BufferGeometry();
+        pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+        const pMat = new THREE.PointsMaterial({
+            color: 0x66ffdd, size: 0.06, transparent: true, opacity: 0.6,
+            blending: THREE.AdditiveBlending,
+        });
+        spaceGroup.add(new THREE.Points(pGeom, pMat));
+
+        // --- Base marker ring ---
+        const baseGeom = new THREE.RingGeometry(3, 3.4, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: boatColor, transparent: true, opacity: 0.25, side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.roarboot.group = spaceGroup;
+    }
+
+    // ========================================================================
+    // SWE DESIGN FACTORY SPACE
+    // ========================================================================
+
+    createSweDesignSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.swedesign.position);
+
+        const factoryColor = 0xff6633;
+
+        // --- Factory Building (translucent box) ---
+        const buildingGeom = new THREE.BoxGeometry(2.4, 1.8, 1.6);
+        const buildingMat = new THREE.MeshPhongMaterial({
+            color: factoryColor,
+            transparent: true,
+            opacity: 0.35,
+            emissive: factoryColor,
+            emissiveIntensity: 0.2,
+            side: THREE.DoubleSide,
+        });
+        const building = new THREE.Mesh(buildingGeom, buildingMat);
+        building.position.y = 0.9;
+        building.userData = { type: 'factory', title: 'SWE Design Factory' };
+        spaceGroup.add(building);
+        this.spaces.swedesign.objects.push(building);
+        this.spaces.swedesign.building = building;
+
+        // --- Roof (slightly wider flat box) ---
+        const roofGeom = new THREE.BoxGeometry(2.8, 0.15, 2.0);
+        const roofMat = new THREE.MeshPhongMaterial({
+            color: 0xcc5522,
+            transparent: true,
+            opacity: 0.6,
+            emissive: 0xcc5522,
+            emissiveIntensity: 0.15,
+        });
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.y = 1.85;
+        spaceGroup.add(roof);
+
+        // --- Smokestack 1 ---
+        const stackGeom = new THREE.CylinderGeometry(0.15, 0.18, 1.2, 8);
+        const stackMat = new THREE.MeshPhongMaterial({
+            color: 0x884422,
+            emissive: 0x663311,
+            emissiveIntensity: 0.3,
+        });
+        const stack1 = new THREE.Mesh(stackGeom, stackMat);
+        stack1.position.set(-0.6, 2.5, -0.4);
+        spaceGroup.add(stack1);
+
+        // --- Smokestack 2 ---
+        const stack2 = new THREE.Mesh(stackGeom, stackMat);
+        stack2.position.set(0.6, 2.5, -0.4);
+        spaceGroup.add(stack2);
+
+        // --- Smoke particles (rising from stacks) ---
+        const smokeCount = 30;
+        const smokePositions = new Float32Array(smokeCount * 3);
+        for (let i = 0; i < smokeCount; i++) {
+            smokePositions[i * 3] = (Math.random() - 0.5) * 0.3;
+            smokePositions[i * 3 + 1] = Math.random() * 2.0;
+            smokePositions[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+        }
+        const smokeGeom = new THREE.BufferGeometry();
+        smokeGeom.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
+        const smokeMat = new THREE.PointsMaterial({
+            size: 0.12,
+            color: 0xffaa77,
+            transparent: true,
+            opacity: 0.4,
+        });
+        const smoke1 = new THREE.Points(smokeGeom, smokeMat);
+        smoke1.position.set(-0.6, 3.1, -0.4);
+        spaceGroup.add(smoke1);
+        this.spaces.swedesign.smoke1 = smoke1;
+
+        const smoke2 = new THREE.Points(smokeGeom.clone(), smokeMat.clone());
+        smoke2.position.set(0.6, 3.1, -0.4);
+        spaceGroup.add(smoke2);
+        this.spaces.swedesign.smoke2 = smoke2;
+
+        // --- Gear 1 (left side, visible through translucent wall) ---
+        const gearGeom = new THREE.TorusGeometry(0.4, 0.08, 8, 12);
+        const gearMat = new THREE.MeshPhongMaterial({
+            color: 0xffcc44,
+            emissive: 0xffaa22,
+            emissiveIntensity: 0.3,
+            transparent: true,
+            opacity: 0.8,
+        });
+        const gear1 = new THREE.Mesh(gearGeom, gearMat);
+        gear1.position.set(-0.5, 0.9, 0.82);
+        spaceGroup.add(gear1);
+        this.spaces.swedesign.gear1 = gear1;
+
+        // --- Gear 2 (right side, interlocking) ---
+        const gear2 = new THREE.Mesh(gearGeom, gearMat);
+        gear2.position.set(0.5, 0.9, 0.82);
+        spaceGroup.add(gear2);
+        this.spaces.swedesign.gear2 = gear2;
+
+        // --- Conveyor Belt (flat box from left to right) ---
+        const conveyorGeom = new THREE.BoxGeometry(4.0, 0.08, 0.5);
+        const conveyorMat = new THREE.MeshPhongMaterial({
+            color: 0x886644,
+            emissive: 0x553322,
+            emissiveIntensity: 0.2,
+            transparent: true,
+            opacity: 0.6,
+        });
+        const conveyor = new THREE.Mesh(conveyorGeom, conveyorMat);
+        conveyor.position.set(0, 0.04, 0.9);
+        spaceGroup.add(conveyor);
+
+        // --- Glow sphere (warm orange) ---
+        const glowGeom = new THREE.IcosahedronGeometry(2.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: factoryColor,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.BackSide,
+        });
+        const glow = new THREE.Mesh(glowGeom, glowMat);
+        spaceGroup.add(glow);
+
+        // --- Base marker ring ---
+        const baseGeom = new THREE.RingGeometry(2.5, 3, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: factoryColor,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.swedesign.group = spaceGroup;
+
+        console.log('[Multiverse] SWE Design Factory created');
+    }
+
     // ========================================================================
     // ENVIRONMENT
     // ========================================================================
@@ -806,29 +1076,65 @@ class MultiverseApp {
         const projectLight = new THREE.PointLight(0x44ff88, 1, 20);
         projectLight.position.copy(this.spaces.projects.position);
         this.scene.add(projectLight);
+
+        // Add light for Roarboot Space
+        const roarbootLight = new THREE.PointLight(0x22ccaa, 1, 20);
+        roarbootLight.position.copy(this.spaces.roarboot.position);
+        this.scene.add(roarbootLight);
+
+        // Add light for SWE Design Factory
+        const factoryLight = new THREE.PointLight(0xff6633, 1, 20);
+        factoryLight.position.copy(this.spaces.swedesign.position);
+        factoryLight.position.y += 2; // Above the building
+        this.scene.add(factoryLight);
     }
     
     createConnectionPaths() {
-        // Path 1: Ideas -> Projects
+        // Path 1: Ideas -> Factory (main shuttle route, orange)
+        this.createSinglePath(
+            this.spaces.ideas.position,
+            this.spaces.swedesign.position,
+            0xff8844,
+            0.5
+        );
+
+        // Path 2: Factory -> Projects (output route, green)
+        this.createSinglePath(
+            this.spaces.swedesign.position,
+            this.spaces.projects.position,
+            0x88cc44,
+            0.4
+        );
+
+        // Path 3: Ideas -> Projects (legacy direct, very subtle)
         this.createSinglePath(
             this.spaces.ideas.position,
             this.spaces.projects.position,
-            0x5588aa
+            0x5588aa,
+            0.15
         );
-        
-        // Path 2: Projects -> Desktop
+
+        // Path 4: Projects -> Desktop
         this.createSinglePath(
             this.spaces.projects.position,
             this.spaces.desktop.position,
             0x88aa55
         );
-        
-        // Path 3: Ideas -> Desktop (long path, more subtle)
+
+        // Path 5: Ideas -> Desktop (long path, subtle)
         this.createSinglePath(
             this.spaces.ideas.position,
             this.spaces.desktop.position,
             0x6688aa,
-            0.2 // Lower opacity
+            0.2
+        );
+
+        // Path 6: Ideas -> Roarboot
+        this.createSinglePath(
+            this.spaces.ideas.position,
+            this.spaces.roarboot.position,
+            0x33aa99,
+            0.3
         );
     }
     
@@ -897,6 +1203,33 @@ class MultiverseApp {
             }
         }
 
+        // Hide Rowboat BrowserView when leaving roarboot space
+        if (this.currentSpace === 'roarboot' && targetSpace !== 'roarboot') {
+            if (window.vibemind && window.vibemind.hideRowboat) {
+                window.vibemind.hideRowboat();
+                console.log('[Multiverse] Hiding Rowboat BrowserView');
+            }
+        }
+
+        // Hide SWE Design BrowserView when leaving swedesign space
+        if (this.currentSpace === 'swedesign' && targetSpace !== 'swedesign') {
+            if (window.vibemind && window.vibemind.hideSweDesign) {
+                window.vibemind.hideSweDesign();
+                console.log('[Multiverse] Hiding SWE Design BrowserView');
+            }
+        }
+
+        // Hide Desktop Dashboard when leaving desktop space
+        if (this.currentSpace === 'desktop' && targetSpace !== 'desktop') {
+            if (this._insideDesktopDashboard) {
+                const panel = document.getElementById('vapi-panel');
+                if (panel) {
+                    panel.classList.remove('fade-in', 'visible');
+                }
+                this._insideDesktopDashboard = false;
+            }
+        }
+
         // Calculate camera target
         const targetPos = space.position.clone();
         targetPos.z += 10;
@@ -913,6 +1246,22 @@ class MultiverseApp {
                 if (window.vibemind && window.vibemind.showDashboard) {
                     window.vibemind.showDashboard();
                     console.log('[Multiverse] Showing Coding Engine Dashboard');
+                }
+            }
+
+            // Show Rowboat BrowserView when entering roarboot space
+            if (targetSpace === 'roarboot') {
+                if (window.vibemind && window.vibemind.showRowboat) {
+                    window.vibemind.showRowboat();
+                    console.log('[Multiverse] Showing Rowboat BrowserView');
+                }
+            }
+
+            // Show SWE Design BrowserView when entering swedesign space
+            if (targetSpace === 'swedesign') {
+                if (window.vibemind && window.vibemind.showSweDesign) {
+                    window.vibemind.showSweDesign();
+                    console.log('[Multiverse] Showing SWE Design BrowserView');
                 }
             }
 
@@ -1098,8 +1447,12 @@ class MultiverseApp {
                 this.enterCurrentSelection();
                 break;
             case 'Escape':
-                // Exit bubble view
-                this.exitBubbleWithAnimation();
+                // Exit desktop dashboard or bubble view
+                if (this._insideDesktopDashboard) {
+                    this.exitDesktopDashboard();
+                } else {
+                    this.exitBubbleWithAnimation();
+                }
                 break;
             case 'ArrowLeft':
                 // Navigate to Ideas Space
@@ -1228,6 +1581,47 @@ class MultiverseApp {
             });
         }
 
+        // Animate SWE Design Factory (gears, smoke, building pulse)
+        if (this.spaces.swedesign.gear1) {
+            this.spaces.swedesign.gear1.rotation.z += 0.01;
+        }
+        if (this.spaces.swedesign.gear2) {
+            this.spaces.swedesign.gear2.rotation.z -= 0.01;
+        }
+        if (this.spaces.swedesign.building && this.spaces.swedesign.building.material) {
+            this.spaces.swedesign.building.material.emissiveIntensity =
+                0.15 + Math.sin(elapsed * 1.5) * 0.1;
+        }
+        // Smoke particles drift upward and reset
+        [this.spaces.swedesign.smoke1, this.spaces.swedesign.smoke2].forEach(smoke => {
+            if (smoke && smoke.geometry) {
+                const pos = smoke.geometry.attributes.position;
+                for (let i = 0; i < pos.count; i++) {
+                    let y = pos.getY(i);
+                    y += 0.015 + Math.random() * 0.005;
+                    if (y > 2.0) y = 0; // reset to base
+                    pos.setY(i, y);
+                    // gentle horizontal drift
+                    pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.003);
+                }
+                pos.needsUpdate = true;
+            }
+        });
+
+        // Animate Roarboot Space (gentle bobbing + ripple pulse)
+        if (this.spaces.roarboot.boat) {
+            this.spaces.roarboot.boat.position.y = 0.1 + Math.sin(elapsed * 0.8) * 0.15;
+            this.spaces.roarboot.boat.rotation.z = Math.sin(elapsed * 0.5) * 0.05;
+        }
+        if (this.spaces.roarboot.sail) {
+            this.spaces.roarboot.sail.material.opacity = 0.25 + Math.sin(elapsed * 1.2) * 0.1;
+        }
+        if (this.spaces.roarboot.ripple) {
+            const s = 1 + Math.sin(elapsed * 0.6) * 0.1;
+            this.spaces.roarboot.ripple.scale.set(s, s, 1);
+            this.spaces.roarboot.ripple.material.opacity = 0.1 + Math.sin(elapsed * 0.6) * 0.05;
+        }
+
         // Update requirement shuttles
         if (this.shuttleManager) {
             this.shuttleManager.update(delta, elapsed);
@@ -1266,6 +1660,30 @@ class MultiverseApp {
             return; // Shuttle click handled
         }
 
+        // Check Factory click (visible from any space) — navigate into SWE Design
+        if (this.spaces.swedesign?.group && this.currentSpace !== 'swedesign') {
+            const factoryObjects = this.spaces.swedesign.group.children.filter(
+                c => c.isMesh
+            );
+            const factoryHit = raycaster.intersectObjects(factoryObjects);
+            if (factoryHit.length > 0) {
+                this.navigateToSpace('swedesign');
+                return;
+            }
+        }
+
+        // Check Roarboot boat click (visible from any space) — navigate into Roarboot
+        if (this.spaces.roarboot?.group && this.currentSpace !== 'roarboot') {
+            const boatObjects = this.spaces.roarboot.group.children.filter(
+                c => c.isMesh
+            );
+            const boatHit = raycaster.intersectObjects(boatObjects);
+            if (boatHit.length > 0) {
+                this.navigateToSpace('roarboot');
+                return;
+            }
+        }
+
         // Check based on current space
         if (this.currentSpace === 'ideas') {
             // Check Ideas Space bubbles
@@ -1291,17 +1709,189 @@ class MultiverseApp {
             const projects = this.spaces.projects.objects.filter(
                 obj => obj.userData && obj.userData.type === 'project'
             );
-            
+
             const intersects = raycaster.intersectObjects(projects);
-            
+
             if (intersects.length > 0) {
                 const project = intersects[0].object;
                 const index = projects.indexOf(project);
                 this.selectProject(index);
             }
+        } else if (this.currentSpace === 'desktop') {
+            // Check Desktop Space - click on sun/planet to navigate into desktop dashboard
+            const planet = this.spaces.desktop?.planet;
+            if (planet) {
+                const intersects = raycaster.intersectObjects([planet]);
+                if (intersects.length > 0) {
+                    this.enterDesktopDashboard();
+                }
+            }
         }
     }
     
+    /**
+     * Navigate into the Desktop Dashboard (triggered by clicking the sun).
+     * Zooms camera into the sun, then shows fullscreen Vapi + Live Stream dashboard.
+     */
+    enterDesktopDashboard() {
+        if (this.isNavigating || this._insideDesktopDashboard) return;
+
+        // Request Automation_ui backend start (fallback if auto-start didn't work)
+        if (window.vibemind?.send) {
+            window.vibemind.send({ type: 'start_automation_ui' });
+        }
+
+        const planet = this.spaces.desktop?.planet;
+        if (!planet) return;
+
+        this.isNavigating = true;
+        this._insideDesktopDashboard = true;
+
+        // Get sun world position
+        const sunPos = new THREE.Vector3();
+        planet.getWorldPosition(sunPos);
+
+        // Save camera state for exit
+        this._desktopCamSave = {
+            position: this.camera.position.clone(),
+            target: this.controls.target.clone()
+        };
+
+        // Zoom camera into the sun
+        const targetPos = sunPos.clone();
+        targetPos.z += 0.5;
+
+        const startPosition = this.camera.position.clone();
+        const startLookAt = this.controls.target.clone();
+        const duration = 700;
+        const startTime = Date.now();
+
+        const zoomIn = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            this.camera.position.lerpVectors(startPosition, targetPos, eased);
+            this.controls.target.lerpVectors(startLookAt, sunPos, eased);
+
+            if (progress < 1) {
+                requestAnimationFrame(zoomIn);
+            } else {
+                this.isNavigating = false;
+                this._showDesktopDashboard();
+            }
+        };
+        requestAnimationFrame(zoomIn);
+    }
+
+    /**
+     * Create and show the fullscreen desktop dashboard overlay.
+     */
+    _showDesktopDashboard() {
+        let panel = document.getElementById('vapi-panel');
+        if (panel) {
+            panel.classList.add('visible');
+            requestAnimationFrame(() => panel.classList.add('fade-in'));
+            return;
+        }
+
+        // Create fullscreen dashboard (no custom header - VibeMind's nav tabs handle navigation)
+        panel = document.createElement('div');
+        panel.id = 'vapi-panel';
+        panel.innerHTML = `
+            <div id="vapi-loading">
+                <div class="spinner"></div>
+                <span>Connecting to Automation backend...</span>
+            </div>
+            <iframe id="vapi-frame" style="display:none;" allow="microphone; autoplay" allowfullscreen></iframe>
+        `;
+        document.body.appendChild(panel);
+
+        // Show with fade-in
+        requestAnimationFrame(() => {
+            panel.classList.add('visible');
+            requestAnimationFrame(() => panel.classList.add('fade-in'));
+        });
+
+        // Poll backend health, then load iframe
+        let attempts = 0;
+        const maxAttempts = 20;
+        const pollHealth = () => {
+            attempts++;
+            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                .then(r => {
+                    if (r.ok) {
+                        const loadingEl = document.getElementById('vapi-loading');
+                        const frameEl = document.getElementById('vapi-frame');
+                        if (loadingEl) loadingEl.style.display = 'none';
+                        if (frameEl) {
+                            frameEl.src = 'http://localhost:8007/voice/dashboard';
+                            frameEl.style.display = 'block';
+                        }
+                    } else if (attempts < maxAttempts) {
+                        setTimeout(pollHealth, 3000);
+                    }
+                })
+                .catch(() => {
+                    if (attempts < maxAttempts) {
+                        setTimeout(pollHealth, 3000);
+                    } else {
+                        const loadingEl = document.getElementById('vapi-loading');
+                        if (loadingEl) {
+                            loadingEl.innerHTML = '<span>Backend not reachable. Check Automation_ui.</span>';
+                        }
+                    }
+                });
+        };
+        setTimeout(pollHealth, 2000);
+    }
+
+    /**
+     * Exit the desktop dashboard and zoom back out to Desktop Space view.
+     */
+    exitDesktopDashboard() {
+        if (!this._insideDesktopDashboard) return;
+
+        const panel = document.getElementById('vapi-panel');
+        if (panel) {
+            panel.classList.remove('fade-in');
+            // Wait for fade-out, then hide
+            setTimeout(() => {
+                panel.classList.remove('visible');
+            }, 400);
+        }
+
+        // Restore camera position
+        if (this._desktopCamSave) {
+            this.isNavigating = true;
+            const targetPos = this._desktopCamSave.position;
+            const targetLookAt = this._desktopCamSave.target;
+            const startPosition = this.camera.position.clone();
+            const startLookAt = this.controls.target.clone();
+            const duration = 600;
+            const startTime = Date.now();
+
+            const zoomOut = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+
+                this.camera.position.lerpVectors(startPosition, targetPos, eased);
+                this.controls.target.lerpVectors(startLookAt, targetLookAt, eased);
+
+                if (progress < 1) {
+                    requestAnimationFrame(zoomOut);
+                } else {
+                    this.isNavigating = false;
+                    this._insideDesktopDashboard = false;
+                }
+            };
+            requestAnimationFrame(zoomOut);
+        } else {
+            this._insideDesktopDashboard = false;
+        }
+    }
+
     /**
      * Project a 3D world position to 2D screen coordinates.
      */

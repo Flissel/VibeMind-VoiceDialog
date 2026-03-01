@@ -549,7 +549,7 @@ async def _call_llm_for_formatting(prompt: str, format_type: str) -> Dict[str, A
         )
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model="anthropic/claude-sonnet-4-6",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,  # Balanced creativity and consistency
             max_tokens=2000,

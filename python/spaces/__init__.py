@@ -7,7 +7,7 @@ Verschiedene Spaces im Multiverse:
 - Desktop Space - Desktop-Kontrolle via Automation_ui
 - OpenClaw Space - AutoGen Desktop Swarm
 - Transformer Space - Bubble-to-Coding Pipeline
-- Roarboot Space - (Placeholder)
+- Roarboot Space - Rowboat Knowledge Graph
 - Minibook Space - (Placeholder)
 """
 
@@ -23,7 +23,8 @@ class SpaceType(Enum):
     DESKTOP_SPACE = "desktop_space"
     OPENCLAW = "openclaw"
     TRANSFORMER = "transformer"
-    ROARBOOT = "roarboot"
+    ROWBOAT = "rowboat"
+    SWE_DESIGN = "swe_design"
     MINIBOOK = "minibook"
 
 
@@ -117,17 +118,32 @@ SPACES = {
             "pipeline": True,
         }
     ),
-    SpaceType.ROARBOOT: SpaceConfig(
-        type=SpaceType.ROARBOOT,
-        name="Roarboot",
-        description="Roarboot Space - (Placeholder)",
+    SpaceType.ROWBOAT: SpaceConfig(
+        type=SpaceType.ROWBOAT,
+        name="Rowboat",
+        description="Rowboat Space - Knowledge Graph (Emails, Meetings, Wissen)",
         position={"x": -12, "y": -2, "z": -10},
-        agent_slug=None,
+        agent_slug="rowboat",
         color=0xffaa00,  # Gold
         visualization="nebula",
         metadata={
+            "entry_point": True,
+            "uses_docker": True,
+            "rowboat_url": "http://localhost:3000",
+        }
+    ),
+    SpaceType.SWE_DESIGN: SpaceConfig(
+        type=SpaceType.SWE_DESIGN,
+        name="SWE Design Factory",
+        description="Software Engineering Design Factory - Shuttles land here for full spec generation",
+        position={"x": 8, "y": 0, "z": 5.5},
+        agent_slug=None,
+        color=0xff6633,
+        visualization="factory",
+        metadata={
             "entry_point": False,
-            "placeholder": True,
+            "pipeline": True,
+            "arch_team_url": "http://localhost:8087",
         }
     ),
     SpaceType.MINIBOOK: SpaceConfig(

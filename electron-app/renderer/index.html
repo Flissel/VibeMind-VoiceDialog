@@ -12,6 +12,7 @@
     <script defer src="multiverse.js"></script>
     <script defer src="universe_canvas.js"></script>
     <script defer src="rich_content_renderer.js"></script>
+    <script defer src="glass_bubbles.js"></script>
     <!-- AI-Scientist Exploration Dialogs -->
     <script defer src="exploration_dialog.js"></script>
 </head>
@@ -43,6 +44,14 @@
             <button class="space-tab" id="tab-desktop" data-space="desktop">
                 <span class="space-icon">🖥️</span>
                 <span class="space-name">Desktop Space</span>
+            </button>
+            <button class="space-tab" id="tab-swedesign" data-space="swedesign">
+                <span class="space-icon">&#x1F3ED;</span>
+                <span class="space-name">SWE Design</span>
+            </button>
+            <button class="space-tab" id="tab-roarboot" data-space="roarboot">
+                <span class="space-icon">&#x1F6A3;</span>
+                <span class="space-name">Rowboat</span>
             </button>
         </div>
         <div class="agent-status" id="agent-status">
@@ -195,6 +204,9 @@
                 </iframe>
             </div>
         </div>
+
+        <!-- Roarboot Space is now rendered via BrowserView (rowboat-manager.js) -->
+        <!-- No iframe needed — BrowserView overlays the window directly -->
 
         <!-- Transition Overlay -->
         <div id="transition-overlay"></div>
@@ -443,11 +455,8 @@
         // MULTIVERSE INITIALIZATION
         // ========================================
 
-        // Create MultiverseApp instance on DOMContentLoaded
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('[Index] Creating MultiverseApp...');
-            window.multiverseApp = new MultiverseApp('canvas-container');
-        });
+        // MultiverseApp instance is created by glass_bubbles.js DOMContentLoaded
+        // (which also attaches RoarbootChat and updateRoarbootStatus)
 
         // Window controls
         document.getElementById('minimize-btn').onclick = () => window.vibemind.minimize();
@@ -1109,7 +1118,9 @@
                         const spaceConfig = {
                             'ideas': { icon: '💭', name: 'Ideas Universe' },
                             'projects': { icon: '🧬', name: 'Project Space' },
-                            'desktop': { icon: '🌟', name: 'Desktop Automation' }
+                            'desktop': { icon: '🌟', name: 'Desktop Automation' },
+                            'swedesign': { icon: '\u{1F3ED}', name: 'SWE Design' },
+                            'roarboot': { icon: '\u{1F6A3}', name: 'Rowboat' }
                         };
                         const cfg = spaceConfig[message.space] || { icon: '❓', name: message.space };
                         if (spaceIcon) spaceIcon.textContent = cfg.icon;
@@ -1460,6 +1471,43 @@
 
                         showTranscript('System', `${iconP13} ${stageNameP13} shuttle: ${message.bubble_name} (${infoP13})`);
                     }
+                    break;
+
+                // Roarboot status (tab dot only — BrowserView handles its own UI)
+                case 'roarboot_status':
+                    if (window.multiverseApp && window.multiverseApp.updateRoarbootStatus) {
+                        window.multiverseApp.updateRoarbootStatus(message.status);
+                    }
+                    break;
+
+                // Rowboat BrowserView load status (from rowboat-manager.js)
+                case 'rowboat_view_status':
+                    if (window.multiverseApp && window.multiverseApp.updateRoarbootStatus) {
+                        window.multiverseApp.updateRoarbootStatus(message.status);
+                    }
+                    break;
+
+                case 'roarboot_open_webview':
+                    if (window.multiverseApp) {
+                        window.multiverseApp.navigateToSpace('roarboot');
+                    }
+                    break;
+
+                // Rowboat update available (from Python update_checker)
+                case 'rowboat_update_available':
+                    console.log(`[UI] Rowboat update available: ${message.current_version} → ${message.latest_version}`);
+                    // Show update badge on Roarboot tab
+                    {
+                        const rTab = document.getElementById('tab-roarboot');
+                        if (rTab) {
+                            const nameSpan = rTab.querySelector('.space-name');
+                            if (nameSpan && !nameSpan.textContent.includes('Update')) {
+                                nameSpan.textContent = 'Rowboat \ud83d\udd34 Update';
+                            }
+                        }
+                    }
+                    // Store for BrowserView update banner
+                    window._rowboatUpdateInfo = message;
                     break;
             }
         });
@@ -2245,7 +2293,35 @@
                 }
             };
         }
-        
+
+        const tabSweDesign = document.getElementById('tab-swedesign');
+        if (tabSweDesign) {
+            tabSweDesign.onclick = () => {
+                switchSpace('swedesign');
+                if (window.vibemind?.navigateToSpace) {
+                    try {
+                        window.vibemind.navigateToSpace('swedesign');
+                    } catch(e) {
+                        console.error('[Space] Navigation failed:', e);
+                    }
+                }
+            };
+        }
+
+        const tabRoarboot = document.getElementById('tab-roarboot');
+        if (tabRoarboot) {
+            tabRoarboot.onclick = () => {
+                switchSpace('roarboot');
+                if (window.vibemind?.navigateToSpace) {
+                    try {
+                        window.vibemind.navigateToSpace('roarboot');
+                    } catch(e) {
+                        console.error('[Space] Navigation failed:', e);
+                    }
+                }
+            };
+        }
+
         async function switchSpace(spaceId) {
             if (spaceId === currentSpace) return;
             
@@ -2287,6 +2363,12 @@
             } else if (spaceId === 'desktop') {
                 if (spaceIcon) spaceIcon.textContent = '🌟';
                 if (spaceName) spaceName.textContent = 'Desktop Automation';
+            } else if (spaceId === 'swedesign') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F3ED}';
+                if (spaceName) spaceName.textContent = 'SWE Design';
+            } else if (spaceId === 'roarboot') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F6A3}';
+                if (spaceName) spaceName.textContent = 'Rowboat';
             }
             // Show the indicator when space changes
             if (spaceIndicator) spaceIndicator.classList.remove('hidden');

@@ -23,7 +23,7 @@ def test_exploration_module():
 def test_exploration_tools():
     print("\n=== Test 2: Exploration Tools ===")
     try:
-        from swarm.tools.exploration_tools import (
+        from spaces.ideas.tools.exploration_tools import (
             start_exploration, stop_exploration, get_exploration_status,
             accept_connection, reject_connection, explore_deeper,
             visualize_exploration, respond_to_exploration_question,

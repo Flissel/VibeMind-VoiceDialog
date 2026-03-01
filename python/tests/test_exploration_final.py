@@ -25,7 +25,7 @@ async def test_exploration():
 
     # 3. Start exploration
     print("\n3. Starting exploration...")
-    from swarm.tools.exploration_tools import start_exploration, get_exploration_status, stop_exploration
+    from spaces.ideas.tools.exploration_tools import start_exploration, get_exploration_status, stop_exploration
 
     result = await start_exploration(
         bubble_id=None,  # Use first available

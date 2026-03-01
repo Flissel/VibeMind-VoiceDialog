@@ -155,7 +155,7 @@ async def test_tool_handler():
     print("=" * 60)
     
     try:
-        from tools.desktop_tools import handle_desktop_tool_call, cleanup_desktop_tools
+        from spaces.desktop.tools.desktop_tools import handle_desktop_tool_call, cleanup_desktop_tools
         
         # Test press_key tool
         print("\n1. Testing press_key tool...")

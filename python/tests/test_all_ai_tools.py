@@ -174,56 +174,7 @@ def main():
             results.append((f"import:{tool_name}", False, 0))
 
     # =====================================================================
-    # PART 3: TYPED WRAPPERS (adapted_idea_tools)
-    # =====================================================================
-    print("\n\n" + "#" * 60)
-    print("  PART 3: TYPED WRAPPERS (adapted_idea_tools)")
-    print("#" * 60)
-
-    wrapper_tools = [
-        "count_ideas",
-        "move_idea",
-        "connect_ideas_multi",
-        "link_idea_to_root",
-        "classify_idea",
-        "list_ideas",
-        "create_idea",
-        "find_idea",
-        "update_idea",
-        "delete_idea",
-        "connect_ideas",
-        "disconnect_ideas",
-        "get_current_space",
-        "auto_link_ideas",
-        "format_idea_as_table",
-        "summarize_idea",
-        "generate_white_paper",
-        "expand_ideas",
-        "analyze_and_suggest_links",
-        "explain_idea",
-    ]
-
-    for tool_name in wrapper_tools:
-        print(f"\n  Checking: {tool_name}...", end=" ")
-        try:
-            from swarm.tools import adapted_idea_tools
-            func = getattr(adapted_idea_tools, tool_name, None)
-            if func and callable(func):
-                # Check signature
-                import inspect
-                sig = inspect.signature(func)
-                params = list(sig.parameters.keys())
-                print(f"OK  params={params}  return={sig.return_annotation}")
-                results.append((f"wrapper:{tool_name}", True, 0))
-            else:
-                print(f"NOT FOUND")
-                results.append((f"wrapper:{tool_name}", False, 0))
-        except Exception as e:
-            print(f"FAIL: {e}")
-            results.append((f"wrapper:{tool_name}", False, 0))
-
-    # =====================================================================
-    # PART 4: IDEAS SWARM (import check)
+    # PART 3: IDEAS SWARM (import check)
     # =====================================================================
     print("\n\n" + "#" * 60)
     print("  PART 4: IDEAS SWARM IMPORT")

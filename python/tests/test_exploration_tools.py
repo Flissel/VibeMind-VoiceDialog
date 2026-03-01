@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 def test_exploration_tools():
     """Test that exploration tools are properly defined."""
 
-    from swarm.tools.exploration_tools import get_exploration_tools
+    from spaces.ideas.tools.exploration_tools import get_exploration_tools
 
     tools = get_exploration_tools()
 
@@ -77,7 +77,7 @@ async def test_multiversum_bubble_parsing():
     print("=" * 80)
 
     try:
-        from swarm.tools.exploration_tools import parse_bubble_content_for_paper
+        from spaces.ideas.tools.exploration_tools import parse_bubble_content_for_paper
 
         # Test 1: Parse bubble content with example Multiversum content
         print("\nSTEP 1: Parsing Bubble Content...")
@@ -128,7 +128,7 @@ Multiversum ist ein vielversprechender Ansatz für die Orchestrierung von KI-Age
 
         # Test 2: Generate requirements from sections
         print("\n[STEP 2] Generating Requirements...")
-        from swarm.tools.exploration_tools import generate_requirements_from_sections
+        from spaces.ideas.tools.exploration_tools import generate_requirements_from_sections
 
         req_result = await generate_requirements_from_sections(sections)
         print(f"[INFO] Requirements generation success: {req_result.get('success')}")
@@ -148,7 +148,7 @@ Multiversum ist ein vielversprechender Ansatz für die Orchestrierung von KI-Age
 
         # Test 3: Optimize paper coherence
         print("\n[STEP 3] Optimizing Paper Coherence...")
-        from swarm.tools.exploration_tools import optimize_paper_coherence
+        from spaces.ideas.tools.exploration_tools import optimize_paper_coherence
 
         coherence_result = await optimize_paper_coherence(sections)
         print(f"[INFO] Coherence optimization success: {coherence_result.get('success')}")
@@ -163,7 +163,7 @@ Multiversum ist ein vielversprechender Ansatz für die Orchestrierung von KI-Age
 
         # Test 4: Generate complete research paper
         print("\n[STEP 4] Generating Complete Research Paper...")
-        from swarm.tools.exploration_tools import generate_complete_research_paper
+        from spaces.ideas.tools.exploration_tools import generate_complete_research_paper
 
         paper_result = await generate_complete_research_paper(
             sections,

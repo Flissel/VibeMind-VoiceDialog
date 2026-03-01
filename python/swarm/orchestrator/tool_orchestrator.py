@@ -216,7 +216,7 @@ class ToolOrchestrator:
 
         # === CODING TOOLS ===
         try:
-            from tools.coding_tools import (
+            from spaces.coding.tools.coding_tools import (
                 generate_code, get_generation_status, start_preview,
                 stop_preview, list_generated_projects, cancel_generation
             )
@@ -234,7 +234,7 @@ class ToolOrchestrator:
 
         # === DESKTOP TOOLS (with sync wrappers) ===
         try:
-            from tools.desktop_tools import (
+            from spaces.desktop.tools.desktop_tools import (
                 execute_desktop_task, click_element, type_text,
                 press_key, take_screenshot, scroll_screen
             )

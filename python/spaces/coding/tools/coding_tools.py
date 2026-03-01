@@ -149,6 +149,19 @@ def generate_code(params: Dict[str, Any]) -> str:
             "tech_stack": tech_stack,
         })
 
+        # Publish to Rowboat knowledge graph
+        try:
+            from publishing import get_coding_publisher
+            get_coding_publisher().publish_project(
+                project_name=title,
+                tech_stack=tech_stack,
+                status="generating",
+                progress=0.0,
+                data_dir=project_path,
+            )
+        except Exception:
+            pass
+
         return f"Starting generation of '{title}' with {tech_stack}. Job ID: {job_id}. This may take a few minutes. Ask for status with 'What's the status of {job_id}?'"
 
     except Exception as e:
@@ -205,6 +218,20 @@ def get_generation_status(params: Dict[str, Any]) -> str:
         if live_status.get("error"):
             project.error_message = live_status["error"]
         repo.update(project)
+
+        # Publish to Rowboat on status transitions
+        if project.generation_status in (GenerationStatus.COMPLETED, GenerationStatus.FAILED):
+            try:
+                from publishing import get_coding_publisher
+                get_coding_publisher().publish_project(
+                    project_name=project.name,
+                    tech_stack=project.tech_stack or "",
+                    status=project.generation_status,
+                    progress=project.convergence_progress or 100.0,
+                    data_dir=project.project_path or "",
+                )
+            except Exception:
+                pass
 
     # Build response
     status_messages = {

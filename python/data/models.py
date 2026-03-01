@@ -102,8 +102,10 @@ class Idea:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Idea":
         """Create Idea from database row"""
-        tags = json.loads(data.get("tags", "[]")) if isinstance(data.get("tags"), str) else data.get("tags", [])
-        metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        raw_tags = data.get("tags")
+        tags = json.loads(raw_tags) if isinstance(raw_tags, str) else (raw_tags or [])
+        raw_meta = data.get("metadata")
+        metadata = json.loads(raw_meta) if isinstance(raw_meta, str) else (raw_meta or {})
 
         created_at = data.get("created_at")
         if isinstance(created_at, str):

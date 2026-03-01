@@ -70,7 +70,7 @@ class ShuttleManager {
 
         // Store positions for curve creation
         this.ideasPos = spaces.ideas.position.clone();
-        this.projectsPos = new THREE.Vector3(10, 0, 7); // Projects Space position
+        this.projectsPos = new THREE.Vector3(8, 0, 5.5); // SWE Design Factory position (shuttles land here)
 
         // Default path from Ideas center to Projects (used for checkpoints)
         this.ideasToProjectsCurve = new THREE.QuadraticBezierCurve3(

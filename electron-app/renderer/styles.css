@@ -1662,6 +1662,18 @@ body {
     color: rgba(150, 255, 200, 0.9);
 }
 
+/* SWE Design Factory tab — orange-red accent */
+.space-tab[data-space="swedesign"].active {
+    background: rgba(255, 102, 51, 0.2);
+    border-color: rgba(255, 102, 51, 0.4);
+    color: rgba(255, 180, 130, 1);
+}
+
+.space-tab[data-space="swedesign"]:hover {
+    background: rgba(255, 102, 51, 0.1);
+    color: rgba(255, 180, 130, 0.9);
+}
+
 /* ======================================================================== */
 /* VNC LIVE PREVIEW CONTAINER - Coding Engine Integration */
 /* ======================================================================== */
@@ -1868,6 +1880,9 @@ body {
     height: 100vh;
     background: #000;
 }
+
+/* Roarboot Space is now rendered via BrowserView (rowboat-manager.js).
+   Old iframe/toolbar/overlay CSS removed. */
 
 /* ============================================
    SHUTTLE INFO PANEL
@@ -2956,4 +2971,59 @@ body {
     height: 100%;
     border: none;
     background: #0a0f1a;
+}
+
+/* ===== Vapi Voice Control Dashboard (Fullscreen) ===== */
+#vapi-panel {
+    display: none;
+    flex-direction: column;
+    position: fixed;
+    top: 74px;       /* Below titlebar (32px) + nav bar (42px) */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #0a0f1a;
+    z-index: 8000;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+#vapi-panel.visible {
+    display: flex;
+    opacity: 1;
+}
+
+#vapi-panel.fade-in {
+    opacity: 1;
+}
+
+#vapi-frame {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #0a0f1a;
+}
+
+#vapi-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #67e8f9;
+    font-size: 14px;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#vapi-loading .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(0, 217, 255, 0.2);
+    border-top-color: #00d9ff;
+    border-radius: 50%;
+    animation: vapiSpin 0.8s linear infinite;
+}
+
+@keyframes vapiSpin {
+    to { transform: rotate(360deg); }
 }

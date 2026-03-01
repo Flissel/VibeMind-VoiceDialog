@@ -1284,7 +1284,7 @@ async def conduct_autogen_research(
         Dict mit Requirements, Paper und Quality Report
     """
     try:
-        from swarm.tools.autogen_research import (
+        from spaces.ideas.tools.autogen_research import (
             get_research_system,
             conduct_autogen_research as _conduct_autogen_research,
             start_autogen_host,

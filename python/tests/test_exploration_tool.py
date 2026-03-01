@@ -20,7 +20,7 @@ async def test_start_exploration():
     # Import the tool
     print("\n1. Importing start_exploration...")
     try:
-        from swarm.tools.exploration_tools import start_exploration
+        from spaces.ideas.tools.exploration_tools import start_exploration
         print("   ✓ Imported successfully")
     except ImportError as e:
         print(f"   ✗ Import failed: {e}")
@@ -83,7 +83,7 @@ async def test_start_exploration():
     # Also test get_exploration_status
     print("\n5. Testing get_exploration_status...")
     try:
-        from swarm.tools.exploration_tools import get_exploration_status
+        from spaces.ideas.tools.exploration_tools import get_exploration_status
         status = await get_exploration_status()
         print("   ✓ Status retrieved!")
         if isinstance(status, dict):

@@ -428,21 +428,12 @@ def create_idea(params: Dict[str, Any]) -> str:
         }
     })
 
-    # Trigger PostgreSQL synchronization
+    # Publish updated bubble to Rowboat
     try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_idea_created
-        idea_data = {
-            "id": str(node.id),
-            "bubble_id": bubble_id,
-            "title": node.title,
-            "content": node.content,
-            "type": node.node_type,
-            "position": {"x": node.x, "y": node.y}
-        }
-        asyncio.create_task(on_idea_created(idea_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for idea creation: {e}")
+        from publishing import get_ideas_publisher
+        get_ideas_publisher().publish_bubble(bubble_id=bubble_id)
+    except Exception:
+        pass
 
     logger.info(f"Created note '{title}' in bubble {bubble_id}")
     return f"Added '{title}'"
@@ -705,22 +696,6 @@ def update_idea(params: Dict[str, Any]) -> str:
         }
     })
 
-    # Trigger PostgreSQL synchronization
-    try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_idea_updated
-        idea_data = {
-            "id": str(match.id),
-            "bubble_id": bubble_id,
-            "title": match.title,
-            "content": match.content,
-            "type": match.node_type,
-            "position": {"x": match.x, "y": match.y}
-        }
-        asyncio.create_task(on_idea_updated(idea_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for idea update: {e}")
-
     logger.info(f"Updated idea '{match.title}'")
     return f"Updated '{match.title}'"
 
@@ -893,22 +868,6 @@ def connect_ideas(params: Dict[str, Any]) -> str:
             "label": "related"
         }
     })
-
-    # Trigger PostgreSQL synchronization
-    try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_edge_created
-        edge_data = {
-            "id": str(edge.id),
-            "bubble_id": bubble_id,
-            "source_id": str(node1.id),
-            "target_id": str(node2.id),
-            "type": "related",
-            "weight": 1.0
-        }
-        asyncio.create_task(on_edge_created(edge_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for edge creation: {e}")
 
     logger.info(f"Connected '{node1.title}' to '{node2.title}'")
     return f"'{node1.title}' und '{node2.title}' sind jetzt verbunden."
@@ -1265,6 +1224,14 @@ def delete_idea(params: Dict[str, Any]) -> str:
         "type": "node_deleted",
         "node_id": node_id
     })
+
+    # Publish updated bubble to Rowboat
+    if bubble_id:
+        try:
+            from publishing import get_ideas_publisher
+            get_ideas_publisher().publish_bubble(bubble_id=bubble_id)
+        except Exception:
+            pass
 
     logger.info(f"Deleted idea '{title}'")
     return f"Deleted '{title}'"

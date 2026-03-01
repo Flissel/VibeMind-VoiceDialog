@@ -91,6 +91,24 @@ _ideas_repo: Optional[IdeasRepository] = None
 _canvas_repo: Optional[CanvasRepository] = None
 
 
+def _publish_bubble(bubble_id: str):
+    """Publish bubble metadata to Rowboat (fire-and-forget)."""
+    try:
+        from publishing import get_ideas_publisher
+        get_ideas_publisher().publish_bubble(bubble_id=bubble_id)
+    except Exception:
+        logger.debug("Rowboat publish failed (non-critical)", exc_info=True)
+
+
+def _unpublish_bubble(title: str):
+    """Remove bubble metadata from Rowboat (fire-and-forget)."""
+    try:
+        from publishing import get_ideas_publisher
+        get_ideas_publisher().remove_bubble(title=title)
+    except Exception:
+        logger.debug("Rowboat unpublish failed (non-critical)", exc_info=True)
+
+
 def _get_ideas_repo() -> IdeasRepository:
     """Get or create the ideas repository."""
     global _ideas_repo
@@ -472,23 +490,7 @@ def create_bubble(params: Dict[str, Any]) -> str:
             "agent_id": idea.agent_id
         }
     })
-
-    # Trigger PostgreSQL synchronization
-    try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_bubble_created
-        bubble_data = {
-            "id": str(idea.id),
-            "title": idea.title,
-            "description": idea.description,
-            "color": None,  # Will be set by UI
-            "position": {"x": 0, "y": 0, "z": 0},  # Default position
-            "radius": 0.7,
-            "space_type": "ideas"
-        }
-        asyncio.create_task(on_bubble_created(bubble_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for bubble creation: {e}")
+    _publish_bubble(idea.id)
 
     return f"Created new space '{title}'"
 
@@ -558,19 +560,9 @@ def update_bubble(params: Dict[str, Any]) -> str:
             "old_title": old_title
         }
     })
-
-    # Trigger PostgreSQL synchronization
-    try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_bubble_updated
-        bubble_data = {
-            "id": str(bubble.id),
-            "title": bubble.title,
-            "description": bubble.description,
-        }
-        asyncio.create_task(on_bubble_updated(bubble_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for bubble update: {e}")
+    if new_title and new_title != old_title:
+        _unpublish_bubble(old_title)  # Remove old-named manifest
+    _publish_bubble(bubble.id)
 
     if new_title:
         return f"Space umbenannt von '{old_title}' zu '{new_title}'"
@@ -712,23 +704,7 @@ def score_bubble(params: Dict[str, Any]) -> str:
             "urgency": idea.urgency
         }
     })
-
-    # Trigger PostgreSQL synchronization
-    try:
-        import asyncio
-        from swarm.tools.data_event_handler import on_bubble_updated
-        bubble_data = {
-            "id": str(idea.id),
-            "title": idea.title,
-            "description": idea.description,
-            "color": None,
-            "position": {"x": 0, "y": 0, "z": 0},
-            "radius": 0.7,
-            "space_type": "ideas"
-        }
-        asyncio.create_task(on_bubble_updated(bubble_data))
-    except Exception as e:
-        logger.warning(f"Failed to trigger PostgreSQL sync for bubble scoring: {e}")
+    _publish_bubble(idea.id)
 
     logger.info(f"Scored bubble '{idea.title}': {idea.score:.0f}/100")
 
@@ -794,6 +770,7 @@ def promote_bubble(params: Dict[str, Any]) -> str:
             "project_id": project.id,
             "project_name": project.name
         })
+        _publish_bubble(idea.id)
 
         logger.info(f"Promoted bubble '{idea.title}' to project '{project.name}'")
         return f"'{idea.title}' is now a project! Ready to take action."
@@ -867,6 +844,7 @@ def delete_bubble(params: Dict[str, Any]) -> str:
         "deleted_nodes": deleted_nodes,
         "deleted_edges": deleted_edges
     })
+    _unpublish_bubble(title)
 
     logger.info(f"Cascade deleted bubble '{title}': {deleted_nodes} nodes, {deleted_edges} edges")
     return f"Deleted space '{title}' with {deleted_nodes} notes and {deleted_edges} connections"
@@ -922,6 +900,7 @@ def _delete_multiple_bubbles(bubble_names: list) -> str:
                     "deleted_nodes": stats.get("nodes_deleted", 0),
                     "deleted_edges": stats.get("edges_deleted", 0)
                 })
+                _unpublish_bubble(idea.title)
             else:
                 errors.append(name)
         except Exception as e:
