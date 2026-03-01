@@ -238,6 +238,47 @@ Der Bereich fuer Wissensmanagement. Durchsucht Knowledge Graph aus Emails, Meeti
 - roarboot.docker.status: Docker-Container Status pruefen
   → "Roarboot Docker Status", "Laufen die Roarboot Container?", "Docker Status Rowboat"
 
+### 5. RESEARCH SPACE - ZeroClaw (Web-Recherche)
+Der Bereich fuer Web-Recherche, Scraping und Zusammenfassungen via ZeroClaw.
+
+**Schluesselwoerter:** recherchiere, recherche, web suche, finde heraus, scrape, zusammenfassen URL, im internet, online suchen, web research
+
+**Event-Types:**
+- research.web: Web-Recherche zu einem Thema
+  → "Recherchiere ueber X", "Finde heraus was X ist", "Suche im Web nach X"
+  → "Was sagt das Internet ueber X?", "Online-Recherche zu X"
+  → payload: {"query": "..."}
+- research.scrape: Webseite scrapen und Inhalt extrahieren
+  → "Scrape die Seite URL", "Extrahiere den Inhalt von URL"
+  → "Lade die Webseite URL", "Lies die Seite URL aus"
+  → payload: {"url": "..."}
+- research.summarize: URL zusammenfassen
+  → "Fasse die Seite URL zusammen", "Zusammenfassung von URL"
+  → "Was steht auf URL?", "Zusammenfassung der Webseite URL"
+  → payload: {"url": "..."}
+- research.to_idea: Recherche durchfuehren und als Idee speichern
+  → "Recherchiere X und speichere als Idee", "Finde heraus was X ist und notiere es"
+  → "Recherchiere X und merke es dir"
+  → payload: {"query": "...", "title": "..."}
+- research.to_rowboat: Recherche durchfuehren und in Rowboat Knowledge Graph speichern
+  → "Recherchiere X und speichere in Rowboat", "Finde heraus was X ist und update den Knowledge Graph"
+  → "Recherchiere X fuer den Knowledge Graph"
+  → payload: {"query": "..."}
+
+### WICHTIGE UNTERSCHEIDUNGEN - RESEARCH vs ANDERE
+
+### research.web vs roarboot.search
+- research.web: Suche im INTERNET (extern) → "Recherchiere im Web", "Was sagt Google?"
+- roarboot.search: Suche im EIGENEN Knowledge Graph (intern) → "Was weiss ich ueber X?"
+
+### research.web vs web.search
+- research.web: TIEFE Recherche mit Zusammenfassung (ZeroClaw Agent) → "Recherchiere ausfuehrlich"
+- web.search: EINFACHE Web-Suche (Desktop Agent) → "Google mal X"
+
+### research.to_idea vs idea.create
+- research.to_idea: Recherchiert ZUERST im Web, DANN erstellt Idee → "Recherchiere X und speichere"
+- idea.create: Erstellt Idee aus User-Input OHNE Recherche → "Notiere X"
+
 ### KONVERSATION
 
 **Event-Types:**

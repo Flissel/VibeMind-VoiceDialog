@@ -34,6 +34,7 @@ class EventRouter:
     STREAM_TASKS_IDEAS = "events:tasks:ideas"
     STREAM_TASKS_BUBBLES = "events:tasks:bubbles"
     STREAM_TASKS_ROARBOOT = "events:tasks:roarboot"
+    STREAM_TASKS_ZEROCLAW = "events:tasks:zeroclaw"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -127,6 +128,13 @@ class EventRouter:
         "idea.explore.direction": STREAM_TASKS_IDEAS,
         "idea.explore.respond": STREAM_TASKS_IDEAS,
 
+        # Research tasks -> zeroclaw stream (ZeroClaw Web Research)
+        "research.web": STREAM_TASKS_ZEROCLAW,
+        "research.scrape": STREAM_TASKS_ZEROCLAW,
+        "research.summarize": STREAM_TASKS_ZEROCLAW,
+        "research.to_idea": STREAM_TASKS_ZEROCLAW,
+        "research.to_rowboat": STREAM_TASKS_ZEROCLAW,
+
         # Roarboot tasks -> roarboot stream (Rowboat Knowledge Graph)
         "roarboot.search": STREAM_TASKS_ROARBOOT,
         "roarboot.query": STREAM_TASKS_ROARBOOT,
@@ -209,6 +217,8 @@ class EventRouter:
             return "bubbles"
         elif stream == self.STREAM_TASKS_ROARBOOT:
             return "roarboot"
+        elif stream == self.STREAM_TASKS_ZEROCLAW:
+            return "research"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -224,6 +234,7 @@ class EventRouter:
             cls.STREAM_TASKS_IDEAS,
             cls.STREAM_TASKS_BUBBLES,
             cls.STREAM_TASKS_ROARBOOT,
+            cls.STREAM_TASKS_ZEROCLAW,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]
