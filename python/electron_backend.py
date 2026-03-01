@@ -190,8 +190,21 @@ except ImportError as e:
     create_voice_bridge_v2 = None
     logger.warning(f"VoiceBridgeV2 not available: {e}")
 
+# Try to import OpenAI Realtime voice session
+try:
+    from voice.openai_realtime import OpenAIRealtimeVoiceSession
+    from voice.session_config import create_session_config, SEND_INTENT_TOOL
+    HAS_OPENAI_REALTIME = True
+except ImportError as e:
+    HAS_OPENAI_REALTIME = False
+    OpenAIRealtimeVoiceSession = None
+    logger.warning(f"OpenAI Realtime voice not available: {e}")
+
 # VoiceBridgeV2 is the default (Swarm pipeline). Set USE_VOICE_BRIDGE_V2=false for legacy ClientTools.
 USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "true").lower() == "true"
+
+# Voice provider selection: "openai_realtime" (default) or "elevenlabs" (legacy)
+VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "elevenlabs").lower()
 
 
 # ==============================================================================
@@ -260,6 +273,9 @@ class ElectronBackend:
 
         # VoiceBridgeV2 (new async architecture with NotificationQueue)
         self.voice_bridge = None  # VoiceBridgeV2 instance when USE_VOICE_BRIDGE_V2=true
+
+        # OpenAI Realtime voice session (when VOICE_PROVIDER=openai_realtime)
+        self.openai_realtime_session = None
         
         # Project Preview State (Coding Engine Integration)
         self.active_previews: Dict[str, Dict] = {}  # project_id -> preview_info
@@ -1255,11 +1271,189 @@ class ElectronBackend:
         - Rachel as pure voice interface (only send_intent tool)
         - NotificationQueue for deferred feedback
         - Backend agents for async tool execution
+
+        Voice Provider Selection:
+        - VOICE_PROVIDER=openai_realtime → OpenAI Realtime API (speech-to-speech)
+        - VOICE_PROVIDER=elevenlabs → ElevenLabs Conversational AI (legacy)
+        """
+        # Check if OpenAI Realtime is selected and available
+        if VOICE_PROVIDER == "openai_realtime" and HAS_OPENAI_REALTIME:
+            debug_log("Using OpenAI Realtime voice provider")
+            await self._start_voice_openai_realtime(agent_id)
+            return
+
+        if VOICE_PROVIDER == "openai_realtime" and not HAS_OPENAI_REALTIME:
+            debug_log("WARNING: VOICE_PROVIDER=openai_realtime but module not available. Falling back to ElevenLabs.")
+
+        # ElevenLabs path (legacy)
+        await self._start_voice_elevenlabs_v2(agent_id)
+
+    async def _start_voice_openai_realtime(self, agent_id: str):
+        """
+        Start voice with OpenAI Realtime API.
+
+        Uses speech-to-speech with native function calling.
+        The send_intent tool routes to the same orchestrator as ElevenLabs.
         """
         try:
             import time as _time
             _t_total = _time.time()
-            debug_log("Initializing VoiceBridgeV2...")
+            debug_log("Initializing OpenAI Realtime voice session...")
+
+            # 1. Create VoiceBridge for backend agents (shared with both providers)
+            _t0 = _time.time()
+            self.voice_bridge = await create_voice_bridge_v2(
+                model_client=None,
+                event_manager=None
+            )
+            debug_log(f"VoiceBridgeV2 created ({_time.time() - _t0:.2f}s)")
+
+            # 2. Get Rachel's system prompt
+            from spaces.ideas.agents.rachel_agent import RACHEL_VOICE_PROMPT
+            system_prompt = RACHEL_VOICE_PROMPT
+
+            # 3. Create OpenAI Realtime session
+            _t0 = _time.time()
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                debug_log("ERROR: OPENAI_API_KEY not set for Realtime voice")
+                self.send_message({
+                    "type": "voice_error",
+                    "error": "OPENAI_API_KEY not set. Required for VOICE_PROVIDER=openai_realtime"
+                })
+                return
+
+            self.openai_realtime_session = OpenAIRealtimeVoiceSession(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                on_tool_call=self._handle_realtime_tool_call,
+                on_user_transcript=self._handle_user_transcript,
+                on_agent_transcript=self._handle_agent_response,
+                on_session_end=self._handle_realtime_session_end,
+                on_error=self._handle_realtime_error,
+            )
+            debug_log(f"OpenAI Realtime session created ({_time.time() - _t0:.2f}s)")
+
+            # 4. Connect and start
+            _t0 = _time.time()
+            await self.openai_realtime_session.connect()
+            debug_log(f"WebSocket connected ({_time.time() - _t0:.2f}s)")
+
+            _t0 = _time.time()
+            await self.openai_realtime_session.start()
+            debug_log(f"Audio capture started ({_time.time() - _t0:.2f}s)")
+
+            self.voice_active = True
+            self.send_message({
+                "type": "voice_started",
+                "agent_id": agent_id,
+                "agent_name": "Rachel",
+                "mode": "openai_realtime"
+            })
+
+            debug_log(f"OpenAI Realtime voice started (total: {_time.time() - _t_total:.2f}s)")
+
+        except Exception as e:
+            debug_log(f"OpenAI Realtime start failed: {e}")
+            import traceback
+            debug_log(traceback.format_exc())
+            self.send_message({
+                "type": "voice_error",
+                "error": str(e)
+            })
+
+    def _handle_realtime_tool_call(self, call_id: str, name: str, arguments: Dict) -> str:
+        """
+        Handle tool calls from OpenAI Realtime API.
+
+        Routes send_intent to the orchestrator, same as ElevenLabs bridge tools.
+
+        Args:
+            call_id: Unique call ID from OpenAI
+            name: Tool name (expected: 'send_intent')
+            arguments: Tool arguments dict
+
+        Returns:
+            Result string for voice response
+        """
+        import time as _time
+
+        if name == "send_intent":
+            user_request = arguments.get("user_request", "")
+            debug_log(f"[REALTIME TOOL] send_intent: {user_request}")
+
+            if not user_request:
+                return "Ich habe dich nicht verstanden. Was moechtest du?"
+
+            try:
+                from swarm.orchestrator import get_orchestrator
+                from swarm.orchestrator.system_context_store import get_system_context_store
+
+                orchestrator = get_orchestrator()
+                context_store = get_system_context_store()
+
+                # Process intent (no domain_hint - OpenAI Realtime + IntentClassifier handle routing)
+                result = orchestrator.process_intent_sync(user_request)
+
+                debug_log(
+                    f"send_intent result: {result.event_type} -> "
+                    f"{result.response_hint[:200]}{'...' if len(result.response_hint) > 200 else ''}"
+                )
+
+                # Store in context for Smart Rachel
+                if not result.is_conversational and not result.error:
+                    context_store.store(
+                        event_type=result.event_type,
+                        result=result.response_hint
+                    )
+
+                # Notify Electron
+                if not result.is_conversational:
+                    self.send_message({
+                        "type": "task_queued",
+                        "task_type": "backend_agent",
+                        "domain": "auto"
+                    })
+
+                if result.error:
+                    return f"Es gab ein Problem: {result.error}"
+
+                return result.response_hint
+
+            except Exception as e:
+                debug_log(f"send_intent error: {e}")
+                import traceback
+                traceback.print_exc()
+                return f"Es gab ein Problem bei der Verarbeitung: {str(e)}"
+
+        else:
+            debug_log(f"[REALTIME TOOL] Unknown tool: {name}")
+            return f"Unbekanntes Tool: {name}"
+
+    def _handle_realtime_session_end(self):
+        """Handle OpenAI Realtime session ending."""
+        debug_log("OpenAI Realtime session ended")
+        self.voice_active = False
+        self.send_message({"type": "voice_stopped"})
+
+    def _handle_realtime_error(self, error_msg: str):
+        """Handle OpenAI Realtime errors."""
+        debug_log(f"OpenAI Realtime error: {error_msg}")
+        self.send_message({
+            "type": "voice_error",
+            "error": error_msg
+        })
+
+    async def _start_voice_elevenlabs_v2(self, agent_id: str):
+        """
+        Start voice with ElevenLabs Conversational AI (legacy path).
+
+        Original VoiceBridgeV2 implementation using ElevenLabs for voice I/O.
+        """
+        try:
+            import time as _time
+            _t_total = _time.time()
+            debug_log("Initializing VoiceBridgeV2 (ElevenLabs)...")
 
             # 1. Create VoiceBridge (6-step init: model client, queue, orchestrator, rachel, tts, agents)
             _t0 = _time.time()
@@ -1526,6 +1720,15 @@ class ElectronBackend:
         if self.transfer_handler:
             self.transfer_handler.stop()
             self.transfer_handler = None
+
+        # Stop OpenAI Realtime session if active
+        if self.openai_realtime_session:
+            try:
+                await self.openai_realtime_session.disconnect()
+                debug_log("OpenAI Realtime session disconnected")
+            except Exception as e:
+                debug_log(f"Error disconnecting OpenAI Realtime: {e}")
+            self.openai_realtime_session = None
 
         # Stop VoiceBridgeV2 if active
         if self.voice_bridge:
