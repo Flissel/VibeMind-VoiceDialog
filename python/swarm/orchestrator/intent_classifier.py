@@ -172,11 +172,11 @@ Der Bereich fuer Desktop-Automatisierung. WICHTIG: Nur fuer echte Desktop-Aktion
 - desktop.task: Komplexe Desktop-Aufgabe
   → "Geh auf YouTube und spiele...", "Oeffne Browser und suche..."
 
-### MESSAGING (OpenClaw)
+### MESSAGING (Clawdbot Gateway)
 
-Nachrichten senden via WhatsApp, Telegram, oder Web-Suche.
+Nachrichten senden via WhatsApp, Telegram, Discord etc. und Web-Suche ueber Clawdbot Bridge.
 
-**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web
+**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web, Clawdbot
 
 **Event-Types:**
 - messaging.whatsapp: WhatsApp Nachricht senden
@@ -191,8 +191,8 @@ Nachrichten senden via WhatsApp, Telegram, oder Web-Suche.
 - web.fetch: Webseite abrufen und zusammenfassen
   → "Hol mir den Inhalt von URL", "Was steht auf der Seite X"
   → payload: {"url": "..."}
-- openclaw.status: OpenClaw Gateway Status pruefen
-  → "OpenClaw Status", "Ist OpenClaw verbunden?"
+- openclaw.status: Clawdbot Gateway Status pruefen
+  → "Clawdbot Status", "Ist Clawdbot verbunden?", "Gateway Status"
 - openclaw.notifications: Benachrichtigungen abrufen
   → "Zeig meine Benachrichtigungen", "Was gibt es Neues?"
 
@@ -527,9 +527,9 @@ class IntentClassifier:
                 result["payload"] = {}
                 logger.debug(f"Post-process: -> desktop.screenshot")
 
-        # Rule 6b: OpenClaw/Gateway status -> openclaw.status
+        # Rule 6b: Clawdbot/Gateway status -> openclaw.status
         if intent == "conversation.unknown":
-            openclaw_kw = ["openclaw", "gateway", "clawed"]
+            openclaw_kw = ["openclaw", "clawdbot", "gateway", "clawed"]
             status_kw = ["status", "verbunden", "connected", "zustand"]
             if any(kw in text_lower for kw in openclaw_kw) and any(kw in text_lower for kw in status_kw):
                 result["event_type"] = "openclaw.status"

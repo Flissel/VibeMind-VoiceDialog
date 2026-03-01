@@ -546,7 +546,7 @@ class IntentOrchestrator:
 
         # === CODING TOOLS ===
         try:
-            from tools.coding_tools import (
+            from spaces.coding.tools.coding_tools import (
                 generate_code, get_generation_status, start_preview,
                 stop_preview, list_generated_projects, cancel_generation,
                 exit_project
@@ -566,7 +566,7 @@ class IntentOrchestrator:
 
         # === DESKTOP TOOLS (with sync wrappers) ===
         try:
-            from tools.desktop_tools import (
+            from spaces.desktop.tools.desktop_tools import (
                 execute_desktop_task, click_element, type_text,
                 press_key, take_screenshot, scroll_screen
             )
@@ -714,7 +714,7 @@ class IntentOrchestrator:
 
         # === EXPLORATION TOOLS (AI-Scientist Tree Search) ===
         try:
-            from swarm.tools.exploration_tools import (
+            from spaces.ideas.tools.exploration_tools import (
                 start_exploration,
                 stop_exploration,
                 get_exploration_status,
@@ -902,12 +902,12 @@ class IntentOrchestrator:
 
         # === ROARBOOT TOOLS (Rowboat Knowledge Graph) ===
         try:
-            from spaces.roarboot.tools.roarboot_tools import (
+            from spaces.rowboat.tools.roarboot_tools import (
                 search_knowledge, query_knowledge, draft_email,
                 generate_meeting_brief, generate_deck, process_voice_note,
                 get_status as roarboot_get_status, open_webview, reset_conversation,
             )
-            from spaces.roarboot.tools.docker_tools import (
+            from spaces.rowboat.tools.docker_tools import (
                 start_docker, stop_docker, restart_docker, docker_status,
             )
 

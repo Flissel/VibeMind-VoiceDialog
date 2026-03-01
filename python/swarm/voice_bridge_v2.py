@@ -200,7 +200,7 @@ class VoiceBridgeV2:
 
     async def _setup_rachel(self) -> None:
         """Setup Rachel as the voice interface with NotificationQueue."""
-        from swarm.user_agents.rachel import create_rachel_agent
+        from spaces.ideas.agents.rachel_agent import create_rachel_agent
 
         self.rachel = create_rachel_agent(
             model_client=self.model_client,

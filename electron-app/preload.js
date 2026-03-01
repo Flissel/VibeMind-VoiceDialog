@@ -266,6 +266,20 @@ contextBridge.exposeInMainWorld('vibemind', {
     hideDashboard: () => ipcRenderer.send('hide-dashboard'),
     isDashboardVisible: () => ipcRenderer.invoke('is-dashboard-visible'),
 
+    // ===== ROWBOAT (ROARBOOT SPACE) =====
+
+    // Rowboat BrowserView Control
+    showRowboat: () => ipcRenderer.send('show-rowboat'),
+    hideRowboat: () => ipcRenderer.send('hide-rowboat'),
+    isRowboatVisible: () => ipcRenderer.invoke('is-rowboat-visible'),
+
+    // ===== SWE DESIGN (FACTORY SPACE) =====
+
+    // SWE Design BrowserView Control
+    showSweDesign: () => ipcRenderer.send('show-swedesign'),
+    hideSweDesign: () => ipcRenderer.send('hide-swedesign'),
+    isSweDesignVisible: () => ipcRenderer.invoke('is-swedesign-visible'),
+
     // Docker Management (for Coding Engine containers)
     docker: {
         startEngine: () => ipcRenderer.invoke('docker:start-engine'),

@@ -26,7 +26,7 @@ if env_path.exists():
 else:
     print(f"Warnung: .env Datei nicht gefunden unter: {env_path}")
 
-from swarm.tools.autogen_research import (
+from spaces.ideas.tools.autogen_research import (
     conduct_autogen_research,
     start_autogen_host,
     stop_autogen_host,

@@ -61,7 +61,7 @@ class AutomationUIClient:
             return self._healthy or False
 
         try:
-            resp = self.client.get("/api/health", timeout=3.0)
+            resp = self.client.get("/api/health/health", timeout=3.0)
             self._healthy = resp.status_code == 200
         except Exception:
             self._healthy = False
@@ -185,6 +185,34 @@ class AutomationUIClient:
             "steps": steps,
             "error": "Stream ended without 'done' event",
         }
+
+    # ------------------------------------------------------------------
+    # Clawdbot messaging endpoints
+    # ------------------------------------------------------------------
+
+    def clawdbot_send(self, recipient: str, message: str, platform: str = "whatsapp") -> Dict[str, Any]:
+        """Send a message via Clawdbot messaging bridge."""
+        try:
+            resp = self.client.post("/api/clawdbot/command", json={
+                "command": f"send to {recipient}: {message}",
+                "user_id": "vibemind",
+                "platform": platform,
+            })
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error("clawdbot_send error: %s", e)
+            return {"success": False, "error": str(e)}
+
+    def clawdbot_status(self) -> Dict[str, Any]:
+        """Get Clawdbot messaging bridge status."""
+        try:
+            resp = self.client.get("/api/clawdbot/status")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error("clawdbot_status error: %s", e)
+            return {"success": False, "error": str(e)}
 
     def close(self):
         """Close the underlying HTTP client."""

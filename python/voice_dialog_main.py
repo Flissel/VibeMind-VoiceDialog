@@ -1,6 +1,16 @@
 """
-Voice Dialog Main Entry Point
-Dynamic multi-agent voice conversation with ElevenLabs
+Voice Dialog Main Entry Point (LEGACY / Standalone Mode)
+
+This module uses the legacy ClientTools architecture where ElevenLabs
+agents call tools directly via ClientToolsManager.
+
+For the Electron app, VoiceBridgeV2 (swarm/voice_bridge_v2.py) is the
+default path, using the Swarm pipeline:
+  IntentClassifier → EventRouter → BackendAgent → Tool Execution
+
+This file is still used for:
+  - Standalone voice dialog (python voice_dialog_main.py)
+  - Fallback when USE_VOICE_BRIDGE_V2=false
 
 Supports switching between:
 - Multiverse agent (bubble navigation)
@@ -19,7 +29,6 @@ from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInt
 
 # Import Client Tools Manager and tools
 from tools.client_tools_manager import ClientToolsManager
-from tools.hello_world_tools import write_hello_desktop, write_hello_writer
 from tools.workspace_tools import register_workspace_tools
 from tools.conversation_tools import register_conversation_tools
 from tools.browser_worker import register_browser_tools
@@ -37,7 +46,7 @@ from tools.summary_tools import register_summary_tools
 from tools.supermemory_tools import register_supermemory_tools, set_session_id, get_session_id
 # Try to import coding tools (optional - requires coding engine)
 try:
-    from tools.coding_tools import register_coding_tools
+    from spaces.coding.tools.coding_tools import register_coding_tools
     HAS_CODING_TOOLS = True
 except ImportError:
     HAS_CODING_TOOLS = False
@@ -53,7 +62,7 @@ except ImportError:
 
 # Try to import desktop tools for Adam (requires MoireTracker v2)
 try:
-    from tools.desktop_tools import register_desktop_tools
+    from spaces.desktop.tools.desktop_tools import register_desktop_tools
     HAS_DESKTOP_TOOLS = True
 except ImportError:
     HAS_DESKTOP_TOOLS = False
@@ -123,20 +132,25 @@ def _install_exception_handlers():
 
 
 def setup_tools_manager():
-    """Initialize and register all client tools."""
+    """Initialize and register all client tools.
+
+    NOTE: In VoiceBridgeV2 mode (Electron default), these tools are NOT used.
+    The Swarm pipeline handles tool execution via BackendAgents instead.
+
+    Duplicated by Swarm:
+      register_idea_tools      → IdeasAgent (spaces/ideas/agents/)
+      register_bubble_tools    → BubblesAgent (spaces/ideas/agents/)
+      register_coding_tools    → CodingAgent (spaces/coding/agents/)
+      register_desktop_tools   → DesktopAgent (spaces/desktop/agents/)
+      register_summary_tools   → IdeasAgent
+      register_workspace_tools → various BackendAgents
+
+    Unique to ClientTools (no Swarm equivalent):
+      register_session_tools, register_browser_tools,
+      register_conversation_tools, register_memory_tools,
+      register_supermemory_tools, register_navigation_tools
+    """
     tools_manager = ClientToolsManager()
-
-    # Register hello world tools
-    def hello_desktop_wrapper(params):
-        result = write_hello_desktop()
-        return result
-
-    def hello_writer_wrapper(params):
-        result = write_hello_writer()
-        return result
-
-    tools_manager.register_with_observer("write_hello_desktop", hello_desktop_wrapper)
-    tools_manager.register_with_observer("write_hello_writer", hello_writer_wrapper)
 
     # Register all tool sets
     register_workspace_tools(tools_manager)

@@ -536,7 +536,7 @@ class IdeasBroadcastAgent(BaseBroadcastAgent):
 
         # --- Exploration tools ---
         try:
-            from swarm.tools.exploration_tools import (
+            from spaces.ideas.tools.exploration_tools import (
                 start_exploration,
                 stop_exploration,
                 get_exploration_status,

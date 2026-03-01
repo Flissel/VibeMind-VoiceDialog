@@ -132,7 +132,7 @@ def create_ideas_swarm(model_client=None):
     )
 
     # Exploration tools (already typed + async)
-    from swarm.tools.exploration_tools import (
+    from spaces.ideas.tools.exploration_tools import (
         start_exploration,
         stop_exploration,
         get_exploration_status,

@@ -11,7 +11,7 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from swarm.tools.exploration_tools import (
+from spaces.ideas.tools.exploration_tools import (
     start_exploration,
     stop_exploration,
     get_exploration_status,

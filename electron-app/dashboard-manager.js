@@ -16,12 +16,12 @@ class DashboardManager {
 
     // Dashboard source - use built files or dev server
     this.dashboardPath = process.env.DASHBOARD_DEV_URL ||
-      path.join(__dirname, '..', '..', '..', 'Coding_engine', 'dashboard-app', 'dist-embedded', 'index.html');
+      path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine', 'dashboard-app', 'dist-embedded', 'index.html');
 
     this.isDev = !!process.env.DASHBOARD_DEV_URL;
 
-    // Titlebar height to offset the view
-    this.titlebarHeight = 32;
+    // Titlebar (32px) + Space Nav Bar (42px) to offset the view
+    this.titlebarHeight = 74;
 
     // Listen for window resize
     if (this.mainWindow) {

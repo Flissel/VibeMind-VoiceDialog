@@ -42,7 +42,7 @@ class BubbleContextProvider:
         """
         try:
             # Import here to avoid circular imports
-            from tools.idea_tools import _get_current_bubble_id, _get_bubble_info
+            from spaces.ideas.tools.idea_tools import _get_current_bubble_id, _get_bubble_info
 
             bubble_id = _get_current_bubble_id()
 

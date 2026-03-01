@@ -394,7 +394,7 @@ class IdeasAgent(BaseBackendAgent):
 
         # Load exploration tools (AI-Scientist Tree Search)
         try:
-            from swarm.tools.exploration_tools import (
+            from spaces.ideas.tools.exploration_tools import (
                 start_exploration,
                 stop_exploration,
                 get_exploration_status,

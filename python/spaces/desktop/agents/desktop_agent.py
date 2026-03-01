@@ -22,8 +22,8 @@ class DesktopAgent(BaseBackendAgent):
     """
     Backend agent for Desktop Automation domain.
 
-    Handles 12 tools for controlling the user's desktop,
-    including app launching, UI interaction, and Moire vision.
+    Handles 19 tools: 12 desktop automation (app launching, UI interaction,
+    Moire vision) + 7 messaging/web tools (Clawdbot bridge).
     """
 
     # Event type to tool name mapping
@@ -43,6 +43,14 @@ class DesktopAgent(BaseBackendAgent):
         # Moire vision
         "desktop.moire.scan": "moire_scan",
         "desktop.moire.find": "moire_find_element",
+        # Messaging (Clawdbot bridge)
+        "messaging.whatsapp": "send_whatsapp",
+        "messaging.telegram": "send_telegram",
+        "messaging.send": "send_message",
+        "web.search": "web_search",
+        "web.fetch": "web_fetch",
+        "openclaw.status": "get_clawdbot_status",
+        "openclaw.notifications": "get_notifications",
     }
 
     # Parameter normalization: map classifier output to tool expected params
@@ -63,6 +71,14 @@ class DesktopAgent(BaseBackendAgent):
         "desktop.task.update": {"name": "task_name", "title": "task_name"},
         # moire_find_element expects "element_description"
         "desktop.moire.find": {"description": "element_description", "target": "element_description", "element": "element_description"},
+        # messaging: send_whatsapp/send_telegram expect "recipient" + "message"
+        "messaging.whatsapp": {"name": "recipient", "contact": "recipient", "text": "message", "content": "message"},
+        "messaging.telegram": {"name": "recipient", "contact": "recipient", "text": "message", "content": "message"},
+        "messaging.send": {"name": "recipient", "contact": "recipient", "text": "message", "content": "message"},
+        # web.search expects "query"
+        "web.search": {"text": "query", "search": "query", "term": "query"},
+        # web.fetch expects "url"
+        "web.fetch": {"link": "url", "address": "url", "page": "url"},
     }
 
     @property
@@ -74,7 +90,7 @@ class DesktopAgent(BaseBackendAgent):
         return "DesktopAgent"
 
     def _load_tools(self) -> Dict[str, Callable]:
-        """Load desktop automation tools."""
+        """Load desktop automation and messaging tools."""
         tools = {}
 
         try:
@@ -101,6 +117,26 @@ class DesktopAgent(BaseBackendAgent):
             logger.info(f"{self.name}: Loaded {len(tools)} desktop tools")
         except ImportError as e:
             logger.warning(f"{self.name}: Could not load desktop tools: {e}")
+
+        # Messaging tools (Clawdbot bridge)
+        try:
+            from spaces.desktop.adapted.messaging_tools import (
+                send_whatsapp, send_telegram, send_message,
+                web_search, web_fetch,
+                get_clawdbot_status, get_notifications,
+            )
+            tools.update({
+                "send_whatsapp": send_whatsapp,
+                "send_telegram": send_telegram,
+                "send_message": send_message,
+                "web_search": web_search,
+                "web_fetch": web_fetch,
+                "get_clawdbot_status": get_clawdbot_status,
+                "get_notifications": get_notifications,
+            })
+            logger.info(f"{self.name}: Loaded 7 messaging tools (Clawdbot)")
+        except ImportError as e:
+            logger.warning(f"{self.name}: Could not load messaging tools: {e}")
 
         return tools
 
