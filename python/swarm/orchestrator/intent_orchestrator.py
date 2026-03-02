@@ -219,6 +219,7 @@ class IntentOrchestrator:
         "conversation.greeting",
         "conversation.help",
         "conversation.unknown",
+        "direct_answer",
     }
 
     # Phase 17: Evaluation feedback events (handled specially)
@@ -636,6 +637,7 @@ class IntentOrchestrator:
             self._tool_executors.update({
                 "desktop.task": desktop_task_sync,
                 "desktop.open_app": desktop_task_sync,  # Alias - open_app uses task
+                "system.open_app": desktop_task_sync,   # Classifier sometimes emits system.open_app
                 "desktop.click": click_element_sync,
                 "desktop.type": type_text_sync,
                 "desktop.press_key": press_key_sync,
@@ -958,6 +960,37 @@ class IntentOrchestrator:
                 logger.info("Loaded research tools for sync fallback (5 tools)")
             except ImportError as e:
                 logger.warning(f"Could not load research tools: {e}")
+
+        # === MINIBOOK TOOLS (Inter-Space Collaboration) ===
+        if os.getenv("MINIBOOK_ENABLED", "false").lower() == "true":
+            try:
+                from spaces.minibook.tools.minibook_tools import (
+                    get_minibook_status,
+                    start_discussion,
+                    get_discussion_results,
+                    list_projects,
+                )
+                from spaces.minibook.tools.collaboration_tools import (
+                    start_collaboration,
+                    poll_responses,
+                )
+
+                def _fmt_minibook(result):
+                    if isinstance(result, dict):
+                        return result.get("response_hint", result.get("message", "Minibook-Aktion abgeschlossen."))
+                    return str(result)
+
+                self._tool_executors.update({
+                    "minibook.status": lambda p: _fmt_minibook(get_minibook_status()),
+                    "minibook.discuss": lambda p: _fmt_minibook(start_discussion(p.get("message", ""), p.get("topic", ""))),
+                    "minibook.results": lambda p: _fmt_minibook(get_discussion_results(p.get("discussion_id", ""))),
+                    "minibook.list_projects": lambda p: _fmt_minibook(list_projects()),
+                    "minibook.collaborate": lambda p: _fmt_minibook(start_collaboration(p.get("task", ""), p.get("goal", ""))),
+                    "minibook.poll": lambda p: _fmt_minibook(poll_responses()),
+                })
+                logger.info("Loaded minibook tools for sync fallback (6 tools)")
+            except ImportError as e:
+                logger.warning(f"Could not load minibook tools: {e}")
 
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 

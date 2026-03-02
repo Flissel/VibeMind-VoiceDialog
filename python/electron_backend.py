@@ -21,6 +21,14 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Callable, Any
 import logging
 
+# Fix Windows console encoding for German umlauts in debug output
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # Load .env file FIRST before any other imports that might need env vars
 try:
     from dotenv import load_dotenv
@@ -263,6 +271,9 @@ class ElectronBackend:
         self.current_bubble_id: Optional[int] = None  # Currently "inside" a bubble
         self.voice_dialog: Optional[VoiceDialog] = None
         self.voice_active = False
+        self._voice_stopping = False
+        self._start_cancelled = False
+        self._voice_start_task: Optional[asyncio.Task] = None  # Track running start_voice task
 
         # Full voice tools support (for Electron IPC integration)
         self.voice_conversation = None  # ElevenLabs Conversation object
@@ -1099,7 +1110,19 @@ class ElectronBackend:
         debug_log("start_voice() called")
         debug_log(f"HAS_VOICE_TOOLS: {HAS_VOICE_TOOLS}")
         debug_log(f"HAS_VOICE: {HAS_VOICE}")
-        
+
+        # Cancel any still-running start_voice task to prevent concurrent connect() calls
+        old_task = self._voice_start_task
+        if old_task and not old_task.done():
+            debug_log("Cancelling previous start_voice task before new start")
+            self._start_cancelled = True
+            old_task.cancel()
+            try:
+                await old_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._start_cancelled = False
+
         # Get agent ID from environment
         agent_id = os.getenv("AGENT_MULTIVERSE") or os.getenv("ELEVENLABS_AGENT_ID")
         if not agent_id:
@@ -1294,26 +1317,30 @@ class ElectronBackend:
 
         Uses speech-to-speech with native function calling.
         The send_intent tool routes to the same orchestrator as ElevenLabs.
+
+        Startup order (optimized for fastest voice output):
+        1. WebSocket connection (DNS needs free executor)
+        2. Audio start + greeting (Rachel speaks immediately)
+        3. VoiceBridge creation (Redis/backend - can be slow, runs in background)
         """
+        session = None  # Track for cleanup on CancelledError
         try:
             import time as _time
             _t_total = _time.time()
             debug_log("Initializing OpenAI Realtime voice session...")
 
-            # 1. Create VoiceBridge for backend agents (shared with both providers)
-            _t0 = _time.time()
-            self.voice_bridge = await create_voice_bridge_v2(
-                model_client=None,
-                event_manager=None
-            )
-            debug_log(f"VoiceBridgeV2 created ({_time.time() - _t0:.2f}s)")
+            # Reset cancellation flag for this start attempt
+            self._start_cancelled = False
 
-            # 2. Get Rachel's system prompt
-            from spaces.ideas.agents.rachel_agent import RACHEL_VOICE_PROMPT
-            system_prompt = RACHEL_VOICE_PROMPT
+            # 0. Clean up any previous session first (stop Redis threads, free executor)
+            if self.voice_bridge or self.openai_realtime_session:
+                debug_log("Stopping previous session before restart...")
+                await self.stop_voice()
+                await asyncio.sleep(0.1)
+                debug_log("Previous session cleaned up")
+                self._start_cancelled = False  # Reset after cleanup
 
-            # 3. Create OpenAI Realtime session
-            _t0 = _time.time()
+            # 1. Check API key first
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 debug_log("ERROR: OPENAI_API_KEY not set for Realtime voice")
@@ -1323,7 +1350,14 @@ class ElectronBackend:
                 })
                 return
 
-            self.openai_realtime_session = OpenAIRealtimeVoiceSession(
+            # 2. Get Rachel's system prompt
+            from spaces.ideas.agents.rachel_agent import RACHEL_VOICE_PROMPT
+            system_prompt = RACHEL_VOICE_PROMPT
+
+            # 3. Create OpenAI Realtime session (lightweight, no network yet)
+            #    Use local var to avoid race with concurrent stop_voice()
+            _t0 = _time.time()
+            session = OpenAIRealtimeVoiceSession(
                 api_key=api_key,
                 system_prompt=system_prompt,
                 on_tool_call=self._handle_realtime_tool_call,
@@ -1334,14 +1368,32 @@ class ElectronBackend:
             )
             debug_log(f"OpenAI Realtime session created ({_time.time() - _t0:.2f}s)")
 
-            # 4. Connect and start
+            # 4. Connect WebSocket FIRST — before anything that touches Redis!
+            #    VoiceBridgeV2 starts Redis connections that can exhaust the
+            #    default ThreadPoolExecutor, blocking DNS resolution.
             _t0 = _time.time()
-            await self.openai_realtime_session.connect()
+            await session.connect()
             debug_log(f"WebSocket connected ({_time.time() - _t0:.2f}s)")
 
+            # Check if stop_voice was called during our connect() wait
+            if self._start_cancelled:
+                debug_log("Voice start cancelled during connect — aborting")
+                await session.disconnect()
+                return
+
+            # 5. Start audio + greeting IMMEDIATELY after WebSocket connects.
+            #    Rachel speaks right away while VoiceBridge initializes.
+            self.openai_realtime_session = session
             _t0 = _time.time()
-            await self.openai_realtime_session.start()
-            debug_log(f"Audio capture started ({_time.time() - _t0:.2f}s)")
+            await session.start()
+            debug_log(f"Audio capture + greeting started ({_time.time() - _t0:.2f}s)")
+
+            # Check again after start()
+            if self._start_cancelled:
+                debug_log("Voice start cancelled during audio init — aborting")
+                await session.disconnect()
+                self.openai_realtime_session = None
+                return
 
             self.voice_active = True
             self.send_message({
@@ -1351,8 +1403,29 @@ class ElectronBackend:
                 "mode": "openai_realtime"
             })
 
-            debug_log(f"OpenAI Realtime voice started (total: {_time.time() - _t_total:.2f}s)")
+            debug_log(f"Voice ACTIVE — Rachel speaking ({_time.time() - _t_total:.2f}s)")
 
+            # 6. Create VoiceBridge in background (needed for tool calls).
+            #    This can be slow (Redis connections, backend agents) but
+            #    audio is already flowing so the user hears Rachel immediately.
+            bg_task = asyncio.create_task(self._init_voice_bridge_background())
+            bg_task.add_done_callback(self._log_task_exception)
+
+            # 7. Initialize Minibook (inter-space collaboration) if enabled.
+            #    Registers space agents and starts polling workers.
+            if os.getenv("MINIBOOK_ENABLED", "false").lower() == "true":
+                mb_task = asyncio.create_task(self._init_minibook_background())
+                mb_task.add_done_callback(self._log_task_exception)
+
+        except asyncio.CancelledError:
+            debug_log("OpenAI Realtime start CANCELLED (task killed by stop/restart)")
+            # Clean up the local session if it was connected
+            if session:
+                try:
+                    await session.disconnect()
+                except Exception:
+                    pass
+            raise  # Re-raise so the task shows as cancelled
         except Exception as e:
             debug_log(f"OpenAI Realtime start failed: {e}")
             import traceback
@@ -1361,6 +1434,89 @@ class ElectronBackend:
                 "type": "voice_error",
                 "error": str(e)
             })
+
+    async def _init_voice_bridge_background(self):
+        """Initialize VoiceBridgeV2 in the background (non-blocking for audio)."""
+        import time as _time
+        try:
+            _t0 = _time.time()
+            debug_log("Background: Initializing VoiceBridgeV2...")
+            bridge = await asyncio.wait_for(
+                create_voice_bridge_v2(model_client=None, event_manager=None),
+                timeout=30.0
+            )
+            # Check if voice was stopped during init
+            if self.voice_active:
+                self.voice_bridge = bridge
+                debug_log(f"Background: VoiceBridgeV2 ready ({_time.time() - _t0:.2f}s)")
+            else:
+                debug_log("Background: Voice stopped during VoiceBridge init — discarding")
+                try:
+                    await bridge.shutdown()
+                except Exception:
+                    pass
+        except asyncio.TimeoutError:
+            debug_log("Background: VoiceBridgeV2 TIMEOUT (30s) — tool calls will use direct orchestrator")
+        except Exception as e:
+            debug_log(f"Background: VoiceBridgeV2 failed: {e} — tool calls will use direct orchestrator")
+
+    async def _init_minibook_background(self):
+        """Initialize Minibook inter-space collaboration in the background."""
+        import time as _time
+        try:
+            _t0 = _time.time()
+            debug_log("Background: Initializing Minibook...")
+
+            from spaces.minibook.tools.minibook_client import get_minibook_client
+            from spaces.minibook.tools.collaboration_tools import register_all_space_agents
+            from spaces.minibook.workers.minibook_workers import (
+                get_discussion_poller,
+                create_space_responders,
+            )
+
+            client = get_minibook_client()
+
+            # Check if Minibook is reachable
+            status = client.get_status()
+            if not status.get("success"):
+                debug_log(f"Background: Minibook not reachable ({status.get('error', '?')}) — skipping")
+                return
+
+            # Create collaboration project and register all space agents
+            project_id = register_all_space_agents(client)
+            debug_log(f"Background: Minibook agents registered, project={project_id}")
+
+            # Start DiscussionPollerWorker (delivers async results via voice)
+            def _get_session():
+                return self.openai_realtime_session
+
+            poller = get_discussion_poller(
+                realtime_session_getter=_get_session,
+            )
+            poller_task = asyncio.create_task(poller.poll_loop())
+            poller_task.add_done_callback(self._log_task_exception)
+
+            # Start SpaceMinibookResponders (one per space)
+            responders = create_space_responders()
+            for space_key, responder in responders.items():
+                resp_task = asyncio.create_task(responder.poll_and_respond())
+                resp_task.add_done_callback(self._log_task_exception)
+
+            debug_log(
+                f"Background: Minibook ready — {len(responders)} space responders "
+                f"({_time.time() - _t0:.2f}s)"
+            )
+
+        except Exception as e:
+            debug_log(f"Background: Minibook init failed: {e} — collaboration disabled")
+
+    def _log_task_exception(self, task: asyncio.Task):
+        """Callback to log unhandled exceptions from background tasks."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            debug_log(f"Background task failed: {exc}")
 
     def _handle_realtime_tool_call(self, call_id: str, name: str, arguments: Dict) -> str:
         """
@@ -1431,10 +1587,16 @@ class ElectronBackend:
             return f"Unbekanntes Tool: {name}"
 
     def _handle_realtime_session_end(self):
-        """Handle OpenAI Realtime session ending."""
-        debug_log("OpenAI Realtime session ended")
-        self.voice_active = False
-        self.send_message({"type": "voice_stopped"})
+        """Handle OpenAI Realtime session ending (server-initiated disconnect)."""
+        debug_log("OpenAI Realtime session ended (server-initiated)")
+        try:
+            loop = asyncio.get_event_loop()
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(self.stop_voice())
+            )
+        except Exception as e:
+            debug_log(f"Could not schedule stop_voice: {e}")
+            self.voice_active = False
 
     def _handle_realtime_error(self, error_msg: str):
         """Handle OpenAI Realtime errors."""
@@ -1715,7 +1877,31 @@ class ElectronBackend:
             loop.run_until_complete(self.start_voice_with_agent(agent_id))
 
     async def stop_voice(self):
-        """Stop voice dialog session."""
+        """Stop voice dialog session (with re-entrance guard)."""
+        # Signal any pending start_voice to abort
+        self._start_cancelled = True
+
+        # Cancel running start_voice task (kills connect() mid-flight)
+        start_task = self._voice_start_task
+        if start_task and not start_task.done():
+            debug_log("stop_voice: cancelling running start_voice task")
+            start_task.cancel()
+            try:
+                await start_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        self._voice_start_task = None
+
+        if getattr(self, '_voice_stopping', False):
+            return
+        self._voice_stopping = True
+        try:
+            await self._stop_voice_impl()
+        finally:
+            self._voice_stopping = False
+
+    async def _stop_voice_impl(self):
+        """Internal stop implementation."""
         # Stop transfer handler
         if self.transfer_handler:
             self.transfer_handler.stop()
@@ -1838,7 +2024,8 @@ class ElectronBackend:
             self.exit_bubble()
 
         elif msg_type == "start_voice":
-            asyncio.create_task(self.start_voice())
+            task = asyncio.create_task(self.start_voice())
+            self._voice_start_task = task
 
         elif msg_type == "stop_voice":
             asyncio.create_task(self.stop_voice())
@@ -1847,7 +2034,8 @@ class ElectronBackend:
             if self.voice_active:
                 asyncio.create_task(self.stop_voice())
             else:
-                asyncio.create_task(self.start_voice())
+                task = asyncio.create_task(self.start_voice())
+                self._voice_start_task = task
 
         elif msg_type == "add_canvas_node":
             self.add_canvas_node(

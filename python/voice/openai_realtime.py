@@ -36,8 +36,19 @@ import base64
 import json
 import logging
 import os
+import queue  # Thread-safe queue for audio from sounddevice thread
+import sys
 import time
 from typing import Optional, Callable, Dict, Any
+
+from openai import AsyncOpenAI
+
+# Fix Windows console encoding for German umlauts in stderr debug prints
+if sys.platform == "win32":
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 from voice.audio_manager import AudioManager
 from voice.session_config import (
@@ -129,6 +140,7 @@ class OpenAIRealtimeVoiceSession:
 
         # Connection state
         self._connection = None
+        self._connection_manager = None
         self._is_connected = False
         self._is_running = False
         self._event_task: Optional[asyncio.Task] = None
@@ -141,7 +153,8 @@ class OpenAIRealtimeVoiceSession:
         )
 
         # Audio send queue (mic chunks → WebSocket)
-        self._audio_queue: asyncio.Queue = asyncio.Queue()
+        # Uses thread-safe queue.Queue because sounddevice callback runs in a separate thread
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=100)
 
         # Session timing
         self._session_start_time: float = 0
@@ -154,6 +167,11 @@ class OpenAIRealtimeVoiceSession:
         # Function call accumulation
         self._function_call_args: Dict[str, str] = {}  # call_id → accumulated args
 
+        # Pre-create the AsyncOpenAI client (no network, just object setup).
+        # This avoids a 10s+ delay in connect() on Windows where the
+        # AsyncOpenAI constructor + import is unexpectedly slow.
+        self._client = AsyncOpenAI(api_key=self._api_key)
+
         logger.info(
             f"OpenAIRealtimeVoiceSession initialized: "
             f"model={self._model}, voice={self._voice}"
@@ -165,20 +183,50 @@ class OpenAIRealtimeVoiceSession:
 
         Establishes connection to OpenAI Realtime API and sends
         session.update with voice config, tools, and system prompt.
+        Waits for session.created from server before returning to
+        ensure the connection is fully stable.
         """
         if self._is_connected:
             logger.warning("Already connected")
             return
 
+        _t0 = time.time()
+
+        def _dbg(msg):
+            elapsed = time.time() - _t0
+            print(f"[Python DEBUG] [RealtimeVoice] [{elapsed:.3f}s] {msg}", file=sys.stderr, flush=True)
+
         try:
-            from openai import AsyncOpenAI
+            _dbg(f"Connecting to {self._model}...")
+            self._connection_manager = self._client.realtime.connect(
+                model=self._model,
+                websocket_connection_options={
+                    "open_timeout": 15,
+                    "close_timeout": 5,
+                },
+            )
+            _dbg("Connection manager created, opening WebSocket...")
 
-            client = AsyncOpenAI(api_key=self._api_key)
+            # Open the WebSocket connection with timeout.
+            # No executor swap needed — OpenAI SDK v2 uses websockets library
+            # which handles DNS resolution internally.
+            self._connection = await asyncio.wait_for(
+                self._connection_manager.__aenter__(),
+                timeout=20.0,
+            )
+            _dbg("WebSocket connected!")
 
-            logger.info(f"Connecting to OpenAI Realtime: model={self._model}")
-            self._connection = await client.realtime.connect(
-                model=self._model
-            ).__aenter__()
+            # Wait for session.created from server before configuring.
+            # This confirms the server has accepted our connection.
+            _dbg("Waiting for session.created from server...")
+            first_event = await asyncio.wait_for(
+                self._connection.recv(),
+                timeout=10.0,
+            )
+            if first_event.type == "session.created":
+                _dbg("session.created received — connection stable")
+            else:
+                _dbg(f"First event was {first_event.type} (expected session.created)")
 
             # Configure session
             session_config = create_session_config(
@@ -187,13 +235,36 @@ class OpenAIRealtimeVoiceSession:
                 tools=self._tools,
             )
 
+            _dbg("Sending session.update...")
             await self._connection.session.update(session=session_config)
-            logger.info("Session configured successfully")
+
+            # Wait for session.updated confirmation
+            _dbg("Waiting for session.updated confirmation...")
+            update_event = await asyncio.wait_for(
+                self._connection.recv(),
+                timeout=10.0,
+            )
+            if update_event.type == "session.updated":
+                _dbg("session.updated confirmed — session fully configured!")
+            else:
+                _dbg(f"Got {update_event.type} instead of session.updated (proceeding anyway)")
 
             self._is_connected = True
             self._session_start_time = time.time()
+            _dbg(f"Connection complete ({time.time() - _t0:.2f}s total)")
+
+        except asyncio.TimeoutError:
+            _dbg("TIMEOUT: WebSocket connection or session config timed out!")
+            logger.error("Connection timed out")
+            self._is_connected = False
+            if self._on_error:
+                self._on_error("Connection timed out after 20s")
+            raise ConnectionError("OpenAI Realtime connection timed out")
 
         except Exception as e:
+            _dbg(f"CONNECTION FAILED: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             logger.error(f"Connection failed: {e}")
             self._is_connected = False
             if self._on_error:
@@ -219,15 +290,45 @@ class OpenAIRealtimeVoiceSession:
         # Set up audio callback to queue chunks
         self._audio_manager.set_audio_callback(self._on_mic_audio)
 
-        # Start audio I/O
-        self._audio_manager.start_capture()
-        self._audio_manager.start_playback()
-
-        # Start event processing and audio sending tasks
+        # Start event processing and audio sending tasks IMMEDIATELY.
+        # These can begin processing WebSocket events while audio initializes.
         self._event_task = asyncio.create_task(self._event_loop())
         self._audio_send_task = asyncio.create_task(self._audio_send_loop())
 
-        logger.info("Voice session started - listening for speech")
+        # Start audio I/O in thread executor to avoid blocking the event loop.
+        # PortAudio device initialization on Windows can take 30+ seconds
+        # on first use (enumerating WASAPI/DirectSound devices).
+        # We start it in background and trigger the greeting only after
+        # audio is ready so the user can actually hear Rachel.
+        async def _init_audio_and_greet():
+            try:
+                loop = asyncio.get_event_loop()
+                print("[Python DEBUG] [RealtimeVoice] Starting audio I/O (in executor)...", file=sys.stderr, flush=True)
+                _t0_audio = time.time()
+                await loop.run_in_executor(None, self._audio_manager.start_capture)
+                await loop.run_in_executor(None, self._audio_manager.start_playback)
+                _audio_dur = time.time() - _t0_audio
+                print(f"[Python DEBUG] [RealtimeVoice] Audio I/O started ({_audio_dur:.1f}s)", file=sys.stderr, flush=True)
+
+                # NOW trigger greeting — audio is ready so user will hear it
+                if self._is_running and self._connection:
+                    await self._connection.response.create(
+                        response={
+                            "instructions": (
+                                "Begruesse den User kurz und freundlich. "
+                                "Sag z.B. 'Hey! Ich bin Rachel, deine VibeMind Assistentin. Was kann ich fuer dich tun?'"
+                            ),
+                        }
+                    )
+                    print("[Python DEBUG] [RealtimeVoice] Greeting triggered after audio ready", file=sys.stderr, flush=True)
+            except Exception as e:
+                print(f"[Python DEBUG] [RealtimeVoice] Audio/greeting init error: {e}", file=sys.stderr, flush=True)
+                logger.error(f"Audio init error: {e}")
+
+        self._audio_init_task = asyncio.create_task(_init_audio_and_greet())
+
+        print("[Python DEBUG] [RealtimeVoice] Voice session ACTIVE - audio initializing in background", file=sys.stderr, flush=True)
+        logger.info("Voice session started - audio initializing")
 
     async def disconnect(self) -> None:
         """
@@ -241,33 +342,79 @@ class OpenAIRealtimeVoiceSession:
         # Stop audio
         self._audio_manager.cleanup()
 
-        # Cancel tasks
+        # Cancel event-loop tasks (these cancel instantly)
         for task in [self._event_task, self._audio_send_task]:
             if task and not task.done():
                 task.cancel()
                 try:
                     await task
-                except asyncio.CancelledError:
+                except (asyncio.CancelledError, Exception):
                     pass
 
-        # Close WebSocket
-        if self._connection:
+        # Cancel audio init task separately — it may be stuck in
+        # run_in_executor (PortAudio blocks for 30s+ on Windows and
+        # can't be cancelled from Python). Just cancel and move on.
+        audio_init = getattr(self, '_audio_init_task', None)
+        if audio_init and not audio_init.done():
+            audio_init.cancel()
+            # Don't await — the executor thread will finish on its own.
+            # _is_running=False prevents greeting from being triggered.
+
+        # Close WebSocket via connection manager
+        if hasattr(self, '_connection_manager') and self._connection_manager:
             try:
-                await self._connection.__aexit__(None, None, None)
+                await self._connection_manager.__aexit__(None, None, None)
             except Exception as e:
                 logger.debug(f"WebSocket close: {e}")
+            self._connection_manager = None
             self._connection = None
 
         self._is_connected = False
 
-        if self._on_session_end:
-            self._on_session_end()
+        # NOTE: Do NOT call _on_session_end here. disconnect() is called from
+        # stop_voice() which handles voice_stopped. Calling it here would cause
+        # duplicate voice_stopped messages. _on_session_end is only called from
+        # _handle_unexpected_disconnect for server-initiated disconnects.
 
         logger.info(
             f"Voice session disconnected "
             f"(duration: {time.time() - self._session_start_time:.0f}s, "
             f"reconnects: {self._reconnect_count})"
         )
+
+    async def inject_system_message(self, text: str) -> None:
+        """
+        Inject a context message into the active session and trigger Rachel to speak it.
+
+        Used by DiscussionPollerWorker to deliver async collaboration results
+        without blocking the voice session.
+
+        Args:
+            text: The result text to inject (Rachel will paraphrase it)
+        """
+        if not self._is_connected or not self._connection:
+            logger.warning("Cannot inject system message - not connected")
+            return
+
+        try:
+            await self._connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": text}],
+                }
+            )
+            await self._connection.response.create(
+                response={
+                    "instructions": (
+                        f"Ein Ergebnis ist gerade eingetroffen. "
+                        f"Teile dem User das Ergebnis kurz und freundlich mit: {text[:500]}"
+                    ),
+                }
+            )
+            logger.info(f"Injected system message: {text[:80]}...")
+        except Exception as e:
+            logger.error(f"Error injecting system message: {e}")
 
     async def send_text_response(self, text: str) -> None:
         """
@@ -287,7 +434,7 @@ class OpenAIRealtimeVoiceSession:
             # Create a response with the text as a user message
             await self._connection.response.create(
                 response={
-                    "modalities": ["text", "audio"],
+                    "output_modalities": ["audio"],
                     "instructions": f"Sage dem User folgendes: {text}",
                 }
             )
@@ -300,30 +447,33 @@ class OpenAIRealtimeVoiceSession:
         """
         Callback from AudioManager when a mic chunk is ready.
 
-        Puts the base64-encoded audio into the async queue.
+        Puts the base64-encoded audio into the thread-safe queue.
         This is called from the sounddevice callback thread.
         """
         if self._is_running:
             try:
                 self._audio_queue.put_nowait(base64_audio)
-            except asyncio.QueueFull:
+            except queue.Full:
                 pass  # Drop chunk if queue is full
 
     async def _audio_send_loop(self) -> None:
         """
         Continuously send audio chunks from queue to WebSocket.
 
-        Reads from the async queue and sends input_audio_buffer.append events.
+        Reads from the thread-safe queue and sends input_audio_buffer.append events.
+        Uses polling to bridge between thread-safe queue and async WebSocket.
         """
+        chunks_sent = 0
+        last_log_time = time.time()
+
         while self._is_running:
             try:
-                # Wait for audio chunk with timeout
+                # Poll thread-safe queue (non-blocking to stay async-friendly)
                 try:
-                    base64_audio = await asyncio.wait_for(
-                        self._audio_queue.get(), timeout=0.5
-                    )
-                except asyncio.TimeoutError:
-                    # Check session timeout
+                    base64_audio = self._audio_queue.get_nowait()
+                except queue.Empty:
+                    # No audio available - yield to event loop and check timeout
+                    await asyncio.sleep(0.02)  # 20ms polling interval
                     if self._should_reconnect():
                         await self._handle_session_timeout()
                     continue
@@ -333,10 +483,18 @@ class OpenAIRealtimeVoiceSession:
                     await self._connection.input_audio_buffer.append(
                         audio=base64_audio
                     )
+                    chunks_sent += 1
+
+                    # Log progress every 5 seconds
+                    now = time.time()
+                    if now - last_log_time > 5.0:
+                        print(f"[Python DEBUG] [RealtimeVoice] Audio: {chunks_sent} chunks sent, queue={self._audio_queue.qsize()}", file=sys.stderr, flush=True)
+                        last_log_time = now
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                print(f"[Python DEBUG] [RealtimeVoice] Audio send error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
                 logger.error(f"Audio send error: {e}")
                 await asyncio.sleep(0.1)
 
@@ -351,19 +509,30 @@ class OpenAIRealtimeVoiceSession:
         - VAD events
         - Errors
         """
+        event_count = 0
         try:
+            print("[Python DEBUG] [RealtimeVoice] Event loop started, waiting for events...", file=sys.stderr, flush=True)
             async for event in self._connection:
                 if not self._is_running:
                     break
 
+                event_count += 1
+                # Log first few events and then periodically
+                if event_count <= 3 or event_count % 50 == 0:
+                    print(f"[Python DEBUG] [RealtimeVoice] Event #{event_count}: {event.type}", file=sys.stderr, flush=True)
+
                 try:
                     await self._handle_event(event)
                 except Exception as e:
+                    print(f"[Python DEBUG] [RealtimeVoice] Event handler error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
                     logger.error(f"Event handler error: {e}", exc_info=True)
 
         except asyncio.CancelledError:
             logger.debug("Event loop cancelled")
         except Exception as e:
+            print(f"[Python DEBUG] [RealtimeVoice] Event loop CRASHED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             logger.error(f"Event loop error: {e}")
             if self._is_running:
                 # Unexpected disconnect - try to reconnect
@@ -378,31 +547,36 @@ class OpenAIRealtimeVoiceSession:
         """
         event_type = event.type
 
-        # === Audio Events ===
-        if event_type == "response.audio.delta":
+        # === Audio Events (GA API: response.output_audio.*) ===
+        if event_type in ("response.output_audio.delta", "response.audio.delta"):
             # Received audio chunk - enqueue for playback
             if hasattr(event, "delta") and event.delta:
                 self._audio_manager.enqueue_audio(event.delta)
 
-        # === Transcript Events ===
-        elif event_type == "response.audio_transcript.delta":
+        # === Transcript Events (GA API: response.output_audio_transcript.*) ===
+        elif event_type in ("response.output_audio_transcript.delta", "response.audio_transcript.delta"):
             # Agent speech transcript (incremental)
             if hasattr(event, "delta"):
                 self._current_agent_transcript += event.delta
 
-        elif event_type == "response.audio_transcript.done":
+        elif event_type in ("response.output_audio_transcript.done", "response.audio_transcript.done"):
             # Agent transcript complete
             transcript = self._current_agent_transcript.strip()
             if transcript:
+                print(f"[Python DEBUG] [RealtimeVoice] Rachel: {transcript[:100]}", file=sys.stderr, flush=True)
                 logger.info(f"Agent: {transcript}")
                 if self._on_agent_transcript:
                     self._on_agent_transcript(transcript)
             self._current_agent_transcript = ""
 
-        elif event_type == "conversation.item.input_audio_transcription.completed":
+        elif event_type in (
+            "conversation.item.input_audio_transcription.completed",
+            "conversation.item.input_audio_transcription.delta",
+        ):
             # User speech transcript
             transcript = getattr(event, "transcript", "")
             if transcript:
+                print(f"[Python DEBUG] [RealtimeVoice] User: {transcript[:100]}", file=sys.stderr, flush=True)
                 logger.info(f"User: {transcript}")
                 if self._on_user_transcript:
                     self._on_user_transcript(transcript)
@@ -428,14 +602,14 @@ class OpenAIRealtimeVoiceSession:
 
         # === VAD Events ===
         elif event_type == "input_audio_buffer.speech_started":
-            logger.debug("VAD: Speech started")
+            print("[Python DEBUG] [RealtimeVoice] VAD: Speech STARTED", file=sys.stderr, flush=True)
             # Clear playback to allow interruption
             self._audio_manager.clear_playback_buffer()
             if self._on_vad_speech_started:
                 self._on_vad_speech_started()
 
         elif event_type == "input_audio_buffer.speech_stopped":
-            logger.debug("VAD: Speech stopped")
+            print("[Python DEBUG] [RealtimeVoice] VAD: Speech STOPPED", file=sys.stderr, flush=True)
             if self._on_vad_speech_stopped:
                 self._on_vad_speech_stopped()
 
@@ -458,8 +632,15 @@ class OpenAIRealtimeVoiceSession:
             error_msg = getattr(event, "error", {})
             if isinstance(error_msg, dict):
                 error_text = error_msg.get("message", str(error_msg))
+                error_code = error_msg.get("code", "")
             else:
                 error_text = str(error_msg)
+                error_code = ""
+
+            # Non-critical errors that can be safely ignored
+            if "already_has_active_response" in error_text or error_code == "conversation_already_has_active_response":
+                logger.debug(f"Non-critical: {error_text}")
+                return
 
             logger.error(f"Server error: {error_text}")
             if self._on_error:
@@ -468,6 +649,19 @@ class OpenAIRealtimeVoiceSession:
         # === Rate Limit Events ===
         elif event_type == "rate_limits.updated":
             logger.debug("Rate limits updated")
+
+        # === GA API events (informational, no action needed) ===
+        elif event_type in (
+            "input_audio_buffer.committed",
+            "conversation.item.added",
+            "conversation.item.done",
+            "response.output_item.added",
+            "response.output_item.done",
+            "response.content_part.added",
+            "response.content_part.done",
+            "response.output_audio.done",
+        ):
+            logger.debug(f"GA event: {event_type}")
 
         else:
             logger.debug(f"Unhandled event: {event_type}")
@@ -496,9 +690,12 @@ class OpenAIRealtimeVoiceSession:
 
         if self._on_tool_call:
             try:
-                result = self._on_tool_call(call_id, name, arguments)
-                if asyncio.iscoroutine(result):
-                    result = await result
+                # Run tool call in executor to avoid blocking the event loop
+                # during LLM intent classification (can take several seconds)
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None, self._on_tool_call, call_id, name, arguments
+                )
                 result = str(result) if result else "Erledigt."
             except Exception as e:
                 logger.error(f"Tool execution error: {e}")
@@ -516,7 +713,15 @@ class OpenAIRealtimeVoiceSession:
             )
 
             # Trigger a new response from the model
-            await self._connection.response.create()
+            try:
+                await self._connection.response.create()
+            except Exception as resp_err:
+                err_str = str(resp_err)
+                if "already_has_active_response" in err_str:
+                    # Model already generating a response - safe to skip
+                    logger.debug("Response already active, skipping create")
+                else:
+                    raise
 
             logger.info(f"Tool result sent: {result[:100]}")
 
@@ -544,10 +749,10 @@ class OpenAIRealtimeVoiceSession:
         # Stop audio briefly
         self._audio_manager.stop_capture()
 
-        # Close old connection
-        if self._connection:
+        # Close old connection via connection manager
+        if hasattr(self, '_connection_manager') and self._connection_manager:
             try:
-                await self._connection.__aexit__(None, None, None)
+                await self._connection_manager.__aexit__(None, None, None)
             except Exception:
                 pass
 
@@ -556,9 +761,10 @@ class OpenAIRealtimeVoiceSession:
             from openai import AsyncOpenAI
 
             client = AsyncOpenAI(api_key=self._api_key)
-            self._connection = await client.realtime.connect(
+            self._connection_manager = client.realtime.connect(
                 model=self._model
-            ).__aenter__()
+            )
+            self._connection = await self._connection_manager.__aenter__()
 
             # Reconfigure session
             session_config = create_session_config(

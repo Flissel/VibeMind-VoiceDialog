@@ -35,6 +35,7 @@ class EventRouter:
     STREAM_TASKS_BUBBLES = "events:tasks:bubbles"
     STREAM_TASKS_ROARBOOT = "events:tasks:roarboot"
     STREAM_TASKS_ZEROCLAW = "events:tasks:zeroclaw"
+    STREAM_TASKS_MINIBOOK = "events:tasks:minibook"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -151,6 +152,14 @@ class EventRouter:
         "roarboot.docker.restart": STREAM_TASKS_ROARBOOT,
         "roarboot.docker.status": STREAM_TASKS_ROARBOOT,
 
+        # Minibook tasks -> minibook stream (Inter-Space Collaboration)
+        "minibook.discuss": STREAM_TASKS_MINIBOOK,
+        "minibook.collaborate": STREAM_TASKS_MINIBOOK,
+        "minibook.status": STREAM_TASKS_MINIBOOK,
+        "minibook.results": STREAM_TASKS_MINIBOOK,
+        "minibook.list_projects": STREAM_TASKS_MINIBOOK,
+        "minibook.poll": STREAM_TASKS_MINIBOOK,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -219,6 +228,8 @@ class EventRouter:
             return "roarboot"
         elif stream == self.STREAM_TASKS_ZEROCLAW:
             return "research"
+        elif stream == self.STREAM_TASKS_MINIBOOK:
+            return "minibook"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -235,6 +246,7 @@ class EventRouter:
             cls.STREAM_TASKS_BUBBLES,
             cls.STREAM_TASKS_ROARBOOT,
             cls.STREAM_TASKS_ZEROCLAW,
+            cls.STREAM_TASKS_MINIBOOK,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]

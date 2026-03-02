@@ -1,0 +1,511 @@
+"""
+Minibook Workers - Background tasks for inter-space collaboration
+
+DiscussionPollerWorker:
+    Polls Minibook for new responses to active collaboration discussions.
+    When all @mentioned spaces have responded, delivers aggregated results
+    via inject_system_message() or NotificationQueue fallback.
+
+SpaceMinibookResponder:
+    Per-space worker that monitors Minibook notifications for @mentions
+    and executes the appropriate tool, posting the result back as a comment.
+"""
+
+import asyncio
+import logging
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Set, Optional, Callable
+
+logger = logging.getLogger(__name__)
+
+
+def _debug_print(msg: str):
+    print(f"[Python DEBUG] [MinibookWorker] {msg}", file=sys.stderr, flush=True)
+
+
+# =============================================================================
+# Active Discussion Tracking
+# =============================================================================
+
+@dataclass
+class ActiveDiscussion:
+    """Tracks a multi-space collaboration discussion."""
+    post_id: str
+    mentioned_agents: Set[str]
+    responded_agents: Set[str] = field(default_factory=set)
+    responses: Dict[str, str] = field(default_factory=dict)  # agent_name → content
+    original_request: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
+# =============================================================================
+# Discussion Poller Worker
+# =============================================================================
+
+class DiscussionPollerWorker:
+    """
+    Polls Minibook for responses to active collaboration discussions.
+
+    When all @mentioned agents have responded (or timeout), delivers
+    aggregated results to the user.
+
+    Delivery methods (in order of preference):
+    1. inject_system_message() → Rachel speaks the result immediately
+    2. NotificationQueue → Rachel picks up result on next user input
+    """
+
+    def __init__(
+        self,
+        realtime_session_getter: Optional[Callable] = None,
+        poll_interval: float = 2.0,
+        timeout: float = 120.0,
+    ):
+        """
+        Args:
+            realtime_session_getter: Callable returning the active OpenAIRealtimeVoiceSession
+            poll_interval: Seconds between polls
+            timeout: Seconds before a discussion times out
+        """
+        self._get_session = realtime_session_getter
+        self._active: Dict[str, ActiveDiscussion] = {}
+        self._running = False
+        self._poll_interval = poll_interval
+        self._timeout = timeout
+
+    @property
+    def active_discussion_count(self) -> int:
+        """Number of active (unresolved) discussions."""
+        return len(self._active)
+
+    def track_discussion(
+        self,
+        post_id: str,
+        mentioned_agents: List[str],
+        original_request: str,
+    ) -> None:
+        """
+        Start tracking a collaboration discussion for completion.
+
+        Args:
+            post_id: Minibook post ID
+            mentioned_agents: List of agent names that were @mentioned
+            original_request: Original user request text
+        """
+        self._active[post_id] = ActiveDiscussion(
+            post_id=post_id,
+            mentioned_agents=set(mentioned_agents),
+            original_request=original_request,
+        )
+        _debug_print(
+            f"Tracking discussion {post_id}: "
+            f"waiting for {mentioned_agents}"
+        )
+
+    async def poll_loop(self) -> None:
+        """
+        Main polling loop. Runs as asyncio.Task.
+
+        Checks each active discussion for new comments from
+        @mentioned agents. When all have responded (or timeout),
+        delivers results.
+        """
+        from spaces.minibook.tools.minibook_client import get_minibook_client
+
+        self._running = True
+        _debug_print("Discussion poller started")
+
+        while self._running:
+            if not self._active:
+                await asyncio.sleep(self._poll_interval)
+                continue
+
+            client = get_minibook_client()
+
+            for post_id, discussion in list(self._active.items()):
+                try:
+                    comments = client.get_comments(post_id)
+
+                    for comment in comments:
+                        agent_name = comment.get("agent_name", "")
+                        if agent_name in discussion.mentioned_agents:
+                            if agent_name not in discussion.responded_agents:
+                                discussion.responded_agents.add(agent_name)
+                                discussion.responses[agent_name] = comment.get("content", "")
+                                _debug_print(
+                                    f"Discussion {post_id}: "
+                                    f"{agent_name} responded "
+                                    f"({len(discussion.responded_agents)}/{len(discussion.mentioned_agents)})"
+                                )
+
+                    # All agents responded
+                    if discussion.responded_agents >= discussion.mentioned_agents:
+                        await self._deliver_results(post_id, discussion)
+                        del self._active[post_id]
+
+                    # Timeout
+                    elif time.time() - discussion.created_at > self._timeout:
+                        _debug_print(f"Discussion {post_id} timed out")
+                        await self._deliver_partial_results(post_id, discussion)
+                        del self._active[post_id]
+
+                except Exception as e:
+                    logger.warning(f"Poll error for discussion {post_id}: {e}")
+
+            await asyncio.sleep(self._poll_interval)
+
+        _debug_print("Discussion poller stopped")
+
+    def stop(self) -> None:
+        """Stop the polling loop."""
+        self._running = False
+
+    async def _deliver_results(
+        self, post_id: str, discussion: ActiveDiscussion
+    ) -> None:
+        """Deliver complete collaboration results to the user."""
+        summary = self._aggregate_responses(discussion)
+        _debug_print(f"Delivering results for {post_id}: {summary[:100]}...")
+        await self._inject_or_queue(summary, discussion)
+
+    async def _deliver_partial_results(
+        self, post_id: str, discussion: ActiveDiscussion
+    ) -> None:
+        """Deliver partial results (timeout, not all agents responded)."""
+        missing = discussion.mentioned_agents - discussion.responded_agents
+        summary = self._aggregate_responses(discussion)
+        summary += f"\n(Timeout: {', '.join(missing)} haben nicht geantwortet)"
+        _debug_print(f"Delivering partial results for {post_id}")
+        await self._inject_or_queue(summary, discussion)
+
+    async def _inject_or_queue(
+        self, text: str, discussion: ActiveDiscussion
+    ) -> None:
+        """
+        Deliver result text via the best available method.
+
+        1. Try inject_system_message() for immediate Rachel speech
+        2. Fall back to NotificationQueue for next-input delivery
+        """
+        # Try direct injection into voice session
+        if self._get_session:
+            session = self._get_session()
+            if session and hasattr(session, "inject_system_message"):
+                try:
+                    await session.inject_system_message(text)
+                    _debug_print("Result injected via voice session")
+                    return
+                except Exception as e:
+                    logger.warning(f"Voice injection failed: {e}")
+
+        # Fallback: NotificationQueue
+        try:
+            from swarm.orchestrator.notification_queue import get_notification_queue
+            queue = get_notification_queue()
+            queue.add_notification(
+                job_id=f"minibook-{discussion.post_id}",
+                event_type="minibook.collaboration_complete",
+                result=text,
+                metadata={"original_request": discussion.original_request},
+            )
+            _debug_print("Result queued in NotificationQueue (fallback)")
+        except Exception as e:
+            logger.error(f"Could not deliver result: {e}")
+
+    def _aggregate_responses(self, discussion: ActiveDiscussion) -> str:
+        """Format all agent responses into a summary string."""
+        parts = []
+        for agent_name, content in discussion.responses.items():
+            # Strip the "vibemind_" prefix for readability
+            short_name = agent_name.replace("vibemind_", "")
+            parts.append(f"{short_name}: {content}")
+
+        if not parts:
+            return "Keine Ergebnisse erhalten."
+
+        return "\n".join(parts)
+
+
+# =============================================================================
+# Space Minibook Responder
+# =============================================================================
+
+class SpaceMinibookResponder:
+    """
+    Per-space worker that monitors @mentions and responds.
+
+    Each VibeMind space gets a responder that:
+    1. Polls Minibook notifications for its agent
+    2. Parses the mention content
+    3. Executes the appropriate space tool
+    4. Posts the result back as a comment
+    """
+
+    def __init__(
+        self,
+        agent_name: str,
+        space_key: str,
+        tool_executor: Optional[Callable] = None,
+        poll_interval: float = 2.0,
+    ):
+        """
+        Args:
+            agent_name: Minibook agent name (e.g., "vibemind_ideas")
+            space_key: VibeMind space key (e.g., "ideas")
+            tool_executor: Callable that executes a task and returns result string
+            poll_interval: Seconds between notification polls
+        """
+        self._agent_name = agent_name
+        self._space_key = space_key
+        self._executor = tool_executor
+        self._running = False
+        self._poll_interval = poll_interval
+
+    async def poll_and_respond(self) -> None:
+        """
+        Main loop: poll for @mentions and respond.
+        Runs as asyncio.Task.
+        """
+        from spaces.minibook.tools.minibook_client import get_minibook_client
+
+        self._running = True
+        _debug_print(f"SpaceResponder started for {self._agent_name}")
+
+        while self._running:
+            try:
+                client = get_minibook_client()
+                notifications = client.get_notifications(self._agent_name)
+
+                for notif in notifications:
+                    notif_type = notif.get("type", "")
+                    if notif_type not in ("mention", "new_comment"):
+                        continue
+
+                    post_id = notif.get("post_id", "")
+                    content = notif.get("content", "")
+                    notif_id = notif.get("id", "")
+
+                    if not post_id or not content:
+                        continue
+
+                    _debug_print(
+                        f"SpaceResponder {self._agent_name}: "
+                        f"mentioned in post {post_id}"
+                    )
+
+                    # Execute the task
+                    result = await self._handle_mention(content)
+
+                    # Post response as comment
+                    try:
+                        client.create_comment(post_id, result, self._agent_name)
+                        _debug_print(
+                            f"SpaceResponder {self._agent_name}: "
+                            f"responded to {post_id}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to post comment: {e}")
+
+                    # Mark notification as read
+                    if notif_id:
+                        try:
+                            client.mark_notification_read(notif_id, self._agent_name)
+                        except Exception:
+                            pass
+
+            except Exception as e:
+                # Connection errors are expected if Minibook is down
+                if "Connection" not in str(type(e).__name__):
+                    logger.warning(f"SpaceResponder {self._agent_name} error: {e}")
+
+            await asyncio.sleep(self._poll_interval)
+
+        _debug_print(f"SpaceResponder stopped for {self._agent_name}")
+
+    def stop(self) -> None:
+        """Stop the responder loop."""
+        self._running = False
+
+    async def _handle_mention(self, content: str) -> str:
+        """
+        Handle an @mention by executing the appropriate tool.
+
+        Uses domain-constrained classification to avoid re-entering the
+        Minibook collaboration loop.
+
+        Args:
+            content: The post/comment content that mentioned this agent
+
+        Returns:
+            Result string to post as a comment
+        """
+        # Strip @agent_name mentions from content for cleaner classification
+        clean_content = content
+        for prefix in ("@vibemind_", "@"):
+            while prefix in clean_content:
+                idx = clean_content.index(prefix)
+                end = clean_content.find(" ", idx)
+                if end == -1:
+                    clean_content = clean_content[:idx].strip()
+                else:
+                    clean_content = (clean_content[:idx] + clean_content[end:]).strip()
+        # Strip Minibook boilerplate
+        clean_content = clean_content.replace("Aufgabe:", "").strip()
+        clean_content = clean_content.replace("bitte bearbeitet euren Teil.", "").strip()
+        clean_content = clean_content.replace("bitte bearbeitet euren teil.", "").strip()
+        # Remove trailing newlines left after stripping
+        clean_content = clean_content.strip()
+        if not clean_content:
+            return "Keine Aufgabe erkannt."
+
+        if self._executor:
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._executor, clean_content)
+                return str(result) if result else "Erledigt."
+            except Exception as e:
+                logger.error(f"SpaceResponder {self._agent_name} execution error: {e}")
+                return f"Fehler: {e}"
+
+        # Fallback: use the IntentOrchestrator with domain_hint to
+        # constrain classification to this space's domain.
+        try:
+            from swarm.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            result = orchestrator.process_intent_sync(
+                clean_content,
+                domain_hint=self._space_key,
+            )
+
+            # Anti-loop guard: if the orchestrator classified back into
+            # minibook.*, do NOT re-enter — return a safe fallback.
+            event_type = getattr(result, "event_type", "") or ""
+            if event_type.startswith("minibook."):
+                _debug_print(
+                    f"Anti-loop: {self._agent_name} got '{event_type}' "
+                    f"— skipping to prevent recursion"
+                )
+                return (
+                    f"[{self._space_key}] Aufgabe empfangen, "
+                    f"aber liegt ausserhalb meiner Domain."
+                )
+
+            return result.response_hint
+        except Exception as e:
+            logger.error(f"SpaceResponder fallback error: {e}")
+            return f"Konnte Anfrage nicht verarbeiten: {e}"
+
+
+# =============================================================================
+# Singleton + Factory
+# =============================================================================
+
+_discussion_poller: Optional[DiscussionPollerWorker] = None
+
+
+def get_discussion_poller(
+    realtime_session_getter: Optional[Callable] = None,
+    poll_interval: float = 2.0,
+    timeout: float = 120.0,
+) -> DiscussionPollerWorker:
+    """Get or create the global DiscussionPollerWorker."""
+    global _discussion_poller
+    if _discussion_poller is None:
+        _discussion_poller = DiscussionPollerWorker(
+            realtime_session_getter=realtime_session_getter,
+            poll_interval=poll_interval,
+            timeout=timeout,
+        )
+    return _discussion_poller
+
+
+def _make_space_executor(space_key: str, domain_prefix: str) -> Callable:
+    """
+    Build a per-space tool executor that routes through the orchestrator
+    constrained to this space's domain.
+
+    The executor:
+    1. Classifies the mention content with domain_hint → stays in-domain
+    2. Anti-loop: if result is minibook.*, returns a safe fallback
+    3. Returns the response_hint string for posting as a Minibook comment
+
+    Args:
+        space_key: VibeMind space key (e.g., "ideas", "coding")
+        domain_prefix: Dot-separated event type prefixes (e.g., "bubble.,idea.")
+
+    Returns:
+        Callable(content: str) → str
+    """
+    def executor(content: str) -> str:
+        try:
+            from swarm.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+
+            # Use domain_hint to constrain the classifier
+            result = orchestrator.process_intent_sync(
+                content,
+                domain_hint=space_key,
+            )
+
+            # Anti-loop guard
+            event_type = getattr(result, "event_type", "") or ""
+            if event_type.startswith("minibook."):
+                _debug_print(
+                    f"Anti-loop: executor for '{space_key}' got "
+                    f"'{event_type}' — blocking recursion"
+                )
+                return (
+                    f"[{space_key}] Aufgabe liegt ausserhalb "
+                    f"meiner Domain ({domain_prefix})."
+                )
+
+            return result.response_hint or "Erledigt."
+
+        except Exception as e:
+            logger.error(f"Space executor '{space_key}' error: {e}")
+            return f"Fehler in {space_key}: {e}"
+
+    return executor
+
+
+def create_space_responders(
+    poll_interval: float = 2.0,
+) -> Dict[str, SpaceMinibookResponder]:
+    """
+    Create SpaceMinibookResponder instances for all registered spaces.
+
+    Each responder gets a per-space tool executor that classifies and
+    executes mentions within the space's domain (anti-loop safe).
+
+    Returns:
+        Dict mapping space_key → SpaceMinibookResponder
+    """
+    from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
+
+    responders = {}
+    for space_key, agent_info in SPACE_AGENT_REGISTRY.items():
+        domain_prefix = agent_info.get("domain_prefix", "")
+        executor = _make_space_executor(space_key, domain_prefix)
+
+        responders[space_key] = SpaceMinibookResponder(
+            agent_name=agent_info["name"],
+            space_key=space_key,
+            tool_executor=executor,
+            poll_interval=poll_interval,
+        )
+        _debug_print(
+            f"Created responder for '{space_key}' "
+            f"(agent={agent_info['name']}, prefix={domain_prefix})"
+        )
+
+    return responders
+
+
+__all__ = [
+    "DiscussionPollerWorker",
+    "SpaceMinibookResponder",
+    "ActiveDiscussion",
+    "get_discussion_poller",
+    "create_space_responders",
+]

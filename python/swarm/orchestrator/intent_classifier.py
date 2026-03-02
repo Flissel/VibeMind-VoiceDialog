@@ -279,6 +279,35 @@ Der Bereich fuer Web-Recherche, Scraping und Zusammenfassungen via ZeroClaw.
 - research.to_idea: Recherchiert ZUERST im Web, DANN erstellt Idee → "Recherchiere X und speichere"
 - idea.create: Erstellt Idee aus User-Input OHNE Recherche → "Notiere X"
 
+### 6. MINIBOOK SPACE (Zusammenarbeit zwischen Spaces)
+Der Bereich fuer Space-uebergreifende Zusammenarbeit via Minibook.
+
+**Schluesselwoerter:** zusammen, zusammenarbeit, koordiniere, besprechen, diskutieren, minibook, mehrere spaces, kombiniere
+
+**Event-Types:**
+- minibook.collaborate: Multi-Space Aufgabe starten (mind. 2 verschiedene Domains involviert)
+  → "Recherchiere X und erstelle daraus eine Idee", "Finde Infos und schreib Code dafuer"
+  → "Recherchiere AI Trends und speichere die Ergebnisse als Bubble"
+  → payload: {"task": "...", "goal": "..."}
+- minibook.discuss: Diskussion in Minibook starten
+  → "Bespreche X in Minibook", "Starte eine Diskussion zu X"
+  → payload: {"message": "...", "topic": "..."}
+- minibook.status: Minibook-Verbindung pruefen
+  → "Minibook Status", "Ist Minibook verbunden?", "Zeig Minibook Info"
+- minibook.results: Ergebnisse einer laufenden Zusammenarbeit abrufen
+  → "Was kam bei der Diskussion raus?", "Ergebnisse der Zusammenarbeit"
+  → "Gibt es Neuigkeiten von Minibook?"
+  → payload: {"discussion_id": "..."} (wenn bekannt, sonst leer)
+- minibook.list_projects: Minibook-Projekte auflisten
+  → "Zeig Minibook Projekte", "Welche Projekte gibt es in Minibook?"
+- minibook.poll: Manuell nach neuen Ergebnissen fragen
+  → "Poll Minibook", "Check Minibook", "Neue Antworten?"
+
+### WICHTIGE UNTERSCHEIDUNG - MINIBOOK vs DIRECT
+- minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
+- Einzelne Actions (research.web, idea.create, etc.): Aufgabe passt in EINEN Space → "Recherchiere X" oder "Erstelle eine Idee"
+Nur wenn der User explizit 2+ verschiedene Domains in EINER Anfrage kombiniert, wird minibook.collaborate verwendet.
+
 ### KONVERSATION
 
 **Event-Types:**

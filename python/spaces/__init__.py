@@ -8,7 +8,7 @@ Verschiedene Spaces im Multiverse:
 - OpenClaw Space - AutoGen Desktop Swarm
 - Transformer Space - Bubble-to-Coding Pipeline
 - Roarboot Space - Rowboat Knowledge Graph
-- Minibook Space - (Placeholder)
+- Minibook Space - Inter-Space Collaboration
 """
 
 from enum import Enum
@@ -149,14 +149,14 @@ SPACES = {
     SpaceType.MINIBOOK: SpaceConfig(
         type=SpaceType.MINIBOOK,
         name="Minibook",
-        description="Minibook Space - (Placeholder)",
+        description="Minibook Space - Inter-Space Collaboration (Multi-Agent Diskussionen)",
         position={"x": 6, "y": -3, "z": -12},
-        agent_slug=None,
+        agent_slug="minibook",
         color=0x00aaff,  # Hellblau
         visualization="nebula",
         metadata={
             "entry_point": False,
-            "placeholder": True,
+            "minibook_url": "http://localhost:3480",
         }
     ),
 }
