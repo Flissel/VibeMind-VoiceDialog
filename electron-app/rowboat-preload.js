@@ -16,7 +16,17 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('ipc', {
   invoke(channel, args) {
-    return ipcRenderer.invoke(channel, args);
+    return ipcRenderer.invoke(channel, args).catch((err) => {
+      // Electron throws "No handler registered" when main process
+      // hasn't called ipcMain.handle() for this channel yet.
+      // Return a structured error so the renderer can handle it
+      // instead of crashing with an opaque Electron internal error.
+      if (err?.message?.includes('No handler registered')) {
+        console.warn(`[Rowboat IPC] No handler for '${channel}' — services may still be loading`);
+        return { __ipcError: true, channel, message: err.message };
+      }
+      throw err;
+    });
   },
   send(channel, args) {
     ipcRenderer.send(channel, args);

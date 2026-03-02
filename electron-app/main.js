@@ -842,8 +842,8 @@ function setupIpcHandlers() {
             return { success: false, error: 'Managers not initialized' };
         }
         const { projectId, outputDir } = data;
-        const vncPort = portAllocator.allocate(projectId);
-        const appPort = portAllocator.allocateAppPort(projectId);
+        const vncPort = await portAllocator.allocate(projectId);
+        const appPort = await portAllocator.allocateAppPort(projectId);
         return await dockerManager.startProjectContainer(projectId, outputDir, vncPort, appPort);
     });
 
@@ -898,14 +898,22 @@ function setupIpcHandlers() {
         if (!dockerManager || !portAllocator) return { success: false, error: 'Managers not initialized' };
         try {
             const engineRoot = process.env.CODING_ENGINE_PATH || path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
+            const projectRoot = path.join(__dirname, '..');
             let localPath = requirementsPath;
             if (requirementsPath.startsWith('/app/projects/')) {
                 const relative = requirementsPath.replace('/app/projects/', '');
                 localPath = path.join(engineRoot, 'Data', 'all_services', relative);
             }
-            const vncPort = portAllocator.allocate(projectId);
-            const appPort = portAllocator.allocateAppPort(projectId);
-            const absOutputDir = outputDir.startsWith('.') ? path.join(engineRoot, outputDir.replace(/^\.\//, '')) : outputDir;
+            // Docker requires absolute paths for volume mounts on Windows
+            if (!path.isAbsolute(localPath)) {
+                localPath = path.resolve(projectRoot, localPath);
+            }
+            const vncPort = await portAllocator.allocate(projectId);
+            const appPort = await portAllocator.allocateAppPort(projectId);
+            let absOutputDir = outputDir.startsWith('.') ? path.join(engineRoot, outputDir.replace(/^\.\//, '')) : outputDir;
+            if (!path.isAbsolute(absOutputDir)) {
+                absOutputDir = path.resolve(projectRoot, absOutputDir);
+            }
             return await dockerManager.startGenerationWithPreview(projectId, localPath, absOutputDir, vncPort, appPort, forceGenerate);
         } catch (error) {
             console.error('[Generation] Error:', error);
@@ -917,10 +925,15 @@ function setupIpcHandlers() {
         if (!dockerManager || !portAllocator) return { success: false, error: 'Managers not initialized' };
         try {
             const engineRoot = process.env.CODING_ENGINE_PATH || path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
-            const absOutputDir = outputDir.startsWith('.') ? path.join(engineRoot, outputDir.replace(/^\.\//, '')) : outputDir;
-            const vncPort = portAllocator.allocate(projectId);
-            const appPort = portAllocator.allocateAppPort(projectId);
-            return await dockerManager.startGenerationWithPreview(projectId, projectPath, absOutputDir, vncPort, appPort, true);
+            const projectRoot = path.join(__dirname, '..');
+            let absProjectPath = path.isAbsolute(projectPath) ? projectPath : path.resolve(projectRoot, projectPath);
+            let absOutputDir = outputDir.startsWith('.') ? path.join(engineRoot, outputDir.replace(/^\.\//, '')) : outputDir;
+            if (!path.isAbsolute(absOutputDir)) {
+                absOutputDir = path.resolve(projectRoot, absOutputDir);
+            }
+            const vncPort = await portAllocator.allocate(projectId);
+            const appPort = await portAllocator.allocateAppPort(projectId);
+            return await dockerManager.startGenerationWithPreview(projectId, absProjectPath, absOutputDir, vncPort, appPort, true);
         } catch (error) {
             console.error('[Orchestrator Generation] Error:', error);
             return { success: false, error: error.message };
@@ -936,43 +949,150 @@ function setupIpcHandlers() {
     ipcMain.handle('engine:start-epic-generation', async (event, projectId, projectPath, outputDir) => {
         if (!dockerManager || !portAllocator) return { success: false, error: 'Managers not initialized' };
         try {
-            const vncPort = portAllocator.allocate(projectId);
-            const appPort = portAllocator.allocateAppPort(projectId);
-            return await dockerManager.startEpicGeneration(projectId, projectPath, outputDir, vncPort, appPort);
+            const engineRoot = process.env.CODING_ENGINE_PATH || path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
+            const absOutputDir = outputDir && outputDir.startsWith('.')
+                ? path.join(engineRoot, outputDir.replace(/^\.\//, ''))
+                : (outputDir || path.join(engineRoot, 'output'));
+            const vncPort = await portAllocator.allocate(projectId);
+            const appPort = await portAllocator.allocateAppPort(projectId);
+            console.log(`[EpicGen] Starting for ${projectId}, VNC:${vncPort}, App:${appPort}`);
+
+            // Start VNC preview container
+            const containerResult = await dockerManager.startProjectContainer(projectId, absOutputDir, absOutputDir, vncPort, appPort);
+            if (!containerResult.success) {
+                portAllocator.release(projectId);
+                return { success: false, error: containerResult.error };
+            }
+
+            // Kick off epic orchestration via API
+            const containerPath = toContainerProjectPath(projectPath);
+            try {
+                const response = await fetch(`${ENGINE_API}/api/v1/dashboard/start-epic-generation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_path: containerPath, output_dir: absOutputDir, vnc_port: vncPort, app_port: appPort })
+                });
+                if (!response.ok) {
+                    console.warn(`[EpicGen] API returned ${response.status}`);
+                } else {
+                    console.log(`[EpicGen] Orchestrator started via API`);
+                }
+            } catch (apiError) {
+                console.warn(`[EpicGen] Could not reach API:`, apiError.message);
+            }
+
+            return { success: true, vncPort, appPort };
         } catch (error) {
-            console.error('[EpicGeneration] Error:', error);
+            console.error('[EpicGen] Error:', error);
             return { success: false, error: error.message };
         }
     });
 
+    // Helper: convert host project path to container-internal path for the Coding Engine API
+    function toContainerProjectPath(hostPath) {
+        const engineRoot = process.env.CODING_ENGINE_PATH || path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
+        const dataDir = path.join(engineRoot, 'Data', 'all_services').replace(/\\/g, '/');
+        const normalized = hostPath.replace(/\\/g, '/');
+        if (normalized.startsWith(dataDir)) {
+            return '/data/projects' + normalized.slice(dataDir.length);
+        }
+        // Already a container path or /data/projects path
+        if (normalized.startsWith('/data/projects')) return normalized;
+        return hostPath;
+    }
+
+    const ENGINE_API = process.env.CODING_ENGINE_API_URL || 'http://localhost:8000';
+
     ipcMain.handle('engine:get-epics', async (event, projectPath) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.getEpics(projectPath);
+        console.log(`[Epic:IPC] get-epics for: ${projectPath}`);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const url = `${ENGINE_API}/api/v1/dashboard/epics?project_path=${encodeURIComponent(containerPath)}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            return await response.json();
+        } catch (error) {
+            console.error('[Epic:IPC] get-epics failed:', error.message);
+            return { project_path: projectPath, total_epics: 0, epics: [] };
+        }
     });
 
     ipcMain.handle('engine:get-epic-tasks', async (event, epicId, projectPath) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.getEpicTasks(epicId, projectPath);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const response = await fetch(
+                `${ENGINE_API}/api/v1/dashboard/epic/${epicId}/tasks?project_path=${encodeURIComponent(containerPath)}`
+            );
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`[Epic:IPC] get-epic-tasks failed for ${epicId}:`, error.message);
+            return { epic_id: epicId, tasks: [], total_tasks: 0 };
+        }
     });
 
     ipcMain.handle('engine:run-epic', async (event, epicId, projectPath) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.runEpic(epicId, projectPath);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const response = await fetch(`${ENGINE_API}/api/v1/dashboard/epic/${epicId}/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: containerPath })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`[Epic:IPC] run-epic failed for ${epicId}:`, error.message);
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('engine:rerun-epic', async (event, epicId, projectPath) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.rerunEpic(epicId, projectPath);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const response = await fetch(`${ENGINE_API}/api/v1/dashboard/epic/${epicId}/rerun`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: containerPath })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`[Epic:IPC] rerun-epic failed for ${epicId}:`, error.message);
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('engine:rerun-task', async (event, epicId, taskId, projectPath, fixInstructions) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.rerunTask(epicId, taskId, projectPath, fixInstructions);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const response = await fetch(`${ENGINE_API}/api/v1/dashboard/epic/${epicId}/task/${taskId}/rerun`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: containerPath, fix_instructions: fixInstructions || null })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`[Epic:IPC] rerun-task failed for ${epicId}/${taskId}:`, error.message);
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('engine:generate-task-lists', async (event, projectPath) => {
-        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
-        return await dockerManager.generateTaskLists(projectPath);
+        try {
+            const containerPath = toContainerProjectPath(projectPath);
+            const response = await fetch(`${ENGINE_API}/api/v1/dashboard/generate-task-lists`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: containerPath })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error('[Epic:IPC] generate-task-lists failed:', error.message);
+            return { success: false, error: error.message };
+        }
     });
 
     // File System
@@ -1350,6 +1470,13 @@ app.whenReady().then(async () => {
     dockerManager = new DockerManager();
     portAllocator = new PortAllocator();
 
+    // Sync port allocations with any Docker containers from previous sessions
+    try {
+        await portAllocator.syncWithDocker();
+    } catch (e) {
+        console.warn('[Main] Docker sync failed (Docker may not be running):', e.message);
+    }
+
     setupIpcHandlers();
     createWindow();
 
@@ -1365,56 +1492,69 @@ app.whenReady().then(async () => {
     // ========================================
     // ROWBOAT @x/core SERVICES INITIALIZATION
     // ========================================
+    // Each phase is independent — a failure in one doesn't block the rest.
+    // The critical path is: initConfigs → setupIpcHandlers.
     if (rowboatServices) {
+        // Call a function only if it exists on the bundle; warn if missing
+        const _rb = (name, ...args) => {
+            if (typeof rowboatServices[name] !== 'function') {
+                console.warn(`[Rowboat] ${name} not exported — rebuild: npm run build:rowboat`);
+                return undefined;
+            }
+            return rowboatServices[name](...args);
+        };
+
+        // Phase 1 — Config dirs (~/.rowboat/) + VibeMind model auto-config
         try {
-            // Create ~/.rowboat/ directories + default config files
-            await rowboatServices.initConfigs();
-            console.log('[Main] Rowboat configs initialized');
-
-            // Auto-configure Rowboat LLM from VibeMind .env if not yet configured
+            await _rb('initConfigs');
             await autoConfigureRowboatModels();
-
-            // Register all 40+ IPC handlers (workspace:*, runs:*, models:*, etc.)
-            rowboatServices.setupIpcHandlers();
-            console.log('[Main] Rowboat IPC handlers registered');
-
-            // Start file/run/service watchers
-            rowboatServices.startWorkspaceWatcher();
-            rowboatServices.startRunsWatcher();
-            rowboatServices.startServicesWatcher();
-            console.log('[Main] Rowboat watchers started');
-
-            // Start background services
-            rowboatServices.initGraphBuilder();
-            console.log('[Main] Rowboat graph builder started');
-
-            // Optional sync services — start in background, fail silently
-            try { rowboatServices.initGmailSync(); } catch (e) { /* Gmail sync optional */ }
-            try { rowboatServices.initCalendarSync(); } catch (e) { /* Calendar sync optional */ }
-            try { rowboatServices.initFirefliesSync(); } catch (e) { /* Fireflies sync optional */ }
-            try { rowboatServices.initGranolaSync(); } catch (e) { /* Granola sync optional */ }
-            try { rowboatServices.initPreBuiltRunner(); } catch (e) { /* Pre-built runner optional */ }
-            try { rowboatServices.initAgentRunner(); } catch (e) { /* Agent scheduler optional */ }
-            console.log('[Main] Rowboat optional sync services initialized');
-
-            // Push-Event Relay: BrowserView is not a BrowserWindow,
-            // so BrowserWindow.getAllWindows() in @x/core won't reach it.
-            // We subscribe to event buses and relay to the BrowserView directly.
-            const { bus, serviceBus } = rowboatServices;
-            if (bus) {
-                bus.subscribe('*', (event) => {
-                    rowboatManager?.relayEvent('runs:events', event);
-                });
-            }
-            if (serviceBus) {
-                serviceBus.subscribe((event) => {
-                    rowboatManager?.relayEvent('services:events', event);
-                });
-            }
-            console.log('[Main] Rowboat push-event relay configured');
+            console.log('[Rowboat] Phase 1/4: configs ready');
         } catch (err) {
-            console.error('[Main] Rowboat services init failed:', err.message);
+            console.error('[Rowboat] Phase 1/4 (configs) failed:', err.message);
         }
+
+        // Phase 2 — IPC handlers (critical: renderer can't function without these)
+        try {
+            _rb('setupIpcHandlers');
+            console.log('[Rowboat] Phase 2/4: IPC handlers registered');
+        } catch (err) {
+            console.error('[Rowboat] Phase 2/4 (IPC handlers) FAILED:', err.message);
+        }
+
+        // Phase 3 — File/run/service watchers
+        try {
+            _rb('startWorkspaceWatcher');
+            _rb('startRunsWatcher');
+            _rb('startServicesWatcher');
+            console.log('[Rowboat] Phase 3/4: watchers started');
+        } catch (err) {
+            console.error('[Rowboat] Phase 3/4 (watchers) failed:', err.message);
+        }
+
+        // Phase 4 — Background services (graph builder + optional syncs)
+        try { _rb('initGraphBuilder'); } catch (err) {
+            console.warn('[Rowboat] Graph builder failed (non-critical):', err.message);
+        }
+        for (const svc of ['initGmailSync', 'initCalendarSync', 'initFirefliesSync',
+                           'initGranolaSync', 'initPreBuiltRunner', 'initAgentRunner']) {
+            try { _rb(svc); } catch { /* optional sync */ }
+        }
+        console.log('[Rowboat] Phase 4/4: background services started');
+
+        // Push-Event Relay: BrowserView is not a BrowserWindow,
+        // so BrowserWindow.getAllWindows() in @x/core won't reach it.
+        const { bus, serviceBus } = rowboatServices;
+        if (bus) {
+            bus.subscribe('*', (event) => {
+                rowboatManager?.relayEvent('runs:events', event);
+            });
+        }
+        if (serviceBus) {
+            serviceBus.subscribe((event) => {
+                rowboatManager?.relayEvent('services:events', event);
+            });
+        }
+        console.log('[Rowboat] Event relay configured');
     }
 
     startPythonBackend();
@@ -1444,21 +1584,31 @@ app.on('window-all-closed', () => {
     }
 });
 
+let dockerCleanupDone = false;
+app.on('before-quit', (event) => {
+    if (dockerManager && !dockerCleanupDone) {
+        event.preventDefault();
+        dockerManager.stopAllContainers()
+            .catch(e => console.warn('[Main] Docker cleanup error:', e.message))
+            .finally(() => {
+                dockerCleanupDone = true;
+                app.quit();
+            });
+        return;
+    }
+});
+
 app.on('will-quit', () => {
     if (pythonProcess) {
         pythonProcess.kill();
     }
 
-    // Stop Rowboat watchers
+    // Stop Rowboat watchers (guard: may never have been started)
     if (rowboatServices) {
-        try {
-            rowboatServices.stopWorkspaceWatcher();
-            rowboatServices.stopRunsWatcher();
-            rowboatServices.stopServicesWatcher();
-            console.log('[Main] Rowboat watchers stopped');
-        } catch (e) {
-            console.warn('[Main] Error stopping Rowboat watchers:', e.message);
+        for (const fn of ['stopWorkspaceWatcher', 'stopRunsWatcher', 'stopServicesWatcher']) {
+            try { if (typeof rowboatServices[fn] === 'function') rowboatServices[fn](); } catch { /* best-effort */ }
         }
+        console.log('[Rowboat] Watchers stopped');
     }
 
     // Destroy Rowboat BrowserView

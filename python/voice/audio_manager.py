@@ -15,6 +15,7 @@ import base64
 import logging
 import threading
 import numpy as np
+import sounddevice as sd
 from typing import Optional, Callable
 from collections import deque
 
@@ -79,8 +80,6 @@ class AudioManager:
             return
 
         try:
-            import sounddevice as sd
-
             self._input_stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=self._channels,
@@ -118,8 +117,6 @@ class AudioManager:
             return
 
         try:
-            import sounddevice as sd
-
             self._output_stream = sd.OutputStream(
                 samplerate=self._sample_rate,
                 channels=self._channels,

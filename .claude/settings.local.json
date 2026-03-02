@@ -127,7 +127,12 @@
       "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\User\\\\Desktop\\\\Voice_dialog_vibemind\\\\VibeMind-VoiceDialog\\\\python''; python test_debug_space.py\")",
       "Bash(cd:*)",
       "Bash(del \"c:\\\\Users\\\\User\\\\Desktop\\\\Voice_dialog_vibemind\\\\VibeMind-VoiceDialog\\\\python\\\\test_fallback.py\")",
-      "Bash(set:*)"
+      "Bash(set:*)",
+      "Bash(C:/Users/User/.pyenv/pyenv-win/shims/python:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git -C \"c:/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog\" submodule status)",
+      "Bash(bash scripts/build-rowboat.sh)",
+      "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")"
     ],
     "deny": [],
     "ask": []
