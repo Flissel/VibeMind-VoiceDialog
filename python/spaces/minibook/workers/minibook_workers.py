@@ -331,14 +331,127 @@ class SpaceMinibookResponder:
         """
         Handle an @mention by executing the appropriate tool.
 
-        Uses domain-constrained classification to avoid re-entering the
-        Minibook collaboration loop.
+        Supports two formats:
+        1. Enriched (v2): JSON payload with event_type, payload, context
+        2. Legacy (v1): Raw text — uses domain-constrained classification
 
         Args:
             content: The post/comment content that mentioned this agent
 
         Returns:
             Result string to post as a comment
+        """
+        # ─── Try enriched payload first (MinibookHub v2 format) ───
+        enriched = self._try_parse_enriched(content)
+        if enriched:
+            return await self._execute_enriched(enriched)
+
+        # ─── Legacy text-based execution (existing behavior) ───
+        return await self._execute_legacy(content)
+
+    def _try_parse_enriched(self, content: str) -> Optional[Dict[str, Any]]:
+        """
+        Try to parse enriched JSON payload from post content.
+
+        MinibookHub posts tasks in this format:
+            ```enriched
+            {"version": "2", "event_type": "...", "tasks": [...]}
+            ```
+            Aufgabe: <user text>
+
+        Returns the enriched dict for this agent, or None if not enriched.
+        """
+        import json
+
+        try:
+            if "```enriched" not in content:
+                return None
+
+            # Extract JSON between ```enriched and ```
+            start = content.index("```enriched") + len("```enriched")
+            end = content.index("```", start)
+            json_str = content[start:end].strip()
+            data = json.loads(json_str)
+
+            if data.get("version") != "2":
+                return None
+
+            # Find this agent's task in the tasks list
+            tasks = data.get("tasks", [])
+            for task in tasks:
+                if task.get("space_key") == self._space_key:
+                    return task
+
+            # If no specific task for this space, use the global event_type
+            return {
+                "event_type": data.get("event_type", ""),
+                "payload": {},
+                "context": {},
+                "space_key": self._space_key,
+                "original_text": data.get("original_text", ""),
+            }
+
+        except (ValueError, json.JSONDecodeError, KeyError):
+            return None
+
+    async def _execute_enriched(self, enriched: Dict[str, Any]) -> str:
+        """
+        Execute an enriched task with pre-classified event_type and payload.
+
+        Bypasses re-classification since the EnrichmentPipeline already
+        determined the event_type and payload.
+
+        Args:
+            enriched: Dict with event_type, payload, context, space_key
+
+        Returns:
+            Result string to post as comment
+        """
+        event_type = enriched.get("event_type", "")
+        payload = enriched.get("payload", {})
+        user_text = payload.get("user_text", "") or enriched.get("original_text", "")
+
+        _debug_print(
+            f"SpaceResponder {self._agent_name}: "
+            f"enriched execution: {event_type}"
+        )
+
+        # Anti-loop guard
+        if event_type.startswith("minibook."):
+            return (
+                f"[{self._space_key}] Aufgabe empfangen, "
+                f"aber liegt ausserhalb meiner Domain."
+            )
+
+        # Execute via domain-constrained orchestrator with the user_text
+        # The orchestrator will re-classify within this space's domain
+        if user_text:
+            return await self._execute_via_orchestrator(user_text)
+
+        # Fallback: if we have event_type but no user_text, try direct executor
+        if self._executor and user_text:
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._executor, user_text)
+                return str(result) if result else "Erledigt."
+            except Exception as e:
+                logger.error(f"SpaceResponder {self._agent_name} enriched exec error: {e}")
+                return f"Fehler: {e}"
+
+        return "Keine ausfuehrbare Aufgabe erkannt."
+
+    async def _execute_legacy(self, content: str) -> str:
+        """
+        Legacy text-based execution (existing behavior, unchanged).
+
+        Strips @mentions and boilerplate, then executes via domain-constrained
+        orchestrator or custom executor.
+
+        Args:
+            content: Raw post content text
+
+        Returns:
+            Result string to post as comment
         """
         # Strip @agent_name mentions from content for cleaner classification
         clean_content = content
@@ -368,13 +481,25 @@ class SpaceMinibookResponder:
                 logger.error(f"SpaceResponder {self._agent_name} execution error: {e}")
                 return f"Fehler: {e}"
 
-        # Fallback: use the IntentOrchestrator with domain_hint to
-        # constrain classification to this space's domain.
+        return await self._execute_via_orchestrator(clean_content)
+
+    async def _execute_via_orchestrator(self, text: str) -> str:
+        """
+        Execute via IntentOrchestrator with domain_hint.
+
+        Used by both enriched and legacy paths.
+
+        Args:
+            text: Text to classify and execute
+
+        Returns:
+            Result string
+        """
         try:
             from swarm.orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
             result = orchestrator.process_intent_sync(
-                clean_content,
+                text,
                 domain_hint=self._space_key,
             )
 

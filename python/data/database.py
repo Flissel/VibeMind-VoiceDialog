@@ -24,7 +24,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 13
+    SCHEMA_VERSION = 14
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -252,6 +252,33 @@ class Database:
     CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_type ON mermaid_diagrams(diagram_type);
     CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_source_idea ON mermaid_diagrams(source_idea_id);
     CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_created ON mermaid_diagrams(created_at DESC);
+
+    -- Scheduled tasks table (APScheduler-based scheduling)
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        action_text TEXT NOT NULL,
+        execution_mode TEXT DEFAULT 'simple',
+        trigger_type TEXT NOT NULL,
+        trigger_config TEXT NOT NULL,
+        timezone TEXT DEFAULT 'Europe/Berlin',
+        status TEXT DEFAULT 'active',
+        next_run_at TIMESTAMP,
+        last_run_at TIMESTAMP,
+        run_count INTEGER DEFAULT 0,
+        max_runs INTEGER,
+        last_result TEXT,
+        last_error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP,
+        metadata TEXT
+    );
+
+    -- Scheduled tasks indexes
+    CREATE INDEX IF NOT EXISTS idx_sched_status ON scheduled_tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_sched_next_run ON scheduled_tasks(next_run_at);
+    CREATE INDEX IF NOT EXISTS idx_sched_created ON scheduled_tasks(created_at DESC);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -558,6 +585,41 @@ class Database:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_type ON mermaid_diagrams(diagram_type)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_source_idea ON mermaid_diagrams(source_idea_id)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_mermaid_diagrams_created ON mermaid_diagrams(created_at DESC)")
+            except Exception:
+                pass  # Indexes may already exist
+
+        # Migration 13 -> 14: Add scheduled_tasks table for APScheduler-based scheduling
+        if from_version < 14:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        action_text TEXT NOT NULL,
+                        execution_mode TEXT DEFAULT 'simple',
+                        trigger_type TEXT NOT NULL,
+                        trigger_config TEXT NOT NULL,
+                        timezone TEXT DEFAULT 'Europe/Berlin',
+                        status TEXT DEFAULT 'active',
+                        next_run_at TIMESTAMP,
+                        last_run_at TIMESTAMP,
+                        run_count INTEGER DEFAULT 0,
+                        max_runs INTEGER,
+                        last_result TEXT,
+                        last_error TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP,
+                        metadata TEXT
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+            # Create indexes
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sched_status ON scheduled_tasks(status)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sched_next_run ON scheduled_tasks(next_run_at)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sched_created ON scheduled_tasks(created_at DESC)")
             except Exception:
                 pass  # Indexes may already exist
 

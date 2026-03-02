@@ -36,6 +36,7 @@ class EventRouter:
     STREAM_TASKS_ROARBOOT = "events:tasks:roarboot"
     STREAM_TASKS_ZEROCLAW = "events:tasks:zeroclaw"
     STREAM_TASKS_MINIBOOK = "events:tasks:minibook"
+    STREAM_TASKS_SCHEDULE = "events:tasks:schedule"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -160,6 +161,14 @@ class EventRouter:
         "minibook.list_projects": STREAM_TASKS_MINIBOOK,
         "minibook.poll": STREAM_TASKS_MINIBOOK,
 
+        # Schedule tasks -> schedule stream (Erinnerungen, Alarme, Zeitplan)
+        "schedule.create": STREAM_TASKS_SCHEDULE,
+        "schedule.list": STREAM_TASKS_SCHEDULE,
+        "schedule.cancel": STREAM_TASKS_SCHEDULE,
+        "schedule.modify": STREAM_TASKS_SCHEDULE,
+        "schedule.status": STREAM_TASKS_SCHEDULE,
+        "schedule.snooze": STREAM_TASKS_SCHEDULE,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -247,6 +256,7 @@ class EventRouter:
             cls.STREAM_TASKS_ROARBOOT,
             cls.STREAM_TASKS_ZEROCLAW,
             cls.STREAM_TASKS_MINIBOOK,
+            cls.STREAM_TASKS_SCHEDULE,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]
