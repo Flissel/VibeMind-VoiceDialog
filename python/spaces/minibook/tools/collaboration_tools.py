@@ -98,6 +98,15 @@ SPACE_AGENT_REGISTRY: Dict[str, Dict[str, str]] = {
             "Zustaendig fuer die Umwandlung von Ideen in ausfuehrbare Specs."
         ),
     },
+    "schedule": {
+        "name": "vibemind_schedule",
+        "domain_prefix": "schedule.",
+        "role": (
+            "Zeitplan und Erinnerungen: Erstellen, auflisten, aendern, abbrechen "
+            "von geplanten Aufgaben, Erinnerungen und wiederkehrenden Tasks. "
+            "Zustaendig fuer alles mit Zeitbezug (in X Minuten, um X Uhr, jeden Montag)."
+        ),
+    },
 }
 
 # Keywords that hint at a specific space being needed
@@ -110,6 +119,7 @@ SPACE_KEYWORDS: Dict[str, List[str]] = {
     "openclaw": ["autogen", "swarm", "browser", "claude cli", "multi-step", "orchestrier"],
     "swe_design": ["spec", "spezifikation", "requirement", "architektur", "design factory"],
     "transformer": ["transform", "umwandel", "pipeline", "shuttle"],
+    "schedule": ["erinner", "erinnerung", "alarm", "timer", "zeitplan", "schedule", "snooze", "taeglich", "wecker"],
 }
 
 

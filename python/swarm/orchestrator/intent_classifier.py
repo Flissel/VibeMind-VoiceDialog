@@ -303,6 +303,46 @@ Der Bereich fuer Space-uebergreifende Zusammenarbeit via Minibook.
 - minibook.poll: Manuell nach neuen Ergebnissen fragen
   → "Poll Minibook", "Check Minibook", "Neue Antworten?"
 
+### 7. SCHEDULE SPACE (Erinnerungen, Alarme, geplante Aufgaben)
+Der Bereich fuer zeitgesteuerte Aufgaben: Erinnerungen, wiederkehrende Aktionen, Alarme.
+
+**Schluesselwoerter:** erinnere, erinnerung, alarm, timer, um X Uhr, in X Minuten, jeden Montag, taeglich, alle X Stunden, zeitplan, schedule, snooze, verschieben, wecker, planen
+
+**Event-Types:**
+- schedule.create: Neue geplante Aufgabe erstellen (Erinnerung, Timer, Wiederkehrend)
+  → "Erinnere mich in 5 Minuten an den Termin"
+  → "Jeden Montag um 9 Uhr Report erstellen"
+  → "Alle 2 Stunden Status pruefen"
+  → "Um 14 Uhr Meeting-Vorbereitung"
+  → "Morgen um 10 Arzt anrufen"
+  → "Taeglich um 8 Nachrichten checken"
+  → payload: {"user_text": "...", "title": "..."} (user_text = voller Satz mit Zeitausdruck)
+- schedule.list: Alle geplanten Aufgaben anzeigen
+  → "Zeig meine Erinnerungen", "Was steht an?", "Meine Termine"
+  → "Zeig meinen Zeitplan", "Welche Aufgaben sind geplant?"
+  → payload: {"status": "active"} (optional)
+- schedule.cancel: Geplante Aufgabe loeschen/absagen
+  → "Loesche den Montag-Report", "Absagen die Erinnerung"
+  → "Stoppe den Timer", "Entferne den Alarm"
+  → payload: {"title": "...", "task_id": "..."} (eins von beiden)
+- schedule.modify: Zeit oder Aktion aendern
+  → "Verschiebe den Report auf 10 Uhr"
+  → "Aendere die Erinnerung auf morgen"
+  → payload: {"title": "...", "new_time": "...", "new_action": "..."}
+- schedule.status: Zusammenfassung des Zeitplans
+  → "Schedule Status", "Wie viele Aufgaben habe ich?"
+- schedule.snooze: Aufgabe um X Minuten verschieben
+  → "Snooze 5 Minuten", "Spaeter nochmal erinnern"
+  → "Verschiebe um 10 Minuten"
+  → payload: {"minutes": 5, "title": "...", "user_text": "..."}
+
+### WICHTIGE UNTERSCHEIDUNG - SCHEDULE vs SOFORT
+- schedule.create: Zeitausdruck vorhanden (in X Minuten, um X Uhr, jeden Tag, etc.)
+  → "Erinnere mich IN 5 MINUTEN an den Termin" → schedule.create
+- Sofortige Aktion: Kein Zeitausdruck, sofort ausfuehren
+  → "Erstelle eine Idee fuer Marketing" → idea.create (NICHT schedule!)
+Nur wenn ein Zeitausdruck erkennbar ist, wird schedule.create verwendet.
+
 ### WICHTIGE UNTERSCHEIDUNG - MINIBOOK vs DIRECT
 - minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
 - Einzelne Actions (research.web, idea.create, etc.): Aufgabe passt in EINEN Space → "Recherchiere X" oder "Erstelle eine Idee"

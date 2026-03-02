@@ -32,6 +32,14 @@ class MinibookConfig:
     # Redis Stream
     redis_stream_minibook: str = "events:tasks:minibook"
 
+    # ── MinibookHub (central execution) ──────────────────────────────
+    hub_enabled: bool = False                      # USE_MINIBOOK_HUB
+    hub_sync_timeout: float = 10.0                 # Seconds for single-space wait
+    hub_async_timeout: float = 120.0               # Seconds for multi-space
+    enrichment_model: str = "openai/gpt-4o-mini"   # LLM for SpaceRouter
+    enrichment_enabled: bool = True                # LLM routing on/off
+    rachel_prompt_enabled: bool = True             # Rachel metadata on/off
+
     @classmethod
     def from_env(cls) -> "MinibookConfig":
         """Load configuration from environment variables."""
@@ -42,6 +50,13 @@ class MinibookConfig:
             auto_register_spaces=os.getenv("MINIBOOK_AUTO_REGISTER", "true").lower() in ("true", "1"),
             poll_interval_seconds=float(os.getenv("MINIBOOK_POLL_INTERVAL", "2.0")),
             collaboration_timeout_seconds=float(os.getenv("MINIBOOK_COLLABORATION_TIMEOUT", "120.0")),
+            # MinibookHub settings
+            hub_enabled=os.getenv("USE_MINIBOOK_HUB", "false").lower() in ("true", "1"),
+            hub_sync_timeout=float(os.getenv("MINIBOOK_HUB_SYNC_TIMEOUT", "10.0")),
+            hub_async_timeout=float(os.getenv("MINIBOOK_HUB_ASYNC_TIMEOUT", "120.0")),
+            enrichment_model=os.getenv("MINIBOOK_ENRICHMENT_MODEL", "openai/gpt-4o-mini"),
+            enrichment_enabled=os.getenv("MINIBOOK_ENRICHMENT_LLM", "true").lower() in ("true", "1"),
+            rachel_prompt_enabled=os.getenv("MINIBOOK_RACHEL_PROMPT", "true").lower() in ("true", "1"),
         )
 
 

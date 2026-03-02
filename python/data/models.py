@@ -755,3 +755,115 @@ class MermaidDiagram:
     def to_markdown(self) -> str:
         """Return the diagram wrapped in markdown code block."""
         return f"```mermaid\n{self.content}\n```"
+
+
+# Schedule status enum values
+class ScheduleStatus:
+    """Status values for scheduled tasks."""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class TriggerType:
+    """Trigger types for scheduled tasks."""
+    DATE = "date"          # One-shot at specific datetime
+    CRON = "cron"          # Recurring cron expression
+    INTERVAL = "interval"  # Recurring interval
+
+
+class ExecutionMode:
+    """Execution modes for scheduled tasks."""
+    SIMPLE = "simple"    # APScheduler → IntentOrchestrator.process_intent_sync()
+    COMPLEX = "complex"  # APScheduler → Minibook start_collaboration()
+
+
+@dataclass
+class ScheduledTask:
+    """
+    A scheduled task managed by APScheduler.
+
+    Persisted in SQLite so tasks survive restarts.
+    APScheduler reloads active tasks from DB on startup.
+
+    Execution modes:
+      - simple: Direct execution via IntentOrchestrator (reminders, single-space tasks)
+      - complex: Multi-space execution via Minibook collaboration
+    """
+    id: str
+    title: str
+    action_text: str                                        # Natural language intent to execute
+    trigger_type: str = TriggerType.DATE                    # date, cron, interval
+    trigger_config: Dict[str, Any] = field(default_factory=dict)  # APScheduler trigger kwargs
+    execution_mode: str = ExecutionMode.SIMPLE               # simple or complex
+    timezone: str = "Europe/Berlin"
+    status: str = ScheduleStatus.ACTIVE
+    description: str = ""
+    next_run_at: Optional[datetime] = None
+    last_run_at: Optional[datetime] = None
+    run_count: int = 0
+    max_runs: Optional[int] = None                          # None = unlimited for recurring
+    last_result: Optional[str] = None
+    last_error: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)  # original_user_text, parsed_time_expr
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "action_text": self.action_text,
+            "execution_mode": self.execution_mode,
+            "trigger_type": self.trigger_type,
+            "trigger_config": json.dumps(self.trigger_config),
+            "timezone": self.timezone,
+            "status": self.status,
+            "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "run_count": self.run_count,
+            "max_runs": self.max_runs,
+            "last_result": self.last_result,
+            "last_error": self.last_error,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "metadata": json.dumps(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ScheduledTask":
+        """Create ScheduledTask from database row."""
+        trigger_config = json.loads(data.get("trigger_config", "{}")) \
+            if isinstance(data.get("trigger_config"), str) else data.get("trigger_config", {})
+        metadata = json.loads(data.get("metadata", "{}")) \
+            if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+
+        def parse_dt(value):
+            if isinstance(value, str):
+                return datetime.fromisoformat(value)
+            return value
+
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            action_text=data.get("action_text", ""),
+            trigger_type=data.get("trigger_type", TriggerType.DATE),
+            trigger_config=trigger_config,
+            execution_mode=data.get("execution_mode", ExecutionMode.SIMPLE),
+            timezone=data.get("timezone", "Europe/Berlin"),
+            status=data.get("status", ScheduleStatus.ACTIVE),
+            description=data.get("description", ""),
+            next_run_at=parse_dt(data.get("next_run_at")),
+            last_run_at=parse_dt(data.get("last_run_at")),
+            run_count=data.get("run_count", 0),
+            max_runs=data.get("max_runs"),
+            last_result=data.get("last_result"),
+            last_error=data.get("last_error"),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+            updated_at=parse_dt(data.get("updated_at")),
+            metadata=metadata,
+        )

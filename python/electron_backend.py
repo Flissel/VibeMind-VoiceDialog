@@ -1417,6 +1417,12 @@ class ElectronBackend:
                 mb_task = asyncio.create_task(self._init_minibook_background())
                 mb_task.add_done_callback(self._log_task_exception)
 
+            # 8. Initialize Schedule Space (APScheduler) if enabled.
+            #    Loads active tasks from DB and starts the scheduler.
+            if os.getenv("SCHEDULE_ENABLED", "false").lower() == "true":
+                sched_task = asyncio.create_task(self._init_schedule_background())
+                sched_task.add_done_callback(self._log_task_exception)
+
         except asyncio.CancelledError:
             debug_log("OpenAI Realtime start CANCELLED (task killed by stop/restart)")
             # Clean up the local session if it was connected
@@ -1507,8 +1513,110 @@ class ElectronBackend:
                 f"({_time.time() - _t0:.2f}s)"
             )
 
+            # ── MinibookHub: Central Execution (when USE_MINIBOOK_HUB=true) ──
+            if os.getenv("USE_MINIBOOK_HUB", "false").lower() in ("true", "1"):
+                try:
+                    from spaces.minibook.minibook_hub import MinibookHub
+                    from spaces.minibook.enrichment.pipeline import create_enrichment_pipeline
+                    from spaces.minibook.rachel_interface import RachelInterface
+                    from spaces.minibook.result_aggregator import ResultAggregator
+                    from spaces.minibook.config import get_config as get_minibook_config
+
+                    mb_config = get_minibook_config()
+
+                    # Rachel Interface — passive dashboard
+                    rachel = RachelInterface()
+
+                    # Register all known agents in Rachel
+                    from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
+                    for space_key, agent_info in SPACE_AGENT_REGISTRY.items():
+                        rachel.register_agent(agent_info["name"], space_key)
+
+                    # Enrichment Pipeline — classifier reused from orchestrator
+                    pipeline = create_enrichment_pipeline(
+                        classifier=self.orchestrator.classifier,
+                        rachel_interface=rachel,
+                        enrichment_model=mb_config.enrichment_model,
+                        use_llm_routing=mb_config.enrichment_enabled,
+                    )
+
+                    # Result Aggregator — sync-wait + async-poll
+                    aggregator = ResultAggregator(
+                        realtime_session_getter=_get_session,
+                        rachel_interface=rachel,
+                        sync_timeout=mb_config.hub_sync_timeout,
+                        async_timeout=mb_config.hub_async_timeout,
+                    )
+
+                    # MinibookHub — central dispatch
+                    hub = MinibookHub(
+                        client=client,
+                        enrichment_pipeline=pipeline,
+                        rachel_interface=rachel,
+                        result_aggregator=aggregator,
+                        sync_timeout=mb_config.hub_sync_timeout,
+                    )
+
+                    # Wire into orchestrator
+                    self.orchestrator.set_minibook_hub(hub)
+
+                    debug_log(
+                        f"Background: MinibookHub ACTIVATED — all intents route through Minibook "
+                        f"(sync={mb_config.hub_sync_timeout}s, async={mb_config.hub_async_timeout}s, "
+                        f"model={mb_config.enrichment_model})"
+                    )
+
+                except Exception as hub_err:
+                    debug_log(f"Background: MinibookHub init failed: {hub_err} — using direct execution")
+                    import traceback
+                    debug_log(traceback.format_exc())
+
         except Exception as e:
             debug_log(f"Background: Minibook init failed: {e} — collaboration disabled")
+
+    async def _init_schedule_background(self):
+        """Initialize the Schedule Space (APScheduler) in the background."""
+        import time as _time
+        try:
+            _t0 = _time.time()
+            debug_log("Background: Initializing Schedule Space...")
+
+            from spaces.schedule.workers.schedule_worker import ScheduleWorker
+            from spaces.schedule.tools.schedule_tools import (
+                set_electron_sender,
+                set_schedule_worker,
+            )
+
+            # Set Electron IPC sender for schedule tools
+            set_electron_sender(self.send_message)
+
+            # Session + orchestrator getters for the worker
+            def _get_session():
+                return self.openai_realtime_session
+
+            def _get_orchestrator():
+                return self.orchestrator
+
+            # Create and start ScheduleWorker
+            worker = ScheduleWorker(
+                realtime_session_getter=_get_session,
+                orchestrator_getter=_get_orchestrator,
+            )
+            await worker.start()
+
+            # Wire worker into schedule tools (so add_job/remove_job work live)
+            set_schedule_worker(worker)
+
+            self._schedule_worker = worker
+            debug_log(
+                f"Background: Schedule Space ready — {worker.job_count} active jobs "
+                f"({_time.time() - _t0:.2f}s)"
+            )
+
+        except Exception as e:
+            debug_log(f"Background: Schedule init failed: {e} — scheduling disabled")
+            import traceback
+            debug_log(traceback.format_exc())
 
     def _log_task_exception(self, task: asyncio.Task):
         """Callback to log unhandled exceptions from background tasks."""
