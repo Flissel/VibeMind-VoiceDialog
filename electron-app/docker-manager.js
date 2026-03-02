@@ -25,6 +25,47 @@ class DockerManager {
       : path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
 
     this.sandboxImage = 'coding-engine/sandbox:latest';
+
+    // Resolve Python executable path (Electron may not inherit shell PATH)
+    this.pythonPath = this._findPython();
+  }
+
+  /**
+   * Find a working Python executable, checking venv and common locations
+   */
+  _findPython() {
+    const fs = require('fs');
+    const projectRoot = path.join(__dirname, '..');
+
+    // Priority order: venv in project root, PYTHON_PATH env, system python
+    const candidates = [
+      path.join(projectRoot, '.venv312', 'Scripts', 'python.exe'),
+      path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
+      process.env.PYTHON_PATH,
+      'python',
+      'python3',
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      if (path.isAbsolute(candidate) && fs.existsSync(candidate)) {
+        console.log(`[DockerManager] Using Python: ${candidate}`);
+        return candidate;
+      }
+    }
+
+    // Fallback — try to resolve via where/which
+    try {
+      const { execSync } = require('child_process');
+      const cmd = process.platform === 'win32' ? 'where python' : 'which python3';
+      const result = execSync(cmd, { timeout: 5000 }).toString().trim().split('\n')[0].trim();
+      if (result && fs.existsSync(result)) {
+        console.log(`[DockerManager] Using Python (resolved): ${result}`);
+        return result;
+      }
+    } catch { /* ignore */ }
+
+    console.warn('[DockerManager] Python not found, generation will fail');
+    return 'python';
   }
 
   /**
@@ -123,6 +164,10 @@ class DockerManager {
       // Stop any existing container with same name
       await this.stopProjectContainer(projectId);
 
+      // Stop any containers using our ports to prevent "port already allocated" errors
+      await this.stopContainersByPort(vncPort);
+      await this.stopContainersByPort(appPort);
+
       // Ensure sandbox image exists (auto-build if missing)
       await this.ensureSandboxImage();
 
@@ -166,9 +211,18 @@ class DockerManager {
     try {
       const containerName = `project-${projectId}`;
 
-      // Stop and remove container (Windows compatible)
-      await execAsync(`docker stop ${containerName} 2>nul || echo ""`);
-      await execAsync(`docker rm ${containerName} 2>nul || echo ""`);
+      // Kill the generation subprocess if running
+      const entry = this.containers.get(projectId);
+      if (entry && entry.process) {
+        try {
+          entry.process.kill();
+          console.log(`[DockerManager] Killed generation process for ${projectId}`);
+        } catch { /* already exited */ }
+      }
+
+      try {
+        await execAsync(`docker rm -f ${containerName}`);
+      } catch { /* container doesn't exist, that's fine */ }
 
       this.containers.delete(projectId);
 
@@ -176,6 +230,50 @@ class DockerManager {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Stop Docker containers that are using a specific port
+   */
+  async stopContainersByPort(port) {
+    try {
+      const { stdout } = await execAsync(`docker ps -q --filter "publish=${port}"`);
+      const containerIds = stdout.trim().split('\n').filter(id => id);
+      for (const containerId of containerIds) {
+        try {
+          console.log(`[DockerManager] Stopping container ${containerId} using port ${port}`);
+          await execAsync(`docker rm -f ${containerId}`);
+        } catch { /* already gone */ }
+      }
+      if (containerIds.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch { /* no containers found */ }
+  }
+
+  /**
+   * Kill host processes holding a specific port (Windows only)
+   */
+  async killHostProcessOnPort(port) {
+    try {
+      if (process.platform !== 'win32') return;
+      const portNum = parseInt(port, 10);
+      if (isNaN(portNum) || portNum < 1 || portNum > 65535) return;
+      const findCmd = `powershell -Command "Get-NetTCPConnection -LocalPort ${portNum} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"`;
+      const { stdout } = await execAsync(findCmd);
+      const pids = stdout.trim().split('\n')
+        .map(pid => parseInt(pid.trim(), 10))
+        .filter(pid => !isNaN(pid) && pid > 0);
+      for (const pid of pids) {
+        try {
+          console.log(`[DockerManager] Killing host process ${pid} using port ${portNum}`);
+          await execAsync(`powershell -Command "Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue"`);
+        } catch { /* already exited */ }
+      }
+      if (pids.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch { /* port not in use */ }
   }
 
   /**
@@ -222,7 +320,7 @@ class DockerManager {
    */
   async startGeneration(requirementsPath, outputDir) {
     try {
-      const pythonPath = process.platform === 'win32' ? 'python' : 'python3';
+      const pythonPath = this.pythonPath;
 
       const genProcess = spawn(pythonPath, [
         'run_society_hybrid.py',
@@ -263,6 +361,16 @@ class DockerManager {
       // Ensure sandbox image exists (auto-build if missing)
       await this.ensureSandboxImage();
 
+      // Pre-start cleanup: stop containers and processes using our ports
+      await this.stopContainersByPort(vncPort);
+      await this.stopContainersByPort(appPort);
+      await this.killHostProcessOnPort(vncPort);
+      await this.killHostProcessOnPort(appPort);
+
+      // Wait for ports to be fully released (Windows is slow)
+      console.log('[DockerManager] Waiting for ports to be released...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       // Start container with generation + VNC preview
       const args = [
         'run', '-d',
@@ -279,12 +387,85 @@ class DockerManager {
         this.sandboxImage
       ];
 
-      const { stdout } = await execAsync(`docker ${args.join(' ')}`);
-      const containerId = stdout.trim();
+      // Retry loop for port conflicts
+      let containerId = '';
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const { stdout } = await execAsync(`docker ${args.join(' ')}`);
+          containerId = stdout.trim();
+          break; // success
+        } catch (error) {
+          const errorMsg = error.message || '';
+          if (errorMsg.includes('port') && (errorMsg.includes('not available') || errorMsg.includes('already allocated') || errorMsg.includes('already in use')) && attempt < maxRetries - 1) {
+            console.log(`[DockerManager] Port conflict on attempt ${attempt + 1}, retrying in 3s...`);
+            await this.killHostProcessOnPort(vncPort);
+            await this.killHostProcessOnPort(appPort);
+            await this.stopContainersByPort(vncPort);
+            await this.stopContainersByPort(appPort);
+            // Also remove the failed container by name before retrying
+            try { await execAsync(`docker rm -f ${containerName}`); } catch { /* ok */ }
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      if (!containerId) {
+        throw new Error('Docker container failed to start: empty container ID after retries');
+      }
+
+      // Start the code generation subprocess (run_engine.py)
+      const pythonPath = this.pythonPath;
+      const runEnginePath = path.join(this.engineRoot, 'run_engine.py');
+      const fs = require('fs');
+
+      let genProcess = null;
+      if (fs.existsSync(runEnginePath)) {
+        console.log(`[DockerManager] Starting code generation: ${runEnginePath}`);
+        genProcess = spawn(pythonPath, [
+          runEnginePath,
+          requirementsPath,
+          '--autonomous',
+          '--continuous-sandbox',
+          '--enable-vnc',
+          '--vnc-port', String(vncPort),
+          '--enable-validation',
+          '--output-dir', outputDir,
+          '--json-progress',
+          '--parallel', '10',
+        ], {
+          cwd: this.engineRoot,
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        genProcess.stdout.on('data', (data) => {
+          const lines = data.toString().split('\n').filter(l => l.trim());
+          for (const line of lines) {
+            console.log(`[CodingEngine:${projectId}] ${line}`);
+          }
+        });
+
+        genProcess.stderr.on('data', (data) => {
+          console.error(`[CodingEngine:${projectId}:ERR] ${data.toString().trim()}`);
+        });
+
+        genProcess.on('exit', (code) => {
+          console.log(`[CodingEngine:${projectId}] Process exited with code ${code}`);
+          const entry = this.containers.get(projectId);
+          if (entry) entry.process = null;
+        });
+
+        genProcess.unref();
+      } else {
+        console.warn(`[DockerManager] run_engine.py not found at ${runEnginePath}, skipping generation`);
+      }
 
       this.containers.set(projectId, {
         id: containerId,
-        process: null,
+        process: genProcess,
         vncPort,
         appPort,
         status: 'running',

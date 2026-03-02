@@ -108,8 +108,10 @@ def create_session_config(
             "interrupt_response": True,
         }
 
-    # GA API schema (openai SDK v2.0.0+)
-    # Audio config is now nested under "audio" object
+    # OpenAI Realtime API session config
+    # NOTE: The API uses nested "audio" format with "type": "realtime",
+    # NOT the flat fields in the SDK model. The SDK model is auto-generated
+    # from a different spec version. Verified via live API testing.
     config = {
         "type": "realtime",
         "output_modalities": ["audio"],

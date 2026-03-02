@@ -2,12 +2,12 @@
 CodingEngineRunner - Bridge between VibeMind and Coding Engine
 
 This module manages subprocess execution of the Coding Engine's
-autonomous hybrid run (run_society_hybrid.py) and provides real-time
+unified 3-layer engine (run_engine.py) and provides real-time
 status updates to the Electron frontend.
 
 Features:
 - Multi-project support with unique VNC ports per project
-- Real-time status streaming via stdout parsing
+- Real-time status streaming via stdout parsing (JSON progress)
 - Job cancellation and cleanup
 - Requirements file generation from voice commands
 """
@@ -61,8 +61,8 @@ class CodingEngineRunner:
     """
     Manages Coding Engine subprocess execution for VibeMind.
 
-    This class starts run_society_hybrid.py as a subprocess with
-    full autonomous mode options and streams status updates back
+    This class starts run_engine.py (unified 3-layer engine) as a subprocess
+    with full autonomous mode options and streams status updates back
     to the Electron frontend via callback.
     """
 
@@ -284,12 +284,12 @@ class CodingEngineRunner:
             job.status = "generating"
             self._notify_status(job)
 
-            # Build command
+            # Build command — unified 3-layer engine
             python_exe = sys.executable
-            script_path = self.coding_engine_path / "run_society_hybrid.py"
+            script_path = self.coding_engine_path / "run_engine.py"
 
             if not script_path.exists():
-                raise FileNotFoundError(f"run_society_hybrid.py not found at {script_path}")
+                raise FileNotFoundError(f"run_engine.py not found at {script_path}")
 
             cmd = [
                 python_exe,
@@ -301,7 +301,8 @@ class CodingEngineRunner:
                 "--vnc-port", str(job.vnc_port),
                 "--enable-validation",
                 "--output-dir", job.output_dir,
-                "--json-progress"  # Request JSON progress output
+                "--json-progress",  # Request JSON progress output
+                "--parallel", "10",
             ]
 
             logger.info(f"Executing: {' '.join(cmd)}")

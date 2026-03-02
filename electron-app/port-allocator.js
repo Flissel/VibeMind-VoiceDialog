@@ -8,6 +8,12 @@
  * App Ports: 3001, 3002, 3003, ...
  */
 
+const net = require('net');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
+
 class PortAllocator {
   constructor() {
     this.vncBasePort = 6081;
@@ -22,15 +28,15 @@ class PortAllocator {
   /**
    * Allocate a VNC port for a project
    */
-  allocate(projectId) {
+  async allocate(projectId) {
     // Return existing allocation if exists
     const existing = this.allocations.get(projectId);
     if (existing) {
       return existing.vncPort;
     }
 
-    // Find next available VNC port
-    const vncPort = this.findNextPort(this.vncBasePort, this.usedVncPorts);
+    // Find next available VNC port (checks OS-level availability)
+    const vncPort = await this.findNextPort(this.vncBasePort, this.usedVncPorts);
     this.usedVncPorts.add(vncPort);
 
     // Initialize allocation (app port allocated separately)
@@ -42,14 +48,14 @@ class PortAllocator {
   /**
    * Allocate an app port for a project
    */
-  allocateAppPort(projectId) {
+  async allocateAppPort(projectId) {
     const existing = this.allocations.get(projectId);
     if (existing && existing.appPort > 0) {
       return existing.appPort;
     }
 
-    // Find next available app port
-    const appPort = this.findNextPort(this.appBasePort, this.usedAppPorts);
+    // Find next available app port (checks OS-level availability)
+    const appPort = await this.findNextPort(this.appBasePort, this.usedAppPorts);
     this.usedAppPorts.add(appPort);
 
     if (existing) {
@@ -99,14 +105,30 @@ class PortAllocator {
   }
 
   /**
-   * Find next available port
+   * Check if a port is actually free on the OS by attempting to bind to it.
    */
-  findNextPort(basePort, usedPorts) {
+  isPortFreeOnOS(port) {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once('error', () => resolve(false));
+      server.once('listening', () => {
+        server.close(() => resolve(true));
+      });
+      server.listen(port, '0.0.0.0');
+    });
+  }
+
+  /**
+   * Find next available port (checks both internal tracking and OS-level availability)
+   */
+  async findNextPort(basePort, usedPorts) {
     for (let i = 0; i < this.maxPorts; i++) {
       const port = basePort + i;
-      if (!usedPorts.has(port)) {
+      if (usedPorts.has(port)) continue;
+      if (await this.isPortFreeOnOS(port)) {
         return port;
       }
+      console.log(`[PortAllocator] Port ${port} is in use on OS, skipping`);
     }
     throw new Error(`No available ports in range ${basePort}-${basePort + this.maxPorts}`);
   }
@@ -116,6 +138,78 @@ class PortAllocator {
    */
   isPortAvailable(port) {
     return !this.usedVncPorts.has(port) && !this.usedAppPorts.has(port);
+  }
+
+  /**
+   * Sync port allocations with running Docker containers.
+   * Call this on app startup to detect containers from previous sessions.
+   */
+  async syncWithDocker() {
+    try {
+      const { stdout } = await execAsync('docker ps --format "{{.Names}}|{{.Ports}}"');
+
+      for (const line of stdout.split('\n').filter(Boolean)) {
+        const [name, ports] = line.split('|');
+
+        if (!name.startsWith('generation-') && !name.startsWith('project-')) {
+          continue;
+        }
+
+        const vncMatch = ports?.match(/0\.0\.0\.0:(\d+)->6080/);
+        const appMatch = ports?.match(/0\.0\.0\.0:(\d+)->5173/);
+
+        if (vncMatch) {
+          this.usedVncPorts.add(parseInt(vncMatch[1]));
+        }
+        if (appMatch) {
+          this.usedAppPorts.add(parseInt(appMatch[1]));
+        }
+
+        const projectId = name.replace(/^(generation-|project-)/, '');
+        if (vncMatch || appMatch) {
+          this.allocations.set(projectId, {
+            vncPort: vncMatch ? parseInt(vncMatch[1]) : 0,
+            appPort: appMatch ? parseInt(appMatch[1]) : 0
+          });
+        }
+      }
+
+      console.log(`[PortAllocator] Synced with Docker: ${this.usedVncPorts.size} VNC ports, ${this.usedAppPorts.size} app ports in use`);
+    } catch (error) {
+      if (error.code === 'ENOENT' || error.message?.includes('not found')) {
+        console.log('[PortAllocator] Docker not available, skipping sync');
+      } else {
+        console.warn('[PortAllocator] syncWithDocker error:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Cleanup all stale generation/project containers.
+   * Call this on app startup for a clean slate.
+   */
+  async cleanupStaleContainers() {
+    try {
+      const { stdout } = await execAsync('docker ps -a --format "{{.Names}}"');
+
+      const containers = stdout.split('\n')
+        .filter(name => name.startsWith('generation-') || name.startsWith('project-'));
+
+      for (const name of containers) {
+        console.log(`[PortAllocator] Removing stale container: ${name}`);
+        try {
+          await execAsync(`docker rm -f ${name}`);
+        } catch { /* already gone */ }
+      }
+
+      this.allocations.clear();
+      this.usedVncPorts.clear();
+      this.usedAppPorts.clear();
+
+      console.log(`[PortAllocator] Cleaned up ${containers.length} stale containers`);
+    } catch {
+      console.log('[PortAllocator] No stale containers to clean');
+    }
   }
 }
 
