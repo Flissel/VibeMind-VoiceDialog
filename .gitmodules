@@ -13,3 +13,6 @@
 [submodule "external/zeroclaw"]
 	path = external/zeroclaw
 	url = https://github.com/zeroclaw-labs/zeroclaw.git
+[submodule "external/minibook"]
+	path = external/minibook
+	url = https://github.com/c4pt0r/minibook.git
