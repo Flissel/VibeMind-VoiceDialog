@@ -10,7 +10,9 @@ Architecture:
 - Spaces respond to @mentions by executing tools and posting results
 - Results flow back non-blocking via inject_system_message() or NotificationQueue
 
-Single-space tasks bypass Minibook entirely for zero overhead.
+When USE_MINIBOOK_HUB=true, MinibookHub becomes the central execution hub
+for ALL intents (single-space and multi-space). The EnrichmentPipeline
+classifies, routes, and enriches tasks before posting to Minibook.
 
 Usage:
     from spaces.minibook import get_minibook_client, get_minibook_agent
@@ -26,6 +28,11 @@ Usage:
     # Create space responders
     from spaces.minibook import create_space_responders
     responders = create_space_responders()
+
+    # Central Hub (when USE_MINIBOOK_HUB=true)
+    from spaces.minibook import MinibookHub
+    hub = MinibookHub(client, pipeline, rachel, aggregator)
+    result = await hub.dispatch("Zeig meine Bubbles")
 """
 
 # Configuration
@@ -55,6 +62,28 @@ from .workers import (
     get_discussion_poller,
 )
 
+# Central Hub
+from .minibook_hub import MinibookHub
+
+# Rachel Interface
+from .rachel_interface import RachelInterface, get_rachel_interface
+
+# Result Aggregator
+from .result_aggregator import ResultAggregator, get_result_aggregator
+
+# Enrichment Pipeline
+from .enrichment import (
+    EnrichmentPipeline,
+    PipelineResult,
+    create_enrichment_pipeline,
+    ContextGather,
+    EnrichmentContext,
+    SpaceRouter,
+    RoutingDecision,
+    TaskEnricher,
+    EnrichedTask,
+)
+
 __all__ = [
     # Config
     "MinibookConfig",
@@ -78,4 +107,22 @@ __all__ = [
     "DiscussionPollerWorker",
     "SpaceMinibookResponder",
     "get_discussion_poller",
+    # Central Hub
+    "MinibookHub",
+    # Rachel Interface
+    "RachelInterface",
+    "get_rachel_interface",
+    # Result Aggregator
+    "ResultAggregator",
+    "get_result_aggregator",
+    # Enrichment Pipeline
+    "EnrichmentPipeline",
+    "PipelineResult",
+    "create_enrichment_pipeline",
+    "ContextGather",
+    "EnrichmentContext",
+    "SpaceRouter",
+    "RoutingDecision",
+    "TaskEnricher",
+    "EnrichedTask",
 ]
