@@ -72,3 +72,12 @@ python/logs/
 .venv/
 .venv*/
 .env
+
+# Build artifacts
+electron-app/rowboat-services.cjs
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Diagnostic reports
+diagnostic_reports/
