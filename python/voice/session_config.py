@@ -90,20 +90,48 @@ def create_session_config(
     if tools is None:
         tools = [SEND_INTENT_TOOL]
 
-    config = {
-        "modalities": ["text", "audio"],
-        "instructions": system_prompt,
-        "voice": voice,
-        "input_audio_format": "pcm16",
-        "output_audio_format": "pcm16",
-        "input_audio_transcription": {
-            "model": "whisper-1",
-        },
-        "turn_detection": {
-            "type": vad_type,
+    # Build turn_detection config based on type
+    if vad_type == "semantic_vad":
+        turn_detection_config = {
+            "type": "semantic_vad",
+            "eagerness": "auto",
+            "create_response": True,
+            "interrupt_response": True,
+        }
+    else:
+        turn_detection_config = {
+            "type": "server_vad",
             "threshold": vad_threshold,
             "prefix_padding_ms": prefix_padding_ms,
             "silence_duration_ms": silence_duration_ms,
+            "create_response": True,
+            "interrupt_response": True,
+        }
+
+    # GA API schema (openai SDK v2.0.0+)
+    # Audio config is now nested under "audio" object
+    config = {
+        "type": "realtime",
+        "output_modalities": ["audio"],
+        "instructions": system_prompt,
+        "audio": {
+            "input": {
+                "format": {
+                    "type": "audio/pcm",
+                    "rate": SAMPLE_RATE,
+                },
+                "transcription": {
+                    "model": "whisper-1",
+                },
+                "turn_detection": turn_detection_config,
+            },
+            "output": {
+                "format": {
+                    "type": "audio/pcm",
+                    "rate": SAMPLE_RATE,
+                },
+                "voice": voice,
+            },
         },
         "tools": tools,
         "tool_choice": "auto",
