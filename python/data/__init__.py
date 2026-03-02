@@ -1,14 +1,16 @@
 """
 Vibemind Data Layer
 
-SQLite persistence for Ideas, Projects, Canvas nodes, Conversation history, Shuttles, and Tasks.
+SQLite persistence for Ideas, Projects, Canvas nodes, Conversation history,
+Shuttles, Tasks, and Scheduled Tasks.
 """
 
 from .database import Database, get_database
 from .models import (
     Idea, Project, CanvasNode, CanvasEdge, ConversationMessage,
     ConversationSession, Shuttle, ShuttleStatus, ShuttleStage,
-    STAGE_PROGRESS, GenerationStatus, Task, TaskStatus
+    STAGE_PROGRESS, GenerationStatus, Task, TaskStatus,
+    ScheduledTask, ScheduleStatus, TriggerType, ExecutionMode,
 )
 from .repository import (
     IdeasRepository,
@@ -16,6 +18,7 @@ from .repository import (
     CanvasRepository,
     ConversationRepository,
     ShuttlesRepository,
+    ScheduledTaskRepository,
     promote_idea_to_project,
 )
 from .task_memory_repository import TaskMemoryRepository, get_task_memory_repository
@@ -42,11 +45,16 @@ __all__ = [
     "GenerationStatus",
     "Task",
     "TaskStatus",
+    "ScheduledTask",
+    "ScheduleStatus",
+    "TriggerType",
+    "ExecutionMode",
     "IdeasRepository",
     "ProjectsRepository",
     "CanvasRepository",
     "ConversationRepository",
     "ShuttlesRepository",
+    "ScheduledTaskRepository",
     "TaskMemoryRepository",
     "get_task_memory_repository",
     "promote_idea_to_project",

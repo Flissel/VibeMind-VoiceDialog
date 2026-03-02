@@ -388,6 +388,10 @@ class IntentOrchestrator:
                 logger.warning(f"Failed to initialize Enhancement Pipeline: {e}")
                 self._use_enhancement_pipeline = False
 
+        # MinibookHub — Central execution hub (Phase: Minibook als zentraler Hub)
+        # When USE_MINIBOOK_HUB=true, all intents route through Minibook
+        self._minibook_hub = None
+
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
         self._tool_executors: Dict[str, Callable] = {}
@@ -475,6 +479,11 @@ class IntentOrchestrator:
         except Exception as e:
             logger.warning(f"Redis not available ({e}) - using synchronous fallback")
             return False
+
+    def set_minibook_hub(self, hub) -> None:
+        """Set the MinibookHub for centralized execution dispatch."""
+        self._minibook_hub = hub
+        logger.info("MinibookHub connected to IntentOrchestrator")
 
     def _load_direct_tools(self):
         """Load tool implementations for direct synchronous execution."""
@@ -992,6 +1001,55 @@ class IntentOrchestrator:
             except ImportError as e:
                 logger.warning(f"Could not load minibook tools: {e}")
 
+            # === SCHEDULE TOOLS ===
+            try:
+                from spaces.schedule.tools.schedule_tools import (
+                    create_scheduled_task,
+                    list_scheduled_tasks,
+                    cancel_scheduled_task,
+                    modify_scheduled_task,
+                    get_schedule_status,
+                    snooze_scheduled_task,
+                )
+
+                def _fmt_schedule(result):
+                    if isinstance(result, dict):
+                        if result.get("success"):
+                            return result.get("response_hint", result.get("message", "Erledigt."))
+                        else:
+                            return result.get("response_hint", f"Fehler: {result.get('message', 'Unbekannter Fehler')}")
+                    return str(result)
+
+                self._tool_executors.update({
+                    "schedule.create": lambda p: _fmt_schedule(create_scheduled_task(
+                        user_text=p.get("user_text", p.get("text", "")),
+                        title=p.get("title", ""),
+                    )),
+                    "schedule.list": lambda p: _fmt_schedule(list_scheduled_tasks(
+                        status=p.get("status", ""),
+                    )),
+                    "schedule.cancel": lambda p: _fmt_schedule(cancel_scheduled_task(
+                        task_id=p.get("task_id", p.get("id", "")),
+                        title=p.get("title", p.get("name", "")),
+                    )),
+                    "schedule.modify": lambda p: _fmt_schedule(modify_scheduled_task(
+                        task_id=p.get("task_id", p.get("id", "")),
+                        title=p.get("title", p.get("name", "")),
+                        new_time=p.get("new_time", p.get("zeit", "")),
+                        new_action=p.get("new_action", ""),
+                    )),
+                    "schedule.status": lambda p: _fmt_schedule(get_schedule_status()),
+                    "schedule.snooze": lambda p: _fmt_schedule(snooze_scheduled_task(
+                        task_id=p.get("task_id", p.get("id", "")),
+                        title=p.get("title", p.get("name", "")),
+                        minutes=int(p.get("minutes", 5)),
+                        user_text=p.get("user_text", p.get("text", "")),
+                    )),
+                })
+                logger.info("Loaded schedule tools for sync fallback (6 tools)")
+            except ImportError as e:
+                logger.warning(f"Could not load schedule tools: {e}")
+
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 
     def _load_evaluation_tools(self):
@@ -1103,6 +1161,22 @@ class IntentOrchestrator:
                     return domain_result
                 # If domain routing failed, continue to normal analysis
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
+
+            # =================================================================
+            # PHASE 0.5: MINIBOOK HUB DISPATCH (if enabled)
+            # =================================================================
+            # When USE_MINIBOOK_HUB=true, ALL intents route through Minibook
+            # for centralized execution. Falls through to existing pipeline
+            # on failure/timeout.
+            if self._minibook_hub and not domain_hint:
+                try:
+                    hub_result = await self._minibook_hub.dispatch(intent_text, context)
+                    if hub_result and getattr(hub_result, 'success', False):
+                        logger.info(f"[MinibookHub] Dispatched: {getattr(hub_result, 'event_type', '?')}")
+                        return hub_result
+                    # hub_result is None or not successful — fall through
+                except Exception as hub_err:
+                    logger.warning(f"[MinibookHub] Dispatch failed, falling through: {hub_err}")
 
             # =================================================================
             # PHASE 1: CORE ANALYSIS - IntentAnalysisTeam (Always runs first)
