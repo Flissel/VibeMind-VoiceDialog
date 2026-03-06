@@ -27,7 +27,8 @@ REM WINDOWED MODE - for debugging
 REM ================================================
 echo.
 echo Checking MoireServer...
-set MOIRE_ROOT=C:\Users\User\Desktop\Moire_tracker_v1\MoireTracker_v2
+REM Set MOIRE_ROOT via environment variable or default to sibling directory
+if not defined MOIRE_ROOT set MOIRE_ROOT=%PROJECT_ROOT%\..\MoireTracker_v2
 
 netstat -an | findstr ":8766" | findstr "LISTENING" > nul
 if %errorlevel%==0 (

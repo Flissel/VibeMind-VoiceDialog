@@ -1,259 +1,216 @@
 # VibeMind Voice Dialog
 
-A voice conversation system powered by ElevenLabs Conversational AI, with optional audio-reactive visual effects.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://python.org)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18+-339933.svg)](https://nodejs.org)
+[![Electron 25](https://img.shields.io/badge/Electron-25-47848F.svg)](https://electronjs.org)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
+
+**A voice-controlled 3D workspace where you speak ideas into existence.** VibeMind captures voice input via dual voice providers (OpenAI Realtime API or ElevenLabs Conversational AI), classifies intent through a swarm backend, and renders ideas as interactive 3D bubbles in an Electron UI.
+
+<!-- TODO: Add demo GIF/video here -->
+<!-- ![VibeMind Demo](docs/assets/demo.gif) -->
+
+---
 
 ## Features
 
-- **Real-time voice conversations** with ElevenLabs AI agents
-- **Microphone input** for natural spoken interaction
-- **Audio-reactive visuals** (optional C++ OpenGL module)
-- **Simple Python API** for easy integration
+- **Voice-First Interface** — Speak naturally in German or English; OpenAI Realtime API handles speech-to-speech with sub-second latency
+- **3D Multiverse UI** — Ideas rendered as glass bubbles in a Three.js scene; navigate nested spaces visually
+- **Intent Classification** — LLM-based classification routes natural language to structured event types (`bubble.create`, `idea.format`, `code.generate`, etc.)
+- **8 Domain Spaces** — Ideas, Coding, Desktop Automation, Rowboat (Knowledge Graph), Research, Minibook, Shuttles, Schedule
+- **Swarm Backend** — Domain-specific agents execute tools and broadcast results to the UI in real-time
+- **Memory System** — Optional Supermemory integration for cross-session context, task tracking, and user preference learning
+- **Reference Resolution** — DroPE resolves ambiguous references ("do that again", "delete it") using conversation history
+- **Multi-Step Orchestration** — Claude Sonnet handles complex requests that span multiple tools
+- **Sync & Async Modes** — Run locally with zero dependencies (sync) or scale with Redis streams (async)
 
 ## Quick Start
 
-### 1. Install Dependencies
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- An [OpenAI API key](https://platform.openai.com/api-keys) (for voice + intent classification)
+
+### Install & Run
 
 ```bash
+# Clone with submodules
+git clone --recursive https://github.com/Flissel/VibeMind-VoiceDialog.git
+cd VibeMind-VoiceDialog
+
+# Python backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Electron frontend
+cd electron-app
+npm install
+cd ..
+
+# Configure
+cp .env.example .env
+# Edit .env — set OPENAI_API_KEY at minimum
+
+# Launch
+cd electron-app
+npm start
 ```
 
-### 2. Configure API Keys
+This starts the Electron app which automatically spawns the Python backend. Speak into your microphone to interact.
 
-Copy the template and add your ElevenLabs credentials:
+> **Minimal mode:** Set `FORCE_SYNC_MODE=true` in `.env` to run without Redis or any external services.
 
-```bash
-copy .env.template .env
-notepad .env
-```
-
-Required settings:
-- `ELEVENLABS_API_KEY` - Get from [ElevenLabs API Keys](https://elevenlabs.io/app/settings/api-keys)
-- `ELEVENLABS_AGENT_ID` - Create an agent at [ElevenLabs Conversational AI](https://elevenlabs.io/app/conversational-ai)
-
-### 3. Run Voice Dialog
-
-```bash
-cd python
-python voice_dialog_main.py
-```
-
-Speak into your microphone to start a conversation with your AI agent!
-
-## Documentation
-
-- [Agent Setup Guide](docs/AGENT_SETUP.md) - Multi-agent voice system setup
-- [Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md) - Architecture reference
-- [User Transfers Guide](docs/USER_CONTROLLED_TRANSFERS_GUIDE.md) - Voice handoffs & audio settings
-- [Client Tools](docs/agents/CLIENT_TOOLS_SETUP.md) - Tool implementation guide
-- [AutoGen gRPC Setup](docs/AUTOGEN_GRPC_SETUP.md) - Distributed runtime configuration
-
-## How It Works
-
-```
-┌─────────────────────────────────────┐
-│   Your Microphone                   │
-└──────────────┬──────────────────────┘
-               │ Audio stream (16kHz)
-┌──────────────▼──────────────────────┐
-│   VoiceDialog Client                │
-│   - Sends audio to ElevenLabs       │
-│   - Receives agent responses        │
-└──────────────┬──────────────────────┘
-               │ Agent audio
-┌──────────────▼──────────────────────┐
-│   Speaker Output                    │
-│   + Optional Visual Effects         │
-└─────────────────────────────────────┘
-```
+See [docs/installation/](docs/installation/) for platform-specific guides and troubleshooting.
 
 ## Architecture
 
-### Core Components
+```
+User Voice ──► Voice Provider (OpenAI Realtime / ElevenLabs)
+                        │
+                   send_intent()
+                        │
+                ┌───────▼────────┐
+                │ Intent Classifier│
+                │ (LLM-based)     │
+                └───────┬────────┘
+                        │ event_type + payload
+     ┌──────────┬───────┼───────┬──────────┐
+     ▼          ▼       ▼       ▼          ▼
+ BubblesAgent IdeasAgent CodingAgent DesktopAgent  ...4 more
+ (bubble.*)  (idea.*)  (code.*)  (desktop.*)
+     │          │       │       │          │
+     └──────────┴───────┼───────┴──────────┘
+                        ▼
+                   Electron UI
+                (Three.js 3D Bubbles)
 
-- **[voice_dialog_main.py](python/voice_dialog_main.py)** - Main application entry point
-- **[elevenlabs_voice_dialog.py](python/elevenlabs_voice_dialog.py)** - ElevenLabs client wrapper
-- **[audio_analyzer.py](python/audio_analyzer.py)** - Audio feature extraction for visuals
-- **[config.py](python/config.py)** - Configuration management
-
-### Optional Visual Module (C++)
-
-The project includes an optional audio-reactive visual system built with C++ and OpenGL:
-
-- Real-time particle effects (60 FPS)
-- Fisheye lens distortion
-- Dynamic colors responding to audio frequencies
-- Bass → Blue/Purple, Mid → Green/Yellow, Treble → Red/Orange
-
-See [Building the Visual Module](#building-the-visual-module-optional) for compilation instructions.
-
-## Usage in Your Application
-
-```python
-import asyncio
-from elevenlabs_voice_dialog import VoiceDialog
-import sounddevice as sd
-
-async def main():
-    # Create voice dialog client
-    dialog = VoiceDialog(
-        agent_id="your_agent_id",
-        on_agent_response=lambda audio: sd.play(audio, samplerate=22050),
-        on_user_transcript=lambda text: print(f"You: {text}")
-    )
-
-    # Start conversation
-    await dialog.start_conversation()
-
-    # Send audio from microphone
-    # (see voice_dialog_main.py for full implementation)
-
-    # End when done
-    await dialog.end_conversation()
-
-asyncio.run(main())
+8 agents total: Bubbles, Ideas, Coding, Desktop,
+Roarboot, ZeroClaw Research, Minibook, Schedule
 ```
 
-## Building the Visual Module (Optional)
+**Key flow:** Voice input → Rachel (OpenAI Realtime) → `send_intent` tool → IntentClassifier → event routing → backend agent executes tool → broadcasts result to Electron UI.
 
-The audio-reactive visual system requires C++ compilation:
+See [docs/architecture/](docs/architecture/) for detailed diagrams and component docs.
 
-### Prerequisites
+## Spaces
 
-**Windows:**
-```bash
-vcpkg install glfw3:x64-windows glm:x64-windows glad:x64-windows pybind11:x64-windows
+| Space | Domain | What It Does |
+|-------|--------|--------------|
+| **Ideas** | `bubble.*`, `idea.*` | Create/navigate bubbles, manage ideas, auto-link, format |
+| **Coding** | `code.*` | Generate code projects, check status, live preview |
+| **Desktop** | `desktop.*` | Open apps, click elements, type text, take screenshots |
+| **Rowboat** | `roarboot.*` | Knowledge graph exploration and RAG |
+| **Research** | `research.*` | Web research via ZeroClaw engine |
+| **Minibook** | `minibook.*` | Inter-space collaboration workflows |
+| **Shuttles** | _(handled by BubblesAgent via `bubble.evaluate`/`bubble.promote`)_ | Requirements pipeline and SWE design |
+| **Schedule** | `schedule.*` | Task scheduling, reminders, alarms |
+
+## Voice Commands (Examples)
+
+```
+"Erstelle eine Bubble Marketing"     → bubble.create  {title: "Marketing"}
+"Notiere: API Design Review"         → idea.create    {title: "API Design Review"}
+"Verlinke die Ideen sinnvoll"        → idea.auto_link
+"Erstelle eine App fuer Notizen"     → code.generate  {description: "Notizen App"}
+"Oeffne Chrome"                      → desktop.open_app {app_name: "Chrome"}
+"Zurueck"                            → bubble.exit
 ```
 
-**Linux:**
-```bash
-sudo apt install libglfw3-dev libglm-dev python3-dev
-pip install pybind11[global]
-```
-
-**macOS:**
-```bash
-brew install glfw glm pybind11
-```
-
-### Build Steps
-
-```bash
-mkdir build
-cd build
-
-# Configure
-cmake .. -DCMAKE_TOOLCHAIN_FILE=[path to vcpkg]/scripts/buildsystems/vcpkg.cmake
-
-# Build
-cmake --build . --config Release
-
-# Output: python/visual_sim_core.pyd (Windows) or python/visual_sim_core.so (Linux/Mac)
-```
-
-### Using Visuals
-
-```python
-import visual_sim_core
-from audio_analyzer import AudioAnalyzer
-
-# Create simulation
-sim = visual_sim_core.AudioReactiveSimulation(num_particles=200)
-sim.initialize(800, 600)
-sim.set_fisheye_strength(0.6)
-
-# Analyze audio and update visuals
-analyzer = AudioAnalyzer()
-features = analyzer.analyze(audio_chunk)
-
-cpp_features = visual_sim_core.AudioFeatures()
-cpp_features.amplitude = features.amplitude
-cpp_features.bass = features.bass
-cpp_features.mid = features.mid
-cpp_features.treble = features.treble
-
-sim.update_audio(cpp_features)
-sim.render()
-```
+See [docs/user-guide/voice-commands.md](docs/user-guide/voice-commands.md) for the full command reference.
 
 ## Project Structure
 
 ```
 VibeMind-VoiceDialog/
 ├── python/
-│   ├── voice_dialog_main.py          # Main entry point
-│   ├── electron_backend.py           # Electron IPC handler
-│   ├── agent_config.py               # Agent registry
-│   ├── config.py                     # Configuration
-│   ├── agents/                       # Multi-agent configs
-│   ├── tools/                        # Tool implementations
-│   ├── workers/                      # Background workers
-│   ├── scripts/                      # Utility/deploy scripts
-│   ├── tests/                        # Test suites
-│   └── demos/                        # Demo visualizations
-├── electron-app/                     # Electron UI
-│   ├── main.js                       # Electron main process
-│   └── renderer/                     # Three.js multiverse UI
-├── docs/                             # Documentation
-│   ├── AGENT_SETUP.md
-│   ├── COMPLETE_SYSTEM_GUIDE.md
-│   └── agents/                       # Agent tool configs
-├── cpp/                              # Optional visual module
-├── shaders/                          # GLSL shaders
-├── requirements.txt                  # Python dependencies
-└── README.md
+│   ├── core/                  # Shared: database, event bus, LLM, orchestrator, voice
+│   ├── spaces/                # 8 domain spaces (ideas, coding, desktop, ...)
+│   │   └── <space>/
+│   │       ├── agents/        # Space-specific agents
+│   │       └── tools/         # Space-specific tools
+│   ├── data/                  # SQLite database, models, repository
+│   ├── tools/                 # Shared tool implementations
+│   ├── memory/                # Supermemory services
+│   ├── swarm/                 # Orchestrator, backend agents, event routing
+│   ├── tests/                 # Test suites (62+ test files)
+│   └── electron_backend.py    # Python ↔ Electron IPC handler
+├── electron-app/
+│   ├── main.js                # Electron main process, Python spawning
+│   └── renderer/              # Three.js 3D multiverse UI
+├── docs/                      # Documentation
+├── external/                  # Submodules (minibook, zeroclaw)
+├── .env.example               # Configuration template
+└── requirements.txt           # Python dependencies
 ```
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Installation](docs/installation/) | Platform-specific setup guides |
+| [Architecture](docs/architecture/) | System design, diagrams, component docs |
+| [Developer Guide](docs/development/) | Contributing code, adding spaces/tools/events |
+| [API Reference](docs/api/) | Event types, IPC messages, tool functions, database schema |
+| [User Guide](docs/user-guide/) | Voice commands, space walkthroughs, FAQ |
+| [Configuration](docs/configuration.md) | Every environment variable explained |
+| [CLAUDE.md](CLAUDE.md) | Quick architecture reference for AI-assisted development |
 
 ## Configuration
 
-Configuration is managed through environment variables in `.env`:
+Copy `.env.example` to `.env` and configure:
 
 ```bash
 # Required
-ELEVENLABS_API_KEY=your_key_here
-ELEVENLABS_AGENT_ID=your_agent_id
+OPENAI_API_KEY=sk-xxx              # Voice + intent classification
 
-# Optional
-OPENAI_API_KEY=your_openai_key      # Fallback for additional features
-LOG_LEVEL=INFO                       # DEBUG, INFO, WARNING, ERROR
-LOG_FILE=voice_dialog.log           # Log file location
+# Execution mode
+FORCE_SYNC_MODE=true               # true = no Redis needed (default)
+
+# Optional features
+USE_TOOL_ORCHESTRATOR=true         # Multi-step request handling
+USE_TASK_MEMORY=true               # Cross-session task tracking
+USE_CONVERSATION_MEMORY=true       # Conversation context persistence
+USE_DROPE_RESOLVER=true            # Ambiguous reference resolution
 ```
 
-## Troubleshooting
+See [docs/configuration.md](docs/configuration.md) for the complete reference (50+ variables).
 
-### "ELEVENLABS_API_KEY not found"
+## Testing
 
-Make sure you've created a `.env` file from `.env.template` and added your API key.
-
-### Audio input not working
-
-Check your microphone permissions and default device:
-
-```python
-import sounddevice as sd
-print(sd.query_devices())
+```bash
+cd python
+python -m tests.test_data_layer        # Database layer
+python -m tests.test_intent_to_tool    # Intent → tool routing
+python -m tests.test_desktop_tools     # Desktop automation
+python -m tests.test_integration_e2e   # End-to-end flow
 ```
 
-### Visual module not loading
+## Platform Support
 
-Ensure you've built the C++ module:
-- Windows: `python/visual_sim_core.pyd` should exist
-- Linux/Mac: `python/visual_sim_core.so` should exist
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Windows 10/11 | Fully tested | Primary development platform |
+| macOS | Builds available | Community testing welcome |
+| Linux | Builds available | Community testing welcome |
 
-The visual module is optional - voice dialog works without it.
+## Contributing
 
-## Performance
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-- **60 FPS** rendering with 200-500 particles (optional visuals)
-- **Low latency** voice streaming via ElevenLabs SDK
-- **Real-time** audio analysis with librosa
+- Fork/clone workflow
+- Branch naming and PR process
+- Architecture quick reference for adding spaces, tools, and events
+- Code style guidelines
+
+Good first issues are labeled [`good first issue`](https://github.com/Flissel/VibeMind-VoiceDialog/labels/good%20first%20issue).
 
 ## License
 
-MIT License
+[MIT License](LICENSE) — free for personal and commercial use.
 
-## Future Enhancements
+## Acknowledgments
 
-- Multi-modal interactions
-- Advanced audio-reactive effects
-- Custom agent personalities
-- Integration with other AI frameworks
+Built with [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime), [ElevenLabs Conversational AI](https://elevenlabs.io), [Electron](https://electronjs.org), [Three.js](https://threejs.org), [AutoGen](https://github.com/microsoft/autogen), and [Supermemory](https://supermemory.ai).
