@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**VibeMind Voice Dialog** is a voice-controlled workspace where ElevenLabs voice agents capture user input and route it through a swarm backend for execution.
+**VibeMind Voice Dialog** is a voice-controlled workspace where voice input is captured and routed through a swarm backend for execution.
 
 **Current Architecture:**
 
-- **4 ElevenLabs Voice Agents** - Rachel (entry), Alice (coordinator), Adam (desktop), Antoni (coding)
-- **Intent Classification** - LLM-based classification of natural language to event types
-- **Swarm Backend** - Executes tools via domain-specific backend agents
-- **Electron UI** - 3D multiverse with bubbles (ideas) rendered via Three.js
+- **Dual Voice Provider** — `VOICE_PROVIDER` selects: `openai_realtime` (speech-to-speech, native function calling) or `elevenlabs` (4 agents: Rachel/Alice/Adam/Antoni with transfers). Also supports `VoiceBridgeV2` async mode.
+- **Intent Classification** — LLM-based classification of natural language to event types
+- **Swarm Backend** — 8 backend agents across 8 domain spaces execute tools
+- **Electron UI** — 3D multiverse with bubbles (ideas) rendered via Three.js
 
 ## Quick Start
 
@@ -35,9 +35,14 @@ npm start    # spawns Python backend automatically
 Copy `.env.example` to `.env`:
 
 ```bash
-# Required
-ELEVENLABS_API_KEY=xxx
-AGENT_MULTIVERSE=agent_xxx  # Rachel's agent ID
+# Voice provider selection (openai_realtime or elevenlabs)
+VOICE_PROVIDER=openai_realtime
+OPENAI_API_KEY=sk-xxx
+
+# Alternative: ElevenLabs (legacy multi-agent)
+# VOICE_PROVIDER=elevenlabs
+# ELEVENLABS_API_KEY=xxx
+# AGENT_MULTIVERSE=agent_xxx
 
 # Default: sync mode (no Redis required)
 FORCE_SYNC_MODE=true
@@ -48,19 +53,19 @@ FORCE_SYNC_MODE=true
 ### Main Flow
 
 ```
-User Voice → Rachel (ElevenLabs Voice Agent)
+User Voice → Voice Provider (OpenAI Realtime or ElevenLabs)
                     ↓
             Intent Classification
             (LLM classifies to event_type + payload)
                     ↓
             Event Routing (event_type → stream)
                     ↓
-    ┌───────────────┼───────────────┐
-    ↓               ↓               ↓
-IdeasAgent    CodingAgent    DesktopAgent
-(ideas.*)     (code.*)       (desktop.*)
-    ↓               ↓               ↓
-    └───────────────┼───────────────┘
+    ┌─────────┬─────────┬──────────┬──────────┬──────────┐
+    ↓         ↓         ↓          ↓          ↓          ↓
+Bubbles   Ideas    Coding    Desktop   Roarboot  ...3 more
+(bubble.*)(idea.*) (code.*)  (desktop.*)(roarboot.*)
+    ↓         ↓         ↓          ↓          ↓          ↓
+    └─────────┴─────────┴──────────┴──────────┴──────────┘
                     ↓
             Electron UI (3D Bubbles)
 ```
@@ -86,15 +91,22 @@ Rachel (Entry) ──transfer──► Alice (Hub)
 
 Agent configs: `python/agents/{name}/config.py` + `prompts.py` + `tools.py`
 
-### Three Spaces (Domains)
+### Eight Spaces (Domains)
 
-VibeMind has 3 main workspaces, each handled by a backend agent:
+VibeMind has 8 domain spaces, each with its own backend agent and Redis stream:
 
-| Space | Domain | Backend Agent | Purpose |
-| ----- | ------ | ------------- | ------- |
-| IDEAS | `bubble.*`, `idea.*` | IdeasAgent | Bubble/idea management |
-| CODING | `code.*` | CodingAgent | Code generation |
-| DESKTOP | `desktop.*` | DesktopAgent | System automation |
+| Space | Stream | Backend Agent | Event Prefix | File |
+| ----- | ------ | ------------- | ------------ | ---- |
+| Bubbles | `events:tasks:bubbles` | BubblesAgent | `bubble.*` | `python/spaces/ideas/agents/bubbles_agent.py` |
+| Ideas | `events:tasks:ideas` | IdeasAgent | `idea.*` | `python/spaces/ideas/agents/ideas_agent.py` |
+| Coding | `events:tasks:coding` | CodingAgent | `code.*` | `python/spaces/coding/agents/coding_agent.py` |
+| Desktop | `events:tasks:desktop` | DesktopAgent | `desktop.*`, `messaging.*`, `web.*`, `openclaw.*` | `python/spaces/desktop/agents/desktop_agent.py` |
+| Rowboat | `events:tasks:roarboot` | RoarbootBackendAgent | `roarboot.*` | `python/spaces/rowboat/agents/roarboot_agent.py` |
+| Research | `events:tasks:zeroclaw` | ZeroClawResearchAgent | `research.*` | `python/spaces/research/agents/zeroclaw_research_agent.py` |
+| Minibook | `events:tasks:minibook` | MinibookBackendAgent | `minibook.*` | `python/spaces/minibook/agents/minibook_agent.py` |
+| Schedule | `events:tasks:schedule` | ScheduleBackendAgent | `schedule.*` | `python/spaces/schedule/agents/schedule_agent.py` |
+
+> **Note:** Shuttles (`python/spaces/shuttles/`) contains only the SWE Design submodule and has no dedicated backend agent. Shuttle events (`bubble.evaluate`, `bubble.promote`) are handled by BubblesAgent.
 
 ### Intent Classification
 
@@ -161,15 +173,21 @@ class IdeasBackendAgent(BaseBackendAgent):
 | Component | File |
 | --------- | ---- |
 | Base Agent | `python/swarm/backend_agents/base_agent.py` |
-| Ideas Agent | `python/swarm/backend_agents/ideas_agent.py` |
-| Coding Agent | `python/swarm/backend_agents/coding_agent.py` |
-| Desktop Agent | `python/swarm/backend_agents/desktop_agent.py` |
+| Agent Registry | `python/swarm/backend_agents/__init__.py` |
+| Bubbles Agent | `python/spaces/ideas/agents/bubbles_agent.py` |
+| Ideas Agent | `python/spaces/ideas/agents/ideas_agent.py` |
+| Coding Agent | `python/spaces/coding/agents/coding_agent.py` |
+| Desktop Agent | `python/spaces/desktop/agents/desktop_agent.py` |
+| Roarboot Agent | `python/spaces/rowboat/agents/roarboot_agent.py` |
+| ZeroClaw Agent | `python/spaces/research/agents/zeroclaw_research_agent.py` |
+| Minibook Agent | `python/spaces/minibook/agents/minibook_agent.py` |
+| Schedule Agent | `python/spaces/schedule/agents/schedule_agent.py` |
 
 ### Orchestration Flow (Detailed)
 
 ```
-1. User speaks → Rachel (ElevenLabs)
-2. Rachel calls swarm_entry tool with user_text
+1. User speaks → Voice Provider (OpenAI Realtime or ElevenLabs)
+2. Voice agent calls send_intent tool with user_request
 
 3. IntentOrchestrator receives text:
    ├── (Optional) CollectorAgent: Accumulate fragments
@@ -196,10 +214,16 @@ class IdeasBackendAgent(BaseBackendAgent):
 | --------- | ---- |
 | Orchestrator | `python/swarm/orchestrator/intent_orchestrator.py` |
 | Classifier | `python/swarm/orchestrator/intent_classifier.py` |
+| RAG Classifier | `python/swarm/orchestrator/rag_intent_classifier.py` |
 | Tool Orchestrator (multi-step) | `python/swarm/orchestrator/tool_orchestrator.py` |
+| Reference Resolver (DroPE) | `python/swarm/orchestrator/reference_resolver.py` |
+| Response Generator | `python/swarm/orchestrator/response_generator.py` |
+| System Context Store | `python/swarm/orchestrator/system_context_store.py` |
+| Notification Queue (V2) | `python/swarm/orchestrator/notification_queue.py` |
+| Question Queue | `python/swarm/orchestrator/question_queue.py` |
+| Tool Definitions | `python/swarm/orchestrator/tool_definitions.py` |
 | Event Router | `python/swarm/event_team/event_router.py` |
 | Event Bus | `python/swarm/event_bus.py` |
-| Swarm Entry Tool | `python/tools/swarm_entry.py` |
 
 ### Input Enhancement Pipeline (Optional)
 
@@ -222,33 +246,59 @@ Tools are Python functions that agents can call. Two types:
 
 **2. Backend Tools** (executed via swarm)
 
-- Located in `python/tools/`
-- Mapped from event types in backend agents
+Tools live in two locations:
+- **Shared tools:** `python/tools/` (22 files — cross-space utilities)
+- **Space-specific tools:** `python/spaces/*/tools/` (per-space implementations)
 
-| Tool Module | Purpose | Key Functions |
-| ----------- | ------- | ------------- |
-| `bubble_tools.py` | Bubble CRUD | `create_bubble`, `enter_bubble`, `list_bubbles` |
-| `idea_tools.py` | Idea CRUD | `create_idea_tool`, `auto_link_ideas` |
-| `coding_tools.py` | Code generation | `generate_code`, `get_code_status` |
-| `desktop_tools.py` | Desktop automation | `open_app`, `click`, `type_text` |
-| `summary_tools.py` | LLM summaries | `summarize_bubble` |
-| `structured_formatting_tools.py` | Format ideas | `format_idea_content` |
+**Shared tools (`python/tools/`):**
+
+| Tool Module | Purpose |
+| ----------- | ------- |
+| `workspace_tools.py` | Workspace management (29KB) |
+| `navigation_tools.py` | Space navigation |
+| `conversation_tools.py` | Conversation management |
+| `session_tools.py` | Session lifecycle |
+| `memory_tools.py` | Memory services |
+| `task_memory_tools.py` | Supermemory task tracking |
+| `supermemory_tools.py` | Supermemory integration |
+| `system_status_tools.py` | System health |
+| `task_status_tools.py` | Task status monitoring |
+| `handoff_tools.py` | ElevenLabs agent transfers |
+| `transfer_handler.py` | Agent transfer handling |
+| `client_tools_manager.py` | ElevenLabs client tools (18KB) |
+| `worker_queue.py` | Async work queue (29KB) |
+| `browser_worker.py` | Headless browser automation (13KB) |
+| `index_mapping.py` | Event type → tool mapping |
+| `moire_tools.py` | MoireTracker integration |
+| `bubble_requirements_tool.py` | Shuttle pipeline requirements |
+| `bubble_tools.py` | Bubble stubs (actual in spaces/ideas/) |
+| `idea_tools.py` | Idea stubs (actual in spaces/ideas/) |
+| `summary_tools.py` | LLM summaries |
+| `structured_formatting_tools.py` | Format ideas |
+| `format_dispatcher.py` | Format routing |
+
+**Space-specific tools** (in `python/spaces/*/tools/`): Each space has its own tools directory with adapted implementations. See `docs/python/spaces/` for details.
 
 ### Database
 
 SQLite: `python/vibemind.db`
 
-**Schema:**
+**Schema (v14, 12 data tables):**
 
 | Table | Purpose | Key Columns |
 | ----- | ------- | ----------- |
-| `ideas` | Bubbles and ideas | `id`, `title`, `description`, `parent_id`, `format_schema`, `content_json` |
-| `projects` | Code generation | `id`, `name`, `generation_status`, `vnc_port`, `preview_url` |
-| `canvas_nodes` | Visual nodes | `id`, `node_type`, `linked_idea_id`, `x`, `y` |
+| `ideas` | Bubbles and ideas | `id`, `title`, `description`, `parent_id`, `score`, `status`, `embedding_vector` |
+| `projects` | Code generation | `id`, `name`, `generation_status`, `vnc_port`, `preview_url`, `tech_stack` |
+| `canvas_nodes` | Visual nodes | `id`, `node_type`, `linked_idea_id`, `x`, `y`, `format_schema`, `content_json` |
 | `canvas_edges` | Node connections | `from_node_id`, `to_node_id`, `edge_type` |
 | `conversation_sessions` | Chat sessions | `id`, `started_at`, `agent_id` |
-| `conversation_messages` | Chat history | `session_id`, `speaker`, `text` |
-| `shuttles` | Requirements pipeline | `shuttle_id`, `bubble_id`, `current_stage` |
+| `conversation_history` | Chat history | `session_id`, `speaker`, `text`, `timestamp` |
+| `shuttles` | Requirements pipeline | `shuttle_id`, `bubble_id`, `current_stage`, `stage_type`, `stage_data` |
+| `exploration_sessions` | AI-Scientist runs | `root_bubble_id`, `status`, `total_nodes_explored`, `best_score` |
+| `exploration_nodes` | Exploration tree nodes | `session_id`, `source_bubble_id`, `target_bubble_id`, `combined_score` |
+| `discovered_edges` | Permanent semantic links | `from_idea_id`, `to_idea_id`, `edge_label`, `confidence` |
+| `mermaid_diagrams` | Generated diagrams | `title`, `diagram_type`, `content`, `source_idea_id` |
+| `scheduled_tasks` | APScheduler tasks | `title`, `action_text`, `trigger_type`, `trigger_config`, `status` |
 
 **Repository Pattern:**
 
@@ -288,9 +338,23 @@ _broadcast_to_electron({
 | ------------ | ------- |
 | `node_added` | New bubble/idea created |
 | `node_removed` | Bubble/idea deleted |
-| `edge_added` | Connection created |
+| `node_updated` | Bubble/idea metadata changed |
+| `node_structured_update` | Rich content update (format + content_json) |
+| `edge_added` / `edge_created` | Connection created |
+| `edge_deleted` | Connection removed |
 | `space_changed` | Navigate to bubble |
-| `node_structured_update` | Rich content update |
+| `canvas_refresh` | Full canvas reload |
+| `navigate_to_space` | Navigate to named space |
+| `agent_transfer_complete` | Voice agent transfer done |
+| `project_created` | New coding project |
+| `project_status_update` | Code gen progress |
+| `project_preview_ready` | VNC preview available |
+| `shuttle_launched` | Shuttle pipeline started |
+| `shuttle_stage_update` | Pipeline stage progress |
+| `exploration_update` | AI-Scientist exploration step |
+| `schedule_created` | New scheduled task |
+| `roarboot_result` | Rowboat query result |
+| `voice_end_requested` | Voice session stop |
 
 **Key Files:**
 
@@ -366,18 +430,25 @@ python -m tests.test_agent_transfers   # Agent transfer tests
 
 ## Configuration Reference
 
+See `.env.example` for all 60+ variables. Key groups:
+
 ```bash
-# Required
-ELEVENLABS_API_KEY=xxx
-AGENT_MULTIVERSE=agent_xxx
+# Voice Provider (required — choose one)
+VOICE_PROVIDER=openai_realtime    # or "elevenlabs"
+OPENAI_API_KEY=sk-xxx             # for openai_realtime
+# ELEVENLABS_API_KEY=xxx          # for elevenlabs
+# AGENT_MULTIVERSE=agent_xxx      # Rachel agent ID (elevenlabs)
 
 # Execution Mode
 FORCE_SYNC_MODE=true         # false enables Redis-based async execution
 
+# Voice Bridge V2 (async notification mode)
+USE_VOICE_BRIDGE_V2=false
+
 # Orchestrator Features
-USE_TOOL_ORCHESTRATOR=true   # Claude Sonnet for multi-step requests
-USE_INTENT_ANALYSIS=true     # Multi-agent intent analysis
-USE_RAG_CLASSIFIER=true      # Semantic classification
+USE_RAG_CLASSIFIER=true      # Semantic classification via Supermemory
+USE_DROPE_RESOLVER=false     # Reference resolution (requires torch)
+USE_BROADCAST_MODE=false     # Fan-out to all agents for profiling
 
 # Memory Services
 USE_TASK_MEMORY=true
@@ -390,11 +461,26 @@ FAST_STARTUP=true            # Skips Supermemory API calls at startup
 
 # LLM
 OPENROUTER_API_KEY=xxx
+RAG_CLASSIFIER_MODEL=openai/gpt-4o
+
+# Spaces (enable/disable)
+MINIBOOK_ENABLED=false       # Inter-space collaboration
+USE_MINIBOOK_HUB=false       # Route ALL intents through Minibook
+SCHEDULE_ENABLED=false       # APScheduler-based scheduling
+USE_ZEROCLAW=false           # ZeroClaw web research
+ROWBOAT_PUBLISH_ENABLED=true # Publish metadata to knowledge graph
+
+# Database (optional)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=xxx
 
 # Optional
 CODING_ENGINE_PATH=C:\path\to\Coding_engine
 VNC_BASE_URL=https://preview.vibemind.io/vnc
+REQ_ORCHESTRATOR_URL=http://localhost:8087
 ```
+
+Full reference: [docs/configuration.md](docs/configuration.md)
 
 ## Key Patterns
 
@@ -420,10 +506,12 @@ def my_tool(param1: str) -> Dict[str, Any]:
 
 ### Adding a Backend Agent
 
-1. Subclass `BaseBackendAgent` in `python/swarm/backend_agents/`
-2. Define `stream`, `name`, `TOOL_MAP`, `PARAM_MAPPING`
-3. Implement `_load_tools()` and `_get_tool_name()`
-4. Add routing in `event_router.py`
+1. Create space directory in `python/spaces/<your_space>/agents/`
+2. Subclass `BaseBackendAgent` (`python/swarm/backend_agents/base_agent.py`)
+3. Define `stream`, `name`, `TOOL_MAP`, `PARAM_MAPPING`
+4. Implement `_load_tools()` and `_get_tool_name()`
+5. Add stream constant and event mappings in `event_router.py`
+6. Register lazy import in `python/swarm/backend_agents/__init__.py`
 
 ### Tool Definition Format (ElevenLabs)
 

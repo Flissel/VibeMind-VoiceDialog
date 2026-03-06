@@ -76,8 +76,9 @@ python/logs/
 # Build artifacts
 electron-app/rowboat-services.cjs
 
-# Claude Code worktrees
+# Claude Code worktrees and local settings
 .claude/worktrees/
+.claude/settings.local.json
 
 # Diagnostic reports
 diagnostic_reports/
