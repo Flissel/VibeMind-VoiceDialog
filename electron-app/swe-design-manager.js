@@ -12,14 +12,20 @@
  */
 
 const path = require('path');
-const {
-  startREServer,
-  stopREServer,
-  createREDashboardView,
-  removeREDashboardView,
-  isServerRunning,
-  getServerPort,
-} = require('../python/spaces/shuttles/swe_desgine/requirements_engineer/electron/embed');
+
+let embedModule = null;
+try {
+  embedModule = require('../python/spaces/shuttles/swe_desgine/requirements_engineer/electron/embed');
+} catch (e) {
+  console.warn('[SweDesignManager] SWE Design submodule not found — SweDesign feature disabled');
+}
+
+const startREServer     = embedModule ? embedModule.startREServer : () => Promise.reject(new Error('SWE Design not available'));
+const stopREServer      = embedModule ? embedModule.stopREServer : () => {};
+const createREDashboardView = embedModule ? embedModule.createREDashboardView : () => null;
+const removeREDashboardView = embedModule ? embedModule.removeREDashboardView : () => {};
+const isServerRunning   = embedModule ? embedModule.isServerRunning : () => false;
+const getServerPort     = embedModule ? embedModule.getServerPort : () => 0;
 
 class SweDesignManager {
   constructor(mainWindow) {

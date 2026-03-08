@@ -81,6 +81,14 @@ class MultiverseApp {
                 name: 'SWE Design Factory',
                 agent: { name: 'Factory', slug: 'swedesign', role: 'Spec Generator' },
                 color: 0xff6633
+            },
+            clawport: {
+                objects: [],
+                position: new THREE.Vector3(-8, 0, 12),
+                icon: '\u{1F4CA}',
+                name: 'Dashboard',
+                agent: { name: 'Dashboard', slug: 'clawport', role: 'System Dashboard' },
+                color: 0x8866ff
             }
         };
         
@@ -1219,6 +1227,14 @@ class MultiverseApp {
             }
         }
 
+        // Hide ClawPort Dashboard BrowserView when leaving clawport space
+        if (this.currentSpace === 'clawport' && targetSpace !== 'clawport') {
+            if (window.vibemind && window.vibemind.hideClawPort) {
+                window.vibemind.hideClawPort();
+                console.log('[Multiverse] Hiding ClawPort Dashboard');
+            }
+        }
+
         // Hide Desktop Dashboard when leaving desktop space
         if (this.currentSpace === 'desktop' && targetSpace !== 'desktop') {
             if (this._insideDesktopDashboard) {
@@ -1262,6 +1278,14 @@ class MultiverseApp {
                 if (window.vibemind && window.vibemind.showSweDesign) {
                     window.vibemind.showSweDesign();
                     console.log('[Multiverse] Showing SWE Design BrowserView');
+                }
+            }
+
+            // Show ClawPort Dashboard BrowserView when entering clawport space
+            if (targetSpace === 'clawport') {
+                if (window.vibemind && window.vibemind.showClawPort) {
+                    window.vibemind.showClawPort();
+                    console.log('[Multiverse] Showing ClawPort Dashboard');
                 }
             }
 

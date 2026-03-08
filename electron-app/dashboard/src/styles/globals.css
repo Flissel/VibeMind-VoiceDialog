@@ -1,0 +1,209 @@
+/* ============================================
+   VibeMind Dashboard — Design Tokens
+   Adapted from ClawPort UI globals.css
+   ============================================ */
+
+:root {
+  /* Typography Scale — Apple HIG */
+  --text-caption2: 11px;
+  --text-caption1: 12px;
+  --text-footnote: 13px;
+  --text-subheadline: 15px;
+  --text-body: 17px;
+  --text-title3: 20px;
+  --text-title2: 22px;
+  --text-title1: 28px;
+  --text-large-title: 34px;
+
+  /* Leading */
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.47;
+  --leading-relaxed: 1.65;
+
+  /* Tracking */
+  --tracking-tight: -0.41px;
+  --tracking-normal: -0.24px;
+  --tracking-wide: 0.07em;
+
+  /* Font Weights */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Spacing Scale — 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Dark Theme (Apple Dark Mode) */
+  --bg: #000000;
+  --bg-secondary: rgba(28,28,30,1);
+  --bg-tertiary: rgba(44,44,46,1);
+  --material-regular: rgba(28,28,30,0.92);
+  --material-thick: rgba(22,22,24,0.96);
+  --material-thin: rgba(255,255,255,0.06);
+  --material-ultra-thin: rgba(255,255,255,0.04);
+  --fill-primary: rgba(120,120,128,0.36);
+  --fill-secondary: rgba(120,120,128,0.32);
+  --fill-tertiary: rgba(118,118,128,0.24);
+  --fill-quaternary: rgba(118,118,128,0.18);
+  --separator: rgba(84,84,88,0.60);
+  --separator-opaque: #38383A;
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(235,235,245,0.60);
+  --text-tertiary: rgba(235,235,245,0.30);
+  --text-quaternary: rgba(235,235,245,0.18);
+  --accent: #0A84FF;
+  --accent-fill: rgba(10,132,255,0.15);
+  --accent-contrast: #fff;
+  --system-blue: #0A84FF;
+  --system-green: #30D158;
+  --system-red: #FF453A;
+  --system-orange: #FF9F0A;
+  --system-purple: #BF5AF2;
+  --system-yellow: #FFD60A;
+  --system-teal: #64D2FF;
+  --inset-shine: inset 0 1px 0 rgba(255,255,255,0.08);
+  --shadow-subtle: 0 1px 2px rgba(0,0,0,0.20);
+  --shadow-ambient: 0 0 0 0.5px rgba(0,0,0,0.20);
+  --shadow-key: 0 4px 16px rgba(0,0,0,0.40);
+  --shadow-card: 0 0 0 0.5px rgba(0,0,0,0.20), 0 4px 16px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.08);
+  --shadow-overlay: 0 0 0 0.5px rgba(0,0,0,0.30), 0 16px 48px rgba(0,0,0,0.60), inset 0 1px 0 rgba(255,255,255,0.06);
+  --code-bg: rgba(255,255,255,0.06);
+  --code-border: rgba(255,255,255,0.10);
+  --code-text: #e5e5ea;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   Utility Classes (replacing Tailwind)
+   ============================================ */
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-row { flex-direction: row; }
+.flex-wrap { flex-wrap: wrap; }
+.flex-1 { flex: 1; }
+.flex-shrink-0 { flex-shrink: 0; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.min-w-0 { min-width: 0; }
+.overflow-hidden { overflow: hidden; }
+.overflow-auto { overflow: auto; }
+.overflow-y-auto { overflow-y: auto; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cursor-pointer { cursor: pointer; }
+.select-none { user-select: none; }
+.rounded-full { border-radius: 9999px; }
+.font-mono { font-family: "SF Mono", Monaco, Menlo, "Courier New", monospace; }
+.hidden { display: none; }
+
+/* Focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Hover background */
+.hover-bg {
+  transition: background-color 150ms var(--ease-smooth);
+}
+.hover-bg:hover {
+  background-color: var(--material-thin);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--fill-tertiary);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fill-secondary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 500px; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.25s ease-out;
+}
