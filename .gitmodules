@@ -16,3 +16,9 @@
 [submodule "external/minibook"]
 	path = external/minibook
 	url = https://github.com/c4pt0r/minibook.git
+[submodule "electron-app/clawport-ui"]
+	path = electron-app/clawport-ui
+	url = https://github.com/JohnRiceML/clawport-ui.git
+[submodule "python/spaces/brain/the_brain"]
+	path = python/spaces/brain/the_brain
+	url = https://github.com/Flissel/the_brain.git

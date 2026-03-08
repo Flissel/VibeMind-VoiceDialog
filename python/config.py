@@ -1,6 +1,6 @@
 """
 Voice Dialog Configuration
-Simple configuration management for ElevenLabs voice dialog
+Simple configuration management for voice dialog (OpenAI Realtime)
 """
 
 import os
@@ -31,22 +31,14 @@ class AudioConfig:
 @dataclass
 class VoiceConfig:
     """Voice dialog configuration"""
-    elevenlabs_api_key: Optional[str]
-    elevenlabs_agent_id: Optional[str]  # Legacy single agent ID
     openai_api_key: Optional[str]  # For OpenAI Realtime API
 
-    # Voice provider selection: "openai_realtime" or "elevenlabs"
-    voice_provider: str = "elevenlabs"
+    # Voice provider (only openai_realtime supported)
+    voice_provider: str = "openai_realtime"
 
     # OpenAI Realtime settings
     openai_realtime_model: str = "gpt-4o-realtime-preview"
     openai_realtime_voice: str = "alloy"
-
-    # Multi-agent system IDs
-    agent_conversational_memory: Optional[str] = None
-    agent_project_manager: Optional[str] = None
-    agent_desktop_worker: Optional[str] = None
-    agent_project_writer: Optional[str] = None
 
     logging: LoggingConfig = None
     audio: AudioConfig = None
@@ -114,26 +106,10 @@ class ConfigManager:
         Raises:
             ConfigurationError: If required config is missing
         """
-        # ElevenLabs API key (required)
-        elevenlabs_key = os.getenv('ELEVENLABS_API_KEY')
-        if not elevenlabs_key or elevenlabs_key.strip() in ['', 'your_elevenlabs_key_here']:
-            elevenlabs_key = None
-
-        # ElevenLabs Agent ID (required)
-        agent_id = os.getenv('ELEVENLABS_AGENT_ID')
-        if not agent_id or agent_id.strip() in ['', 'your_agent_id_here']:
-            agent_id = None
-
-        # OpenAI API key (optional)
+        # OpenAI API key (required)
         openai_key = os.getenv('OPENAI_API_KEY')
         if openai_key and openai_key.strip() in ['', 'your_openai_key_here']:
             openai_key = None
-
-        # Multi-agent system IDs
-        agent_conversational_memory = os.getenv('AGENT_CONVERSATIONAL_MEMORY')
-        agent_project_manager = os.getenv('AGENT_PROJECT_MANAGER')
-        agent_desktop_worker = os.getenv('AGENT_DESKTOP_WORKER')
-        agent_project_writer = os.getenv('AGENT_PROJECT_WRITER')
 
         # Logging configuration
         log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
@@ -158,26 +134,15 @@ class ConfigManager:
             use_threshold_filtering=use_threshold_filtering
         )
 
-        # Voice provider selection
-        voice_provider = os.getenv('VOICE_PROVIDER', 'elevenlabs').lower()
-        if voice_provider not in ('openai_realtime', 'elevenlabs'):
-            voice_provider = 'elevenlabs'
-
         # OpenAI Realtime settings
         openai_realtime_model = os.getenv('OPENAI_REALTIME_MODEL', 'gpt-4o-realtime-preview')
         openai_realtime_voice = os.getenv('OPENAI_REALTIME_VOICE', 'alloy')
 
         return VoiceConfig(
-            elevenlabs_api_key=elevenlabs_key,
-            elevenlabs_agent_id=agent_id,
             openai_api_key=openai_key,
-            voice_provider=voice_provider,
+            voice_provider="openai_realtime",
             openai_realtime_model=openai_realtime_model,
             openai_realtime_voice=openai_realtime_voice,
-            agent_conversational_memory=agent_conversational_memory,
-            agent_project_manager=agent_project_manager,
-            agent_desktop_worker=agent_desktop_worker,
-            agent_project_writer=agent_project_writer,
             logging=log_config,
             audio=audio_config
         )
@@ -198,12 +163,8 @@ class ConfigManager:
         """
         errors = []
 
-        # Check required ElevenLabs credentials
-        if not config.elevenlabs_api_key:
-            errors.append("ELEVENLABS_API_KEY is required")
-
-        if not config.elevenlabs_agent_id:
-            errors.append("ELEVENLABS_AGENT_ID is required")
+        if not config.openai_api_key:
+            errors.append("OPENAI_API_KEY is required")
 
         if errors:
             error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)

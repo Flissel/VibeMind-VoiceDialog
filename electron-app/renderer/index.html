@@ -53,6 +53,10 @@
                 <span class="space-icon">&#x1F6A3;</span>
                 <span class="space-name">Rowboat</span>
             </button>
+            <button class="space-tab" id="tab-clawport" data-space="clawport">
+                <span class="space-icon">&#x1F4CA;</span>
+                <span class="space-name">Dashboard</span>
+            </button>
         </div>
         <div class="agent-status" id="agent-status">
             <span class="agent-indicator"></span>
@@ -2322,6 +2326,13 @@
             };
         }
 
+        const tabClawport = document.getElementById('tab-clawport');
+        if (tabClawport) {
+            tabClawport.onclick = () => {
+                switchSpace('clawport');
+            };
+        }
+
         async function switchSpace(spaceId) {
             if (spaceId === currentSpace) return;
             
@@ -2369,6 +2380,9 @@
             } else if (spaceId === 'roarboot') {
                 if (spaceIcon) spaceIcon.textContent = '\u{1F6A3}';
                 if (spaceName) spaceName.textContent = 'Rowboat';
+            } else if (spaceId === 'clawport') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F4CA}';
+                if (spaceName) spaceName.textContent = 'Dashboard';
             }
             // Show the indicator when space changes
             if (spaceIndicator) spaceIndicator.classList.remove('hidden');

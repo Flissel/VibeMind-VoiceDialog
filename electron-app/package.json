@@ -5,8 +5,10 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dashboard:build": "cd dashboard && npm run build",
+    "dashboard:dev": "cd dashboard && npm run dev",
     "build:rowboat": "bash scripts/build-rowboat.sh",
-    "build": "electron-builder",
+    "build": "npm run dashboard:build && electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
@@ -56,7 +58,10 @@
     "files": [
       "**/*",
       "rowboat-services.cjs",
-      "rowboat-preload.js"
+      "rowboat-preload.js",
+      "dashboard/dist/**/*",
+      "clawport-manager.js",
+      "clawport-preload.js"
     ]
   },
   "dependencies": {

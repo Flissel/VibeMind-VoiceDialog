@@ -8,19 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current Architecture:**
 
-- **Dual Voice Provider** — `VOICE_PROVIDER` selects: `openai_realtime` (speech-to-speech, native function calling) or `elevenlabs` (4 agents: Rachel/Alice/Adam/Antoni with transfers). Also supports `VoiceBridgeV2` async mode.
+- **Voice Provider** — OpenAI Realtime API (speech-to-speech, native function calling) via VoiceBridgeV2 async architecture. Rachel is the single voice interface agent.
 - **Intent Classification** — LLM-based classification of natural language to event types
 - **Swarm Backend** — 8 backend agents across 8 domain spaces execute tools
 - **Electron UI** — 3D multiverse with bubbles (ideas) rendered via Three.js
 
 ## Quick Start
-
-### Voice Dialog Only
-
-```bash
-cd python
-python voice_dialog_main.py
-```
 
 ### Full System (Electron UI)
 
@@ -35,14 +28,8 @@ npm start    # spawns Python backend automatically
 Copy `.env.example` to `.env`:
 
 ```bash
-# Voice provider selection (openai_realtime or elevenlabs)
-VOICE_PROVIDER=openai_realtime
+# Voice (OpenAI Realtime)
 OPENAI_API_KEY=sk-xxx
-
-# Alternative: ElevenLabs (legacy multi-agent)
-# VOICE_PROVIDER=elevenlabs
-# ELEVENLABS_API_KEY=xxx
-# AGENT_MULTIVERSE=agent_xxx
 
 # Default: sync mode (no Redis required)
 FORCE_SYNC_MODE=true
@@ -53,7 +40,7 @@ FORCE_SYNC_MODE=true
 ### Main Flow
 
 ```
-User Voice → Voice Provider (OpenAI Realtime or ElevenLabs)
+User Voice → OpenAI Realtime API (speech-to-speech)
                     ↓
             Intent Classification
             (LLM classifies to event_type + payload)
@@ -70,26 +57,11 @@ Bubbles   Ideas    Coding    Desktop   Roarboot  ...3 more
             Electron UI (3D Bubbles)
 ```
 
-### Multi-Agent System
+### Voice Agent
 
-4 ElevenLabs voice agents with transfer capabilities:
+Rachel is the single voice interface agent (OpenAI Realtime). She receives user speech, calls `send_intent` to route through the swarm orchestrator, and speaks the response.
 
-```
-Rachel (Entry) ──transfer──► Alice (Hub)
-                               │
-                    ┌──────────┴──────────┐
-                    ▼                      ▼
-               Adam (Desktop)        Antoni (Coding)
-```
-
-| Agent | Role | Transfers To |
-|-------|------|--------------|
-| Rachel | Multiverse Navigator (Entry) | Alice |
-| Alice | Coordinator Hub | Adam, Antoni, Rachel |
-| Adam | Desktop Worker | Alice |
-| Antoni | Coding/Writing | Alice |
-
-Agent configs: `python/agents/{name}/config.py` + `prompts.py` + `tools.py`
+**Key File:** `python/spaces/ideas/agents/rachel_agent.py`
 
 ### Eight Spaces (Domains)
 
@@ -186,7 +158,7 @@ class IdeasBackendAgent(BaseBackendAgent):
 ### Orchestration Flow (Detailed)
 
 ```
-1. User speaks → Voice Provider (OpenAI Realtime or ElevenLabs)
+1. User speaks → OpenAI Realtime API (speech-to-speech)
 2. Voice agent calls send_intent tool with user_request
 
 3. IntentOrchestrator receives text:
@@ -239,12 +211,7 @@ Files in `python/swarm/agents/`
 
 Tools are Python functions that agents can call. Two types:
 
-**1. ElevenLabs Client Tools** (voice agent calls directly)
-
-- Registered via `ClientToolsManager`
-- Used for session control, transfers
-
-**2. Backend Tools** (executed via swarm)
+**Backend Tools** (executed via swarm)
 
 Tools live in two locations:
 - **Shared tools:** `python/tools/` (22 files — cross-space utilities)
@@ -263,9 +230,8 @@ Tools live in two locations:
 | `supermemory_tools.py` | Supermemory integration |
 | `system_status_tools.py` | System health |
 | `task_status_tools.py` | Task status monitoring |
-| `handoff_tools.py` | ElevenLabs agent transfers |
+| `handoff_tools.py` | Agent transfers |
 | `transfer_handler.py` | Agent transfer handling |
-| `client_tools_manager.py` | ElevenLabs client tools (18KB) |
 | `worker_queue.py` | Async work queue (29KB) |
 | `browser_worker.py` | Headless browser automation (13KB) |
 | `index_mapping.py` | Event type → tool mapping |
@@ -362,6 +328,54 @@ _broadcast_to_electron({
 - [python/electron_backend.py](python/electron_backend.py) - Message handler
 - [electron-app/renderer/glass_bubbles.js](electron-app/renderer/glass_bubbles.js) - 3D rendering
 
+### ClawPort Dashboard
+
+A standalone Vite + React dashboard embedded as a BrowserView overlay via `ClawPortManager`. Provides system monitoring and text-based interaction as an alternative to voice.
+
+**4 Dashboard Tabs:**
+
+| Tab | Feature | Python Handler | IPC Messages |
+|-----|---------|---------------|-------------|
+| Schedule | APScheduler task list + pause/resume | `_handle_get_scheduled_tasks` | `get_scheduled_tasks`, `update_task_status` |
+| Agents | 8 backend agent status cards (live dots) | `_handle_get_agent_status_sync` | `get_agent_status` |
+| Chat | Text input → same `process_intent` as voice | `_handle_chat_text_input` | `chat_text_input`, `get_conversation_history` |
+| Memory | Supermemory service overview + search | `_handle_get_memory_overview` | `get_memory_overview`, `search_memory`, `get_recent_memory` |
+
+**Architecture:**
+
+```
+ClawPort React App (dashboard/dist/index.html)
+  → window.vibemindDashboard (clawport-preload.js)
+    → ipcRenderer.invoke('clawport:*')
+      → main.js sendToPythonAndWait()
+        → Python electron_backend.py handlers
+```
+
+**Key Files:**
+
+| Component | File |
+|-----------|------|
+| BrowserView Manager | `electron-app/clawport-manager.js` |
+| Preload (IPC API) | `electron-app/clawport-preload.js` |
+| React App | `electron-app/dashboard/src/App.tsx` |
+| IPC Hooks | `electron-app/dashboard/src/hooks/useIPC.ts` |
+| TypeScript Types | `electron-app/dashboard/src/types.ts` |
+| Schedule UI | `electron-app/dashboard/src/features/ScheduleMonitor.tsx` |
+| Agent Status UI | `electron-app/dashboard/src/features/AgentStatus.tsx` |
+| Chat UI | `electron-app/dashboard/src/features/ChatPanel.tsx` |
+| Memory UI | `electron-app/dashboard/src/features/MemoryBrowser.tsx` |
+| CSS Design System | `electron-app/dashboard/src/styles/globals.css` |
+
+**Build:**
+
+```bash
+cd electron-app
+npm run dashboard:build   # Build to dashboard/dist/
+npm run dashboard:dev     # Vite dev server with hot-reload
+```
+
+**BrowserView Mutual Exclusion:** All 4 managers (Dashboard, Rowboat, SweDesign, ClawPort) hide each other when any one is shown.
+
 ### Memory System (Optional)
 
 Supermemory integration for semantic memory:
@@ -386,10 +400,7 @@ SUPERMEMORY_API_KEY=xxx
 ## Common Commands
 
 ```bash
-# Voice dialog standalone
-cd python && python voice_dialog_main.py
-
-# Electron app
+# Electron app (starts Python backend + voice automatically)
 cd electron-app && npm start
 
 # Test agent registry
@@ -405,10 +416,6 @@ python -c "import sounddevice as sd; print(sd.query_devices())"
 cd electron-app && npm run build:win   # Windows installer
 cd electron-app && npm run build:mac   # macOS DMG
 cd electron-app && npm run build:linux # Linux AppImage
-
-# Deploy client tools to ElevenLabs
-cd python && python deploy_client_tools.py --show
-cd python && python deploy_client_tools.py --deploy
 
 # Debug startup
 start_vibemind_debug.bat               # With debug ports (CDP 9222)
@@ -433,11 +440,8 @@ python -m tests.test_agent_transfers   # Agent transfer tests
 See `.env.example` for all 60+ variables. Key groups:
 
 ```bash
-# Voice Provider (required — choose one)
-VOICE_PROVIDER=openai_realtime    # or "elevenlabs"
-OPENAI_API_KEY=sk-xxx             # for openai_realtime
-# ELEVENLABS_API_KEY=xxx          # for elevenlabs
-# AGENT_MULTIVERSE=agent_xxx      # Rachel agent ID (elevenlabs)
+# Voice Provider (OpenAI Realtime)
+OPENAI_API_KEY=sk-xxx
 
 # Execution Mode
 FORCE_SYNC_MODE=true         # false enables Redis-based async execution
@@ -513,7 +517,7 @@ def my_tool(param1: str) -> Dict[str, Any]:
 5. Add stream constant and event mappings in `event_router.py`
 6. Register lazy import in `python/swarm/backend_agents/__init__.py`
 
-### Tool Definition Format (ElevenLabs)
+### Tool Definition Format
 
 ```python
 TOOL_DEFINITION = {

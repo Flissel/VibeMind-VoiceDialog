@@ -99,14 +99,6 @@ def get_backend() -> Optional['ElectronBackend']:
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
-# Try to import voice dialog components
-try:
-    from elevenlabs_voice_dialog import VoiceDialog
-    HAS_VOICE = True
-except ImportError:
-    HAS_VOICE = False
-    logger.warning("Voice dialog not available")
-
 # Try to import data layer for persistence
 try:
     from data import CanvasRepository, CanvasNode as DBCanvasNode, CanvasEdge as DBCanvasEdge, IdeasRepository, ShuttlesRepository
@@ -142,28 +134,6 @@ except ImportError:
     HAS_NAVIGATION_TOOLS = False
     set_navigation_sender = None
     logger.warning("Navigation tools not available")
-
-# Try to import full voice tools setup
-try:
-    from voice_dialog_main import setup_tools_manager
-    from elevenlabs.client import ElevenLabs
-    from elevenlabs.conversational_ai.conversation import Conversation
-    from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
-    HAS_VOICE_TOOLS = True
-except ImportError as e:
-    HAS_VOICE_TOOLS = False
-    logger.warning(f"Full voice tools not available: {e}")
-
-# Try to import transfer handler
-try:
-    from tools.transfer_handler import init_transfer_handler, get_transfer_handler
-    from tools.bubble_tools import get_pending_agent_switch
-    HAS_TRANSFER_HANDLER = True
-except ImportError as e:
-    HAS_TRANSFER_HANDLER = False
-    init_transfer_handler = None
-    get_pending_agent_switch = None
-    logger.warning(f"Transfer handler not available: {e}")
 
 # Import session tools for speech tracking
 try:
@@ -211,8 +181,8 @@ except ImportError as e:
 # VoiceBridgeV2 is the default (Swarm pipeline). Set USE_VOICE_BRIDGE_V2=false for legacy ClientTools.
 USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "true").lower() == "true"
 
-# Voice provider selection: "openai_realtime" (default) or "elevenlabs" (legacy)
-VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "elevenlabs").lower()
+# Voice provider: openai_realtime only
+VOICE_PROVIDER = "openai_realtime"
 
 
 # ==============================================================================
@@ -269,25 +239,21 @@ class ElectronBackend:
         self.next_bubble_id = 1
         self.next_node_id = 1
         self.current_bubble_id: Optional[int] = None  # Currently "inside" a bubble
-        self.voice_dialog: Optional[VoiceDialog] = None
+        self.voice_dialog = None  # Unused, kept for interface compat
         self.voice_active = False
         self._voice_stopping = False
         self._start_cancelled = False
         self._voice_start_task: Optional[asyncio.Task] = None  # Track running start_voice task
 
-        # Full voice tools support (for Electron IPC integration)
-        self.voice_conversation = None  # ElevenLabs Conversation object
-        self.tools_manager = None       # ClientToolsManager with all registered tools
-        self.elevenlabs_client = None   # ElevenLabs API client
-        self.audio_interface = None     # Audio interface for voice
-        self.transfer_handler = None    # Agent transfer handler
-
-        # VoiceBridgeV2 (new async architecture with NotificationQueue)
-        self.voice_bridge = None  # VoiceBridgeV2 instance when USE_VOICE_BRIDGE_V2=true
+        # VoiceBridgeV2 (async architecture with NotificationQueue)
+        self.voice_bridge = None  # VoiceBridgeV2 instance
 
         # OpenAI Realtime voice session (when VOICE_PROVIDER=openai_realtime)
         self.openai_realtime_session = None
         
+        # ClawPort Dashboard: Track last agent events for status display
+        self._agent_last_events: Dict[str, Dict] = {}
+
         # Project Preview State (Coding Engine Integration)
         self.active_previews: Dict[str, Dict] = {}  # project_id -> preview_info
         self.coding_engine_path = os.environ.get(
@@ -404,45 +370,6 @@ class ElectronBackend:
             except Exception as e:
                 debug_log(f"Embedding model pre-load failed: {e}")
         threading.Thread(target=_preload_embedding_model, daemon=True, name="embedding-preload").start()
-
-        # Pre-warm voice components in background to speed up "Start Voice"
-        # Only pre-warms synchronous operations (ElevenLabs client, audio interface)
-        # VoiceBridgeV2 is async and created when voice starts
-        def _prewarm_voice_components():
-            try:
-                api_key = os.getenv("ELEVENLABS_API_KEY")
-                if not api_key:
-                    debug_log("No ELEVENLABS_API_KEY - skipping voice pre-warm")
-                    return
-
-                # 1. Pre-create ElevenLabs client (slow network auth)
-                if HAS_VOICE_TOOLS:
-                    debug_log("Pre-warming ElevenLabs client...")
-                    from elevenlabs.client import ElevenLabs
-                    self.elevenlabs_client = ElevenLabs(api_key=api_key)
-                    debug_log("ElevenLabs client pre-warmed")
-
-                    # 2. Audio interface: skip pre-warm, just pre-import pyaudio
-                    # DefaultAudioInterface.__init__ only does `import pyaudio`, so
-                    # pre-warming it adds no benefit. Creating it fresh avoids potential
-                    # cross-thread PortAudio issues on Windows.
-                    try:
-                        import pyaudio  # noqa: pre-import to cache module
-                        debug_log("PyAudio module pre-imported")
-                    except ImportError:
-                        debug_log("PyAudio not installed")
-
-                    # 3. Pre-initialize tools manager (only for legacy ClientTools path)
-                    if not USE_VOICE_BRIDGE_V2:
-                        debug_log("Pre-warming tools manager (legacy ClientTools)...")
-                        self.tools_manager = setup_tools_manager()
-                        debug_log("Tools manager pre-warmed")
-                    else:
-                        debug_log("Skipping tools manager pre-warm (VoiceBridgeV2 uses Swarm pipeline)")
-
-            except Exception as e:
-                debug_log(f"Voice pre-warm failed (will init on first use): {e}")
-        threading.Thread(target=_prewarm_voice_components, daemon=True, name="voice-prewarm").start()
 
         # Roarboot autoconnect + self-healing loop
         # Checks Rowboat Docker health at startup, auto-starts if configured,
@@ -1106,10 +1033,8 @@ class ElectronBackend:
     # ========================================================================
 
     async def start_voice(self):
-        """Start voice dialog session with full tool integration."""
+        """Start voice dialog session (OpenAI Realtime)."""
         debug_log("start_voice() called")
-        debug_log(f"HAS_VOICE_TOOLS: {HAS_VOICE_TOOLS}")
-        debug_log(f"HAS_VOICE: {HAS_VOICE}")
 
         # Cancel any still-running start_voice task to prevent concurrent connect() calls
         old_task = self._voice_start_task
@@ -1123,200 +1048,37 @@ class ElectronBackend:
                 pass
             self._start_cancelled = False
 
-        # Get agent ID from environment
-        agent_id = os.getenv("AGENT_MULTIVERSE") or os.getenv("ELEVENLABS_AGENT_ID")
-        if not agent_id:
-            debug_log("ERROR: No agent ID configured")
-            self.send_message({
-                "type": "voice_error",
-                "error": "No agent ID configured (AGENT_MULTIVERSE or ELEVENLABS_AGENT_ID)"
-            })
-            return
-        
+        # Agent ID is only used as a session identifier now
+        agent_id = os.getenv("AGENT_MULTIVERSE", "openai_realtime")
+
         await self.start_voice_with_agent(agent_id)
-    
+
     async def start_voice_with_agent(self, agent_id: str):
-        """Start voice dialog with a specific agent ID."""
+        """Start voice dialog with OpenAI Realtime."""
         debug_log(f"start_voice_with_agent({agent_id})")
 
-        # Option A: VoiceBridgeV2 (new async architecture with NotificationQueue)
-        if USE_VOICE_BRIDGE_V2 and HAS_VOICE_BRIDGE_V2:
-            debug_log("Using VoiceBridgeV2 mode (USE_VOICE_BRIDGE_V2=true)")
-            await self._start_voice_bridge_v2(agent_id)
-            return
-
-        # Option B: Legacy ClientTools path (deprecated - use VoiceBridgeV2)
-        logger.warning("Legacy ClientTools path (USE_VOICE_BRIDGE_V2=false). Migrate to VoiceBridgeV2.")
-        if HAS_VOICE_TOOLS:
-            try:
-                # Get API key
-                api_key = os.getenv("ELEVENLABS_API_KEY")
-                
-                debug_log(f"API Key present: {bool(api_key)}")
-                debug_log(f"Agent ID: {agent_id[:20] if agent_id else 'None'}...")
-                
-                if not api_key:
-                    debug_log("ERROR: ELEVENLABS_API_KEY not set")
-                    self.send_message({
-                        "type": "voice_error",
-                        "error": "ELEVENLABS_API_KEY not set"
-                    })
-                    return
-                
-                # Initialize tools manager (use pre-warmed if available)
-                if not self.tools_manager:
-                    debug_log("Initializing tools manager...")
-                    self.tools_manager = setup_tools_manager()
-                    debug_log(f"Tools manager initialized: {self.tools_manager}")
-                else:
-                    debug_log("Using pre-warmed tools manager")
-                logger.info("Voice tools manager ready")
-
-                # Create ElevenLabs client (use pre-warmed if available)
-                if not self.elevenlabs_client:
-                    debug_log("Creating ElevenLabs client...")
-                    self.elevenlabs_client = ElevenLabs(api_key=api_key)
-                    debug_log("ElevenLabs client created")
-                else:
-                    debug_log("Using pre-warmed ElevenLabs client")
-
-                # Create audio interface (use pre-warmed if available)
-                if not self.audio_interface:
-                    debug_log("Creating audio interface...")
-                    self.audio_interface = DefaultAudioInterface()
-                    debug_log("Audio interface created")
-                else:
-                    debug_log("Using pre-warmed audio interface")
-                
-                # Create conversation with full tool support
-                debug_log("Creating conversation...")
-                self.voice_conversation = Conversation(
-                    client=self.elevenlabs_client,
-                    agent_id=agent_id,
-                    requires_auth=False,
-                    audio_interface=self.audio_interface,
-                    client_tools=self.tools_manager.get_client_tools(),
-                    callback_user_transcript=self._handle_user_transcript,
-                    callback_agent_response=self._handle_agent_response,
-                )
-                debug_log("Conversation created")
-                
-                # Initialize transfer handler if available
-                if HAS_TRANSFER_HANDLER and not self.transfer_handler:
-                    debug_log("Initializing transfer handler...")
-                    self.transfer_handler = init_transfer_handler(
-                        get_pending_switch=get_pending_agent_switch,
-                        end_session=self._end_voice_session_sync,
-                        start_session=self._start_voice_session_sync,
-                        send_to_electron=self.send_message
-                    )
-                    self.transfer_handler.start(agent_id)
-                    debug_log("Transfer handler started")
-                
-                # Start conversation in a background thread (it blocks)
-                def run_voice_session():
-                    try:
-                        debug_log("Voice session thread starting...")
-                        self.voice_conversation.start_session()
-                        debug_log("Voice session started, waiting for end...")
-                        conversation_id = self.voice_conversation.wait_for_session_end()
-                        debug_log(f"Voice session ended: {conversation_id}")
-                        logger.info(f"Voice session ended: {conversation_id}")
-                        self.voice_active = False
-                        self.send_message({"type": "voice_stopped"})
-                    except Exception as e:
-                        debug_log(f"Voice session error: {e}")
-                        logger.error(f"Voice session error: {e}")
-                        self.voice_active = False
-                        self.send_message({
-                            "type": "voice_error",
-                            "error": str(e)
-                        })
-                
-                debug_log("Starting voice thread...")
-                voice_thread = threading.Thread(target=run_voice_session, daemon=True)
-                voice_thread.start()
-                debug_log("Voice thread started")
-                
-                self.voice_active = True
-                
-                # Get agent name for UI
-                agent_name = "Rachel"  # Default
-                if self.transfer_handler:
-                    agent_name = self.transfer_handler.get_agent_name(agent_id)
-                    
-                self.send_message({
-                    "type": "voice_started",
-                    "agent_id": agent_id,
-                    "agent_name": agent_name
-                })
-                debug_log(f"Voice started with {agent_name}")
-                logger.info(f"Voice session started with {agent_name}")
-                
-            except Exception as e:
-                debug_log(f"Failed to start voice with tools: {e}")
-                import traceback
-                debug_log(traceback.format_exc())
-                logger.error(f"Failed to start voice with tools: {e}")
-                self.send_message({
-                    "type": "voice_error",
-                    "error": str(e)
-                })
-                return
-
-        # Fallback to basic voice dialog (no tool integration)
-        elif HAS_VOICE:
-            try:
-                self.voice_dialog = VoiceDialog(
-                    agent_id=agent_id,
-                    on_user_transcript=self._handle_user_transcript,
-                    on_agent_response=self._handle_agent_response
-                )
-                await self.voice_dialog.start_conversation()
-                self.voice_active = True
-                self.send_message({"type": "voice_started"})
-            except Exception as e:
-                self.send_message({
-                    "type": "voice_error",
-                    "error": str(e)
-                })
-        else:
+        if not HAS_VOICE_BRIDGE_V2:
             self.send_message({
                 "type": "voice_error",
-                "error": "Voice dialog not available"
+                "error": "VoiceBridgeV2 not available"
             })
-
-    async def _start_voice_bridge_v2(self, agent_id: str):
-        """
-        Start voice with VoiceBridgeV2 architecture.
-
-        This uses the new async architecture with:
-        - Rachel as pure voice interface (only send_intent tool)
-        - NotificationQueue for deferred feedback
-        - Backend agents for async tool execution
-
-        Voice Provider Selection:
-        - VOICE_PROVIDER=openai_realtime → OpenAI Realtime API (speech-to-speech)
-        - VOICE_PROVIDER=elevenlabs → ElevenLabs Conversational AI (legacy)
-        """
-        # Check if OpenAI Realtime is selected and available
-        if VOICE_PROVIDER == "openai_realtime" and HAS_OPENAI_REALTIME:
-            debug_log("Using OpenAI Realtime voice provider")
-            await self._start_voice_openai_realtime(agent_id)
             return
 
-        if VOICE_PROVIDER == "openai_realtime" and not HAS_OPENAI_REALTIME:
-            debug_log("WARNING: VOICE_PROVIDER=openai_realtime but module not available. Falling back to ElevenLabs.")
-
-        # ElevenLabs path (legacy)
-        await self._start_voice_elevenlabs_v2(agent_id)
+        if not HAS_OPENAI_REALTIME:
+            self.send_message({
+                "type": "voice_error",
+                "error": "OpenAI Realtime module not available"
+            })
+            return
+        # Start OpenAI Realtime voice
+        await self._start_voice_openai_realtime(agent_id)
 
     async def _start_voice_openai_realtime(self, agent_id: str):
         """
         Start voice with OpenAI Realtime API.
 
         Uses speech-to-speech with native function calling.
-        The send_intent tool routes to the same orchestrator as ElevenLabs.
+        The send_intent tool routes to the swarm orchestrator.
 
         Startup order (optimized for fastest voice output):
         1. WebSocket connection (DNS needs free executor)
@@ -1630,7 +1392,7 @@ class ElectronBackend:
         """
         Handle tool calls from OpenAI Realtime API.
 
-        Routes send_intent to the orchestrator, same as ElevenLabs bridge tools.
+        Routes send_intent to the swarm orchestrator.
 
         Args:
             call_id: Unique call ID from OpenAI
@@ -1714,276 +1476,6 @@ class ElectronBackend:
             "error": error_msg
         })
 
-    async def _start_voice_elevenlabs_v2(self, agent_id: str):
-        """
-        Start voice with ElevenLabs Conversational AI (legacy path).
-
-        Original VoiceBridgeV2 implementation using ElevenLabs for voice I/O.
-        """
-        try:
-            import time as _time
-            _t_total = _time.time()
-            debug_log("Initializing VoiceBridgeV2 (ElevenLabs)...")
-
-            # 1. Create VoiceBridge (6-step init: model client, queue, orchestrator, rachel, tts, agents)
-            _t0 = _time.time()
-            self.voice_bridge = await create_voice_bridge_v2(
-                model_client=None,  # Auto-detect Cloud/Ollama
-                event_manager=None  # Optional Redis
-            )
-            debug_log(f"VoiceBridgeV2 created ({_time.time() - _t0:.2f}s)")
-
-            # 2. Get API key for ElevenLabs
-            api_key = os.getenv("ELEVENLABS_API_KEY")
-            if not api_key:
-                debug_log("ERROR: ELEVENLABS_API_KEY not set")
-                self.send_message({
-                    "type": "voice_error",
-                    "error": "ELEVENLABS_API_KEY not set"
-                })
-                return
-
-            # 3. Create ElevenLabs client and audio interface (use pre-warmed if available)
-            _t0 = _time.time()
-            if not self.elevenlabs_client:
-                debug_log("Creating ElevenLabs client...")
-                self.elevenlabs_client = ElevenLabs(api_key=api_key)
-            else:
-                debug_log("Using pre-warmed ElevenLabs client")
-
-            if not self.audio_interface:
-                debug_log("Creating audio interface...")
-                self.audio_interface = DefaultAudioInterface()
-            else:
-                debug_log("Using pre-warmed audio interface")
-            debug_log(f"Client + audio ready ({_time.time() - _t0:.2f}s)")
-
-            # 4. Create conversation with bridge tools
-            _t0 = _time.time()
-            bridge_tools = self._create_bridge_tools()
-            debug_log(f"Bridge tools created ({_time.time() - _t0:.2f}s)")
-
-            _t0 = _time.time()
-            debug_log("Creating ElevenLabs Conversation object...")
-
-            # run_in_executor doesn't work on Windows ProactorEventLoop.
-            # Use a direct thread with call_soon_threadsafe instead.
-            loop = asyncio.get_event_loop()
-            conv_future = loop.create_future()
-
-            def _create_conversation_thread():
-                debug_log(f"[Conv] Thread started ({threading.current_thread().name})")
-                try:
-                    conv = Conversation(
-                        client=self.elevenlabs_client,
-                        agent_id=agent_id,
-                        requires_auth=False,
-                        audio_interface=self.audio_interface,
-                        client_tools=bridge_tools,
-                        callback_user_transcript=self._handle_user_transcript,
-                        callback_agent_response=self._handle_agent_response,
-                    )
-                    debug_log("[Conv] Conversation() OK")
-                    loop.call_soon_threadsafe(conv_future.set_result, conv)
-                except Exception as e:
-                    debug_log(f"[Conv] Conversation() FAILED: {e}")
-                    loop.call_soon_threadsafe(conv_future.set_exception, e)
-
-            t = threading.Thread(target=_create_conversation_thread, daemon=True, name="conv-init")
-            t.start()
-            debug_log("[Conv] Thread launched, awaiting result...")
-            self.voice_conversation = await conv_future
-            debug_log(f"Conversation object created ({_time.time() - _t0:.2f}s)")
-
-            # 5. Start conversation thread (WebSocket connects in background)
-            def run_voice_session():
-                try:
-                    _t_ws = _time.time()
-                    debug_log("Connecting to ElevenLabs WebSocket...")
-                    self.voice_conversation.start_session()
-                    debug_log(f"WebSocket session started ({_time.time() - _t_ws:.2f}s), waiting for end...")
-                    conversation_id = self.voice_conversation.wait_for_session_end()
-                    debug_log(f"VoiceBridgeV2 session ended: {conversation_id}")
-                    self.voice_active = False
-                    self.send_message({"type": "voice_stopped"})
-                except Exception as e:
-                    debug_log(f"VoiceBridgeV2 session error: {e}")
-                    self.voice_active = False
-                    self.send_message({
-                        "type": "voice_error",
-                        "error": str(e)
-                    })
-
-            voice_thread = threading.Thread(target=run_voice_session, daemon=True)
-            voice_thread.start()
-
-            self.voice_active = True
-            self.send_message({
-                "type": "voice_started",
-                "agent_id": agent_id,
-                "agent_name": "Rachel",
-                "mode": "voice_bridge_v2"
-            })
-
-            debug_log(f"VoiceBridgeV2 started successfully (total: {_time.time() - _t_total:.2f}s)")
-
-        except Exception as e:
-            debug_log(f"VoiceBridgeV2 start failed: {e}")
-            import traceback
-            debug_log(traceback.format_exc())
-            self.send_message({
-                "type": "voice_error",
-                "error": str(e)
-            })
-
-    def _create_bridge_tools(self):
-        """
-        Create ClientTools with 5 domain-specific tools.
-
-        Returns a ClientTools instance with domain tools:
-        - send_bubbles_intent: Space/bubble navigation
-        - send_ideas_intent: Idea management
-        - send_desktop_intent: Desktop automation
-        - send_coding_intent: Code generation
-        - send_shuttles_intent: Requirements pipeline
-        """
-        from elevenlabs.conversational_ai.conversation import ClientTools
-
-        backend = self  # Capture reference for closure
-        client_tools = ClientTools()
-
-        def _create_domain_handler(domain: str):
-            """Factory to create domain-specific intent handlers."""
-            def handler(params: dict) -> str:
-                """
-                Send domain-specific intent to the orchestrator.
-
-                The domain_hint enables optimized routing to the correct
-                backend agent (BubblesAgent, IdeasAgent, etc.).
-                """
-                import time as _time
-                # Accept both 'command' and 'user_request' for backwards compat
-                user_request = params.get("command") or params.get("user_request", "")
-
-                # Debug logging
-                debug_log(f"[VOICE INPUT] [{domain.upper()}] {user_request}")
-
-                if not user_request:
-                    domain_prompts = {
-                        "bubbles": "Was moechtest du mit deinen Spaces machen?",
-                        "ideas": "Was moechtest du mit deinen Ideen machen?",
-                        "desktop": "Was soll ich auf dem Desktop machen?",
-                        "coding": "Was soll ich programmieren?",
-                        "shuttles": "Was moechtest du mit dem Shuttle machen?",
-                    }
-                    return domain_prompts.get(domain, "Ich habe dich nicht verstanden.")
-
-                try:
-                    # Get orchestrator and context store
-                    from swarm.orchestrator import get_orchestrator
-                    from swarm.orchestrator.system_context_store import get_system_context_store
-
-                    orchestrator = get_orchestrator()
-                    context_store = get_system_context_store()
-
-                    # Process intent with domain hint for optimized routing
-                    result = orchestrator.process_intent_sync(user_request, domain_hint=domain)
-
-                    debug_log(f"send_{domain}_intent: {result.event_type} -> {result.response_hint[:200]}{'...' if len(result.response_hint) > 200 else ''}")
-
-                    # Store result for context (Smart Rachel)
-                    if not result.is_conversational and not result.error:
-                        context_store.store(
-                            event_type=result.event_type,
-                            result=result.response_hint
-                        )
-
-                    # Notify Electron if task was queued
-                    if not result.is_conversational:
-                        backend.send_message({
-                            "type": "task_queued",
-                            "task_type": "backend_agent",
-                            "domain": domain
-                        })
-
-                    if result.error:
-                        return f"Es gab ein Problem: {result.error}"
-
-                    # Enrich response with relevant context
-                    response = result.response_hint
-                    if not result.is_conversational:
-                        relevant = context_store.get_relevant(user_request, limit=2)
-                        context_texts = []
-                        for entry in relevant:
-                            if entry.result == result.response_hint:
-                                continue
-                            if _time.time() - entry.timestamp > 120:
-                                continue
-                            context_texts.append(entry.result)
-
-                        if context_texts:
-                            response = f"{result.response_hint} Ausserdem: {'. '.join(context_texts)}"
-
-                    return response
-
-                except Exception as e:
-                    debug_log(f"send_{domain}_intent error: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return f"Es gab ein Problem bei der Verarbeitung: {str(e)}"
-
-            return handler
-
-        # Register all 5 domain-specific tools
-        domains = ["bubbles", "ideas", "desktop", "coding", "shuttles"]
-        for domain in domains:
-            tool_name = f"send_{domain}_intent"
-            handler = _create_domain_handler(domain)
-            client_tools.register(tool_name, handler, is_async=False)
-            debug_log(f"Registered tool: {tool_name}")
-
-        return client_tools
-
-    def _end_voice_session_sync(self):
-        """Synchronously end the current voice session (for transfer handler)."""
-        if self.voice_conversation:
-            try:
-                self.voice_conversation.end_session()
-                debug_log("Voice session ended by transfer handler")
-            except Exception as e:
-                debug_log(f"Error ending session: {e}")
-            self.voice_conversation = None
-        self.voice_active = False
-
-    def _start_voice_session_sync(self, agent_id: str = None):
-        """Synchronously start a new voice session (for transfer handler)."""
-        import asyncio
-        
-        # Use provided agent_id or fall back to default
-        if not agent_id:
-            agent_id = os.getenv("AGENT_MULTIVERSE") or os.getenv("ELEVENLABS_AGENT_ID")
-        
-        if not agent_id:
-            debug_log("ERROR: No agent ID for session start")
-            return
-        
-        debug_log(f"_start_voice_session_sync called with agent_id: {agent_id[:20]}...")
-        
-        # Create new event loop if needed
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Start the voice session
-        if loop.is_running():
-            # Schedule in running loop
-            asyncio.ensure_future(self.start_voice_with_agent(agent_id))
-        else:
-            # Run directly
-            loop.run_until_complete(self.start_voice_with_agent(agent_id))
-
     async def stop_voice(self):
         """Stop voice dialog session (with re-entrance guard)."""
         # Signal any pending start_voice to abort
@@ -2010,11 +1502,6 @@ class ElectronBackend:
 
     async def _stop_voice_impl(self):
         """Internal stop implementation."""
-        # Stop transfer handler
-        if self.transfer_handler:
-            self.transfer_handler.stop()
-            self.transfer_handler = None
-
         # Stop OpenAI Realtime session if active
         if self.openai_realtime_session:
             try:
@@ -2032,19 +1519,6 @@ class ElectronBackend:
             except Exception as e:
                 debug_log(f"Error shutting down VoiceBridgeV2: {e}")
             self.voice_bridge = None
-
-        # Stop new conversation-based voice (with tools)
-        if self.voice_conversation:
-            try:
-                self.voice_conversation.end_session()
-            except Exception as e:
-                logger.warning(f"Error ending voice session: {e}")
-            self.voice_conversation = None
-
-        # Stop legacy voice dialog
-        if self.voice_dialog:
-            await self.voice_dialog.end_conversation()
-            self.voice_dialog = None
 
         self.voice_active = False
         self.send_message({"type": "voice_stopped"})
@@ -2452,9 +1926,63 @@ class ElectronBackend:
             debug_log(f"Tool action from UI toolbar: {event_type} with {payload}")
             asyncio.create_task(self._handle_tool_action(event_type, payload))
 
+        # ====================================================================
+        # CLAWPORT DASHBOARD - IPC Handlers
+        # ====================================================================
+
+        elif msg_type == "get_memory_overview":
+            asyncio.create_task(self._handle_get_memory_overview())
+
+        elif msg_type == "search_memory":
+            asyncio.create_task(self._handle_search_memory(message))
+
+        elif msg_type == "get_recent_memory":
+            asyncio.create_task(self._handle_get_recent_memory(message))
+
+        elif msg_type == "get_scheduled_tasks":
+            asyncio.create_task(self._handle_get_scheduled_tasks(message))
+
+        elif msg_type == "update_task_status":
+            asyncio.create_task(self._handle_update_task_status(message))
+
+        elif msg_type == "get_agent_status":
+            self._handle_get_agent_status_sync()
+
+        elif msg_type == "chat_text_input":
+            asyncio.create_task(self._handle_chat_text_input(message))
+
+        elif msg_type == "get_conversation_history":
+            asyncio.create_task(self._handle_get_conversation_history(message))
+
     # ========================================================================
     # UI TOOLBAR HANDLER
     # ========================================================================
+
+    # Map event_type prefix → agent name for status tracking
+    _EVENT_PREFIX_TO_AGENT = {
+        "bubble.": "bubbles", "idea.": "ideas", "code.": "coding",
+        "desktop.": "desktop", "messaging.": "desktop", "web.": "desktop",
+        "openclaw.": "desktop", "roarboot.": "roarboot", "research.": "zeroclaw",
+        "minibook.": "minibook", "schedule.": "schedule",
+    }
+
+    def _track_agent_event(self, event_type: str, status: str, result_summary: str = "", error: str = ""):
+        """Update _agent_last_events for ClawPort Dashboard."""
+        from datetime import datetime as dt
+        agent_name = None
+        for prefix, name in self._EVENT_PREFIX_TO_AGENT.items():
+            if event_type.startswith(prefix):
+                agent_name = name
+                break
+        if not agent_name:
+            return
+        self._agent_last_events[agent_name] = {
+            "status": status,
+            "event_type": event_type,
+            "timestamp": dt.now().isoformat(),
+            "result_summary": result_summary[:200] if result_summary else "",
+            "error": error[:200] if error else "",
+        }
 
     async def _handle_tool_action(self, event_type: str, payload: dict):
         """Execute a tool action triggered from the UI toolbar."""
@@ -2465,6 +1993,9 @@ class ElectronBackend:
                 debug_log("No orchestrator available for tool action")
                 return
 
+            # Track agent as running
+            self._track_agent_event(event_type, "started")
+
             # Execute via orchestrator sync path (same as voice commands in FORCE_SYNC_MODE)
             result = await orchestrator._process_sync(
                 event_type=event_type,
@@ -2474,6 +2005,10 @@ class ElectronBackend:
                 session_id="ui"
             )
 
+            # Track agent as completed
+            hint = result.response_hint if result else ""
+            self._track_agent_event(event_type, "completed", result_summary=hint)
+
             if result and result.response_hint:
                 debug_log(f"Tool action result: {result.response_hint[:100]}")
                 self.send_message({
@@ -2482,9 +2017,269 @@ class ElectronBackend:
                 })
         except Exception as e:
             logger.error(f"Tool action failed: {e}")
+            self._track_agent_event(event_type, "error", error=str(e))
             self.send_message({
                 "type": "agent_response",
                 "text": f"Tool action failed: {str(e)}"
+            })
+
+    # ========================================================================
+    # CLAWPORT DASHBOARD IPC Handlers
+    # ========================================================================
+
+    async def _handle_get_memory_overview(self):
+        """Return overview of memory services (availability + stats)."""
+        try:
+            overview = {
+                "task_memory": {"available": False},
+                "conversation_memory": {"available": False},
+                "user_profiles": {"available": False},
+            }
+
+            # Check TaskMemoryService
+            if os.environ.get("USE_TASK_MEMORY", "").lower() == "true":
+                try:
+                    from memory.task_memory_service import TaskMemoryService
+                    svc = TaskMemoryService()
+                    overview["task_memory"] = {"available": True, "status": "connected"}
+                except Exception:
+                    overview["task_memory"] = {"available": False, "error": "init failed"}
+
+            # Check ConversationMemoryService
+            if os.environ.get("USE_CONVERSATION_MEMORY", "").lower() == "true":
+                try:
+                    from memory.conversation_memory_service import ConversationMemoryService
+                    svc = ConversationMemoryService()
+                    overview["conversation_memory"] = {"available": True, "status": "connected"}
+                except Exception:
+                    overview["conversation_memory"] = {"available": False, "error": "init failed"}
+
+            # Check UserProfileService
+            if os.environ.get("USE_USER_PROFILES", "").lower() == "true":
+                try:
+                    from memory.user_profile_service import UserProfileService
+                    svc = UserProfileService()
+                    overview["user_profiles"] = {"available": True, "status": "connected"}
+                    # Try to get top intents
+                    try:
+                        profile = await svc.get_profile()
+                        if profile and hasattr(profile, "top_intents"):
+                            overview["user_profiles"]["top_intents"] = profile.top_intents[:10]
+                    except Exception:
+                        pass
+                except Exception:
+                    overview["user_profiles"] = {"available": False, "error": "init failed"}
+
+            self.send_message({"type": "memory_overview", "data": overview})
+        except Exception as e:
+            logger.error(f"get_memory_overview failed: {e}")
+            self.send_message({
+                "type": "memory_overview",
+                "data": {
+                    "task_memory": {"available": False},
+                    "conversation_memory": {"available": False},
+                    "user_profiles": {"available": False},
+                }
+            })
+
+    async def _handle_search_memory(self, message: dict):
+        """Search across memory services."""
+        query = message.get("query", "")
+        category = message.get("category", "tasks")
+        limit = int(message.get("limit", 20))
+        results = []
+
+        try:
+            if category == "tasks" and os.environ.get("USE_TASK_MEMORY", "").lower() == "true":
+                from memory.task_memory_service import TaskMemoryService
+                svc = TaskMemoryService()
+                hits = await svc.search(query, limit=limit)
+                results = [{"id": h.get("id", ""), "content": h.get("content", ""),
+                            "score": h.get("score", 0), "metadata": h.get("metadata", {})}
+                           for h in (hits or [])]
+            elif category == "conversations" and os.environ.get("USE_CONVERSATION_MEMORY", "").lower() == "true":
+                from memory.conversation_memory_service import ConversationMemoryService
+                svc = ConversationMemoryService()
+                hits = await svc.search(query, limit=limit)
+                results = [{"id": h.get("id", ""), "content": h.get("content", ""),
+                            "score": h.get("score", 0), "metadata": h.get("metadata", {})}
+                           for h in (hits or [])]
+        except Exception as e:
+            logger.error(f"search_memory failed: {e}")
+
+        self.send_message({
+            "type": "memory_search_results",
+            "category": category,
+            "query": query,
+            "results": results,
+        })
+
+    async def _handle_get_recent_memory(self, message: dict):
+        """Get recent memory entries by category."""
+        category = message.get("category", "conversations")
+        limit = int(message.get("limit", 20))
+        results = []
+
+        try:
+            if category == "conversations":
+                from data import ConversationRepository
+                repo = ConversationRepository()
+                messages = repo.get_recent_messages(limit=limit)
+                results = [m.to_dict() for m in messages]
+        except Exception as e:
+            logger.error(f"get_recent_memory failed: {e}")
+
+        self.send_message({
+            "type": "recent_memory",
+            "category": category,
+            "results": results,
+        })
+
+    async def _handle_get_scheduled_tasks(self, message: dict):
+        """List scheduled tasks with optional status filter."""
+        status_filter = message.get("status")
+        limit = int(message.get("limit", 50))
+
+        try:
+            from data import ScheduledTaskRepository
+            repo = ScheduledTaskRepository()
+
+            if status_filter:
+                tasks = repo.get_by_status(status_filter)
+            else:
+                tasks = repo.list_all(limit=limit)
+
+            task_dicts = [t.to_dict() for t in tasks]
+            self.send_message({
+                "type": "scheduled_tasks_list",
+                "tasks": task_dicts,
+                "total": len(task_dicts),
+            })
+        except Exception as e:
+            logger.error(f"get_scheduled_tasks failed: {e}")
+            self.send_message({
+                "type": "scheduled_tasks_list",
+                "tasks": [],
+                "total": 0,
+            })
+
+    async def _handle_update_task_status(self, message: dict):
+        """Update a scheduled task's status (pause/resume/cancel)."""
+        task_id = message.get("task_id", "")
+        new_status = message.get("status", "")
+
+        try:
+            from data import ScheduledTaskRepository
+            repo = ScheduledTaskRepository()
+            updated = repo.update_status(task_id, new_status)
+            self.send_message({
+                "type": "task_status_updated",
+                "success": updated is not None,
+                "task_id": task_id,
+                "status": new_status,
+                "task": updated.to_dict() if updated else None,
+            })
+        except Exception as e:
+            logger.error(f"update_task_status failed: {e}")
+            self.send_message({
+                "type": "task_status_updated",
+                "success": False,
+                "task_id": task_id,
+                "error": str(e),
+            })
+
+    def _handle_get_agent_status_sync(self):
+        """Return last known status for each backend agent (sync, in-memory)."""
+        agents = []
+        # Canonical agent list
+        agent_names = [
+            "bubbles", "ideas", "coding", "desktop",
+            "roarboot", "zeroclaw", "minibook", "schedule"
+        ]
+        for name in agent_names:
+            event = self._agent_last_events.get(name, {})
+            agents.append({
+                "name": name,
+                "status": event.get("status", "idle"),
+                "last_event_type": event.get("event_type"),
+                "last_event_at": event.get("timestamp"),
+                "last_result": event.get("result_summary"),
+                "error": event.get("error"),
+            })
+        self.send_message({"type": "agent_status_list", "agents": agents})
+
+    async def _handle_chat_text_input(self, message: dict):
+        """Process text chat via the same IntentOrchestrator path as voice."""
+        text = message.get("text", "").strip()
+        if not text:
+            self.send_message({
+                "type": "chat_response",
+                "success": False,
+                "message": "Empty input",
+            })
+            return
+
+        try:
+            from swarm.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            if not orchestrator:
+                self.send_message({
+                    "type": "chat_response",
+                    "success": False,
+                    "message": "Orchestrator not available",
+                })
+                return
+
+            result = await orchestrator.process_intent(text)
+            response_text = ""
+            event_type = ""
+            if result:
+                response_text = getattr(result, "response_hint", "") or str(result)
+                event_type = getattr(result, "event_type", "")
+
+            self.send_message({
+                "type": "chat_response",
+                "success": True,
+                "message": response_text,
+                "event_type": event_type,
+                "user_text": text,
+            })
+        except Exception as e:
+            logger.error(f"chat_text_input failed: {e}")
+            self.send_message({
+                "type": "chat_response",
+                "success": False,
+                "message": f"Error: {str(e)}",
+                "user_text": text,
+            })
+
+    async def _handle_get_conversation_history(self, message: dict):
+        """Get recent conversation history."""
+        limit = int(message.get("limit", 50))
+
+        try:
+            from data import ConversationRepository
+            repo = ConversationRepository()
+            messages = repo.get_recent_messages(limit=limit)
+            msg_list = []
+            for m in messages:
+                d = m.to_dict()
+                msg_list.append({
+                    "id": d.get("id", ""),
+                    "speaker": d.get("speaker", ""),
+                    "text": d.get("text", ""),
+                    "timestamp": d.get("timestamp", ""),
+                    "session_id": d.get("session_id", ""),
+                })
+            self.send_message({
+                "type": "conversation_history",
+                "messages": msg_list,
+            })
+        except Exception as e:
+            logger.error(f"get_conversation_history failed: {e}")
+            self.send_message({
+                "type": "conversation_history",
+                "messages": [],
             })
 
     # ========================================================================

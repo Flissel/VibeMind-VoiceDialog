@@ -280,6 +280,13 @@ contextBridge.exposeInMainWorld('vibemind', {
     hideSweDesign: () => ipcRenderer.send('hide-swedesign'),
     isSweDesignVisible: () => ipcRenderer.invoke('is-swedesign-visible'),
 
+    // ===== CLAWPORT DASHBOARD =====
+
+    // ClawPort BrowserView Control
+    showClawPort: () => ipcRenderer.send('show-clawport'),
+    hideClawPort: () => ipcRenderer.send('hide-clawport'),
+    isClawPortVisible: () => ipcRenderer.invoke('is-clawport-visible'),
+
     // Docker Management (for Coding Engine containers)
     docker: {
         startEngine: () => ipcRenderer.invoke('docker:start-engine'),

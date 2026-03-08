@@ -25,6 +25,9 @@ const RowboatManager = require('./rowboat-manager');
 // SWE Design (Factory Space) Integration
 const SweDesignManager = require('./swe-design-manager');
 
+// ClawPort Dashboard Integration
+const ClawPortManager = require('./clawport-manager');
+
 // Enable remote debugging port for CDP (Chrome DevTools Protocol)
 // This allows external tools to connect and manipulate the renderer
 // Safety check: only set if app is available (not running as Node)
@@ -49,6 +52,12 @@ let rowboatManager = null;
 
 // SWE Design (Factory Space) manager
 let sweDesignManager = null;
+
+// ClawPort Dashboard manager
+let clawportManager = null;
+
+// Pending Python response handlers (for request-response IPC pattern)
+const pendingPythonResponses = new Map();
 
 // Rowboat @x/core services (esbuild CJS bundle)
 let rowboatServices = null;
@@ -259,6 +268,20 @@ function startPythonBackend() {
                     debugLog('Structured content update:', message.node_id);
                 }
                 
+                // Check for pending ClawPort response handlers
+                if (message.type && pendingPythonResponses.has(message.type)) {
+                    const handler = pendingPythonResponses.get(message.type);
+                    handler(message);
+                }
+
+                // Forward ClawPort-relevant messages to dashboard BrowserView
+                if (clawportManager && clawportManager.getIsVisible()) {
+                    const clawportTypes = ['chat_response', 'agent_status_list', 'scheduled_tasks_list', 'memory_overview', 'memory_search_results'];
+                    if (clawportTypes.includes(message.type)) {
+                        clawportManager.relayEvent('clawport-message', message);
+                    }
+                }
+
                 // Forward to renderer
                 if (mainWindow && mainWindow.webContents) {
                     mainWindow.webContents.send('python-message', message);
@@ -302,6 +325,27 @@ function sendToPython(message) {
     } else {
         console.error('[Main] Cannot send to Python - process not running');
     }
+}
+
+/**
+ * Send message to Python and wait for a response with matching type.
+ * Used by ClawPort dashboard IPC handlers that need return values.
+ */
+function sendToPythonAndWait(message, responseType, timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            pendingPythonResponses.delete(responseType);
+            reject(new Error(`Timeout waiting for ${responseType}`));
+        }, timeoutMs);
+
+        pendingPythonResponses.set(responseType, (response) => {
+            clearTimeout(timeout);
+            pendingPythonResponses.delete(responseType);
+            resolve(response);
+        });
+
+        sendToPython(message);
+    });
 }
 
 // ============================================================================
@@ -1254,12 +1298,15 @@ function setupIpcHandlers() {
     // Dashboard View Control
     ipcMain.on('show-dashboard', () => {
         if (dashboardManager) {
-            // Mutual exclusion: hide rowboat + swedesign when showing dashboard
+            // Mutual exclusion: hide rowboat + swedesign + clawport when showing dashboard
             if (rowboatManager && rowboatManager.getIsVisible()) {
                 rowboatManager.hide();
             }
             if (sweDesignManager && sweDesignManager.getIsVisible()) {
                 sweDesignManager.hide();
+            }
+            if (clawportManager && clawportManager.getIsVisible()) {
+                clawportManager.hide();
             }
             dashboardManager.show();
             console.log('[Main] Dashboard shown');
@@ -1283,12 +1330,15 @@ function setupIpcHandlers() {
 
     ipcMain.on('show-rowboat', () => {
         if (rowboatManager) {
-            // Mutual exclusion: hide dashboard + swedesign when showing rowboat
+            // Mutual exclusion: hide dashboard + swedesign + clawport when showing rowboat
             if (dashboardManager && dashboardManager.getIsVisible()) {
                 dashboardManager.hide();
             }
             if (sweDesignManager && sweDesignManager.getIsVisible()) {
                 sweDesignManager.hide();
+            }
+            if (clawportManager && clawportManager.getIsVisible()) {
+                clawportManager.hide();
             }
             rowboatManager.show();
             console.log('[Main] Rowboat shown');
@@ -1312,12 +1362,15 @@ function setupIpcHandlers() {
 
     ipcMain.on('show-swedesign', async () => {
         if (sweDesignManager) {
-            // Mutual exclusion: hide dashboard + rowboat when showing swedesign
+            // Mutual exclusion: hide dashboard + rowboat + clawport when showing swedesign
             if (dashboardManager && dashboardManager.getIsVisible()) {
                 dashboardManager.hide();
             }
             if (rowboatManager && rowboatManager.getIsVisible()) {
                 rowboatManager.hide();
+            }
+            if (clawportManager && clawportManager.getIsVisible()) {
+                clawportManager.hide();
             }
             await sweDesignManager.show();
             console.log('[Main] SWE Design shown');
@@ -1333,6 +1386,98 @@ function setupIpcHandlers() {
 
     ipcMain.handle('is-swedesign-visible', () => {
         return sweDesignManager ? sweDesignManager.getIsVisible() : false;
+    });
+
+    // ========================================
+    // CLAWPORT DASHBOARD VIEW CONTROL
+    // ========================================
+
+    ipcMain.on('show-clawport', () => {
+        if (clawportManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            clawportManager.show();
+            console.log('[Main] ClawPort shown');
+        }
+    });
+
+    ipcMain.on('hide-clawport', () => {
+        if (clawportManager) {
+            clawportManager.hide();
+            console.log('[Main] ClawPort hidden');
+        }
+    });
+
+    ipcMain.handle('is-clawport-visible', () => {
+        return clawportManager ? clawportManager.getIsVisible() : false;
+    });
+
+    // ── ClawPort IPC → Python handlers ──
+
+    ipcMain.handle('clawport:get-memory-overview', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_memory_overview' }, 'memory_overview');
+        } catch (e) {
+            return { type: 'memory_overview', data: { task_memory: { available: false }, conversation_memory: { available: false }, user_profiles: { available: false } } };
+        }
+    });
+
+    ipcMain.handle('clawport:search-memory', async (_event, { query, category, limit }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'search_memory', query, category, limit }, 'memory_search_results');
+        } catch (e) {
+            return { type: 'memory_search_results', category, results: [] };
+        }
+    });
+
+    ipcMain.handle('clawport:get-recent-memory', async (_event, { category, limit }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_recent_memory', category, limit }, 'recent_memory');
+        } catch (e) {
+            return { type: 'recent_memory', category, results: [] };
+        }
+    });
+
+    ipcMain.handle('clawport:get-scheduled-tasks', async (_event, { status, limit }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_scheduled_tasks', status, limit }, 'scheduled_tasks_list');
+        } catch (e) {
+            return { type: 'scheduled_tasks_list', tasks: [], total: 0 };
+        }
+    });
+
+    ipcMain.handle('clawport:update-task-status', async (_event, { taskId, status }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'update_task_status', task_id: taskId, status }, 'task_status_updated');
+        } catch (e) {
+            return { type: 'task_status_updated', success: false, task_id: taskId };
+        }
+    });
+
+    ipcMain.handle('clawport:get-agent-status', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_agent_status' }, 'agent_status_list');
+        } catch (e) {
+            return { type: 'agent_status_list', agents: [] };
+        }
+    });
+
+    ipcMain.handle('clawport:chat-text-input', async (_event, { text }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'chat_text_input', text }, 'chat_response', 30000);
+        } catch (e) {
+            return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };
+        }
+    });
+
+    ipcMain.handle('clawport:get-conversation-history', async (_event, { limit }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_conversation_history', limit }, 'conversation_history');
+        } catch (e) {
+            return { type: 'conversation_history', messages: [] };
+        }
     });
 
     // ========================================
@@ -1489,6 +1634,9 @@ app.whenReady().then(async () => {
     // Initialize SWE Design Manager for Factory Space
     sweDesignManager = new SweDesignManager(mainWindow);
 
+    // Initialize ClawPort Dashboard Manager
+    clawportManager = new ClawPortManager(mainWindow);
+
     // ========================================
     // ROWBOAT @x/core SERVICES INITIALIZATION
     // ========================================
@@ -1619,6 +1767,11 @@ app.on('will-quit', () => {
     // Destroy SWE Design BrowserView
     if (sweDesignManager) {
         sweDesignManager.destroy();
+    }
+
+    // Destroy ClawPort Dashboard BrowserView
+    if (clawportManager) {
+        clawportManager.destroy();
     }
 
     globalShortcut.unregisterAll();
