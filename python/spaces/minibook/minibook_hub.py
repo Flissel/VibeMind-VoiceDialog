@@ -150,6 +150,7 @@ class MinibookHub:
                     content=full_content,
                     agent_name="vibemind_orchestrator",
                     post_type="task",
+                    title=f"[{event_type}] {intent_text[:60]}",
                 )
                 post_id = post_data.get("id", "")
             except Exception as e:

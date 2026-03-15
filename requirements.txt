@@ -48,6 +48,9 @@ pyperclip>=1.8.0
 # Redis for Claude Orchestrator
 redis>=4.0.0
 
+# MongoDB (Rowboat knowledge base publishing)
+pymongo>=4.6.0
+
 # OCR for screen reading
 pytesseract>=0.3.10
 Pillow>=10.0.0

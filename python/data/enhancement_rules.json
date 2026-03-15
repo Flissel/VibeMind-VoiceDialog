@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-01-26T12:30:23",
+  "last_updated": "2026-03-03T19:57:57",
   "rules": [
     {
       "id": "asr_001",
@@ -124,8 +124,8 @@
       "pattern": "bubbl",
       "replacement": "bubble",
       "category": "asr",
-      "times_applied": 69,
-      "times_successful": 69,
+      "times_applied": 76,
+      "times_successful": 76,
       "times_failed": 0,
       "confidence_score": 1.0,
       "active": true,
@@ -137,8 +137,8 @@
       "pattern": "lösch",
       "replacement": "lösche",
       "category": "asr",
-      "times_applied": 65,
-      "times_successful": 65,
+      "times_applied": 66,
+      "times_successful": 66,
       "times_failed": 0,
       "confidence_score": 1.0,
       "active": true,

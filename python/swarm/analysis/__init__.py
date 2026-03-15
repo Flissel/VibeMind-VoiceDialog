@@ -7,7 +7,7 @@ Components:
 - IntentAnalysisTeam: Coordinates parallel hypothesis generation
 - ReasoningAgent: Multi-step reasoning for complex intents
 - ContextAgent: User context and history analysis
-- SemanticAgent: NLP analysis with ElevenLabs metadata integration
+- SemanticAgent: NLP analysis with audio metadata integration
 - UserContext: User profile and session state
 """
 

@@ -5,7 +5,7 @@ Defines the session config and tool definitions for the
 OpenAI Realtime voice connection.
 
 Audio Format: PCM 16-bit, 24kHz, mono, little-endian
-VAD: server_vad (Voice Activity Detection by OpenAI)
+VAD: Client-side silence detection (server_vad disabled)
 """
 
 import os
@@ -34,8 +34,10 @@ SEND_INTENT_TOOL = {
     "name": "send_intent",
     "description": (
         "Sende den Wunsch des Users an das VibeMind System zur Ausfuehrung. "
-        "Verwende dieses Tool fuer ALLE Aktionen: Bubbles verwalten, Ideen erstellen, "
-        "Desktop-Automatisierung, Code-Generierung, Recherche. "
+        "Die Ausfuehrung laeuft asynchron — du erhaeltst das Ergebnis automatisch "
+        "sobald es fertig ist. Verwende dieses Tool fuer ALLE Aktionen: "
+        "Bubbles verwalten, Ideen erstellen, Desktop-Automatisierung, "
+        "Code-Generierung, Recherche, Rowboat-Projekte. "
         "Das System erkennt automatisch welcher Bereich zustaendig ist."
     ),
     "parameters": {
@@ -51,6 +53,29 @@ SEND_INTENT_TOOL = {
             }
         },
         "required": ["user_request"],
+    },
+}
+
+# =============================================================================
+# Tool Definition: check_results
+# =============================================================================
+# Secondary tool for Rachel to explicitly poll for async results.
+# Results are also pushed automatically via inject_system_message,
+# but this tool lets Rachel proactively check on long-running tasks.
+
+CHECK_RESULTS_TOOL = {
+    "type": "function",
+    "name": "check_results",
+    "description": (
+        "Pruefe ob neue Ergebnisse von laufenden Aufgaben vorliegen. "
+        "Verwende dieses Tool wenn der User fragt 'Gibt es Neuigkeiten?', "
+        "'Was ist mit meiner Anfrage?', oder wenn du laenger keine "
+        "Rueckmeldung bekommen hast. Ergebnisse kommen auch automatisch — "
+        "dieses Tool ist fuer explizite Nachfragen."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {},
     },
 }
 
@@ -88,7 +113,7 @@ def create_session_config(
         voice = DEFAULT_VOICE
 
     if tools is None:
-        tools = [SEND_INTENT_TOOL]
+        tools = [SEND_INTENT_TOOL, CHECK_RESULTS_TOOL]
 
     # Build turn_detection config based on type
     if vad_type == "semantic_vad":
@@ -108,33 +133,51 @@ def create_session_config(
             "interrupt_response": True,
         }
 
-    # OpenAI Realtime API session config
-    # NOTE: The API uses nested "audio" format with "type": "realtime",
-    # NOT the flat fields in the SDK model. The SDK model is auto-generated
-    # from a different spec version. Verified via live API testing.
+    # Beta format — flat fields for gpt-4o-realtime-preview via
+    # client.beta.realtime.connect().  The beta WebSocket protocol expects
+    # flat session fields (input_audio_format, voice, modalities, etc.)
+    # rather than the nested GA REST format (audio.input.format...).
+    #
+    # Turn detection: Use semantic_vad (AI-based) instead of server_vad
+    # or None.  semantic_vad understands speech patterns and pauses,
+    # so the user can think mid-sentence without being cut off.
+    # "eagerness: low" = Rachel waits longer before assuming user is done.
+    #
+    # NOTE: server_vad was found to silently discard audio.  semantic_vad
+    # is a different system and does not have this issue.
+    # Client-side silence detection (openai_realtime.py) serves as a
+    # 2-second fallback safety net in case semantic_vad fails.
+    use_semantic_vad = os.getenv("VOICE_TURN_DETECTION", "semantic_vad")
+
+    if use_semantic_vad == "semantic_vad":
+        td_config = {
+            "type": "semantic_vad",
+            "eagerness": os.getenv("VOICE_VAD_EAGERNESS", "low"),
+            "create_response": True,
+            "interrupt_response": True,
+        }
+    elif use_semantic_vad == "server_vad":
+        td_config = {
+            "type": "server_vad",
+            "threshold": vad_threshold,
+            "prefix_padding_ms": prefix_padding_ms,
+            "silence_duration_ms": silence_duration_ms,
+            "create_response": True,
+            "interrupt_response": True,
+        }
+    else:
+        td_config = None  # Client-side only
+
     config = {
-        "type": "realtime",
-        "output_modalities": ["audio"],
+        "modalities": ["text", "audio"],
         "instructions": system_prompt,
-        "audio": {
-            "input": {
-                "format": {
-                    "type": "audio/pcm",
-                    "rate": SAMPLE_RATE,
-                },
-                "transcription": {
-                    "model": "whisper-1",
-                },
-                "turn_detection": turn_detection_config,
-            },
-            "output": {
-                "format": {
-                    "type": "audio/pcm",
-                    "rate": SAMPLE_RATE,
-                },
-                "voice": voice,
-            },
+        "voice": voice,
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
+        "input_audio_transcription": {
+            "model": "whisper-1",
         },
+        "turn_detection": td_config,
         "tools": tools,
         "tool_choice": "auto",
     }

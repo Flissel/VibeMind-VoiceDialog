@@ -176,15 +176,27 @@ Der Bereich fuer Desktop-Automatisierung. WICHTIG: Nur fuer echte Desktop-Aktion
 
 Nachrichten senden via WhatsApp, Telegram, Discord etc. und Web-Suche ueber Clawdbot Bridge.
 
-**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web, Clawdbot
+**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web, Clawdbot, Mutter, schreib
 
 **Event-Types:**
-- messaging.whatsapp: WhatsApp Nachricht senden
+- messaging.send: Nachricht an einen Kontakt senden (plattformunabhaengig)
+  → "Schreib meiner Mutter dass ich spaeter komme", "Sende an Peter: Bin unterwegs"
+  → "Schick eine Nachricht an Mama", "Schreibe an den Boss: Meeting verschoben"
+  → "Sende per WhatsApp an Max: Hallo", "Telegram an @user: Text"
+  → payload: {"recipient": "...", "message": "...", "platform": "auto"}
+  WICHTIG: "Schreib meiner/meinem [Person]" → messaging.send, NICHT idea.create!
+  Wenn der User sagt "Schreib an [Person]..." ist IMMER messaging.send gemeint!
+  platform kann "auto", "whatsapp", "telegram" etc. sein. Bei "auto" wird WhatsApp bevorzugt.
+- messaging.whatsapp: WhatsApp Nachricht senden (explizit WhatsApp)
   → "Schicke WhatsApp an Max: Hallo", "WhatsApp Nachricht an +49...", "Sende per WhatsApp"
   → payload: {"recipient": "...", "message": "..."}
-- messaging.telegram: Telegram Nachricht senden
+- messaging.telegram: Telegram Nachricht senden (explizit Telegram)
   → "Telegram an @user: Text", "Schicke Telegram Nachricht"
   → payload: {"recipient": "...", "message": "..."}
+- messaging.read: Nachrichten lesen / pruefen ob neue Nachrichten da sind
+  → "Gibt es neue Nachrichten?", "Was hat Mutter geschrieben?", "Neue Messages?"
+  → "Zeig meine Nachrichten", "Hab ich neue Nachrichten?"
+  → payload: {}
 - web.search: Web-Suche durchfuehren
   → "Such im Web nach X", "Google X", "Suche online nach"
   → payload: {"query": "..."}

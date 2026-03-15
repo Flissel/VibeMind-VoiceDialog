@@ -31,7 +31,7 @@ class StatusListener:
 
     Uses deferred feedback pattern:
     - Completed tasks → NotificationQueue → Rachel speaks on next input
-    - This is 100% compatible with ElevenLabs Conversational AI
+    - This is compatible with the voice Conversational AI layer
     """
 
     # Status messages for optional TTS callback (mostly unused with deferred pattern)

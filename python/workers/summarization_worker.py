@@ -6,7 +6,7 @@ Part of the multi-agent summarization pipeline:
 1. SummarizationWorker (GPT-4.1) - Creates initial summary
 2. RewriteWorker (Gemini) - Rewrites with larger context
 
-Triggered by ElevenLabs agents through client tools → AutoGen bridge → gRPC host.
+Triggered by voice agents through client tools → AutoGen bridge → gRPC host.
 
 Usage:
     python workers/summarization_worker.py

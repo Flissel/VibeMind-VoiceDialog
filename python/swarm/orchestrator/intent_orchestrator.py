@@ -190,6 +190,30 @@ except ImportError as e:
     HAS_BROADCAST = False
     logger.debug(f"Broadcast dispatcher not available: {e}")
 
+# StreamListener — LLM-based parallel intent routing (replaces keyword-based CollectorAgent)
+try:
+    from swarm.stream_listener import (
+        get_stream_listener_dispatcher,
+        EvalContext,
+        ConfidenceDistribution,
+    )
+    HAS_STREAM_LISTENER = True
+except ImportError as e:
+    HAS_STREAM_LISTENER = False
+    logger.debug(f"StreamListener not available: {e}")
+
+# SpaceAgents — per-space LLM tool orchestration (Phase 2: Ideas Agent)
+try:
+    from swarm.space_agents import (
+        get_ideas_space_agent,
+        SpaceAgentContext,
+        SpaceAgentResult,
+    )
+    HAS_SPACE_AGENTS = True
+except ImportError as e:
+    HAS_SPACE_AGENTS = False
+    logger.debug(f"SpaceAgents not available: {e}")
+
 
 @dataclass
 class OrchestrationResult:
@@ -387,6 +411,38 @@ class IntentOrchestrator:
             except Exception as e:
                 logger.warning(f"Failed to initialize Enhancement Pipeline: {e}")
                 self._use_enhancement_pipeline = False
+
+        # StreamListener — LLM-based parallel intent routing
+        # When enabled, replaces CollectorAgent + IntentClassifier with parallel LLM listeners
+        self._use_stream_listener = (
+            os.getenv("USE_STREAM_LISTENER", "false").lower() == "true"
+            and HAS_STREAM_LISTENER
+        )
+        self._stream_dispatcher = None
+        if self._use_stream_listener:
+            try:
+                self._stream_dispatcher = get_stream_listener_dispatcher()
+                logger.info("StreamListener initialized (LLM-based parallel routing)")
+                print("[Python DEBUG] [STREAM LISTENER] Initialized with all domain listeners", file=sys.stderr, flush=True)
+            except Exception as e:
+                logger.warning(f"Failed to initialize StreamListener: {e}")
+                self._use_stream_listener = False
+
+        # SpaceAgents — per-space LLM tool orchestration
+        # When enabled, StreamListener routes to space-specific agents instead of flat _process_sync
+        self._use_space_agents = (
+            os.getenv("USE_SPACE_AGENTS", "false").lower() == "true"
+            and HAS_SPACE_AGENTS
+        )
+        self._space_agents: Dict[str, Any] = {}
+        if self._use_space_agents:
+            try:
+                self._space_agents["ideas"] = get_ideas_space_agent()
+                logger.info("SpaceAgents initialized (ideas)")
+                print("[Python DEBUG] [SPACE AGENTS] Ideas agent initialized", file=sys.stderr, flush=True)
+            except Exception as e:
+                logger.warning(f"Failed to initialize SpaceAgents: {e}")
+                self._use_space_agents = False
 
         # MinibookHub — Central execution hub (Phase: Minibook als zentraler Hub)
         # When USE_MINIBOOK_HUB=true, all intents route through Minibook
@@ -1050,6 +1106,18 @@ class IntentOrchestrator:
             except ImportError as e:
                 logger.warning(f"Could not load schedule tools: {e}")
 
+            # === MESSAGING PIPELINE TOOLS (Voice ↔ WhatsApp/Telegram via Clawdbot) ===
+            try:
+                from spaces.desktop.messaging.messaging_pipeline import get_messaging_pipeline
+                pipeline = get_messaging_pipeline()
+                self._tool_executors.update({
+                    "messaging.send": lambda p: pipeline.send_message_sync(p),
+                    "messaging.read": lambda p: pipeline.read_messages_sync(p),
+                })
+                logger.info("Loaded messaging pipeline tools for sync fallback (2 tools)")
+            except ImportError as e:
+                logger.warning(f"Could not load messaging pipeline tools: {e}")
+
         logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
 
     def _load_evaluation_tools(self):
@@ -1166,17 +1234,33 @@ class IntentOrchestrator:
             # PHASE 0.5: MINIBOOK HUB DISPATCH (if enabled)
             # =================================================================
             # When USE_MINIBOOK_HUB=true, ALL intents route through Minibook
-            # for centralized execution. Falls through to existing pipeline
-            # on failure/timeout.
+            # for centralized execution and auditability.
+            # EXCLUSIVE MODE: No fallthrough to PHASE 1-3.
             if self._minibook_hub and not domain_hint:
                 try:
                     hub_result = await self._minibook_hub.dispatch(intent_text, context)
                     if hub_result and getattr(hub_result, 'success', False):
                         logger.info(f"[MinibookHub] Dispatched: {getattr(hub_result, 'event_type', '?')}")
                         return hub_result
-                    # hub_result is None or not successful — fall through
+                    # hub_result is None or not successful
+                    logger.warning("[MinibookHub] Dispatch returned no result — exclusive mode, no fallback")
+                    return OrchestrationResult(
+                        job_id="",
+                        event_type="minibook.timeout",
+                        stream="minibook_hub",
+                        response_hint="Die Aufgabe wurde gesendet, aber MinibookHub hat keine Antwort erhalten. Bitte versuche es nochmal.",
+                        is_conversational=True,
+                    )
                 except Exception as hub_err:
-                    logger.warning(f"[MinibookHub] Dispatch failed, falling through: {hub_err}")
+                    logger.error(f"[MinibookHub] Dispatch failed: {hub_err}")
+                    return OrchestrationResult(
+                        job_id="",
+                        event_type="error.minibook",
+                        stream="minibook_hub",
+                        response_hint="MinibookHub ist nicht erreichbar. Stelle sicher, dass der Minibook Docker laeuft.",
+                        is_conversational=True,
+                        error=str(hub_err),
+                    )
 
             # =================================================================
             # PHASE 1: CORE ANALYSIS - IntentAnalysisTeam (Always runs first)
@@ -1361,6 +1445,162 @@ class IntentOrchestrator:
 
         return None
 
+    async def _run_stream_listener(
+        self,
+        intent_text: str,
+        context: TaskContext
+    ) -> Optional[OrchestrationResult]:
+        """
+        LLM-based parallel intent routing via StreamListeners.
+
+        All domain listeners evaluate the input in parallel and return
+        a confidence distribution. The highest confidence listener wins.
+
+        Returns:
+            OrchestrationResult if a winner was found, None to fall through
+        """
+        import asyncio as _asyncio
+
+        print(f"[Python DEBUG] [STREAM LISTENER] Evaluating: {intent_text[:80]}...", file=sys.stderr, flush=True)
+
+        # Step 1: Optional IntentEnhancer for ASR cleanup (keep this)
+        enhanced_text = intent_text
+        if self._use_enhancement_pipeline and self.intent_enhancer:
+            try:
+                from swarm.context import get_bubble_context_provider
+                bubble_ctx = get_bubble_context_provider().get_current_context()
+            except Exception:
+                bubble_ctx = {}
+            try:
+                enhanced = await self.intent_enhancer.enhance(intent_text, bubble_ctx)
+                if enhanced.was_enhanced:
+                    enhanced_text = enhanced.normalized_text
+                    logger.info(f"[StreamListener] Enhanced: '{intent_text[:60]}' -> '{enhanced_text[:60]}'")
+            except Exception as e:
+                logger.debug(f"[StreamListener] Enhancer failed (using original): {e}")
+
+        # Step 2: Build evaluation context
+        conversation_history = []
+        try:
+            from data import ConversationRepository
+            conv_repo = ConversationRepository()
+            session_id = context.session_id if context else None
+            if session_id:
+                messages = conv_repo.get_messages(session_id, limit=5)
+                conversation_history = [
+                    {"speaker": m.speaker, "text": m.text}
+                    for m in messages
+                ]
+        except Exception:
+            pass
+
+        current_bubble = None
+        current_bubble_id = None
+        idea_count = 0
+        try:
+            from swarm.context import get_bubble_context_provider
+            ctx = get_bubble_context_provider().get_current_context()
+            current_bubble = ctx.get("bubble_name")
+            current_bubble_id = ctx.get("bubble_id")
+            idea_count = ctx.get("idea_count", 0)
+        except Exception:
+            pass
+
+        eval_context = EvalContext(
+            conversation_history=conversation_history,
+            current_bubble=current_bubble,
+            current_bubble_id=current_bubble_id,
+            idea_count=idea_count,
+        )
+
+        # Step 3: Evaluate all listeners in parallel
+        distribution = await self._stream_dispatcher.evaluate_all(enhanced_text, eval_context)
+
+        # Step 4: Handle result
+        if not distribution.winner:
+            print("[Python DEBUG] [STREAM LISTENER] No winner (all below threshold)", file=sys.stderr, flush=True)
+            return None  # Fall through to traditional pipeline
+
+        winner = distribution.winner
+        print(
+            f"[Python DEBUG] [STREAM LISTENER] Winner: {winner.space} "
+            f"({winner.confidence:.2f}) -> {winner.event_type}",
+            file=sys.stderr, flush=True,
+        )
+
+        # Handle ambiguity
+        if distribution.is_ambiguous:
+            logger.info(
+                f"[StreamListener] Ambiguous: top-2 too close. "
+                f"Falling through to RAG classifier for disambiguation."
+            )
+            print("[Python DEBUG] [STREAM LISTENER] Ambiguous, falling through", file=sys.stderr, flush=True)
+            return None  # Fall through
+
+        # Check if conversational event
+        if winner.event_type in self.CONVERSATIONAL_EVENTS or winner.mode == "direct_answer":
+            response = winner.direct_answer if winner.mode == "direct_answer" else ""
+            if not response:
+                response = winner.payload.get("response", winner.reasoning)
+            return OrchestrationResult(
+                job_id="",
+                event_type=winner.event_type,
+                stream="",
+                response_hint=response,
+                is_conversational=True,
+            )
+
+        # Step 5a: SpaceAgent execution (intelligent multi-step, if enabled)
+        if (self._use_space_agents
+                and winner.space in self._space_agents
+                and winner.mode == "execute"):
+            try:
+                agent = self._space_agents[winner.space]
+                agent_context = SpaceAgentContext(
+                    user_input=intent_text,
+                    conversation_history=conversation_history,
+                    current_bubble=current_bubble,
+                    current_bubble_id=current_bubble_id,
+                    idea_count=idea_count,
+                )
+                agent_result = await agent.execute(intent_text, agent_context)
+
+                print(
+                    f"[Python DEBUG] [SPACE AGENT:{winner.space}] "
+                    f"{agent_result.turns} turns, "
+                    f"tools={[tc.name for tc in agent_result.tool_calls]}, "
+                    f"{agent_result.total_latency_ms:.0f}ms",
+                    file=sys.stderr, flush=True
+                )
+
+                return OrchestrationResult(
+                    job_id=f"agent-{uuid.uuid4().hex[:8]}",
+                    event_type=winner.event_type,
+                    stream="local",
+                    response_hint=agent_result.summary,
+                    is_conversational=False,
+                )
+            except Exception as e:
+                logger.warning(f"[SpaceAgent:{winner.space}] Error, falling through to _process_sync: {e}")
+                print(f"[Python DEBUG] [SPACE AGENT] Error: {e}, falling through", file=sys.stderr, flush=True)
+
+        # Step 5b: Flat _process_sync execution (fallback)
+        payload = winner.payload or {}
+        # Enrich payload with user input and conversation history
+        payload["_user_input"] = intent_text
+        payload["_conversation_history"] = conversation_history
+
+        session_id = context.session_id if context else "default"
+        user_id = context.user_id if context else "default"
+
+        return await self._process_sync(
+            event_type=winner.event_type,
+            payload=payload,
+            response_hint=winner.reasoning,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
     async def _run_core_analysis(
         self,
         intent_text: str,
@@ -1387,6 +1627,20 @@ class IntentOrchestrator:
         Returns:
             OrchestrationResult if successful, None if failed
         """
+        # =====================================================================
+        # STREAM LISTENER: LLM-based parallel routing (if enabled)
+        # Short-circuits CollectorAgent + Classifier when active
+        # =====================================================================
+        if self._use_stream_listener and self._stream_dispatcher:
+            try:
+                result = await self._run_stream_listener(intent_text, context)
+                if result is not None:
+                    return result
+                # If StreamListener returned None, fall through to traditional pipeline
+                logger.info("[StreamListener] No winner, falling through to traditional pipeline")
+            except Exception as e:
+                logger.warning(f"[StreamListener] Error, falling through: {e}")
+
         # Store original input for learning feedback
         original_input = intent_text
         rules_applied = []
@@ -2687,11 +2941,15 @@ class IntentOrchestrator:
 
         # Start reasoning context for this job
         if self.reasoning_logger:
-            user_input = context.user_input if context else ""
-            self.reasoning_logger.start_job(job_id, None, user_input)
+            try:
+                user_input = context.user_input if context else ""
+                self.reasoning_logger.start_job(job_id, None, user_input)
+            except Exception as e:
+                logger.debug(f"Reasoning start_job failed (non-critical): {e}")
 
         # Order steps by dependencies
         ordered_steps = self._order_by_dependencies(steps)
+        print(f"[Python DEBUG] [MULTI-STEP] Executing {len(ordered_steps)} steps in order", file=sys.stderr, flush=True)
         logger.info(f"Multi-step: Executing {len(ordered_steps)} steps in order")
 
         # Log dependency ordering reasoning
@@ -2733,6 +2991,7 @@ class IntentOrchestrator:
             # Get executor for this event type
             executor = self._tool_executors.get(event_type)
             if not executor:
+                print(f"[Python DEBUG] [MULTI-STEP] [{i+1}/{len(ordered_steps)}] No executor for {event_type}, skipping", file=sys.stderr, flush=True)
                 logger.warning(f"Multi-step [{i+1}/{len(ordered_steps)}]: No executor for {event_type}, skipping")
                 results.append({
                     "event_type": event_type,
@@ -2742,6 +3001,7 @@ class IntentOrchestrator:
                 continue
 
             try:
+                print(f"[Python DEBUG] [MULTI-STEP] [{i+1}/{total_steps}] Executing {event_type} payload={payload}", file=sys.stderr, flush=True)
                 logger.info(f"Multi-step [{i+1}/{total_steps}]: Executing {event_type}")
 
                 # Log tool start reasoning

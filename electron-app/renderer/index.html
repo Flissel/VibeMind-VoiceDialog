@@ -239,6 +239,52 @@
             </div>
         </div>
 
+        <!-- Claude Code Runner Panel -->
+        <div id="claude-runner-panel" class="hidden" style="
+            position: fixed; bottom: 20px; right: 20px; z-index: 1000;
+            background: rgba(15, 15, 25, 0.95); border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px; padding: 16px; width: 380px;
+            backdrop-filter: blur(20px); font-family: 'Inter', sans-serif;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🤖</span>
+                    <span style="color: #e0e0e0; font-weight: 600; font-size: 14px;">Claude Code Runner</span>
+                </div>
+                <span id="claude-runner-status" style="
+                    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+                    background: rgba(100, 100, 100, 0.3); color: #888;
+                ">Stopped</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="claude-runner-repo" placeholder="Git repo path (e.g. C:\projects\my-app)"
+                    style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+                           background: rgba(0,0,0,0.3); color: #e0e0e0; font-size: 12px; box-sizing: border-box;" />
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button id="claude-runner-start-btn" style="
+                    flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(0, 255, 136, 0.2); color: #00ff88; font-size: 12px; font-weight: 600;
+                ">Start</button>
+                <button id="claude-runner-stop-btn" disabled style="
+                    flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(255, 68, 68, 0.15); color: #ff4444; font-size: 12px; font-weight: 600;
+                    opacity: 0.4;
+                ">Stop</button>
+                <button id="claude-runner-vnc-btn" disabled style="
+                    padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(100, 140, 255, 0.2); color: #648cff; font-size: 12px; font-weight: 600;
+                    opacity: 0.4;
+                ">VNC</button>
+            </div>
+            <div id="claude-runner-details" style="
+                margin-top: 10px; padding: 8px; border-radius: 6px;
+                background: rgba(0,0,0,0.2); color: #888; font-size: 11px;
+                font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; max-height: 80px; overflow-y: auto;
+            ">Not running</div>
+        </div>
+
         <!-- Shuttle Interior View (zoomed-in shuttle space) -->
         <div id="shuttle-interior-view" class="hidden">
             <div class="shuttle-interior-header">
@@ -473,7 +519,10 @@
         const voiceIndicator = document.getElementById('voice-indicator');
         const voiceStatus = document.getElementById('voice-status');
 
+        let voiceConnecting = false;  // Debounce flag
+        let voiceConnectTimer = null;  // Safety timeout
         voiceBtn.onclick = () => {
+            if (voiceConnecting) return;  // Ignore clicks during connection
             if (voiceActive) {
                 window.vibemind.stopVoice();
                 voiceActive = false;
@@ -481,11 +530,24 @@
                 voiceStatus.textContent = 'Voice: Inactive';
                 voiceBtn.textContent = 'Start Voice';
             } else {
+                voiceConnecting = true;
                 window.vibemind.startVoice();
-                voiceActive = true;
-                voiceIndicator.className = 'active';
-                voiceStatus.textContent = 'Voice: Listening...';
-                voiceBtn.textContent = 'Stop Voice';
+                voiceIndicator.className = 'connecting';
+                voiceStatus.textContent = 'Verbinde... (bis zu 30s beim ersten Mal)';
+                voiceBtn.textContent = 'Verbinde...';
+                voiceBtn.style.opacity = '0.6';
+                // Safety net: reset voiceConnecting after 35s if no response
+                if (voiceConnectTimer) clearTimeout(voiceConnectTimer);
+                voiceConnectTimer = setTimeout(() => {
+                    if (voiceConnecting) {
+                        console.warn('[Voice] Connection timeout — resetting button');
+                        voiceConnecting = false;
+                        voiceBtn.textContent = 'Start Voice';
+                        voiceBtn.style.opacity = '1';
+                        voiceIndicator.className = 'inactive';
+                        voiceStatus.textContent = 'Voice: Timeout';
+                    }
+                }, 35000);
             }
         };
 
@@ -861,18 +923,41 @@
                     exitSpace();
                     break;
 
+                case 'voice_status':
+                    // Connection progress feedback (e.g. "Verbinde mit OpenAI Realtime...")
+                    voiceIndicator.className = 'connecting';
+                    voiceStatus.textContent = message.message || 'Verbinde...';
+                    voiceBtn.textContent = 'Verbinde...';
+                    break;
+
                 case 'voice_started':
                     voiceActive = true;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
                     voiceIndicator.className = 'active';
                     voiceStatus.textContent = 'Voice: Listening...';
                     voiceBtn.textContent = 'Stop Voice';
+                    voiceBtn.style.opacity = '1';
                     break;
 
                 case 'voice_stopped':
                     voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
                     voiceIndicator.className = 'inactive';
                     voiceStatus.textContent = 'Voice: Inactive';
                     voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
+                    break;
+
+                case 'voice_error':
+                    voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
+                    voiceIndicator.className = 'inactive';
+                    voiceStatus.textContent = 'Voice: Error';
+                    voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
                     break;
 
                 // Canvas events
@@ -1513,6 +1598,21 @@
                     // Store for BrowserView update banner
                     window._rowboatUpdateInfo = message;
                     break;
+
+                // Rowboat update auto-applied
+                case 'rowboat_update_applied':
+                    console.log(`[UI] Rowboat auto-updated: ${message.old_version} -> ${message.new_version}`);
+                    {
+                        const rTab = document.getElementById('tab-roarboot');
+                        if (rTab) {
+                            const nameSpan = rTab.querySelector('.space-name');
+                            if (nameSpan) {
+                                nameSpan.textContent = 'Rowboat \u2705 Updated';
+                                setTimeout(() => { nameSpan.textContent = 'Rowboat'; }, 10000);
+                            }
+                        }
+                    }
+                    break;
             }
         });
 
@@ -1640,6 +1740,112 @@
             }
         });
         
+        // ========================================
+        // CLAUDE CODE RUNNER
+        // ========================================
+        const crPanel = document.getElementById('claude-runner-panel');
+        const crStatus = document.getElementById('claude-runner-status');
+        const crDetails = document.getElementById('claude-runner-details');
+        const crRepoInput = document.getElementById('claude-runner-repo');
+        const crStartBtn = document.getElementById('claude-runner-start-btn');
+        const crStopBtn = document.getElementById('claude-runner-stop-btn');
+        const crVncBtn = document.getElementById('claude-runner-vnc-btn');
+        let crPolling = null;
+
+        crStartBtn?.addEventListener('click', async () => {
+            const repoPath = crRepoInput?.value?.trim();
+            if (!repoPath) { crDetails.textContent = 'Please enter a git repo path'; return; }
+
+            crStartBtn.disabled = true;
+            crStartBtn.style.opacity = '0.4';
+            crStatus.textContent = 'Starting...';
+            crStatus.style.background = 'rgba(255, 200, 0, 0.2)';
+            crStatus.style.color = '#ffc800';
+            crDetails.textContent = 'Building Docker image & starting container...';
+
+            try {
+                const result = await window.vibemind.engine.claudeRunner.start(repoPath);
+                if (result.success) {
+                    crStopBtn.disabled = false;
+                    crStopBtn.style.opacity = '1';
+                    crVncBtn.disabled = false;
+                    crVncBtn.style.opacity = '1';
+                    crVncBtn.dataset.vncPort = result.vncPort;
+                    crStatus.textContent = 'Running';
+                    crStatus.style.background = 'rgba(0, 255, 136, 0.2)';
+                    crStatus.style.color = '#00ff88';
+                    crDetails.textContent = `Container started. VNC: ${result.vncPort}`;
+                    startCrPolling();
+                } else {
+                    crStartBtn.disabled = false;
+                    crStartBtn.style.opacity = '1';
+                    crStatus.textContent = 'Error';
+                    crStatus.style.background = 'rgba(255, 68, 68, 0.2)';
+                    crStatus.style.color = '#ff4444';
+                    crDetails.textContent = result.error;
+                }
+            } catch (error) {
+                crStartBtn.disabled = false;
+                crStartBtn.style.opacity = '1';
+                crStatus.textContent = 'Error';
+                crDetails.textContent = error.message;
+            }
+        });
+
+        crStopBtn?.addEventListener('click', async () => {
+            await window.vibemind.engine.claudeRunner.stop();
+            stopCrPolling();
+            crStartBtn.disabled = false;
+            crStartBtn.style.opacity = '1';
+            crStopBtn.disabled = true;
+            crStopBtn.style.opacity = '0.4';
+            crVncBtn.disabled = true;
+            crVncBtn.style.opacity = '0.4';
+            crStatus.textContent = 'Stopped';
+            crStatus.style.background = 'rgba(100, 100, 100, 0.3)';
+            crStatus.style.color = '#888';
+            crDetails.textContent = 'Not running';
+            hideVncPreview();
+        });
+
+        crVncBtn?.addEventListener('click', () => {
+            const vncPort = crVncBtn.dataset.vncPort;
+            if (vncPort) {
+                showVncPreview(
+                    `http://localhost:${vncPort}/vnc.html?autoconnect=true&resize=scale`,
+                    'Claude Code Runner',
+                    'claude-runner'
+                );
+            }
+        });
+
+        function startCrPolling() {
+            stopCrPolling();
+            crPolling = setInterval(async () => {
+                try {
+                    const s = await window.vibemind.engine.claudeRunner.getStatus();
+                    if (!s.running) { crStopBtn.click(); return; }
+                    const icons = { idle: '🟢', processing: '🔵', completed: '✅', failed: '❌', error: '🔴', starting: '🟡' };
+                    crDetails.textContent =
+                        `${icons[s.state] || '⚪'} ${s.message || s.state}` +
+                        (s.branch ? `\nBranch: ${s.branch}` : '') +
+                        (s.details ? `\n${s.details}` : '');
+                    crStatus.textContent = s.state || 'Running';
+                } catch { /* ignore */ }
+            }, 5000);
+        }
+
+        function stopCrPolling() {
+            if (crPolling) { clearInterval(crPolling); crPolling = null; }
+        }
+
+        // Show/hide runner panel with keyboard shortcut (Ctrl+Shift+R)
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+                crPanel?.classList.toggle('hidden');
+            }
+        });
+
         // Open Project Button Handler
         document.getElementById('open-project-btn')?.addEventListener('click', async () => {
             const projectId = window.multiverseApp?.selectedProjectId;

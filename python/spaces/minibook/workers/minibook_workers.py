@@ -122,10 +122,13 @@ class DiscussionPollerWorker:
                 continue
 
             client = get_minibook_client()
+            loop = asyncio.get_running_loop()
 
             for post_id, discussion in list(self._active.items()):
                 try:
-                    comments = client.get_comments(post_id)
+                    comments = await loop.run_in_executor(
+                        None, client.get_comments, post_id
+                    )
 
                     for comment in comments:
                         agent_name = comment.get("agent_name", "")
@@ -247,6 +250,7 @@ class SpaceMinibookResponder:
         agent_name: str,
         space_key: str,
         tool_executor: Optional[Callable] = None,
+        space_agent: Optional[Any] = None,
         poll_interval: float = 2.0,
     ):
         """
@@ -254,52 +258,114 @@ class SpaceMinibookResponder:
             agent_name: Minibook agent name (e.g., "vibemind_ideas")
             space_key: VibeMind space key (e.g., "ideas")
             tool_executor: Callable that executes a task and returns result string
+            space_agent: Optional BaseSpaceAgent for agentic multi-tool execution
             poll_interval: Seconds between notification polls
         """
         self._agent_name = agent_name
         self._space_key = space_key
         self._executor = tool_executor
+        self._space_agent = space_agent
         self._running = False
         self._poll_interval = poll_interval
+        self._processed_posts: set = set()  # Dedup: post_ids already handled
 
     async def poll_and_respond(self) -> None:
         """
         Main loop: poll for @mentions and respond.
-        Runs as asyncio.Task.
+        Runs as asyncio.Task (or in its own thread).
         """
         from spaces.minibook.tools.minibook_client import get_minibook_client
 
         self._running = True
         _debug_print(f"SpaceResponder started for {self._agent_name}")
 
+        # Flush stale notifications from previous sessions by adding their
+        # post_ids to the dedup set. This prevents re-execution of old tasks
+        # without needing HTTP calls to mark_notification_read (which may fail).
+        try:
+            client = get_minibook_client()
+            loop = asyncio.get_running_loop()
+            stale = await loop.run_in_executor(
+                None, client.get_notifications, self._agent_name
+            )
+            if stale:
+                stale_ids = set()
+                for notif in stale:
+                    pid = notif.get("payload", {}).get("post_id", "")
+                    if pid:
+                        stale_ids.add(pid)
+                self._processed_posts.update(stale_ids)
+                _debug_print(
+                    f"SpaceResponder {self._agent_name}: "
+                    f"flushed {len(stale_ids)} stale post_ids into dedup set"
+                )
+        except Exception as e:
+            _debug_print(f"SpaceResponder {self._agent_name}: flush error: {e}")
+
         while self._running:
             try:
                 client = get_minibook_client()
-                notifications = client.get_notifications(self._agent_name)
+                # Use run_in_executor to avoid blocking the main event loop
+                # with synchronous HTTP calls
+                loop = asyncio.get_running_loop()
+                all_notifs = await loop.run_in_executor(
+                    None, client.get_notifications, self._agent_name
+                )
 
+                # Filter: only unread notifications with actionable types
+                notifications = [
+                    n for n in all_notifs
+                    if not n.get("read", False)
+                    and n.get("type", "") in ("mention", "new_comment", "thread_update")
+                ]
+
+                # Further filter: only posts we haven't processed yet
+                new_notifications = []
                 for notif in notifications:
-                    notif_type = notif.get("type", "")
-                    if notif_type not in ("mention", "new_comment"):
+                    notif_payload = notif.get("payload", {})
+                    post_id = notif_payload.get("post_id", "")
+                    if not post_id or post_id in self._processed_posts:
                         continue
+                    new_notifications.append(notif)
 
-                    post_id = notif.get("post_id", "")
-                    content = notif.get("content", "")
+                # Log only when there are genuinely new notifications
+                if new_notifications:
+                    _debug_print(
+                        f"SpaceResponder {self._agent_name}: "
+                        f"{len(new_notifications)} NEW notifications"
+                    )
+
+                for notif in new_notifications:
+                    notif_payload = notif.get("payload", {})
+                    post_id = notif_payload.get("post_id", "")
                     notif_id = notif.get("id", "")
+                    self._processed_posts.add(post_id)
 
-                    if not post_id or not content:
+                    # Fetch the actual post content from Minibook
+                    content = await self._fetch_post_content(
+                        client, post_id, loop
+                    )
+                    if not content:
+                        _debug_print(
+                            f"SpaceResponder {self._agent_name}: "
+                            f"could not fetch content for post {post_id}"
+                        )
                         continue
 
                     _debug_print(
                         f"SpaceResponder {self._agent_name}: "
-                        f"mentioned in post {post_id}"
+                        f"mentioned in post {post_id}, "
+                        f"content={content[:80]}..."
                     )
 
                     # Execute the task
                     result = await self._handle_mention(content)
 
-                    # Post response as comment
+                    # Post response as comment (in executor to avoid blocking)
                     try:
-                        client.create_comment(post_id, result, self._agent_name)
+                        await loop.run_in_executor(
+                            None, client.create_comment, post_id, result, self._agent_name
+                        )
                         _debug_print(
                             f"SpaceResponder {self._agent_name}: "
                             f"responded to {post_id}"
@@ -310,7 +376,9 @@ class SpaceMinibookResponder:
                     # Mark notification as read
                     if notif_id:
                         try:
-                            client.mark_notification_read(notif_id, self._agent_name)
+                            await loop.run_in_executor(
+                                None, client.mark_notification_read, notif_id, self._agent_name
+                            )
                         except Exception:
                             pass
 
@@ -326,6 +394,37 @@ class SpaceMinibookResponder:
     def stop(self) -> None:
         """Stop the responder loop."""
         self._running = False
+
+    async def _fetch_post_content(
+        self, client, post_id: str, loop
+    ) -> Optional[str]:
+        """
+        Fetch post content from Minibook by listing project posts.
+
+        Notifications only contain post_id (in payload), not the actual
+        content. We need to fetch the post to get the enriched JSON.
+        """
+        try:
+            project_id = client.project_id
+            if not project_id:
+                return None
+
+            posts = await loop.run_in_executor(
+                None, client.get_posts, project_id, self._agent_name
+            )
+
+            for post in posts:
+                if post.get("id") == post_id:
+                    return post.get("content", "")
+
+            _debug_print(
+                f"Post {post_id} not found in {len(posts)} project posts"
+            )
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch post content: {e}")
+            return None
 
     async def _handle_mention(self, content: str) -> str:
         """
@@ -398,8 +497,9 @@ class SpaceMinibookResponder:
         """
         Execute an enriched task with pre-classified event_type and payload.
 
-        Bypasses re-classification since the EnrichmentPipeline already
-        determined the event_type and payload.
+        Execution priority:
+        1. SpaceAgent (agentic multi-tool loop) — no re-classification needed
+        2. Orchestrator with domain_hint (flat single-tool fallback)
 
         Args:
             enriched: Dict with event_type, payload, context, space_key
@@ -410,6 +510,7 @@ class SpaceMinibookResponder:
         event_type = enriched.get("event_type", "")
         payload = enriched.get("payload", {})
         user_text = payload.get("user_text", "") or enriched.get("original_text", "")
+        context_data = enriched.get("context", {})
 
         _debug_print(
             f"SpaceResponder {self._agent_name}: "
@@ -423,22 +524,69 @@ class SpaceMinibookResponder:
                 f"aber liegt ausserhalb meiner Domain."
             )
 
-        # Execute via domain-constrained orchestrator with the user_text
-        # The orchestrator will re-classify within this space's domain
+        # --- Priority 1: SpaceAgent (agentic multi-tool loop) ---
+        if self._space_agent and user_text:
+            try:
+                result = await self._execute_via_space_agent(user_text, context_data)
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning(
+                    f"SpaceAgent {self._space_key} failed: {e}, "
+                    f"falling back to orchestrator"
+                )
+                _debug_print(f"SpaceAgent {self._space_key} error: {e}")
+
+        # --- Priority 2: Orchestrator with domain_hint (flat execution) ---
         if user_text:
             return await self._execute_via_orchestrator(user_text)
 
-        # Fallback: if we have event_type but no user_text, try direct executor
-        if self._executor and user_text:
-            try:
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(None, self._executor, user_text)
-                return str(result) if result else "Erledigt."
-            except Exception as e:
-                logger.error(f"SpaceResponder {self._agent_name} enriched exec error: {e}")
-                return f"Fehler: {e}"
-
         return "Keine ausfuehrbare Aufgabe erkannt."
+
+    async def _execute_via_space_agent(
+        self, user_text: str, context_data: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Execute via SpaceAgent's agentic loop (LLM with domain-specific tools).
+
+        The SpaceAgent decides which tools to call and chains them intelligently.
+        No re-classification needed — the agent handles everything.
+
+        Args:
+            user_text: Original user input text
+            context_data: Context dict from EnrichmentPipeline (bubble state, history)
+
+        Returns:
+            Summary string from the agent, or None on failure
+        """
+        from swarm.space_agents.models import SpaceAgentContext
+
+        agent_context = SpaceAgentContext(
+            user_input=user_text,
+            conversation_history=context_data.get("conversation_history", []),
+            current_bubble=context_data.get("current_bubble"),
+            current_bubble_id=context_data.get("current_bubble_id"),
+            idea_count=context_data.get("idea_count", 0),
+        )
+
+        _debug_print(
+            f"SpaceAgent {self._space_key}: executing '{user_text[:60]}...'"
+        )
+
+        result = await self._space_agent.execute(user_text, agent_context)
+
+        if result and result.summary:
+            _debug_print(
+                f"SpaceAgent {self._space_key}: "
+                f"{result.turns} turns, {len(result.tool_calls)} tools, "
+                f"{result.total_latency_ms:.0f}ms"
+            )
+            return result.summary
+
+        if result and result.error:
+            logger.warning(f"SpaceAgent {self._space_key} returned error: {result.error}")
+
+        return None
 
     async def _execute_legacy(self, content: str) -> str:
         """
@@ -594,34 +742,80 @@ def _make_space_executor(space_key: str, domain_prefix: str) -> Callable:
     return executor
 
 
+def _load_space_agents() -> Dict[str, Any]:
+    """
+    Load all available SpaceAgents (where USE_SPACE_AGENTS=true).
+
+    SpaceAgents provide agentic multi-tool execution (LLM decides which
+    tools to call and chains them). Only spaces with implemented agents
+    are returned; others fall back to orchestrator-based flat execution.
+
+    Returns:
+        Dict mapping space_key → BaseSpaceAgent instance
+    """
+    import os
+    agents: Dict[str, Any] = {}
+
+    if os.getenv("USE_SPACE_AGENTS", "false").lower() != "true":
+        _debug_print("USE_SPACE_AGENTS=false — no SpaceAgents loaded")
+        return agents
+
+    # Ideas Space Agent (47 tools, agentic loop)
+    try:
+        from swarm.space_agents import get_ideas_space_agent
+        agents["ideas"] = get_ideas_space_agent()
+        _debug_print("Loaded IdeasSpaceAgent (47 tools)")
+    except Exception as e:
+        logger.warning(f"Could not load IdeasSpaceAgent: {e}")
+
+    # Future SpaceAgents:
+    # try:
+    #     from swarm.space_agents import get_desktop_space_agent
+    #     agents["desktop"] = get_desktop_space_agent()
+    # except Exception: pass
+
+    if agents:
+        _debug_print(f"Loaded {len(agents)} SpaceAgent(s): {list(agents.keys())}")
+
+    return agents
+
+
 def create_space_responders(
     poll_interval: float = 2.0,
 ) -> Dict[str, SpaceMinibookResponder]:
     """
     Create SpaceMinibookResponder instances for all registered spaces.
 
-    Each responder gets a per-space tool executor that classifies and
-    executes mentions within the space's domain (anti-loop safe).
+    Each responder gets:
+    - A per-space tool executor (orchestrator with domain_hint, flat execution)
+    - An optional SpaceAgent (agentic multi-tool loop, preferred when available)
 
     Returns:
         Dict mapping space_key → SpaceMinibookResponder
     """
     from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
 
+    # Load SpaceAgents where available
+    space_agents = _load_space_agents()
+
     responders = {}
     for space_key, agent_info in SPACE_AGENT_REGISTRY.items():
         domain_prefix = agent_info.get("domain_prefix", "")
         executor = _make_space_executor(space_key, domain_prefix)
+        agent = space_agents.get(space_key)
 
         responders[space_key] = SpaceMinibookResponder(
             agent_name=agent_info["name"],
             space_key=space_key,
             tool_executor=executor,
+            space_agent=agent,
             poll_interval=poll_interval,
         )
+
+        agent_str = f", SpaceAgent=YES" if agent else ""
         _debug_print(
             f"Created responder for '{space_key}' "
-            f"(agent={agent_info['name']}, prefix={domain_prefix})"
+            f"(agent={agent_info['name']}, prefix={domain_prefix}{agent_str})"
         )
 
     return responders

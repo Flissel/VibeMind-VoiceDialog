@@ -63,7 +63,7 @@ class UserAgentConfig:
     name: str  # e.g., "rachel"
     display_name: str  # e.g., "Rachel"
     space_type: SpaceType
-    voice_id: str  # ElevenLabs voice
+    voice_id: str = ""  # Voice identifier (optional)
     greeting: str = ""
 
     # Clarification settings

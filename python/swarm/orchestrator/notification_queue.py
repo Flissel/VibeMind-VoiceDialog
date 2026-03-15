@@ -7,7 +7,7 @@ The NotificationQueue enables async feedback without TTS injection:
 3. On next user input, Rachel checks queue
 4. Rachel includes pending results in her response
 
-This approach is 100% compatible with ElevenLabs Conversational AI.
+This approach is compatible with the voice Conversational AI layer.
 """
 
 import logging

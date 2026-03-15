@@ -1,7 +1,7 @@
 """
 OpenAI Realtime Voice Session for VibeMind
 
-Replaces ElevenLabs Conversational AI with OpenAI Realtime API.
+OpenAI Realtime API voice session for VibeMind.
 Provides speech-to-speech interaction with native function calling.
 
 Architecture:
@@ -37,8 +37,10 @@ import json
 import logging
 import os
 import queue  # Thread-safe queue for audio from sounddevice thread
+import socket
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, Dict, Any
 
 from openai import AsyncOpenAI
@@ -160,6 +162,11 @@ class OpenAIRealtimeVoiceSession:
         self._session_start_time: float = 0
         self._reconnect_count: int = 0
 
+        # Server-side turn detection active?  When True, the server
+        # handles speech_started/stopped events and response.create —
+        # client-side VAD is disabled to avoid empty-buffer conflicts.
+        self._server_vad_active: bool = False
+
         # Transcript accumulation
         self._current_user_transcript = ""
         self._current_agent_transcript = ""
@@ -177,6 +184,10 @@ class OpenAIRealtimeVoiceSession:
             f"model={self._model}, voice={self._voice}"
         )
 
+    # Retry config for connect()
+    MAX_CONNECT_RETRIES = 3
+    CONNECT_TIMEOUTS = [30.0, 40.0, 50.0]  # Generous timeouts (user's network takes ~17s)
+
     async def connect(self) -> None:
         """
         Open WebSocket connection and configure session.
@@ -185,6 +196,8 @@ class OpenAIRealtimeVoiceSession:
         session.update with voice config, tools, and system prompt.
         Waits for session.created from server before returning to
         ensure the connection is fully stable.
+
+        Retries up to MAX_CONNECT_RETRIES times with increasing timeouts.
         """
         if self._is_connected:
             logger.warning("Already connected")
@@ -196,80 +209,163 @@ class OpenAIRealtimeVoiceSession:
             elapsed = time.time() - _t0
             print(f"[Python DEBUG] [RealtimeVoice] [{elapsed:.3f}s] {msg}", file=sys.stderr, flush=True)
 
+        # Ensure the event loop has a dedicated ThreadPoolExecutor so
+        # DNS resolution inside the websockets library doesn't get starved
+        # by other tasks sharing the default pool (stdin reader, Redis, etc.)
+        loop = asyncio.get_running_loop()
+        if loop._default_executor is None or getattr(loop, '_vibemind_executor_set', False) is False:
+            _dbg("Setting dedicated ThreadPoolExecutor(max_workers=8) on event loop")
+            loop.set_default_executor(ThreadPoolExecutor(max_workers=8))
+            loop._vibemind_executor_set = True
+
+        # Pre-resolve DNS asynchronously so the websocket library finds
+        # the IP in the OS cache.  IMPORTANT: Must NOT use blocking
+        # dns_event.wait() here — that freezes the entire event loop.
+        _dbg("Pre-resolving api.openai.com DNS...")
         try:
-            _dbg(f"Connecting to {self._model}...")
-            self._connection_manager = self._client.realtime.connect(
-                model=self._model,
-                websocket_connection_options={
-                    "open_timeout": 15,
-                    "close_timeout": 5,
-                },
-            )
-            _dbg("Connection manager created, opening WebSocket...")
-
-            # Open the WebSocket connection with timeout.
-            # No executor swap needed — OpenAI SDK v2 uses websockets library
-            # which handles DNS resolution internally.
-            self._connection = await asyncio.wait_for(
-                self._connection_manager.__aenter__(),
-                timeout=20.0,
-            )
-            _dbg("WebSocket connected!")
-
-            # Wait for session.created from server before configuring.
-            # This confirms the server has accepted our connection.
-            _dbg("Waiting for session.created from server...")
-            first_event = await asyncio.wait_for(
-                self._connection.recv(),
+            dns_result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, socket.getaddrinfo, "api.openai.com", 443, socket.AF_INET
+                ),
                 timeout=10.0,
             )
-            if first_event.type == "session.created":
-                _dbg("session.created received — connection stable")
-            else:
-                _dbg(f"First event was {first_event.type} (expected session.created)")
-
-            # Configure session
-            session_config = create_session_config(
-                system_prompt=self._system_prompt,
-                voice=self._voice,
-                tools=self._tools,
-            )
-
-            _dbg("Sending session.update...")
-            await self._connection.session.update(session=session_config)
-
-            # Wait for session.updated confirmation
-            _dbg("Waiting for session.updated confirmation...")
-            update_event = await asyncio.wait_for(
-                self._connection.recv(),
-                timeout=10.0,
-            )
-            if update_event.type == "session.updated":
-                _dbg("session.updated confirmed — session fully configured!")
-            else:
-                _dbg(f"Got {update_event.type} instead of session.updated (proceeding anyway)")
-
-            self._is_connected = True
-            self._session_start_time = time.time()
-            _dbg(f"Connection complete ({time.time() - _t0:.2f}s total)")
-
+            ip = dns_result[0][4][0]
+            _dbg(f"DNS resolved: api.openai.com → {ip}")
         except asyncio.TimeoutError:
-            _dbg("TIMEOUT: WebSocket connection or session config timed out!")
-            logger.error("Connection timed out")
-            self._is_connected = False
-            if self._on_error:
-                self._on_error("Connection timed out after 20s")
-            raise ConnectionError("OpenAI Realtime connection timed out")
-
+            _dbg("DNS pre-resolve timed out (proceeding anyway)")
         except Exception as e:
-            _dbg(f"CONNECTION FAILED: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            logger.error(f"Connection failed: {e}")
-            self._is_connected = False
-            if self._on_error:
-                self._on_error(f"Connection failed: {e}")
-            raise
+            _dbg(f"DNS pre-resolve failed: {e}")
+
+        last_error = None
+        for attempt in range(self.MAX_CONNECT_RETRIES):
+            ws_timeout = self.CONNECT_TIMEOUTS[min(attempt, len(self.CONNECT_TIMEOUTS) - 1)]
+            try:
+                if attempt > 0:
+                    wait_secs = 2 ** attempt  # 2s, 4s
+                    _dbg(f"Retry {attempt + 1}/{self.MAX_CONNECT_RETRIES} in {wait_secs}s (timeout={ws_timeout}s)...")
+                    await asyncio.sleep(wait_secs)
+
+                _dbg(f"Connecting to {self._model} via BETA path (attempt {attempt + 1}, timeout={ws_timeout}s)...")
+                self._connection_manager = self._client.beta.realtime.connect(
+                    model=self._model,
+                )
+                _dbg("Connection manager created, opening WebSocket...")
+
+                # Open the WebSocket connection with timeout.
+                self._connection = await asyncio.wait_for(
+                    self._connection_manager.__aenter__(),
+                    timeout=ws_timeout,
+                )
+                _dbg("WebSocket connected!")
+
+                # Wait for session.created from server before configuring.
+                _dbg("Waiting for session.created from server...")
+                first_event = await asyncio.wait_for(
+                    self._connection.recv(),
+                    timeout=10.0,
+                )
+                if first_event.type == "session.created":
+                    _dbg("session.created received — connection stable")
+                else:
+                    _dbg(f"First event was {first_event.type} (expected session.created)")
+
+                # Configure session
+                session_config = create_session_config(
+                    system_prompt=self._system_prompt,
+                    voice=self._voice,
+                    tools=self._tools,
+                )
+
+                # Log config keys (not full prompt, just structure)
+                config_summary = {k: (type(v).__name__ if k == 'instructions' else v) for k, v in session_config.items()}
+                _dbg(f"Sending session.update with config: {config_summary}")
+                await self._connection.session.update(session=session_config)
+
+                # Wait for session.updated confirmation
+                _dbg("Waiting for session.updated confirmation...")
+                update_event = await asyncio.wait_for(
+                    self._connection.recv(),
+                    timeout=10.0,
+                )
+                if update_event.type == "session.updated":
+                    # Log key config fields from the server response
+                    session = getattr(update_event, 'session', None)
+                    if session:
+                        td = getattr(session, 'turn_detection', None)
+                        mods = getattr(session, 'modalities', None) or getattr(session, 'output_modalities', None)
+                        _dbg(f"session.updated confirmed — turn_detection={td}, modalities={mods}")
+                        # Track if server handles turn detection (semantic_vad or server_vad)
+                        # When active, disable client-side VAD to avoid empty-buffer conflicts
+                        if td is not None:
+                            self._server_vad_active = True
+                            _dbg("Server-side turn detection ACTIVE — client-side VAD disabled")
+                        else:
+                            self._server_vad_active = False
+                            _dbg("No server turn detection — client-side VAD ACTIVE")
+                    else:
+                        _dbg("session.updated confirmed — session fully configured!")
+                elif update_event.type == "error":
+                    err_detail = getattr(update_event, 'error', None) or getattr(update_event, 'message', None)
+                    _dbg(f"session.update ERROR from server: {err_detail}")
+                    # Log full event for debugging
+                    try:
+                        _dbg(f"Full error event: {update_event}")
+                    except Exception:
+                        pass
+                else:
+                    _dbg(f"Got {update_event.type} instead of session.updated (proceeding anyway)")
+
+                self._is_connected = True
+                self._session_start_time = time.time()
+                _dbg(f"Connection complete ({time.time() - _t0:.2f}s total)")
+                return  # Success — exit retry loop
+
+            except asyncio.CancelledError:
+                # Task was cancelled (stop_voice) — clean up and propagate immediately
+                _dbg(f"CANCELLED on attempt {attempt + 1} — stopping retries")
+                if self._connection_manager:
+                    try:
+                        await asyncio.wait_for(
+                            self._connection_manager.__aexit__(None, None, None),
+                            timeout=3.0,
+                        )
+                    except (asyncio.TimeoutError, Exception):
+                        _dbg("WebSocket cleanup timed out during cancel — forcing")
+                    self._connection_manager = None
+                raise
+
+            except asyncio.TimeoutError:
+                _dbg(f"TIMEOUT on attempt {attempt + 1}/{self.MAX_CONNECT_RETRIES} ({ws_timeout}s)")
+                last_error = ConnectionError(f"OpenAI Realtime connection timed out (attempt {attempt + 1})")
+                # Clean up failed connection manager
+                if self._connection_manager:
+                    try:
+                        await self._connection_manager.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+                    self._connection_manager = None
+                continue
+
+            except Exception as e:
+                _dbg(f"CONNECTION FAILED on attempt {attempt + 1}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                last_error = e
+                if self._connection_manager:
+                    try:
+                        await self._connection_manager.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+                    self._connection_manager = None
+                continue
+
+        # All retries exhausted
+        _dbg(f"All {self.MAX_CONNECT_RETRIES} connection attempts failed!")
+        logger.error(f"Connection failed after {self.MAX_CONNECT_RETRIES} retries: {last_error}")
+        self._is_connected = False
+        if self._on_error:
+            self._on_error(f"Connection failed after {self.MAX_CONNECT_RETRIES} retries")
+        raise ConnectionError(f"OpenAI Realtime connection failed after {self.MAX_CONNECT_RETRIES} retries") from last_error
 
     async def start(self) -> None:
         """
@@ -295,37 +391,36 @@ class OpenAIRealtimeVoiceSession:
         self._event_task = asyncio.create_task(self._event_loop())
         self._audio_send_task = asyncio.create_task(self._audio_send_loop())
 
-        # Start audio I/O in thread executor to avoid blocking the event loop.
-        # PortAudio device initialization on Windows can take 30+ seconds
-        # on first use (enumerating WASAPI/DirectSound devices).
-        # We start it in background and trigger the greeting only after
-        # audio is ready so the user can actually hear Rachel.
-        async def _init_audio_and_greet():
+        # Trigger greeting IMMEDIATELY to keep the WebSocket alive.
+        # Audio output will buffer the greeting audio and play it once
+        # PortAudio initialization completes (which can take 30+ seconds
+        # on Windows first use, enumerating WASAPI/DirectSound devices).
+        if self._connection:
+            await self._connection.response.create(
+                response={
+                    "instructions": (
+                        "Begruesse den User kurz und freundlich. "
+                        "Sag z.B. 'Hey! Ich bin Rachel, deine VibeMind Assistentin. Was kann ich fuer dich tun?'"
+                    ),
+                }
+            )
+            print("[Python DEBUG] [RealtimeVoice] Greeting triggered (audio buffered until device ready)", file=sys.stderr, flush=True)
+
+        # Start audio I/O in thread executor (non-blocking).
+        async def _init_audio():
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 print("[Python DEBUG] [RealtimeVoice] Starting audio I/O (in executor)...", file=sys.stderr, flush=True)
                 _t0_audio = time.time()
                 await loop.run_in_executor(None, self._audio_manager.start_capture)
                 await loop.run_in_executor(None, self._audio_manager.start_playback)
                 _audio_dur = time.time() - _t0_audio
-                print(f"[Python DEBUG] [RealtimeVoice] Audio I/O started ({_audio_dur:.1f}s)", file=sys.stderr, flush=True)
-
-                # NOW trigger greeting — audio is ready so user will hear it
-                if self._is_running and self._connection:
-                    await self._connection.response.create(
-                        response={
-                            "instructions": (
-                                "Begruesse den User kurz und freundlich. "
-                                "Sag z.B. 'Hey! Ich bin Rachel, deine VibeMind Assistentin. Was kann ich fuer dich tun?'"
-                            ),
-                        }
-                    )
-                    print("[Python DEBUG] [RealtimeVoice] Greeting triggered after audio ready", file=sys.stderr, flush=True)
+                print(f"[Python DEBUG] [RealtimeVoice] Audio I/O ready ({_audio_dur:.1f}s)", file=sys.stderr, flush=True)
             except Exception as e:
-                print(f"[Python DEBUG] [RealtimeVoice] Audio/greeting init error: {e}", file=sys.stderr, flush=True)
+                print(f"[Python DEBUG] [RealtimeVoice] Audio init error: {e}", file=sys.stderr, flush=True)
                 logger.error(f"Audio init error: {e}")
 
-        self._audio_init_task = asyncio.create_task(_init_audio_and_greet())
+        self._audio_init_task = asyncio.create_task(_init_audio())
 
         print("[Python DEBUG] [RealtimeVoice] Voice session ACTIVE - audio initializing in background", file=sys.stderr, flush=True)
         logger.info("Voice session started - audio initializing")
@@ -342,13 +437,13 @@ class OpenAIRealtimeVoiceSession:
         # Stop audio
         self._audio_manager.cleanup()
 
-        # Cancel event-loop tasks (these cancel instantly)
+        # Cancel event-loop tasks with timeout (WebSocket ops can stall)
         for task in [self._event_task, self._audio_send_task]:
             if task and not task.done():
                 task.cancel()
                 try:
-                    await task
-                except (asyncio.CancelledError, Exception):
+                    await asyncio.wait_for(asyncio.shield(task), timeout=3.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                     pass
 
         # Cancel audio init task separately — it may be stuck in
@@ -360,10 +455,15 @@ class OpenAIRealtimeVoiceSession:
             # Don't await — the executor thread will finish on its own.
             # _is_running=False prevents greeting from being triggered.
 
-        # Close WebSocket via connection manager
+        # Close WebSocket via connection manager (with timeout — can stall on dead connection)
         if hasattr(self, '_connection_manager') and self._connection_manager:
             try:
-                await self._connection_manager.__aexit__(None, None, None)
+                await asyncio.wait_for(
+                    self._connection_manager.__aexit__(None, None, None),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("WebSocket close timed out (5s) — forcing cleanup")
             except Exception as e:
                 logger.debug(f"WebSocket close: {e}")
             self._connection_manager = None
@@ -386,11 +486,15 @@ class OpenAIRealtimeVoiceSession:
         """
         Inject a context message into the active session and trigger Rachel to speak it.
 
-        Used by DiscussionPollerWorker to deliver async collaboration results
-        without blocking the voice session.
+        Silently adds a system message to the conversation history.
+        Rachel sees it as context on her next turn — no forced response,
+        no interruption, no 'already_has_active_response' errors.
+
+        Used by _dispatch_in_thread and DiscussionPollerWorker to deliver
+        async results.
 
         Args:
-            text: The result text to inject (Rachel will paraphrase it)
+            text: The result text to add to conversation context
         """
         if not self._is_connected or not self._connection:
             logger.warning("Cannot inject system message - not connected")
@@ -401,18 +505,13 @@ class OpenAIRealtimeVoiceSession:
                 item={
                     "type": "message",
                     "role": "system",
-                    "content": [{"type": "input_text", "text": text}],
+                    "content": [{"type": "input_text", "text": f"[RESULT]: {text}"}],
                 }
             )
-            await self._connection.response.create(
-                response={
-                    "instructions": (
-                        f"Ein Ergebnis ist gerade eingetroffen. "
-                        f"Teile dem User das Ergebnis kurz und freundlich mit: {text[:500]}"
-                    ),
-                }
-            )
-            logger.info(f"Injected system message: {text[:80]}...")
+            # NO response.create() — Rachel picks this up naturally
+            # on the next user turn. No interruption, no race condition.
+            print(f"[Python DEBUG] [RealtimeVoice] Result injected into context: {text[:80]}...", file=sys.stderr, flush=True)
+            logger.info(f"Injected system message (silent): {text[:80]}...")
         except Exception as e:
             logger.error(f"Error injecting system message: {e}")
 
@@ -456,15 +555,36 @@ class OpenAIRealtimeVoiceSession:
             except queue.Full:
                 pass  # Drop chunk if queue is full
 
+    # Client-side silence detection thresholds
+    # FALLBACK only — used when server-side turn_detection (semantic_vad)
+    # is disabled or fails.  When semantic_vad is active the server handles
+    # turn-taking; these thresholds serve as a safety net with a generous
+    # silence window (2s) so the user is never cut off mid-sentence.
+    #
+    # Tuned for HyperX QuadCast 2 at ~57% volume:
+    #   Background noise ≈ 30-60 RMS, speech ≈ 150-5000+ RMS
+    SILENCE_RMS_THRESHOLD = 80       # Below this RMS = silence (int16 range 0-32768)
+    SPEECH_RMS_THRESHOLD = 150       # Above this RMS = speech detected
+    SILENCE_DURATION_MS = 2000       # Silence duration to trigger commit (ms) — generous fallback
+    MIN_SPEECH_DURATION_MS = 300     # Minimum speech before we consider it real
+
     async def _audio_send_loop(self) -> None:
         """
         Continuously send audio chunks from queue to WebSocket.
 
-        Reads from the thread-safe queue and sends input_audio_buffer.append events.
-        Uses polling to bridge between thread-safe queue and async WebSocket.
+        Also implements client-side silence detection as a FALLBACK when
+        server-side turn_detection (semantic_vad) is disabled.  When
+        server VAD is active, the server handles speech boundaries and
+        response.create — client-side VAD is skipped entirely.
         """
         chunks_sent = 0
         last_log_time = time.time()
+
+        # Client-side VAD state (only used when _server_vad_active is False)
+        is_speaking = False
+        speech_start_time = 0.0
+        last_speech_time = 0.0
+        silence_commit_pending = False
 
         while self._is_running:
             try:
@@ -472,8 +592,18 @@ class OpenAIRealtimeVoiceSession:
                 try:
                     base64_audio = self._audio_queue.get_nowait()
                 except queue.Empty:
-                    # No audio available - yield to event loop and check timeout
+                    # No audio available - yield to event loop
                     await asyncio.sleep(0.02)  # 20ms polling interval
+
+                    # Client-side silence check while idle (only if no server VAD)
+                    if not self._server_vad_active and is_speaking and not silence_commit_pending:
+                        now = time.time()
+                        silence_ms = (now - last_speech_time) * 1000
+                        if silence_ms > self.SILENCE_DURATION_MS:
+                            speech_ms = (now - speech_start_time) * 1000
+                            if speech_ms > self.MIN_SPEECH_DURATION_MS:
+                                silence_commit_pending = True
+
                     if self._should_reconnect():
                         await self._handle_session_timeout()
                     continue
@@ -485,10 +615,66 @@ class OpenAIRealtimeVoiceSession:
                     )
                     chunks_sent += 1
 
-                    # Log progress every 5 seconds
                     now = time.time()
+                    rms = self._audio_manager.last_rms
+
+                    # --- Client-side silence detection (FALLBACK only) ---
+                    # When server-side turn detection is active (semantic_vad),
+                    # skip all client-side VAD logic — the server handles it.
+                    if not self._server_vad_active:
+                        if rms >= self.SPEECH_RMS_THRESHOLD:
+                            # Speech detected
+                            if not is_speaking:
+                                is_speaking = True
+                                speech_start_time = now
+                                silence_commit_pending = False
+                                print(f"[Python DEBUG] [RealtimeVoice] CLIENT VAD: Speech STARTED (RMS={rms:.0f})", file=sys.stderr, flush=True)
+                                # Notify UI
+                                if self._on_vad_speech_started:
+                                    self._on_vad_speech_started()
+                            last_speech_time = now
+
+                        elif rms < self.SILENCE_RMS_THRESHOLD and is_speaking:
+                            # Silence detected while speaking
+                            silence_ms = (now - last_speech_time) * 1000
+                            if silence_ms > self.SILENCE_DURATION_MS and not silence_commit_pending:
+                                speech_ms = (now - speech_start_time) * 1000
+                                if speech_ms > self.MIN_SPEECH_DURATION_MS:
+                                    silence_commit_pending = True
+
+                        # Commit buffer when silence detected after speech
+                        if silence_commit_pending:
+                            silence_commit_pending = False
+                            is_speaking = False
+                            speech_duration = time.time() - speech_start_time
+                            print(
+                                f"[Python DEBUG] [RealtimeVoice] CLIENT VAD: Speech STOPPED "
+                                f"({speech_duration:.1f}s) — committing buffer + requesting response",
+                                file=sys.stderr, flush=True,
+                            )
+                            if self._on_vad_speech_stopped:
+                                self._on_vad_speech_stopped()
+
+                            try:
+                                # Commit audio buffer (creates user message)
+                                await self._connection.input_audio_buffer.commit()
+                                # Trigger model response
+                                await self._connection.response.create()
+                            except Exception as commit_err:
+                                err_str = str(commit_err)
+                                if "already_has_active_response" in err_str:
+                                    logger.debug("Response already active, skipping create")
+                                else:
+                                    print(f"[Python DEBUG] [RealtimeVoice] Commit/response error: {commit_err}", file=sys.stderr, flush=True)
+
+                    # Log progress every 5 seconds
                     if now - last_log_time > 5.0:
-                        print(f"[Python DEBUG] [RealtimeVoice] Audio: {chunks_sent} chunks sent, queue={self._audio_queue.qsize()}", file=sys.stderr, flush=True)
+                        vad_mode = "server" if self._server_vad_active else "client"
+                        print(
+                            f"[Python DEBUG] [RealtimeVoice] Audio: {chunks_sent} chunks sent, "
+                            f"queue={self._audio_queue.qsize()}, RMS={rms:.0f}, VAD={vad_mode}",
+                            file=sys.stderr, flush=True,
+                        )
                         last_log_time = now
 
             except asyncio.CancelledError:
@@ -517,8 +703,16 @@ class OpenAIRealtimeVoiceSession:
                     break
 
                 event_count += 1
-                # Log first few events and then periodically
-                if event_count <= 3 or event_count % 50 == 0:
+                # Always log important events (VAD, errors, responses), sample the rest
+                is_important = event.type in (
+                    "input_audio_buffer.speech_started",
+                    "input_audio_buffer.speech_stopped",
+                    "response.created",
+                    "response.done",
+                    "response.function_call_arguments.done",
+                    "error",
+                )
+                if event_count <= 5 or is_important or event_count % 100 == 0:
                     print(f"[Python DEBUG] [RealtimeVoice] Event #{event_count}: {event.type}", file=sys.stderr, flush=True)
 
                 try:
@@ -547,19 +741,19 @@ class OpenAIRealtimeVoiceSession:
         """
         event_type = event.type
 
-        # === Audio Events (GA API: response.output_audio.*) ===
-        if event_type in ("response.output_audio.delta", "response.audio.delta"):
+        # === Audio Events (Beta: response.audio.*, GA: response.output_audio.*) ===
+        if event_type in ("response.audio.delta", "response.output_audio.delta"):
             # Received audio chunk - enqueue for playback
             if hasattr(event, "delta") and event.delta:
                 self._audio_manager.enqueue_audio(event.delta)
 
-        # === Transcript Events (GA API: response.output_audio_transcript.*) ===
-        elif event_type in ("response.output_audio_transcript.delta", "response.audio_transcript.delta"):
+        # === Transcript Events (Beta: response.audio_transcript.*, GA: response.output_audio_transcript.*) ===
+        elif event_type in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
             # Agent speech transcript (incremental)
             if hasattr(event, "delta"):
                 self._current_agent_transcript += event.delta
 
-        elif event_type in ("response.output_audio_transcript.done", "response.audio_transcript.done"):
+        elif event_type in ("response.audio_transcript.done", "response.output_audio_transcript.done"):
             # Agent transcript complete
             transcript = self._current_agent_transcript.strip()
             if transcript:
@@ -590,7 +784,11 @@ class OpenAIRealtimeVoiceSession:
                 self._function_call_args[call_id] += getattr(event, "delta", "")
 
         elif event_type == "response.function_call_arguments.done":
-            # Function call complete - execute it
+            # Function call complete - execute it as a background task.
+            # IMPORTANT: Do NOT await here — the event loop must stay free
+            # to process audio/transcript events while the tool call runs.
+            # Awaiting would block the entire event loop if the SDK's
+            # conversation.item.create or response.create calls stall.
             call_id = getattr(event, "call_id", "")
             name = getattr(event, "name", "")
             args_str = getattr(event, "arguments", "") or self._function_call_args.get(call_id, "")
@@ -598,18 +796,18 @@ class OpenAIRealtimeVoiceSession:
             # Clean up accumulator
             self._function_call_args.pop(call_id, None)
 
-            await self._execute_function_call(call_id, name, args_str)
+            asyncio.create_task(self._execute_function_call(call_id, name, args_str))
 
-        # === VAD Events ===
+        # === VAD Events (server_vad — currently disabled, kept as fallback) ===
         elif event_type == "input_audio_buffer.speech_started":
-            print("[Python DEBUG] [RealtimeVoice] VAD: Speech STARTED", file=sys.stderr, flush=True)
+            print("[Python DEBUG] [RealtimeVoice] SERVER VAD: Speech STARTED", file=sys.stderr, flush=True)
             # Clear playback to allow interruption
             self._audio_manager.clear_playback_buffer()
             if self._on_vad_speech_started:
                 self._on_vad_speech_started()
 
         elif event_type == "input_audio_buffer.speech_stopped":
-            print("[Python DEBUG] [RealtimeVoice] VAD: Speech STOPPED", file=sys.stderr, flush=True)
+            print("[Python DEBUG] [RealtimeVoice] SERVER VAD: Speech STOPPED", file=sys.stderr, flush=True)
             if self._on_vad_speech_stopped:
                 self._on_vad_speech_stopped()
 
@@ -650,18 +848,20 @@ class OpenAIRealtimeVoiceSession:
         elif event_type == "rate_limits.updated":
             logger.debug("Rate limits updated")
 
-        # === GA API events (informational, no action needed) ===
+        # === Informational events (no action needed) ===
         elif event_type in (
             "input_audio_buffer.committed",
+            "conversation.item.created",
             "conversation.item.added",
             "conversation.item.done",
             "response.output_item.added",
             "response.output_item.done",
             "response.content_part.added",
             "response.content_part.done",
+            "response.audio.done",
             "response.output_audio.done",
         ):
-            logger.debug(f"GA event: {event_type}")
+            logger.debug(f"Event: {event_type}")
 
         else:
             logger.debug(f"Unhandled event: {event_type}")
@@ -677,6 +877,8 @@ class OpenAIRealtimeVoiceSession:
             name: Function name (e.g., 'send_intent')
             arguments_str: JSON string of function arguments
         """
+        print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call START: {name}", file=sys.stderr, flush=True)
+
         logger.info(f"Function call: {name}({arguments_str[:100]})")
 
         try:
@@ -690,16 +892,22 @@ class OpenAIRealtimeVoiceSession:
 
         if self._on_tool_call:
             try:
-                # Run tool call in executor to avoid blocking the event loop
-                # during LLM intent classification (can take several seconds)
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None, self._on_tool_call, call_id, name, arguments
-                )
+                # If the tool handler is async, await it directly on the event loop.
+                # This allows the handler to create_task() for async dispatches.
+                # If sync, run in executor to avoid blocking.
+                if asyncio.iscoroutinefunction(self._on_tool_call):
+                    result = await self._on_tool_call(call_id, name, arguments)
+                else:
+                    loop = asyncio.get_running_loop()
+                    result = await loop.run_in_executor(
+                        None, self._on_tool_call, call_id, name, arguments
+                    )
                 result = str(result) if result else "Erledigt."
             except Exception as e:
                 logger.error(f"Tool execution error: {e}")
                 result = f"Fehler bei der Ausfuehrung: {str(e)}"
+
+        print(f"[Python DEBUG] [RealtimeVoice] Tool result ready, sending back: {result[:80]}", file=sys.stderr, flush=True)
 
         # Send result back to OpenAI Realtime
         try:
@@ -723,9 +931,11 @@ class OpenAIRealtimeVoiceSession:
                 else:
                     raise
 
+            print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call DONE: result sent to OpenAI", file=sys.stderr, flush=True)
             logger.info(f"Tool result sent: {result[:100]}")
 
         except Exception as e:
+            print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call ERROR: {e}", file=sys.stderr, flush=True)
             logger.error(f"Error sending tool result: {e}")
 
     def _should_reconnect(self) -> bool:
@@ -749,11 +959,14 @@ class OpenAIRealtimeVoiceSession:
         # Stop audio briefly
         self._audio_manager.stop_capture()
 
-        # Close old connection via connection manager
+        # Close old connection via connection manager (with timeout)
         if hasattr(self, '_connection_manager') and self._connection_manager:
             try:
-                await self._connection_manager.__aexit__(None, None, None)
-            except Exception:
+                await asyncio.wait_for(
+                    self._connection_manager.__aexit__(None, None, None),
+                    timeout=5.0,
+                )
+            except (asyncio.TimeoutError, Exception):
                 pass
 
         # Reconnect
@@ -761,7 +974,7 @@ class OpenAIRealtimeVoiceSession:
             from openai import AsyncOpenAI
 
             client = AsyncOpenAI(api_key=self._api_key)
-            self._connection_manager = client.realtime.connect(
+            self._connection_manager = client.beta.realtime.connect(
                 model=self._model
             )
             self._connection = await self._connection_manager.__aenter__()

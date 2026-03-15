@@ -149,7 +149,7 @@ async def test_type_text(text: str = "Hello from VibeMind!"):
 
 
 async def test_tool_handler():
-    """Test Tool Handler für ElevenLabs."""
+    """Test Tool Handler for voice agents."""
     print("\n" + "=" * 60)
     print("TEST: Desktop Tool Handler")
     print("=" * 60)

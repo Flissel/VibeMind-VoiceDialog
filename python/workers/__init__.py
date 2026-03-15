@@ -2,7 +2,7 @@
 AutoGen Workers Package
 
 This package contains AutoGen gRPC worker agents that provide
-specialized capabilities to ElevenLabs conversational agents.
+specialized capabilities to voice agents.
 
 Available Workers:
 - KnowledgeWorker: URL fetching, web search, document processing

@@ -439,6 +439,129 @@ def create_idea(params: Dict[str, Any]) -> str:
     return f"Added '{title}'"
 
 
+def create_idea_batch(params: Dict[str, Any]) -> str:
+    """
+    Create multiple ideas/notes at once via LLM generation.
+
+    Voice triggers: "Erstelle 15 Ideen ueber Autogen", "Generiere 5 Notizen zu KI"
+
+    Args (via params):
+        topic: Theme/topic for the ideas (required)
+        count: Number of ideas to create (default: 5, max: 20)
+
+    Returns:
+        str: Confirmation with list of created ideas
+    """
+    topic = params.get("topic", "").strip()
+    count = min(int(params.get("count", 5)), 20)
+
+    if not topic:
+        return "Welches Thema sollen die Ideen haben?"
+
+    bubble_id = _get_current_bubble_id()
+    if bubble_id is None:
+        return "Betrete zuerst einen Space bevor du Ideen erstellen kannst."
+
+    # Generate idea titles via LLM
+    try:
+        from openai import OpenAI
+        import os
+        import json as _json
+
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return "OPENROUTER_API_KEY nicht gesetzt."
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            timeout=15.0,
+        )
+
+        response = client.chat.completions.create(
+            model=os.getenv("SPACE_AGENT_MODEL", "openai/gpt-4o-mini"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Du generierst Ideen-Titel und kurze Beschreibungen. "
+                               "Antworte NUR als JSON-Array.",
+                },
+                {
+                    "role": "user",
+                    "content": f"Generiere genau {count} verschiedene Ideen zum Thema '{topic}'. "
+                               f"Antworte als JSON-Array: "
+                               f'[{{"title": "...", "content": "..."}}, ...]',
+                },
+            ],
+            temperature=0.7,
+            max_tokens=2000,
+        )
+
+        response_text = response.choices[0].message.content.strip()
+        # Strip markdown code fences
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3].strip()
+
+        ideas = _json.loads(response_text)
+    except Exception as e:
+        logger.error(f"Failed to generate ideas: {e}")
+        return f"Fehler bei der Ideen-Generierung: {e}"
+
+    # Create all ideas in the current bubble
+    repo = _get_canvas_repo()
+    all_nodes = repo.list_nodes(limit=1000)
+    bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+    existing_count = len(bubble_nodes)
+    existing_positions = [(n.x or 0, n.y or 0) for n in bubble_nodes]
+
+    created = []
+    for i, idea in enumerate(ideas[:count]):
+        title = idea.get("title", f"Idee {i+1}")
+        content = idea.get("content", title)
+
+        x, y = calculate_spiral_position(
+            existing_count + i, existing_positions
+        )
+        existing_positions.append((x, y))
+
+        node = repo.create_node(
+            node_type="note",
+            title=title,
+            content=content,
+            x=x,
+            y=y,
+            linked_idea_id=bubble_id,
+        )
+
+        _broadcast_to_electron({
+            "type": "node_added",
+            "bubble_id": bubble_id,
+            "node": {
+                "id": node.id,
+                "type": node.node_type,
+                "position": {"x": node.x, "y": node.y},
+                "content": {"title": node.title, "text": node.content},
+                "connections": [],
+            },
+        })
+        created.append(title)
+
+    # Publish updated bubble
+    try:
+        from publishing import get_ideas_publisher
+        get_ideas_publisher().publish_bubble(bubble_id=bubble_id)
+    except Exception:
+        pass
+
+    logger.info(f"Batch created {len(created)} ideas in bubble {bubble_id}")
+    titles_str = ", ".join(created[:5])
+    if len(created) > 5:
+        titles_str += f" ... und {len(created) - 5} weitere"
+    return f"{len(created)} Ideen zu '{topic}' erstellt: {titles_str}"
+
+
 def add_image(params: Dict[str, Any]) -> str:
     """
     Add an image to the current bubble/space.

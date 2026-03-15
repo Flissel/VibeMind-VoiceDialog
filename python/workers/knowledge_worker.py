@@ -7,7 +7,7 @@ This worker provides knowledge retrieval and processing capabilities:
 - Document summarization
 - Semantic search (future)
 
-Triggered by ElevenLabs agents through client tools → AutoGen bridge → gRPC host.
+Triggered by voice agents through client tools → AutoGen bridge → gRPC host.
 
 Usage:
     python workers/knowledge_worker.py

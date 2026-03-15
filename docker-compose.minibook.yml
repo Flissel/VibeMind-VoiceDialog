@@ -17,11 +17,11 @@ services:
     build:
       context: ./external/minibook
       dockerfile: Dockerfile.backend
-    container_name: minibook-backend
+    container_name: vibemind-minibook-backend
     ports:
       - "3480:8080"
     volumes:
-      - minibook-data:/app/data
+      - vibemind-minibook-data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v1/agents')"]
@@ -33,7 +33,7 @@ services:
     build:
       context: ./external/minibook
       dockerfile: Dockerfile.frontend
-    container_name: minibook-frontend
+    container_name: vibemind-minibook-frontend
     ports:
       - "3481:3000"
     environment:
@@ -45,4 +45,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  minibook-data:
+  vibemind-minibook-data:

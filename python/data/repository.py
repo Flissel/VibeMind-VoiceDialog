@@ -37,6 +37,26 @@ def normalize_text(text: str) -> str:
     return text.lower()
 
 
+def _levenshtein(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # Cost is 0 if chars match, 1 otherwise
+            curr_row.append(min(
+                prev_row[j + 1] + 1,      # deletion
+                curr_row[j] + 1,            # insertion
+                prev_row[j] + (c1 != c2),   # substitution
+            ))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
 class IdeasRepository:
     """Repository for Idea CRUD operations"""
 
@@ -111,47 +131,59 @@ class IdeasRepository:
 
     def get_by_title_fuzzy(self, title: str, parent_id: Optional[str] = None) -> Optional[Idea]:
         """
-        Accent-insensitive fuzzy title search.
+        Semantic fuzzy title search for voice input.
 
-        Handles speech recognition artifacts where accents may be added/removed.
-        E.g., "swarm team evaluiären" will match "swarm team evaluieren".
-        Also handles compound word variations:
-        E.g., "Testkontext" will match "Test Kontext" (space vs no-space).
+        Matching tiers (first match wins):
+        1. Normalized substring (accent-insensitive)
+        2. Spaceless match ("Test 2" ↔ "test2", "Testkontext" ↔ "Test Kontext")
+        3. Levenshtein distance (edit distance ≤ 2 for short, ≤ 3 for long)
 
         Args:
-            title: Title to search for (may contain accent artifacts)
+            title: Title to search for (may contain ASR artifacts)
             parent_id: If provided, only search within this parent (None = top-level spaces)
 
         Returns:
             Matching Idea or None
         """
         normalized_query = normalize_text(title)
-        # Also create spaceless version for compound word matching
         spaceless_query = normalized_query.replace(" ", "")
 
         # Fetch candidates based on parent_id
         if parent_id is None:
-            # Search top-level spaces (bubbles)
             rows = self.db.fetch_all("SELECT * FROM ideas WHERE parent_id IS NULL")
         else:
-            # Search within a specific parent
             rows = self.db.fetch_all(
                 "SELECT * FROM ideas WHERE parent_id = ?",
                 (parent_id,)
             )
 
-        # Fuzzy match in Python (accent-insensitive)
+        best_lev_match = None
+        best_lev_distance = float('inf')
+
         for row in rows:
             row_title = row['title'] if row['title'] else ''
             normalized_title = normalize_text(row_title)
             spaceless_title = normalized_title.replace(" ", "")
 
-            # Match if query is substring of title (with or without spaces)
-            if normalized_query in normalized_title:
+            # Tier 1: Normalized substring match
+            if normalized_query in normalized_title or normalized_title in normalized_query:
                 return Idea.from_dict(dict(row))
-            # Also match spaceless versions (handles "Testkontext" vs "Test Kontext")
+
+            # Tier 2: Spaceless match ("Test 2" ↔ "test2")
             if spaceless_query in spaceless_title or spaceless_title in spaceless_query:
                 return Idea.from_dict(dict(row))
+
+            # Tier 3: Levenshtein distance (collect best candidate)
+            dist = _levenshtein(spaceless_query, spaceless_title)
+            if dist < best_lev_distance:
+                best_lev_distance = dist
+                best_lev_match = row
+
+        # Accept Levenshtein match if close enough
+        if best_lev_match is not None:
+            max_allowed = 2 if len(normalized_query) <= 8 else 3
+            if best_lev_distance <= max_allowed:
+                return Idea.from_dict(dict(best_lev_match))
 
         return None
 

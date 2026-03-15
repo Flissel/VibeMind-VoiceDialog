@@ -68,6 +68,9 @@ class AudioManager:
         self._playback_buffer: deque = deque()
         self._playback_lock = threading.Lock()
 
+        # Audio level monitoring (for client-side silence detection)
+        self._last_rms: float = 0.0
+
         logger.info(
             f"AudioManager initialized: {sample_rate}Hz, {channels}ch, "
             f"block_size={block_size}"
@@ -80,6 +83,20 @@ class AudioManager:
             return
 
         try:
+            # Log available and selected input device for debugging
+            import sys
+            try:
+                default_input = sd.query_devices(kind="input")
+                print(
+                    f"[Python DEBUG] [AudioManager] Default input device: "
+                    f"'{default_input['name']}' (index={default_input['index']}, "
+                    f"channels={default_input['max_input_channels']}, "
+                    f"rate={default_input['default_samplerate']})",
+                    file=sys.stderr, flush=True,
+                )
+            except Exception as dev_err:
+                print(f"[Python DEBUG] [AudioManager] Could not query input device: {dev_err}", file=sys.stderr, flush=True)
+
             self._input_stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=self._channels,
@@ -176,12 +193,16 @@ class AudioManager:
         """
         Sounddevice input callback - called for each audio chunk.
 
-        Encodes audio as base64 and sends to WebSocket via callback.
+        Encodes audio as base64, computes RMS level, and sends via callback.
         """
         if status:
             logger.warning(f"Audio input status: {status}")
 
         if self._on_audio_chunk and self._is_capturing:
+            # Compute RMS level for silence detection
+            rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2)))
+            self._last_rms = rms
+
             # Convert numpy array to bytes, then base64
             audio_bytes = indata.tobytes()
             base64_audio = base64.b64encode(audio_bytes).decode("utf-8")
@@ -245,6 +266,11 @@ class AudioManager:
     def playback_buffer_size(self) -> int:
         """Number of audio chunks in playback buffer."""
         return len(self._playback_buffer)
+
+    @property
+    def last_rms(self) -> float:
+        """Last measured RMS audio level from microphone (0-32768 for int16)."""
+        return self._last_rms
 
     def cleanup(self) -> None:
         """Release all audio resources."""

@@ -1,7 +1,7 @@
 """
 VibeMind Coding Tools
 
-ElevenLabs client tools for code generation via Hybrid Run Coding Engine.
+Client tools for code generation via Hybrid Run Coding Engine.
 These tools enable voice-controlled project creation and management.
 
 Tool Categories:
@@ -533,7 +533,7 @@ def exit_project(params: Dict[str, Any]) -> str:
 # TOOL REGISTRY
 # ==============================================================================
 
-# All tools that can be registered with ElevenLabs
+# All available tools
 CODING_TOOLS = {
     # Generation
     "generate_code": generate_code,

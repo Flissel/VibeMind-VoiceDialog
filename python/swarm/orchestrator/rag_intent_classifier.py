@@ -210,7 +210,7 @@ class RAGIntentClassifier:
                     self._llm_client = OpenAI(
                         api_key=api_key,
                         base_url="https://openrouter.ai/api/v1",
-                        timeout=10.0,  # 10 second timeout for ElevenLabs compatibility
+                        timeout=10.0,  # 10 second timeout for voice compatibility
                     )
                     print(f"[Python DEBUG] [RAG] OpenRouter client created successfully", file=_sys.stderr, flush=True)
                 else:
