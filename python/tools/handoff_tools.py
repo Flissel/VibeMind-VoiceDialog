@@ -395,7 +395,7 @@ async def mcp_get_focus() -> Dict[str, Any]:
 
 
 # =============================================================================
-# TOOL DEFINITIONS FOR ELEVENLABS
+# TOOL DEFINITIONS
 # =============================================================================
 
 HANDOFF_TOOLS = [

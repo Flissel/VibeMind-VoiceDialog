@@ -297,6 +297,7 @@ class CodingEngineRunner:
                 job.requirements_file,
                 "--autonomous",
                 "--continuous-sandbox",
+                "--external-sandbox",
                 "--enable-vnc",
                 "--vnc-port", str(job.vnc_port),
                 "--enable-validation",
@@ -317,6 +318,17 @@ class CodingEngineRunner:
 
             job.process = process
 
+            # Stream stderr in background so errors are visible immediately
+            stderr_lines = []
+            async def _stream_stderr():
+                async for line in process.stderr:
+                    line_str = line.decode('utf-8', errors='replace').strip()
+                    if line_str:
+                        stderr_lines.append(line_str)
+                        logger.warning(f"[CodingEngine:{job.job_id}] {line_str}")
+
+            stderr_task = asyncio.create_task(_stream_stderr())
+
             # Stream stdout for status updates
             async for line in process.stdout:
                 line_str = line.decode('utf-8', errors='replace').strip()
@@ -336,12 +348,11 @@ class CodingEngineRunner:
 
             # Wait for process completion
             return_code = await process.wait()
+            await stderr_task  # Ensure stderr is fully read
 
-            # Read any remaining stderr
-            stderr_output = await process.stderr.read()
-            if stderr_output:
-                stderr_str = stderr_output.decode('utf-8', errors='replace')
-                logger.debug(f"Stderr: {stderr_str}")
+            stderr_str = "\n".join(stderr_lines) if stderr_lines else None
+            if stderr_str:
+                logger.debug(f"Stderr summary: {stderr_str[-500:]}")
 
             # Determine final status
             if return_code == 0:

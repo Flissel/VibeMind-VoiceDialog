@@ -93,8 +93,22 @@ class EnrichmentPipeline:
                 result.error = "Classification failed"
                 return result
 
-            event_type = classification.get("event_type", "")
-            payload = classification.get("payload", {})
+            # Handle multi-step classifications:
+            # The classifier returns {"is_multi_step": true, "steps": [...]}
+            # SpaceAgents handle multi-tool chaining natively, so we extract
+            # the first step's event_type for routing and pass the full user text.
+            if classification.get("is_multi_step") and classification.get("steps"):
+                first_step = classification["steps"][0]
+                event_type = first_step.get("event_type", "")
+                payload = first_step.get("payload", {})
+                payload["user_text"] = intent_text  # Full text for SpaceAgent
+                _debug_print(
+                    f"Multi-step → using first step for routing: {event_type} "
+                    f"({len(classification['steps'])} steps total)"
+                )
+            else:
+                event_type = classification.get("event_type", "")
+                payload = classification.get("payload", {})
 
             if not event_type:
                 result.error = "No event_type classified"

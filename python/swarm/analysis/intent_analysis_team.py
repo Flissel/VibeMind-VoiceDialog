@@ -101,14 +101,14 @@ class IntentAnalysisTeam:
                 raise
         return self._client
 
-    async def analyze(self, user_input: str, context: UserContext, elevenlabs_input: Optional["ElevenLabsInput"] = None) -> List[IntentHypothesis]:
+    async def analyze(self, user_input: str, context: UserContext, audio_input: Optional["AudioMetadataInput"] = None) -> List[IntentHypothesis]:
         """
         Analyze user input with multiple agents in parallel.
 
         Args:
             user_input: Natural language user request
             context: User context from UserContextBuilder
-            elevenlabs_input: Optional ElevenLabs metadata for enhanced analysis
+            audio_input: Optional audio metadata for enhanced analysis
 
         Returns:
             List of IntentHypothesis sorted by confidence (highest first)
@@ -120,7 +120,7 @@ class IntentAnalysisTeam:
             self._reasoning_analysis(user_input),
             self._context_analysis(user_input, context),
             self._history_analysis(user_input, context),
-            self._semantic_analysis(user_input, context, elevenlabs_input),
+            self._semantic_analysis(user_input, context, audio_input),
         ]
 
         # Wait for all results (parallel)
@@ -245,17 +245,17 @@ class IntentAnalysisTeam:
 
         return hypotheses
 
-    async def _semantic_analysis(self, user_input: str, context: UserContext, elevenlabs_input: Optional["ElevenLabsInput"] = None) -> List[IntentHypothesis]:
+    async def _semantic_analysis(self, user_input: str, context: UserContext, audio_input: Optional["AudioMetadataInput"] = None) -> List[IntentHypothesis]:
         """
-        Semantic analysis with ElevenLabs metadata integration.
+        Semantic analysis with audio metadata integration.
 
-        Uses ElevenLabs transcript metadata and NLP analysis for enhanced intent detection.
+        Uses transcript metadata and NLP analysis for enhanced intent detection.
         """
         try:
             from swarm.analysis.semantic_agent import get_semantic_agent
 
             semantic_agent = get_semantic_agent()
-            return await semantic_agent.analyze(user_input, context, elevenlabs_input)
+            return await semantic_agent.analyze(user_input, context, audio_input)
         except ImportError:
             logger.debug("SemanticAgent not available")
             return []

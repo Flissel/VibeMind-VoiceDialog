@@ -1,7 +1,7 @@
 """
 VibeMind Navigation Tools
 
-ElevenLabs client tools for voice-controlled UI navigation.
+Client tools for voice-controlled UI navigation.
 These tools enable agents to navigate the multiverse, select items,
 and enter/exit views without keyboard interaction.
 
@@ -411,7 +411,7 @@ def continue_to_project(params: Dict[str, Any]) -> str:
 # TOOL REGISTRY
 # ==============================================================================
 
-# All tools that can be registered with ElevenLabs
+# All available tools
 NAVIGATION_TOOLS = {
     # Space Navigation
     "navigate_to_space": navigate_to_space,

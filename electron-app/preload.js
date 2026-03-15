@@ -314,6 +314,15 @@ contextBridge.exposeInMainWorld('vibemind', {
         startGeneration: (requirementsPath, outputDir) =>
             ipcRenderer.invoke('engine:start-generation', { requirementsPath, outputDir }),
         getApiUrl: () => ipcRenderer.invoke('engine:get-api-url'),
+        // Claude Code Runner (persistent Docker container with VNC)
+        claudeRunner: {
+            start: (repoPath, options) =>
+                ipcRenderer.invoke('engine:start-claude-runner', repoPath, options),
+            stop: () =>
+                ipcRenderer.invoke('engine:stop-claude-runner'),
+            getStatus: () =>
+                ipcRenderer.invoke('engine:get-claude-runner-status'),
+        },
     },
 
     // File System Operations

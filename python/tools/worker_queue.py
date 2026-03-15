@@ -1,8 +1,8 @@
 """
-Worker Queue - Fast ElevenLabs Task Seeding
+Worker Queue - Fast Voice Task Seeding
 
 These tools return IMMEDIATELY while seeding tasks to the Claude worker.
-Designed to prevent ElevenLabs audio stream timeouts on long-running operations.
+Designed to prevent voice audio stream timeouts on long-running operations.
 
 Tools:
 - seed_task: Queue a desktop automation task (returns instantly)
@@ -61,7 +61,7 @@ class StepReport:
 
 class ReportQueue:
     """
-    Queue for step reports from Claude worker to ElevenLabs voice agent.
+    Queue for step reports from Claude worker to voice agent.
 
     Worker pushes reports every 3 steps. Voice agent polls for latest.
     """
@@ -79,7 +79,7 @@ class ReportQueue:
         logger.info(f"Report pushed: task={report.task_id} report={report.report_number} steps={report.steps_completed}")
 
     def get_latest_report(self) -> Dict[str, Any]:
-        """ElevenLabs calls this to get latest report."""
+        """Voice agent calls this to get latest report."""
         if not self._latest:
             return {"success": True, "message": "No reports yet. Worker may still be starting."}
         return {
@@ -127,7 +127,7 @@ class TaskQueue:
     """
     Simple task queue for voice-to-worker communication.
 
-    ElevenLabs agents seed tasks here, Claude worker picks them up.
+    Voice agents seed tasks here, Claude worker picks them up.
     """
 
     def __init__(self):
@@ -304,7 +304,7 @@ def get_task_queue() -> TaskQueue:
 
 
 # =============================================================================
-# TOOL IMPLEMENTATIONS (Fast - for ElevenLabs)
+# TOOL IMPLEMENTATIONS (Fast - for voice agents)
 # =============================================================================
 
 def seed_task(description: str, priority: str = "normal") -> Dict[str, Any]:
@@ -497,7 +497,7 @@ def get_all_reports(task_id: str) -> Dict[str, Any]:
 
 
 # =============================================================================
-# TOOL DEFINITIONS FOR ELEVENLABS
+# TOOL DEFINITIONS
 # =============================================================================
 
 WORKER_QUEUE_TOOL_DEFINITIONS = [

@@ -1,6 +1,6 @@
 """
 Voice Dialog Configuration
-Simple configuration management for voice dialog (OpenAI Realtime)
+Simple configuration management for OpenAI Realtime voice dialog
 """
 
 import os
@@ -31,10 +31,7 @@ class AudioConfig:
 @dataclass
 class VoiceConfig:
     """Voice dialog configuration"""
-    openai_api_key: Optional[str]  # For OpenAI Realtime API
-
-    # Voice provider (only openai_realtime supported)
-    voice_provider: str = "openai_realtime"
+    openai_api_key: Optional[str]
 
     # OpenAI Realtime settings
     openai_realtime_model: str = "gpt-4o-realtime-preview"
@@ -42,7 +39,7 @@ class VoiceConfig:
 
     logging: LoggingConfig = None
     audio: AudioConfig = None
-    version: str = "2.0.0"
+    version: str = "3.0.0"
 
 
 class ConfigurationError(Exception):
@@ -106,7 +103,7 @@ class ConfigManager:
         Raises:
             ConfigurationError: If required config is missing
         """
-        # OpenAI API key (required)
+        # OpenAI API key (required for voice)
         openai_key = os.getenv('OPENAI_API_KEY')
         if openai_key and openai_key.strip() in ['', 'your_openai_key_here']:
             openai_key = None
@@ -140,7 +137,6 @@ class ConfigManager:
 
         return VoiceConfig(
             openai_api_key=openai_key,
-            voice_provider="openai_realtime",
             openai_realtime_model=openai_realtime_model,
             openai_realtime_voice=openai_realtime_voice,
             logging=log_config,
@@ -164,7 +160,7 @@ class ConfigManager:
         errors = []
 
         if not config.openai_api_key:
-            errors.append("OPENAI_API_KEY is required")
+            errors.append("OPENAI_API_KEY is required for voice")
 
         if errors:
             error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)

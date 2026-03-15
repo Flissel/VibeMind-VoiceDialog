@@ -2,7 +2,7 @@
 Claude Worker - Step-Based Desktop Automation Agent
 
 Uses Claude Opus 4.5 via OpenRouter to execute desktop automation tasks.
-Listens to the TaskQueue for tasks seeded by ElevenLabs voice agents.
+Listens to the TaskQueue for tasks seeded by voice agents.
 
 Key Features:
 - Step-based execution (plan → execute → verify)
@@ -11,7 +11,7 @@ Key Features:
 - Progress reporting back to TaskQueue
 
 Architecture:
-    ElevenLabs → seed_task() → TaskQueue → ClaudeWorker → MCP Tools
+    Voice → seed_task() → TaskQueue → ClaudeWorker → MCP Tools
 
 Usage:
     python -m workers.claude_worker

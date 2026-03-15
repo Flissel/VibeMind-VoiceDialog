@@ -263,6 +263,11 @@ function startPythonBackend() {
                     rowboatManager?.relayEvent('rowboat:updateAvailable', message);
                 }
 
+                // Handle Rowboat update auto-applied
+                if (message.type === 'rowboat_update_applied') {
+                    rowboatManager?.relayEvent('rowboat:updateApplied', message);
+                }
+
                 // Handle structured content updates
                 if (message.type === 'node_structured_update') {
                     debugLog('Structured content update:', message.node_id);
@@ -934,7 +939,7 @@ function setupIpcHandlers() {
     });
 
     ipcMain.handle('engine:get-api-url', async () => {
-        if (!dockerManager) return 'http://localhost:8000';
+        if (!dockerManager) return 'http://localhost:8321';
         return dockerManager.getApiUrl();
     });
 
@@ -990,6 +995,39 @@ function setupIpcHandlers() {
         return await dockerManager.stopGeneration(projectId);
     });
 
+    // ========================================
+    // CLAUDE CODE RUNNER
+    // ========================================
+
+    ipcMain.handle('engine:start-claude-runner', async (event, repoPath, options = {}) => {
+        if (!dockerManager || !portAllocator) return { success: false, error: 'Managers not initialized' };
+        try {
+            const projectRoot = path.join(__dirname, '..');
+            const absRepoPath = path.isAbsolute(repoPath) ? repoPath : path.resolve(projectRoot, repoPath);
+            const vncPort = await portAllocator.allocate('claude-runner');
+            const result = await dockerManager.startClaudeRunner(absRepoPath, vncPort, options);
+            if (!result.success) {
+                portAllocator.release('claude-runner');
+            }
+            return result;
+        } catch (error) {
+            console.error('[ClaudeRunner] Error:', error);
+            portAllocator.release('claude-runner');
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('engine:stop-claude-runner', async () => {
+        if (!dockerManager) return { success: false, error: 'Docker manager not initialized' };
+        portAllocator?.release('claude-runner');
+        return await dockerManager.stopClaudeRunner();
+    });
+
+    ipcMain.handle('engine:get-claude-runner-status', async () => {
+        if (!dockerManager) return { running: false };
+        return dockerManager.getClaudeRunnerStatus();
+    });
+
     ipcMain.handle('engine:start-epic-generation', async (event, projectId, projectPath, outputDir) => {
         if (!dockerManager || !portAllocator) return { success: false, error: 'Managers not initialized' };
         try {
@@ -1002,7 +1040,7 @@ function setupIpcHandlers() {
             console.log(`[EpicGen] Starting for ${projectId}, VNC:${vncPort}, App:${appPort}`);
 
             // Start VNC preview container
-            const containerResult = await dockerManager.startProjectContainer(projectId, absOutputDir, absOutputDir, vncPort, appPort);
+            const containerResult = await dockerManager.startProjectContainer(projectId, absOutputDir, vncPort, appPort);
             if (!containerResult.success) {
                 portAllocator.release(projectId);
                 return { success: false, error: containerResult.error };
@@ -1045,7 +1083,7 @@ function setupIpcHandlers() {
         return hostPath;
     }
 
-    const ENGINE_API = process.env.CODING_ENGINE_API_URL || 'http://localhost:8000';
+    const ENGINE_API = process.env.CODING_ENGINE_API_URL || 'http://localhost:8321';
 
     ipcMain.handle('engine:get-epics', async (event, projectPath) => {
         console.log(`[Epic:IPC] get-epics for: ${projectPath}`);
@@ -1615,11 +1653,11 @@ app.whenReady().then(async () => {
     dockerManager = new DockerManager();
     portAllocator = new PortAllocator();
 
-    // Sync port allocations with any Docker containers from previous sessions
+    // Clean up stale containers from previous sessions and release their ports
     try {
-        await portAllocator.syncWithDocker();
+        await portAllocator.cleanupStaleContainers();
     } catch (e) {
-        console.warn('[Main] Docker sync failed (Docker may not be running):', e.message);
+        console.warn('[Main] Container cleanup failed (Docker may not be running):', e.message);
     }
 
     setupIpcHandlers();
@@ -1627,6 +1665,16 @@ app.whenReady().then(async () => {
 
     // Initialize Dashboard Manager after window is created
     dashboardManager = new DashboardManager(mainWindow);
+
+    // Forward engine log lines and structured progress to the dashboard renderer
+    if (dockerManager && dashboardManager) {
+        dockerManager.setLogCallback((logLine) => {
+            dashboardManager.sendMessage('engine:log', logLine);
+        });
+        dockerManager.setProgressCallback((progressData) => {
+            dashboardManager.sendMessage('engine:progress', progressData);
+        });
+    }
 
     // Initialize Rowboat Manager for Roarboot Space
     rowboatManager = new RowboatManager(mainWindow);
@@ -1691,7 +1739,7 @@ app.whenReady().then(async () => {
 
         // Push-Event Relay: BrowserView is not a BrowserWindow,
         // so BrowserWindow.getAllWindows() in @x/core won't reach it.
-        const { bus, serviceBus } = rowboatServices;
+        const { bus, serviceBus, onWorkspaceChange, onOAuthConnect } = rowboatServices;
         if (bus) {
             bus.subscribe('*', (event) => {
                 rowboatManager?.relayEvent('runs:events', event);
@@ -1700,6 +1748,17 @@ app.whenReady().then(async () => {
         if (serviceBus) {
             serviceBus.subscribe((event) => {
                 rowboatManager?.relayEvent('services:events', event);
+            });
+        }
+        if (onWorkspaceChange) {
+            onWorkspaceChange((event) => {
+                rowboatManager?.relayEvent('workspace:didChange', event);
+            });
+        }
+        if (onOAuthConnect) {
+            onOAuthConnect((event) => {
+                console.log(`[Rowboat] OAuth event: ${event.provider} success=${event.success}`);
+                rowboatManager?.relayEvent('oauth:didConnect', event);
             });
         }
         console.log('[Rowboat] Event relay configured');

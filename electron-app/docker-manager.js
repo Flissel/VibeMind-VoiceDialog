@@ -25,9 +25,33 @@ class DockerManager {
       : path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine');
 
     this.sandboxImage = 'coding-engine/sandbox:latest';
+    this.claudeRunnerImage = 'claude-runner:latest';
+    this.claudeRunner = null;
+
+    // Callback for forwarding engine log lines to the dashboard renderer
+    // Set via setLogCallback() from main.js after BrowserView is ready
+    this._onLog = null;
+    // Callback for forwarding structured progress data to dashboard
+    this._onProgress = null;
 
     // Resolve Python executable path (Electron may not inherit shell PATH)
     this.pythonPath = this._findPython();
+  }
+
+  /**
+   * Set callback for forwarding engine log lines to the dashboard renderer.
+   * @param {function} callback - (logLine: string) => void
+   */
+  setLogCallback(callback) {
+    this._onLog = callback;
+  }
+
+  /**
+   * Set callback for forwarding structured progress data to the dashboard.
+   * @param {function} callback - (progressData: object) => void
+   */
+  setProgressCallback(callback) {
+    this._onProgress = callback;
   }
 
   /**
@@ -171,21 +195,46 @@ class DockerManager {
       // Ensure sandbox image exists (auto-build if missing)
       await this.ensureSandboxImage();
 
+      // KiloCLI config + network for auto-fix inside container
+      const kiloConfigDir = path.join(process.env.HOME || process.env.USERPROFILE || '', '.kilocode', 'cli');
+      const databaseUrl = process.env.DATABASE_URL ||
+        'postgresql://engine:engine_secret@coding-engine-postgres:5432/coding_engine';
+
       // Start new container
       const args = [
         'run', '-d',
         '--name', containerName,
+        '--network', 'coding-engine-network',
         '-v', `${outputDir}:/app`,
+        '-v', `${kiloConfigDir}:/root/.kilocode/cli`,
         '-p', `${vncPort}:6080`,
         '-p', `${appPort}:5173`,
         '-e', 'ENABLE_VNC=true',
         '-e', 'NODE_ENV=development',
-        '--network', 'bridge',
+        '-e', `DATABASE_URL=${databaseUrl}`,
         this.sandboxImage
       ];
 
-      const { stdout } = await execAsync(`docker ${args.join(' ')}`);
-      const containerId = stdout.trim();
+      // Use spawn instead of execAsync to avoid path escaping issues on Windows
+      const containerId = await new Promise((resolve, reject) => {
+        const proc = spawn('docker', args, {
+          shell: false,
+          windowsHide: true,
+          env: { ...process.env, MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*' }
+        });
+        let stdout = '';
+        let stderr = '';
+        proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+        proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve(stdout.trim());
+          } else {
+            reject(new Error(stderr.trim() || `docker exited with code ${code}`));
+          }
+        });
+        proc.on('error', reject);
+      });
 
       this.containers.set(projectId, {
         id: containerId,
@@ -371,19 +420,26 @@ class DockerManager {
       console.log('[DockerManager] Waiting for ports to be released...');
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      // KiloCLI config + network for auto-fix inside container
+      const kiloConfigDir = path.join(process.env.HOME || process.env.USERPROFILE || '', '.kilocode', 'cli');
+      const databaseUrl = process.env.DATABASE_URL ||
+        'postgresql://engine:engine_secret@coding-engine-postgres:5432/coding_engine';
+
       // Start container with generation + VNC preview
       const args = [
         'run', '-d',
         '--name', containerName,
+        '--network', 'coding-engine-network',
         '-v', `${requirementsPath}:/app/requirements`,
         '-v', `${outputDir}:/app/output`,
+        '-v', `${kiloConfigDir}:/root/.kilocode/cli`,
         '-p', `${vncPort}:6080`,
         '-p', `${appPort}:5173`,
         '-e', 'ENABLE_VNC=true',
         '-e', 'NODE_ENV=development',
         '-e', `REQUIREMENTS_PATH=/app/requirements`,
         '-e', `OUTPUT_DIR=/app/output`,
-        '--network', 'bridge',
+        '-e', `DATABASE_URL=${databaseUrl}`,
         this.sandboxImage
       ];
 
@@ -422,13 +478,19 @@ class DockerManager {
       const fs = require('fs');
 
       let genProcess = null;
-      if (fs.existsSync(runEnginePath)) {
+      // Guard: skip if a run_engine.py process is already running for this project
+      const existingEntry = this.containers.get(projectId);
+      if (existingEntry && existingEntry.process && !existingEntry.process.killed) {
+        console.log(`[DockerManager] run_engine.py already running for ${projectId}, skipping duplicate spawn`);
+        genProcess = existingEntry.process;
+      } else if (fs.existsSync(runEnginePath)) {
         console.log(`[DockerManager] Starting code generation: ${runEnginePath}`);
         genProcess = spawn(pythonPath, [
           runEnginePath,
           requirementsPath,
           '--autonomous',
           '--continuous-sandbox',
+          '--external-sandbox',
           '--enable-vnc',
           '--vnc-port', String(vncPort),
           '--enable-validation',
@@ -445,11 +507,60 @@ class DockerManager {
           const lines = data.toString().split('\n').filter(l => l.trim());
           for (const line of lines) {
             console.log(`[CodingEngine:${projectId}] ${line}`);
+            if (!this._onLog) continue;
+            try {
+              const parsed = JSON.parse(line);
+              // run_engine.py progress JSON: has "status" + "phase"
+              if (parsed.phase) {
+                const logMsg = `[${(parsed.status || 'INFO').toUpperCase()}] ${parsed.phase}${parsed.error ? ' — ' + parsed.error : ''}`;
+                this._onLog(logMsg);
+                // Forward structured progress to dashboard Progress tab
+                if (this._onProgress) {
+                  this._onProgress(parsed);
+                }
+              }
+              // structlog JSON: has "event" field (e.g. from EventBus, parsers, agents)
+              else if (parsed.event) {
+                const level = (parsed.level || 'info').toUpperCase();
+                // Skip DEBUG-level noise (subscriber_added, etc.)
+                if (level === 'DEBUG') continue;
+                const src = parsed.source || parsed.component || '';
+                this._onLog(`[${level}] ${src ? src + ': ' : ''}${parsed.event}`);
+              }
+              // EventBus published event: has data.type
+              else if (parsed.event_type === 'task_progress_update' && parsed.data_keys) {
+                // Skip raw EventBus publish traces — too noisy
+              }
+              // Other JSON — skip empty/unknown entries
+            } catch {
+              // Not JSON — forward raw line
+              this._onLog(line);
+            }
           }
         });
 
         genProcess.stderr.on('data', (data) => {
-          console.error(`[CodingEngine:${projectId}:ERR] ${data.toString().trim()}`);
+          const errLines = data.toString().split('\n').filter(l => l.trim());
+          for (const errLine of errLines) {
+            console.error(`[CodingEngine:${projectId}:ERR] ${errLine}`);
+            if (!this._onLog) continue;
+            // Parse structured stderr lines: "2026-03-02 22:25:07,845 [INFO] component: message"
+            // structlog console output: "2026-03-02 23:14:00 [info     ] event_name  key=val"
+            const match = errLine.match(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},?\d*\s+\[(\w+)\s*]\s+(\S+)(?:\s+(.+))?/);
+            if (match) {
+              const lvl = match[1].toUpperCase();
+              // Skip DEBUG-level and EventBus publish traces
+              if (lvl === 'DEBUG') continue;
+              if (match[2] === '[OUT]' || match[2].includes('EVENT_PUBLISHED')) continue;
+              // Strip structlog key=value metadata, keep only the event name
+              const eventName = match[2];
+              const extra = match[3] ? match[3].replace(/\s*\w+=\S+/g, '').trim() : '';
+              this._onLog(`[${lvl}] ${eventName}${extra ? ': ' + extra : ''}`);
+            } else if (errLine.startsWith('Traceback') || errLine.startsWith('  File') || errLine.includes('Error:')) {
+              this._onLog(`[ERROR] ${errLine}`);
+            }
+            // Skip other stderr noise (import warnings, etc.)
+          }
         });
 
         genProcess.on('exit', (code) => {
@@ -560,6 +671,151 @@ class DockerManager {
     return { success: true, message: 'Task list generation queued' };
   }
 
+  // ========================================================================
+  // CLAUDE CODE RUNNER
+  // ========================================================================
+
+  /**
+   * Ensure the Claude Runner Docker image exists, building if necessary
+   */
+  async ensureClaudeRunnerImage() {
+    try {
+      await execAsync(`docker image inspect ${this.claudeRunnerImage}`);
+      return true;
+    } catch {
+      console.log('[DockerManager] Claude Runner image not found, building...');
+      const dockerfile = path.join(this.engineRoot, 'infra', 'docker', 'Dockerfile.claude-runner');
+      const fs = require('fs');
+      if (!fs.existsSync(dockerfile)) {
+        throw new Error(`Dockerfile not found: ${dockerfile}`);
+      }
+      await execAsync(
+        `docker build -t ${this.claudeRunnerImage} -f "${dockerfile}" .`,
+        { cwd: this.engineRoot, timeout: 600000 }
+      );
+      console.log('[DockerManager] Claude Runner image built successfully');
+      return true;
+    }
+  }
+
+  /**
+   * Start a persistent Claude Code runner container
+   */
+  async startClaudeRunner(repoPath, vncPort, options = {}) {
+    try {
+      const containerName = 'claude-runner';
+      const pollInterval = options.pollInterval || 30;
+      const branchPrefix = options.branchPrefix || 'update/,pr/,feature/';
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+      if (!anthropicKey) {
+        return { success: false, error: 'ANTHROPIC_API_KEY not set in .env' };
+      }
+
+      // Stop any existing runner
+      await this.stopClaudeRunner();
+
+      // Stop anything on our VNC port
+      await this.stopContainersByPort(vncPort);
+
+      // Ensure image exists (auto-build if missing)
+      await this.ensureClaudeRunnerImage();
+
+      // Status directory on host (shared volume for status JSON)
+      const fs = require('fs');
+      const os = require('os');
+      const statusDir = path.join(os.tmpdir(), 'claude-runner-status');
+      if (!fs.existsSync(statusDir)) {
+        fs.mkdirSync(statusDir, { recursive: true });
+      }
+
+      // Start container
+      const args = [
+        'run', '-d',
+        '--name', containerName,
+        '-v', `${repoPath}:/repo`,
+        '-v', `${statusDir}:/status`,
+        '-p', `${vncPort}:6080`,
+        '-e', `ANTHROPIC_API_KEY=${anthropicKey}`,
+        '-e', `WATCH_REPO=/repo`,
+        '-e', `POLL_INTERVAL=${pollInterval}`,
+        '-e', `BRANCH_PREFIX=${branchPrefix}`,
+        '-e', 'ENABLE_VNC=true',
+        '--network', 'bridge',
+        this.claudeRunnerImage
+      ];
+
+      const containerId = await new Promise((resolve, reject) => {
+        const proc = spawn('docker', args, {
+          shell: false,
+          windowsHide: true,
+          env: { ...process.env, MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*' }
+        });
+        let stdout = '';
+        let stderr = '';
+        proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+        proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+        proc.on('close', (code) => {
+          if (code === 0) resolve(stdout.trim());
+          else reject(new Error(stderr.trim() || `docker exited with code ${code}`));
+        });
+        proc.on('error', reject);
+      });
+
+      this.claudeRunner = {
+        id: containerId,
+        vncPort,
+        statusDir,
+        repoPath,
+        status: 'running'
+      };
+
+      console.log(`[DockerManager] Claude Runner started (VNC: ${vncPort}, status: ${statusDir})`);
+      return { success: true, vncPort, statusDir, containerId };
+    } catch (error) {
+      console.error('[DockerManager] Failed to start Claude Runner:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Stop the Claude Runner container
+   */
+  async stopClaudeRunner() {
+    try {
+      await execAsync('docker rm -f claude-runner');
+    } catch { /* container doesn't exist */ }
+    this.claudeRunner = null;
+    return { success: true };
+  }
+
+  /**
+   * Get Claude Runner status by reading the status JSON from the shared volume
+   */
+  getClaudeRunnerStatus() {
+    if (!this.claudeRunner) {
+      return { running: false };
+    }
+
+    const fs = require('fs');
+    const statusFile = path.join(this.claudeRunner.statusDir, 'runner-status.json');
+
+    let fileStatus = {};
+    try {
+      const raw = fs.readFileSync(statusFile, 'utf-8');
+      fileStatus = JSON.parse(raw);
+    } catch {
+      fileStatus = { state: 'unknown', message: 'Status file not available yet' };
+    }
+
+    return {
+      running: true,
+      vncPort: this.claudeRunner.vncPort,
+      repoPath: this.claudeRunner.repoPath,
+      ...fileStatus
+    };
+  }
+
   /**
    * Stop all containers on app quit
    */
@@ -567,6 +823,7 @@ class DockerManager {
     const stopPromises = Array.from(this.containers.keys()).map(id =>
       this.stopProjectContainer(id)
     );
+    stopPromises.push(this.stopClaudeRunner());
     await Promise.all(stopPromises);
   }
 
@@ -574,7 +831,7 @@ class DockerManager {
    * Get the API URL for the Coding Engine
    */
   getApiUrl() {
-    return process.env.CODING_ENGINE_API_URL || 'http://localhost:8000';
+    return process.env.CODING_ENGINE_API_URL || 'http://localhost:8321';
   }
 }
 

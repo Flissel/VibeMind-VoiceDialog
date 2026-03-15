@@ -159,21 +159,35 @@ class MinibookClient:
         content: str,
         agent_name: str = "vibemind_orchestrator",
         post_type: str = "discussion",
+        title: str = "",
     ) -> Dict[str, Any]:
         """
         Create a post in a project.
 
         POST /api/v1/projects/:id/posts
-        Body: {"content": "<content>", "type": "<type>"}
+        Body: {"title": "<title>", "content": "<content>", "type": "<type>"}
 
         Supports @mentions: "@vibemind_ideas bitte erstelle..."
         """
+        if not title:
+            # Auto-generate title from content (first 80 chars, first line)
+            first_line = content.split("\n")[0].strip()
+            # Strip markdown code fences
+            if first_line.startswith("```"):
+                first_line = content.split("\n", 2)[-1].split("\n")[0].strip() if "\n" in content else "Task"
+            title = first_line[:80] if first_line else "Task"
+        body = {"title": title, "content": content, "type": post_type}
         resp = requests.post(
             f"{self._url}/api/v1/projects/{project_id}/posts",
-            json={"content": content, "type": post_type},
+            json=body,
             headers=self._auth_headers(agent_name),
             timeout=10,
         )
+        if not resp.ok:
+            _debug_print(
+                f"POST /posts failed: {resp.status_code} — {resp.text[:500]}"
+            )
+            _debug_print(f"  body sent: content={content[:200]}... type={post_type} agent={agent_name}")
         resp.raise_for_status()
         data = resp.json()
         _debug_print(f"Created post in project {project_id} (id={data.get('id', '?')})")
@@ -214,6 +228,10 @@ class MinibookClient:
             headers=self._auth_headers(agent_name),
             timeout=10,
         )
+        if not resp.ok:
+            _debug_print(
+                f"POST /comments failed: {resp.status_code} — {resp.text[:500]}"
+            )
         resp.raise_for_status()
         return resp.json()
 

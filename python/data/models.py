@@ -27,7 +27,7 @@ class Idea:
     An idea captured from voice or text input.
 
     Ideas can be scored and promoted to projects.
-    Each idea can have its own ElevenLabs agent for voice interaction.
+    Each idea can have its own agent for voice interaction.
     """
     id: str
     title: str
@@ -46,7 +46,7 @@ class Idea:
     novelty: float = 0.0
     urgency: float = 0.0
 
-    # ElevenLabs agent ID for this bubble/idea (for multi-agent architecture)
+    # Agent ID for this bubble/idea (for multi-agent architecture)
     agent_id: Optional[str] = None
 
     # Parent bubble ID for nested bubble hierarchy

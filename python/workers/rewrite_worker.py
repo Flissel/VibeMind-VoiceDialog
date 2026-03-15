@@ -9,7 +9,7 @@ Part of the multi-agent summarization pipeline:
 Gemini is used for its large context window (1M+ tokens) which allows
 incorporating more context during the rewrite phase.
 
-Triggered by ElevenLabs agents through client tools → AutoGen bridge → gRPC host.
+Triggered by voice agents through client tools → AutoGen bridge → gRPC host.
 
 Usage:
     python workers/rewrite_worker.py

@@ -1,5 +1,5 @@
 """
-Desktop Client Tools für ElevenLabs Agent (Adam)
+Desktop Client Tools für Voice Agent (Adam)
 
 Diese Tools ermöglichen Adam, Desktop-Automation via externem MoireTracker v2 auszuführen.
 Nutzt das originale MoireTracker v2 Projekt unter:
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 import moire_external as moire
 
 
-# ==================== ElevenLabs Client Tool Functions ====================
+# ==================== Client Tool Functions ====================
 
 async def execute_desktop_task(goal: str) -> Dict[str, Any]:
     """
@@ -256,7 +256,7 @@ async def scroll_screen(direction: str = "down", amount: int = 3) -> Dict[str, A
         }
 
 
-# ==================== Tool Definitions for ElevenLabs ====================
+# ==================== Tool Definitions ====================
 
 DESKTOP_TOOLS = [
     {
@@ -347,13 +347,13 @@ DESKTOP_TOOLS = [
 ]
 
 
-# ==================== Tool Handler for ElevenLabs ====================
+# ==================== Tool Handler ====================
 
 async def handle_desktop_tool_call(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Handler für Desktop Tool Calls von ElevenLabs.
-    
-    Diese Funktion wird vom ElevenLabs Client aufgerufen wenn
+    Handler für Desktop Tool Calls.
+
+    Diese Funktion wird vom Voice Client aufgerufen wenn
     Adam ein Desktop Tool nutzen will.
     
     Args:

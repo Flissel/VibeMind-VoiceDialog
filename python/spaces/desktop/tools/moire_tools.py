@@ -268,7 +268,7 @@ class MoireServerClient:
         return [elem.text for elem in self._current_context if elem.text]
 
 
-# Singleton client (for direct async usage, not for ElevenLabs tool calls)
+# Singleton client (for direct async usage)
 _moire_client: Optional[MoireServerClient] = None
 
 
@@ -304,7 +304,7 @@ async def moire_scan(timeout: float = 30.0) -> Dict[str, Any]:
 
         if result.success:
             texts = [e.text for e in result.elements if e.text]
-            # Limit to top 20 unique texts to avoid overwhelming ElevenLabs
+            # Limit to top 20 unique texts to avoid overwhelming the voice response
             unique_texts = list(dict.fromkeys(texts))[:20]
 
             return {
@@ -438,7 +438,7 @@ async def moire_get_ui_context() -> Dict[str, Any]:
 
 
 # =============================================================================
-# TOOL DEFINITIONS FOR ELEVENLABS
+# TOOL DEFINITIONS
 # =============================================================================
 
 MOIRE_TOOLS = [
@@ -492,7 +492,7 @@ def register_moire_tools(tools_manager) -> None:
     def create_wrapper(async_func):
         def wrapper(params):
             import asyncio
-            # Filter out tool_call_id - ElevenLabs passes it but our functions don't need it
+            # Filter out tool_call_id - voice layer passes it but our functions don't need it
             filtered_params = {k: v for k, v in params.items() if k != 'tool_call_id'}
             try:
                 # Try to get existing event loop

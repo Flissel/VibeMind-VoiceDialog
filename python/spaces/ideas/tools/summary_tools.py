@@ -1,7 +1,7 @@
 """
 Summary Tools - Voice-callable summarization functions
 
-These tools allow ElevenLabs agents to create AI-powered summaries of ideas.
+These tools allow voice agents to create AI-powered summaries of ideas.
 
 Pipeline (using OpenRouter for all LLM calls):
 1. summarize_idea: Get content, call GPT-4o-mini via OpenRouter for initial summary
@@ -259,7 +259,7 @@ Provide only the rewritten summary, no explanations."""
 
 
 # ==============================================================================
-# CLIENT TOOLS (Called by ElevenLabs)
+# CLIENT TOOLS
 # ==============================================================================
 
 def summarize_idea(params: Dict[str, Any]) -> str:

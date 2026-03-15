@@ -1001,7 +1001,7 @@ def list_available_formats(params: Dict[str, Any] = None) -> str:
 
 
 # =============================================================================
-# TOOL DEFINITIONS (for ElevenLabs registration)
+# TOOL DEFINITIONS
 # =============================================================================
 
 CONVERT_FORMAT_DEFINITION = {

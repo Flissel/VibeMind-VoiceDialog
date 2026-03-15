@@ -99,6 +99,7 @@ def get_backend() -> Optional['ElectronBackend']:
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
+
 # Try to import data layer for persistence
 try:
     from data import CanvasRepository, CanvasNode as DBCanvasNode, CanvasEdge as DBCanvasEdge, IdeasRepository, ShuttlesRepository
@@ -134,6 +135,7 @@ except ImportError:
     HAS_NAVIGATION_TOOLS = False
     set_navigation_sender = None
     logger.warning("Navigation tools not available")
+
 
 # Import session tools for speech tracking
 try:
@@ -178,10 +180,7 @@ except ImportError as e:
     OpenAIRealtimeVoiceSession = None
     logger.warning(f"OpenAI Realtime voice not available: {e}")
 
-# VoiceBridgeV2 is the default (Swarm pipeline). Set USE_VOICE_BRIDGE_V2=false for legacy ClientTools.
-USE_VOICE_BRIDGE_V2 = os.environ.get("USE_VOICE_BRIDGE_V2", "true").lower() == "true"
-
-# Voice provider: openai_realtime only
+# Voice provider: OpenAI Realtime API
 VOICE_PROVIDER = "openai_realtime"
 
 
@@ -239,21 +238,18 @@ class ElectronBackend:
         self.next_bubble_id = 1
         self.next_node_id = 1
         self.current_bubble_id: Optional[int] = None  # Currently "inside" a bubble
-        self.voice_dialog = None  # Unused, kept for interface compat
         self.voice_active = False
         self._voice_stopping = False
         self._start_cancelled = False
         self._voice_start_task: Optional[asyncio.Task] = None  # Track running start_voice task
 
         # VoiceBridgeV2 (async architecture with NotificationQueue)
-        self.voice_bridge = None  # VoiceBridgeV2 instance
+        self.voice_bridge = None
 
-        # OpenAI Realtime voice session (when VOICE_PROVIDER=openai_realtime)
+        # OpenAI Realtime voice session
         self.openai_realtime_session = None
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # For thread-safe async dispatch
         
-        # ClawPort Dashboard: Track last agent events for status display
-        self._agent_last_events: Dict[str, Dict] = {}
-
         # Project Preview State (Coding Engine Integration)
         self.active_previews: Dict[str, Dict] = {}  # project_id -> preview_info
         self.coding_engine_path = os.environ.get(
@@ -370,6 +366,7 @@ class ElectronBackend:
             except Exception as e:
                 debug_log(f"Embedding model pre-load failed: {e}")
         threading.Thread(target=_preload_embedding_model, daemon=True, name="embedding-preload").start()
+
 
         # Roarboot autoconnect + self-healing loop
         # Checks Rowboat Docker health at startup, auto-starts if configured,
@@ -1033,52 +1030,44 @@ class ElectronBackend:
     # ========================================================================
 
     async def start_voice(self):
-        """Start voice dialog session (OpenAI Realtime)."""
-        debug_log("start_voice() called")
+        """Start voice dialog session with OpenAI Realtime API."""
+        self._main_loop = asyncio.get_running_loop()
+        debug_log(f"start_voice() called (active={self.voice_active}, stopping={self._voice_stopping}, "
+                  f"session={self.openai_realtime_session is not None}, bridge={self.voice_bridge is not None})")
+        debug_log(f"HAS_OPENAI_REALTIME: {HAS_OPENAI_REALTIME}")
 
         # Cancel any still-running start_voice task to prevent concurrent connect() calls
+        # IMPORTANT: Skip if old_task is the current task (self-reference from
+        # message handler storing the task before the body runs).
+        current_task = asyncio.current_task()
         old_task = self._voice_start_task
-        if old_task and not old_task.done():
+        if old_task and old_task is not current_task and not old_task.done():
             debug_log("Cancelling previous start_voice task before new start")
             self._start_cancelled = True
             old_task.cancel()
             try:
-                await old_task
-            except (asyncio.CancelledError, Exception):
-                pass
+                await asyncio.wait_for(asyncio.shield(old_task), timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                debug_log("Previous start_voice cancel timed out — proceeding anyway")
             self._start_cancelled = False
-
-        # Agent ID is only used as a session identifier now
-        agent_id = os.getenv("AGENT_MULTIVERSE", "openai_realtime")
-
-        await self.start_voice_with_agent(agent_id)
-
-    async def start_voice_with_agent(self, agent_id: str):
-        """Start voice dialog with OpenAI Realtime."""
-        debug_log(f"start_voice_with_agent({agent_id})")
-
-        if not HAS_VOICE_BRIDGE_V2:
-            self.send_message({
-                "type": "voice_error",
-                "error": "VoiceBridgeV2 not available"
-            })
-            return
+        elif old_task is current_task:
+            debug_log("start_voice: old_task is current task — skipping self-cancel")
 
         if not HAS_OPENAI_REALTIME:
             self.send_message({
                 "type": "voice_error",
-                "error": "OpenAI Realtime module not available"
+                "error": "OpenAI Realtime voice module not available (check voice/ package)"
             })
             return
-        # Start OpenAI Realtime voice
-        await self._start_voice_openai_realtime(agent_id)
 
-    async def _start_voice_openai_realtime(self, agent_id: str):
+        await self._start_voice_openai_realtime()
+
+    async def _start_voice_openai_realtime(self):
         """
         Start voice with OpenAI Realtime API.
 
         Uses speech-to-speech with native function calling.
-        The send_intent tool routes to the swarm orchestrator.
+        The send_intent tool routes to the orchestrator.
 
         Startup order (optimized for fastest voice output):
         1. WebSocket connection (DNS needs free executor)
@@ -1094,11 +1083,26 @@ class ElectronBackend:
             # Reset cancellation flag for this start attempt
             self._start_cancelled = False
 
-            # 0. Clean up any previous session first (stop Redis threads, free executor)
-            if self.voice_bridge or self.openai_realtime_session:
-                debug_log("Stopping previous session before restart...")
-                await self.stop_voice()
-                await asyncio.sleep(0.1)
+            # 0. Clean up any previous session DIRECTLY (not via stop_voice,
+            #    which may return immediately if _voice_stopping is True from
+            #    a concurrent stop call).
+            old_session = self.openai_realtime_session
+            old_bridge = self.voice_bridge
+            if old_session or old_bridge:
+                debug_log("Cleaning up previous session before restart...")
+                if old_session:
+                    self.openai_realtime_session = None
+                    try:
+                        await asyncio.wait_for(old_session.disconnect(), timeout=5.0)
+                    except (asyncio.TimeoutError, Exception) as e:
+                        debug_log(f"Old session disconnect: {e}")
+                if old_bridge:
+                    self.voice_bridge = None
+                    try:
+                        await old_bridge.shutdown()
+                    except Exception as e:
+                        debug_log(f"Old bridge shutdown: {e}")
+                self.voice_active = False
                 debug_log("Previous session cleaned up")
                 self._start_cancelled = False  # Reset after cleanup
 
@@ -1133,7 +1137,13 @@ class ElectronBackend:
             # 4. Connect WebSocket FIRST — before anything that touches Redis!
             #    VoiceBridgeV2 starts Redis connections that can exhaust the
             #    default ThreadPoolExecutor, blocking DNS resolution.
+            #    Send status to UI so user sees progress (connection can take 15-20s).
             _t0 = _time.time()
+            self.send_message({
+                "type": "voice_status",
+                "status": "connecting",
+                "message": "Verbinde mit OpenAI Realtime..."
+            })
             await session.connect()
             debug_log(f"WebSocket connected ({_time.time() - _t0:.2f}s)")
 
@@ -1160,30 +1170,42 @@ class ElectronBackend:
             self.voice_active = True
             self.send_message({
                 "type": "voice_started",
-                "agent_id": agent_id,
                 "agent_name": "Rachel",
                 "mode": "openai_realtime"
             })
 
             debug_log(f"Voice ACTIVE — Rachel speaking ({_time.time() - _t_total:.2f}s)")
 
-            # 6. Create VoiceBridge in background (needed for tool calls).
+            # 6. Pre-warm orchestrator in background so first voice command is fast.
+            #    Without this, get_orchestrator() initializes lazily on first
+            #    send_intent call, adding 2-5s to the first command.
+            prewarm_task = asyncio.create_task(self._prewarm_orchestrator())
+            prewarm_task.add_done_callback(self._log_task_exception)
+
+            # 7. Create VoiceBridge in background (needed for tool calls).
             #    This can be slow (Redis connections, backend agents) but
             #    audio is already flowing so the user hears Rachel immediately.
             bg_task = asyncio.create_task(self._init_voice_bridge_background())
             bg_task.add_done_callback(self._log_task_exception)
 
-            # 7. Initialize Minibook (inter-space collaboration) if enabled.
+            # 8. Initialize Minibook (inter-space collaboration) if enabled.
             #    Registers space agents and starts polling workers.
             if os.getenv("MINIBOOK_ENABLED", "false").lower() == "true":
                 mb_task = asyncio.create_task(self._init_minibook_background())
                 mb_task.add_done_callback(self._log_task_exception)
 
-            # 8. Initialize Schedule Space (APScheduler) if enabled.
+            # 9. Initialize Schedule Space (APScheduler) if enabled.
             #    Loads active tasks from DB and starts the scheduler.
             if os.getenv("SCHEDULE_ENABLED", "false").lower() == "true":
                 sched_task = asyncio.create_task(self._init_schedule_background())
                 sched_task.add_done_callback(self._log_task_exception)
+
+            # 10. Initialize Messaging Bridge (Voice ↔ WhatsApp/Telegram) if enabled.
+            #     Connects IncomingMessageHandler to Clawdbot bridge for
+            #     relevance-filtered incoming message notifications.
+            if os.getenv("MESSAGING_BRIDGE_ENABLED", "false").lower() == "true":
+                msg_task = asyncio.create_task(self._init_messaging_bridge_background())
+                msg_task.add_done_callback(self._log_task_exception)
 
         except asyncio.CancelledError:
             debug_log("OpenAI Realtime start CANCELLED (task killed by stop/restart)")
@@ -1202,6 +1224,22 @@ class ElectronBackend:
                 "type": "voice_error",
                 "error": str(e)
             })
+
+    async def _prewarm_orchestrator(self):
+        """Pre-warm the IntentOrchestrator so first voice command is fast.
+
+        Without this, get_orchestrator() lazily initializes on first
+        send_intent call, adding 2-5s to the user's first request.
+        """
+        import time as _time
+        try:
+            _t0 = _time.time()
+            debug_log("Background: Pre-warming IntentOrchestrator...")
+            from swarm.orchestrator import get_orchestrator
+            _orch = get_orchestrator()
+            debug_log(f"Background: IntentOrchestrator ready ({_time.time() - _t0:.2f}s)")
+        except Exception as e:
+            debug_log(f"Background: Orchestrator pre-warm failed (non-fatal): {e}")
 
     async def _init_voice_bridge_background(self):
         """Initialize VoiceBridgeV2 in the background (non-blocking for audio)."""
@@ -1244,31 +1282,69 @@ class ElectronBackend:
 
             client = get_minibook_client()
 
-            # Check if Minibook is reachable
-            status = client.get_status()
-            if not status.get("success"):
-                debug_log(f"Background: Minibook not reachable ({status.get('error', '?')}) — skipping")
+            # Check if Minibook is reachable (retry up to 5 times for Docker startup)
+            status = None
+            for attempt in range(5):
+                status = client.get_status()
+                if status.get("success"):
+                    break
+                debug_log(f"Background: Minibook not ready (attempt {attempt+1}/5): {status.get('error', '?')}")
+                await asyncio.sleep(3)
+
+            if not status or not status.get("success"):
+                debug_log(f"Background: Minibook not reachable after 5 attempts — skipping")
                 return
 
             # Create collaboration project and register all space agents
             project_id = register_all_space_agents(client)
             debug_log(f"Background: Minibook agents registered, project={project_id}")
 
-            # Start DiscussionPollerWorker (delivers async results via voice)
+            # Start DiscussionPollerWorker in its OWN thread so it doesn't
+            # starve when the voice WebSocket dominates the main event loop.
             def _get_session():
                 return self.openai_realtime_session
 
             poller = get_discussion_poller(
                 realtime_session_getter=_get_session,
             )
-            poller_task = asyncio.create_task(poller.poll_loop())
-            poller_task.add_done_callback(self._log_task_exception)
 
-            # Start SpaceMinibookResponders (one per space)
+            def _run_poller_thread():
+                """Run poller in a dedicated thread with its own event loop."""
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(poller.poll_loop())
+                except Exception as e:
+                    debug_log(f"Poller thread error: {e}")
+                finally:
+                    loop.close()
+
+            poller_thread = threading.Thread(
+                target=_run_poller_thread, daemon=True, name="minibook-poller"
+            )
+            poller_thread.start()
+
+            # Start SpaceMinibookResponders — each in its OWN thread.
+            # Without this, the main event loop (dominated by voice WebSocket
+            # audio events every ~20ms) starves the responder polling tasks.
             responders = create_space_responders()
             for space_key, responder in responders.items():
-                resp_task = asyncio.create_task(responder.poll_and_respond())
-                resp_task.add_done_callback(self._log_task_exception)
+                def _run_responder_thread(r=responder, key=space_key):
+                    """Run responder in a dedicated thread with its own event loop."""
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(r.poll_and_respond())
+                    except Exception as e:
+                        debug_log(f"Responder {key} thread error: {e}")
+                    finally:
+                        loop.close()
+
+                resp_thread = threading.Thread(
+                    target=_run_responder_thread, daemon=True,
+                    name=f"minibook-resp-{space_key}",
+                )
+                resp_thread.start()
 
             debug_log(
                 f"Background: Minibook ready — {len(responders)} space responders "
@@ -1278,12 +1354,14 @@ class ElectronBackend:
             # ── MinibookHub: Central Execution (when USE_MINIBOOK_HUB=true) ──
             if os.getenv("USE_MINIBOOK_HUB", "false").lower() in ("true", "1"):
                 try:
+                    from swarm.orchestrator import get_orchestrator
                     from spaces.minibook.minibook_hub import MinibookHub
                     from spaces.minibook.enrichment.pipeline import create_enrichment_pipeline
                     from spaces.minibook.rachel_interface import RachelInterface
                     from spaces.minibook.result_aggregator import ResultAggregator
                     from spaces.minibook.config import get_config as get_minibook_config
 
+                    orch = get_orchestrator()
                     mb_config = get_minibook_config()
 
                     # Rachel Interface — passive dashboard
@@ -1296,7 +1374,7 @@ class ElectronBackend:
 
                     # Enrichment Pipeline — classifier reused from orchestrator
                     pipeline = create_enrichment_pipeline(
-                        classifier=self.orchestrator.classifier,
+                        classifier=orch.classifier,
                         rachel_interface=rachel,
                         enrichment_model=mb_config.enrichment_model,
                         use_llm_routing=mb_config.enrichment_enabled,
@@ -1320,7 +1398,7 @@ class ElectronBackend:
                     )
 
                     # Wire into orchestrator
-                    self.orchestrator.set_minibook_hub(hub)
+                    orch.set_minibook_hub(hub)
 
                     debug_log(
                         f"Background: MinibookHub ACTIVATED — all intents route through Minibook "
@@ -1357,7 +1435,8 @@ class ElectronBackend:
                 return self.openai_realtime_session
 
             def _get_orchestrator():
-                return self.orchestrator
+                from swarm.orchestrator import get_orchestrator
+                return get_orchestrator()
 
             # Create and start ScheduleWorker
             worker = ScheduleWorker(
@@ -1380,6 +1459,49 @@ class ElectronBackend:
             import traceback
             debug_log(traceback.format_exc())
 
+    async def _init_messaging_bridge_background(self):
+        """Initialize Messaging Bridge (Voice ↔ WhatsApp/Telegram) in background."""
+        import time as _time
+        try:
+            _t0 = _time.time()
+            debug_log("Background: Initializing Messaging Bridge...")
+
+            from spaces.desktop.messaging.relevance_filter import RelevanceFilter
+            from spaces.desktop.messaging.incoming_handler import (
+                IncomingMessageHandler,
+                set_incoming_handler,
+            )
+
+            # Create handler with voice session getter
+            def _get_session():
+                return self.openai_realtime_session
+
+            handler = IncomingMessageHandler(
+                relevance_filter=RelevanceFilter(),
+                voice_session_getter=_get_session,
+            )
+
+            # Register globally (for other modules to access)
+            set_incoming_handler(handler)
+
+            # Register with ClawdbotBridge (if available)
+            try:
+                from spaces.desktop.Automation_ui.backend.app.services.clawdbot_bridge import (
+                    get_clawdbot_bridge,
+                )
+                bridge = await get_clawdbot_bridge()
+                bridge.set_incoming_handler(handler)
+                debug_log("Background: Messaging handler registered with Clawdbot bridge")
+            except Exception as e:
+                debug_log(f"Background: Clawdbot bridge not available: {e}")
+
+            debug_log(
+                f"Background: Messaging Bridge ready ({_time.time() - _t0:.2f}s)"
+            )
+
+        except Exception as e:
+            debug_log(f"Background: Messaging Bridge init failed: {e}")
+
     def _log_task_exception(self, task: asyncio.Task):
         """Callback to log unhandled exceptions from background tasks."""
         if task.cancelled():
@@ -1388,73 +1510,206 @@ class ElectronBackend:
         if exc:
             debug_log(f"Background task failed: {exc}")
 
-    def _handle_realtime_tool_call(self, call_id: str, name: str, arguments: Dict) -> str:
+    async def _handle_realtime_tool_call(self, call_id: str, name: str, arguments: Dict) -> str:
         """
-        Handle tool calls from OpenAI Realtime API.
+        Handle tool calls from OpenAI Realtime API (async).
 
-        Routes send_intent to the swarm orchestrator.
+        send_intent: Fire-and-forget — returns immediately, result delivered
+                     async via inject_system_message().
+        check_results: Poll NotificationQueue for pending results.
 
         Args:
             call_id: Unique call ID from OpenAI
-            name: Tool name (expected: 'send_intent')
+            name: Tool name ('send_intent' or 'check_results')
             arguments: Tool arguments dict
 
         Returns:
             Result string for voice response
         """
-        import time as _time
-
         if name == "send_intent":
             user_request = arguments.get("user_request", "")
-            debug_log(f"[REALTIME TOOL] send_intent: {user_request}")
+            debug_log(f"[REALTIME TOOL] send_intent (async): {user_request}")
 
             if not user_request:
-                return "Ich habe dich nicht verstanden. Was moechtest du?"
+                return "I didn't understand that. What would you like?"
 
+            # Start dispatch in a pure background thread — completely
+            # decoupled from the voice event loop. The thread sleeps 1.5s
+            # (so Rachel finishes speaking), runs the orchestrator with its
+            # own event loop, then delivers results back via main loop.
+            thread = threading.Thread(
+                target=self._dispatch_in_thread,
+                args=(user_request,),
+                daemon=True,
+            )
+            thread.start()
+            debug_log(f"[DISPATCH] Background thread launched")
+
+            return "Ich kuemmere mich darum."
+
+        elif name == "check_results":
+            debug_log("[REALTIME TOOL] check_results")
             try:
-                from swarm.orchestrator import get_orchestrator
-                from swarm.orchestrator.system_context_store import get_system_context_store
+                from swarm.orchestrator.notification_queue import get_notification_queue
+                queue = get_notification_queue()
+                notifications = queue.get_and_clear()
 
-                orchestrator = get_orchestrator()
-                context_store = get_system_context_store()
+                if not notifications:
+                    return "Keine neuen Ergebnisse."
 
-                # Process intent (no domain_hint - OpenAI Realtime + IntentClassifier handle routing)
-                result = orchestrator.process_intent_sync(user_request)
+                parts = []
+                for n in notifications:
+                    result_str = str(n.result)
+                    if len(result_str) > 300:
+                        result_str = result_str[:300] + "..."
+                    parts.append(result_str)
 
-                debug_log(
-                    f"send_intent result: {result.event_type} -> "
-                    f"{result.response_hint[:200]}{'...' if len(result.response_hint) > 200 else ''}"
-                )
-
-                # Store in context for Smart Rachel
-                if not result.is_conversational and not result.error:
-                    context_store.store(
-                        event_type=result.event_type,
-                        result=result.response_hint
-                    )
-
-                # Notify Electron
-                if not result.is_conversational:
-                    self.send_message({
-                        "type": "task_queued",
-                        "task_type": "backend_agent",
-                        "domain": "auto"
-                    })
-
-                if result.error:
-                    return f"Es gab ein Problem: {result.error}"
-
-                return result.response_hint
+                return "\n".join(parts)
 
             except Exception as e:
-                debug_log(f"send_intent error: {e}")
-                import traceback
-                traceback.print_exc()
-                return f"Es gab ein Problem bei der Verarbeitung: {str(e)}"
+                debug_log(f"check_results error: {e}")
+                return "Konnte Ergebnisse nicht abrufen."
 
         else:
             debug_log(f"[REALTIME TOOL] Unknown tool: {name}")
             return f"Unbekanntes Tool: {name}"
+
+    def _dispatch_in_thread(self, user_request: str) -> None:
+        """
+        Complete dispatch in a pure background thread.
+
+        Completely decoupled from the voice event loop:
+        - time.sleep(1.5) instead of asyncio.sleep
+        - Own event loop for the orchestrator
+        - Result delivery via run_coroutine_threadsafe back to main loop
+
+        This avoids the problem where asyncio.create_task() doesn't get
+        scheduled because the voice WebSocket event loop is too busy.
+        """
+        import time as _time
+
+        try:
+            debug_log(f"[DISPATCH] Thread ALIVE — sleeping 1.5s for Rachel to speak...")
+
+            # Wait for Rachel to finish speaking "Ich kuemmere mich darum"
+            _time.sleep(1.5)
+
+            debug_log("[DISPATCH] Thread: running orchestrator...")
+            result = self._run_orchestrator_blocking(user_request)
+            debug_log(f"[DISPATCH] Thread: orchestrator done, delivering result...")
+
+            # Deliver result on main event loop
+            if self._main_loop and not self._main_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    self._deliver_dispatch_result(result),
+                    self._main_loop,
+                )
+            else:
+                debug_log("[DISPATCH] Main loop closed — cannot deliver result")
+
+        except Exception as e:
+            debug_log(f"[DISPATCH] Thread error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _run_orchestrator_blocking(self, user_request: str):
+        """
+        Run orchestrator with its own event loop (called from background thread).
+
+        Creates a fresh event loop because process_intent() is async but
+        internally calls synchronous HTTP (IntentClassifier).
+        """
+        from swarm.orchestrator import get_orchestrator
+
+        orchestrator = get_orchestrator()
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            result = new_loop.run_until_complete(
+                orchestrator.process_intent(user_request)
+            )
+            return result
+        except Exception as e:
+            debug_log(f"[DISPATCH] Orchestrator error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            new_loop.close()
+
+    async def _deliver_dispatch_result(self, result) -> None:
+        """
+        Deliver orchestrator result via voice injection.
+        Runs on the main event loop (scheduled via run_coroutine_threadsafe).
+        """
+        try:
+            if not result:
+                debug_log("Dispatch: no result from orchestrator")
+                await self._inject_voice_result(
+                    "The request could not be processed. Please try again."
+                )
+                return
+
+            debug_log(
+                f"Dispatch result: {result.event_type} -> "
+                f"{result.response_hint[:200]}{'...' if len(result.response_hint) > 200 else ''}"
+            )
+
+            # Store in context for Smart Rachel
+            if not result.is_conversational and not result.error:
+                try:
+                    from swarm.orchestrator.system_context_store import get_system_context_store
+                    context_store = get_system_context_store()
+                    context_store.store(
+                        event_type=result.event_type,
+                        result=result.response_hint,
+                    )
+                except Exception:
+                    pass
+
+            # Notify Electron UI
+            if not result.is_conversational:
+                self.send_message({
+                    "type": "task_queued",
+                    "task_type": "backend_agent",
+                    "domain": "auto",
+                })
+
+            # Deliver result to Rachel via voice injection
+            if result.error:
+                await self._inject_voice_result(
+                    f"There was a problem: {result.error}"
+                )
+            elif result.response_hint:
+                await self._inject_voice_result(result.response_hint)
+
+        except Exception as e:
+            debug_log(f"Dispatch delivery error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def _inject_voice_result(self, text: str) -> None:
+        """Inject result text into Rachel's voice session, with NotificationQueue fallback."""
+        session = self.openai_realtime_session
+        if session:
+            try:
+                await session.inject_system_message(text)
+                return
+            except Exception as e:
+                debug_log(f"Voice injection failed: {e}")
+
+        # Fallback: queue for next user input
+        try:
+            from swarm.orchestrator.notification_queue import get_notification_queue
+            queue = get_notification_queue()
+            queue.add_notification(
+                job_id=f"async-{id(text)}",
+                event_type="async.result",
+                result=text,
+            )
+            debug_log("Result queued in NotificationQueue (voice injection fallback)")
+        except Exception as e:
+            debug_log(f"Could not deliver result: {e}")
 
     def _handle_realtime_session_end(self):
         """Handle OpenAI Realtime session ending (server-initiated disconnect)."""
@@ -1478,50 +1733,82 @@ class ElectronBackend:
 
     async def stop_voice(self):
         """Stop voice dialog session (with re-entrance guard)."""
+        debug_log(f"stop_voice() called (active={self.voice_active}, stopping={self._voice_stopping})")
         # Signal any pending start_voice to abort
         self._start_cancelled = True
 
         # Cancel running start_voice task (kills connect() mid-flight)
+        # Timeout ensures stop_voice never hangs if connect() is stuck on dead WebSocket
         start_task = self._voice_start_task
         if start_task and not start_task.done():
             debug_log("stop_voice: cancelling running start_voice task")
             start_task.cancel()
             try:
-                await start_task
-            except (asyncio.CancelledError, Exception):
-                pass
+                await asyncio.wait_for(asyncio.shield(start_task), timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                debug_log("stop_voice: start_task cancel timed out — proceeding anyway")
         self._voice_start_task = None
 
         if getattr(self, '_voice_stopping', False):
+            debug_log("stop_voice: already stopping — returning early")
             return
         self._voice_stopping = True
         try:
             await self._stop_voice_impl()
         finally:
             self._voice_stopping = False
+            debug_log("stop_voice() complete")
 
     async def _stop_voice_impl(self):
-        """Internal stop implementation."""
-        # Stop OpenAI Realtime session if active
-        if self.openai_realtime_session:
+        """Internal stop implementation.
+
+        IMPORTANT: Capture local references to session/bridge before async
+        disconnect.  A concurrent start_voice() may replace
+        self.openai_realtime_session while we are awaiting disconnect().
+        Only clear the instance vars if they still point to the objects
+        we stopped — otherwise a new session was started and we must not
+        clobber it.
+        """
+        # Capture references BEFORE any await
+        session_to_stop = self.openai_realtime_session
+        bridge_to_stop = self.voice_bridge
+
+        # Stop OpenAI Realtime session if active (with timeout to prevent hanging)
+        if session_to_stop:
             try:
-                await self.openai_realtime_session.disconnect()
+                await asyncio.wait_for(
+                    session_to_stop.disconnect(),
+                    timeout=8.0,
+                )
                 debug_log("OpenAI Realtime session disconnected")
+            except asyncio.TimeoutError:
+                debug_log("OpenAI Realtime disconnect TIMED OUT (8s) — forcing cleanup")
+                # Force-clear state even if disconnect() hung
+                session_to_stop._is_running = False
+                session_to_stop._is_connected = False
+                session_to_stop._audio_manager.cleanup()
             except Exception as e:
                 debug_log(f"Error disconnecting OpenAI Realtime: {e}")
-            self.openai_realtime_session = None
+            # Only clear if a new start_voice hasn't replaced the session
+            if self.openai_realtime_session is session_to_stop:
+                self.openai_realtime_session = None
 
         # Stop VoiceBridgeV2 if active
-        if self.voice_bridge:
+        if bridge_to_stop:
             try:
-                await self.voice_bridge.shutdown()
+                await bridge_to_stop.shutdown()
                 debug_log("VoiceBridgeV2 shutdown complete")
             except Exception as e:
                 debug_log(f"Error shutting down VoiceBridgeV2: {e}")
-            self.voice_bridge = None
+            if self.voice_bridge is bridge_to_stop:
+                self.voice_bridge = None
 
-        self.voice_active = False
-        self.send_message({"type": "voice_stopped"})
+        # Only send voice_stopped if no new session was started during shutdown
+        if self.openai_realtime_session is None:
+            self.voice_active = False
+            self.send_message({"type": "voice_stopped"})
+        else:
+            debug_log("stop_voice_impl: new session active — skipping voice_stopped")
 
     def _handle_user_transcript(self, text: str):
         """Handle transcribed user speech."""
@@ -1926,63 +2213,9 @@ class ElectronBackend:
             debug_log(f"Tool action from UI toolbar: {event_type} with {payload}")
             asyncio.create_task(self._handle_tool_action(event_type, payload))
 
-        # ====================================================================
-        # CLAWPORT DASHBOARD - IPC Handlers
-        # ====================================================================
-
-        elif msg_type == "get_memory_overview":
-            asyncio.create_task(self._handle_get_memory_overview())
-
-        elif msg_type == "search_memory":
-            asyncio.create_task(self._handle_search_memory(message))
-
-        elif msg_type == "get_recent_memory":
-            asyncio.create_task(self._handle_get_recent_memory(message))
-
-        elif msg_type == "get_scheduled_tasks":
-            asyncio.create_task(self._handle_get_scheduled_tasks(message))
-
-        elif msg_type == "update_task_status":
-            asyncio.create_task(self._handle_update_task_status(message))
-
-        elif msg_type == "get_agent_status":
-            self._handle_get_agent_status_sync()
-
-        elif msg_type == "chat_text_input":
-            asyncio.create_task(self._handle_chat_text_input(message))
-
-        elif msg_type == "get_conversation_history":
-            asyncio.create_task(self._handle_get_conversation_history(message))
-
     # ========================================================================
     # UI TOOLBAR HANDLER
     # ========================================================================
-
-    # Map event_type prefix → agent name for status tracking
-    _EVENT_PREFIX_TO_AGENT = {
-        "bubble.": "bubbles", "idea.": "ideas", "code.": "coding",
-        "desktop.": "desktop", "messaging.": "desktop", "web.": "desktop",
-        "openclaw.": "desktop", "roarboot.": "roarboot", "research.": "zeroclaw",
-        "minibook.": "minibook", "schedule.": "schedule",
-    }
-
-    def _track_agent_event(self, event_type: str, status: str, result_summary: str = "", error: str = ""):
-        """Update _agent_last_events for ClawPort Dashboard."""
-        from datetime import datetime as dt
-        agent_name = None
-        for prefix, name in self._EVENT_PREFIX_TO_AGENT.items():
-            if event_type.startswith(prefix):
-                agent_name = name
-                break
-        if not agent_name:
-            return
-        self._agent_last_events[agent_name] = {
-            "status": status,
-            "event_type": event_type,
-            "timestamp": dt.now().isoformat(),
-            "result_summary": result_summary[:200] if result_summary else "",
-            "error": error[:200] if error else "",
-        }
 
     async def _handle_tool_action(self, event_type: str, payload: dict):
         """Execute a tool action triggered from the UI toolbar."""
@@ -1993,9 +2226,6 @@ class ElectronBackend:
                 debug_log("No orchestrator available for tool action")
                 return
 
-            # Track agent as running
-            self._track_agent_event(event_type, "started")
-
             # Execute via orchestrator sync path (same as voice commands in FORCE_SYNC_MODE)
             result = await orchestrator._process_sync(
                 event_type=event_type,
@@ -2005,10 +2235,6 @@ class ElectronBackend:
                 session_id="ui"
             )
 
-            # Track agent as completed
-            hint = result.response_hint if result else ""
-            self._track_agent_event(event_type, "completed", result_summary=hint)
-
             if result and result.response_hint:
                 debug_log(f"Tool action result: {result.response_hint[:100]}")
                 self.send_message({
@@ -2017,269 +2243,9 @@ class ElectronBackend:
                 })
         except Exception as e:
             logger.error(f"Tool action failed: {e}")
-            self._track_agent_event(event_type, "error", error=str(e))
             self.send_message({
                 "type": "agent_response",
                 "text": f"Tool action failed: {str(e)}"
-            })
-
-    # ========================================================================
-    # CLAWPORT DASHBOARD IPC Handlers
-    # ========================================================================
-
-    async def _handle_get_memory_overview(self):
-        """Return overview of memory services (availability + stats)."""
-        try:
-            overview = {
-                "task_memory": {"available": False},
-                "conversation_memory": {"available": False},
-                "user_profiles": {"available": False},
-            }
-
-            # Check TaskMemoryService
-            if os.environ.get("USE_TASK_MEMORY", "").lower() == "true":
-                try:
-                    from memory.task_memory_service import TaskMemoryService
-                    svc = TaskMemoryService()
-                    overview["task_memory"] = {"available": True, "status": "connected"}
-                except Exception:
-                    overview["task_memory"] = {"available": False, "error": "init failed"}
-
-            # Check ConversationMemoryService
-            if os.environ.get("USE_CONVERSATION_MEMORY", "").lower() == "true":
-                try:
-                    from memory.conversation_memory_service import ConversationMemoryService
-                    svc = ConversationMemoryService()
-                    overview["conversation_memory"] = {"available": True, "status": "connected"}
-                except Exception:
-                    overview["conversation_memory"] = {"available": False, "error": "init failed"}
-
-            # Check UserProfileService
-            if os.environ.get("USE_USER_PROFILES", "").lower() == "true":
-                try:
-                    from memory.user_profile_service import UserProfileService
-                    svc = UserProfileService()
-                    overview["user_profiles"] = {"available": True, "status": "connected"}
-                    # Try to get top intents
-                    try:
-                        profile = await svc.get_profile()
-                        if profile and hasattr(profile, "top_intents"):
-                            overview["user_profiles"]["top_intents"] = profile.top_intents[:10]
-                    except Exception:
-                        pass
-                except Exception:
-                    overview["user_profiles"] = {"available": False, "error": "init failed"}
-
-            self.send_message({"type": "memory_overview", "data": overview})
-        except Exception as e:
-            logger.error(f"get_memory_overview failed: {e}")
-            self.send_message({
-                "type": "memory_overview",
-                "data": {
-                    "task_memory": {"available": False},
-                    "conversation_memory": {"available": False},
-                    "user_profiles": {"available": False},
-                }
-            })
-
-    async def _handle_search_memory(self, message: dict):
-        """Search across memory services."""
-        query = message.get("query", "")
-        category = message.get("category", "tasks")
-        limit = int(message.get("limit", 20))
-        results = []
-
-        try:
-            if category == "tasks" and os.environ.get("USE_TASK_MEMORY", "").lower() == "true":
-                from memory.task_memory_service import TaskMemoryService
-                svc = TaskMemoryService()
-                hits = await svc.search(query, limit=limit)
-                results = [{"id": h.get("id", ""), "content": h.get("content", ""),
-                            "score": h.get("score", 0), "metadata": h.get("metadata", {})}
-                           for h in (hits or [])]
-            elif category == "conversations" and os.environ.get("USE_CONVERSATION_MEMORY", "").lower() == "true":
-                from memory.conversation_memory_service import ConversationMemoryService
-                svc = ConversationMemoryService()
-                hits = await svc.search(query, limit=limit)
-                results = [{"id": h.get("id", ""), "content": h.get("content", ""),
-                            "score": h.get("score", 0), "metadata": h.get("metadata", {})}
-                           for h in (hits or [])]
-        except Exception as e:
-            logger.error(f"search_memory failed: {e}")
-
-        self.send_message({
-            "type": "memory_search_results",
-            "category": category,
-            "query": query,
-            "results": results,
-        })
-
-    async def _handle_get_recent_memory(self, message: dict):
-        """Get recent memory entries by category."""
-        category = message.get("category", "conversations")
-        limit = int(message.get("limit", 20))
-        results = []
-
-        try:
-            if category == "conversations":
-                from data import ConversationRepository
-                repo = ConversationRepository()
-                messages = repo.get_recent_messages(limit=limit)
-                results = [m.to_dict() for m in messages]
-        except Exception as e:
-            logger.error(f"get_recent_memory failed: {e}")
-
-        self.send_message({
-            "type": "recent_memory",
-            "category": category,
-            "results": results,
-        })
-
-    async def _handle_get_scheduled_tasks(self, message: dict):
-        """List scheduled tasks with optional status filter."""
-        status_filter = message.get("status")
-        limit = int(message.get("limit", 50))
-
-        try:
-            from data import ScheduledTaskRepository
-            repo = ScheduledTaskRepository()
-
-            if status_filter:
-                tasks = repo.get_by_status(status_filter)
-            else:
-                tasks = repo.list_all(limit=limit)
-
-            task_dicts = [t.to_dict() for t in tasks]
-            self.send_message({
-                "type": "scheduled_tasks_list",
-                "tasks": task_dicts,
-                "total": len(task_dicts),
-            })
-        except Exception as e:
-            logger.error(f"get_scheduled_tasks failed: {e}")
-            self.send_message({
-                "type": "scheduled_tasks_list",
-                "tasks": [],
-                "total": 0,
-            })
-
-    async def _handle_update_task_status(self, message: dict):
-        """Update a scheduled task's status (pause/resume/cancel)."""
-        task_id = message.get("task_id", "")
-        new_status = message.get("status", "")
-
-        try:
-            from data import ScheduledTaskRepository
-            repo = ScheduledTaskRepository()
-            updated = repo.update_status(task_id, new_status)
-            self.send_message({
-                "type": "task_status_updated",
-                "success": updated is not None,
-                "task_id": task_id,
-                "status": new_status,
-                "task": updated.to_dict() if updated else None,
-            })
-        except Exception as e:
-            logger.error(f"update_task_status failed: {e}")
-            self.send_message({
-                "type": "task_status_updated",
-                "success": False,
-                "task_id": task_id,
-                "error": str(e),
-            })
-
-    def _handle_get_agent_status_sync(self):
-        """Return last known status for each backend agent (sync, in-memory)."""
-        agents = []
-        # Canonical agent list
-        agent_names = [
-            "bubbles", "ideas", "coding", "desktop",
-            "roarboot", "zeroclaw", "minibook", "schedule"
-        ]
-        for name in agent_names:
-            event = self._agent_last_events.get(name, {})
-            agents.append({
-                "name": name,
-                "status": event.get("status", "idle"),
-                "last_event_type": event.get("event_type"),
-                "last_event_at": event.get("timestamp"),
-                "last_result": event.get("result_summary"),
-                "error": event.get("error"),
-            })
-        self.send_message({"type": "agent_status_list", "agents": agents})
-
-    async def _handle_chat_text_input(self, message: dict):
-        """Process text chat via the same IntentOrchestrator path as voice."""
-        text = message.get("text", "").strip()
-        if not text:
-            self.send_message({
-                "type": "chat_response",
-                "success": False,
-                "message": "Empty input",
-            })
-            return
-
-        try:
-            from swarm.orchestrator import get_orchestrator
-            orchestrator = get_orchestrator()
-            if not orchestrator:
-                self.send_message({
-                    "type": "chat_response",
-                    "success": False,
-                    "message": "Orchestrator not available",
-                })
-                return
-
-            result = await orchestrator.process_intent(text)
-            response_text = ""
-            event_type = ""
-            if result:
-                response_text = getattr(result, "response_hint", "") or str(result)
-                event_type = getattr(result, "event_type", "")
-
-            self.send_message({
-                "type": "chat_response",
-                "success": True,
-                "message": response_text,
-                "event_type": event_type,
-                "user_text": text,
-            })
-        except Exception as e:
-            logger.error(f"chat_text_input failed: {e}")
-            self.send_message({
-                "type": "chat_response",
-                "success": False,
-                "message": f"Error: {str(e)}",
-                "user_text": text,
-            })
-
-    async def _handle_get_conversation_history(self, message: dict):
-        """Get recent conversation history."""
-        limit = int(message.get("limit", 50))
-
-        try:
-            from data import ConversationRepository
-            repo = ConversationRepository()
-            messages = repo.get_recent_messages(limit=limit)
-            msg_list = []
-            for m in messages:
-                d = m.to_dict()
-                msg_list.append({
-                    "id": d.get("id", ""),
-                    "speaker": d.get("speaker", ""),
-                    "text": d.get("text", ""),
-                    "timestamp": d.get("timestamp", ""),
-                    "session_id": d.get("session_id", ""),
-                })
-            self.send_message({
-                "type": "conversation_history",
-                "messages": msg_list,
-            })
-        except Exception as e:
-            logger.error(f"get_conversation_history failed: {e}")
-            self.send_message({
-                "type": "conversation_history",
-                "messages": [],
             })
 
     # ========================================================================
@@ -2965,7 +2931,12 @@ async def main():
     # Send ready signal to Electron
     backend.send_message({"type": "python_ready"})
     debug_log("Sent python_ready signal")
-    
+
+    # Auto-start voice if configured (no need to click "Start Voice" button)
+    if os.getenv("VOICE_AUTO_START", "false").lower() == "true":
+        debug_log("VOICE_AUTO_START=true — starting voice automatically...")
+        asyncio.create_task(backend.start_voice())
+
     # Create message queue for thread-to-async communication
     message_queue = asyncio.Queue()
     loop = asyncio.get_event_loop()

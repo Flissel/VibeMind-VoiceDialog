@@ -459,15 +459,6 @@ class VoiceBridgeV2:
             loop.close()
             return result.response
 
-    def as_elevenlabs_tool(self) -> Callable:
-        """Return function for ElevenLabs ClientTools."""
-        def process_command(params: Dict[str, Any]) -> str:
-            text = params.get("command", params.get("text", ""))
-            if not text:
-                return "Ich habe dich nicht verstanden."
-            return self.handle_voice_input_sync(text)
-        return process_command
-
     async def shutdown(self) -> None:
         """Shutdown all components gracefully."""
         self._running = False

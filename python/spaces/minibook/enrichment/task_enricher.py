@@ -144,12 +144,19 @@ class TaskEnricher:
         if space_key in ("ideas", "coding", "swe_design", "transformer"):
             if ctx.current_bubble_name:
                 agent_ctx["current_bubble"] = ctx.current_bubble_name
+            if ctx.current_bubble_id:
+                agent_ctx["current_bubble_id"] = ctx.current_bubble_id
+
+        # Idea count (for SpaceAgent context)
+        idea_count = getattr(ctx, "idea_count", 0)
+        if idea_count:
+            agent_ctx["idea_count"] = idea_count
 
         # Conversation history (primary gets more)
         if is_primary and ctx.conversation_history:
-            agent_ctx["conversation"] = ctx.conversation_history[-3:]
+            agent_ctx["conversation_history"] = ctx.conversation_history[-5:]
         elif ctx.conversation_history:
-            agent_ctx["conversation"] = ctx.conversation_history[-1:]
+            agent_ctx["conversation_history"] = ctx.conversation_history[-2:]
 
         # Recent results (for continuity)
         if ctx.recent_results:

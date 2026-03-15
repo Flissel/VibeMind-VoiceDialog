@@ -1,5 +1,5 @@
 """
-SuperMemory Tools for ElevenLabs Voice Integration
+SuperMemory Tools for Voice Integration
 
 Provides voice-callable tools for storing and retrieving context
 from SuperMemory AI. Used for persistent memory across sessions.

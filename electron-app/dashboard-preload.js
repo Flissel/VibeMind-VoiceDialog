@@ -88,6 +88,26 @@ contextBridge.exposeInMainWorld('vibemind', {
   // Send message to Python backend
   sendToPython: (message) => ipcRenderer.send('to-python', message),
 
+  // ===== ENGINE LOG STREAM =====
+
+  // Listen for real-time engine log lines forwarded by main process
+  onEngineLog: (callback) => {
+    ipcRenderer.on('engine:log', (_, logLine) => {
+      callback(logLine);
+    });
+    return () => ipcRenderer.removeAllListeners('engine:log');
+  },
+
+  // ===== ENGINE PROGRESS STREAM =====
+
+  // Listen for structured progress data from run_engine.py (via docker-manager.js)
+  onEngineProgress: (callback) => {
+    ipcRenderer.on('engine:progress', (_, progressData) => {
+      callback(progressData);
+    });
+    return () => ipcRenderer.removeAllListeners('engine:progress');
+  },
+
   // ===== DASHBOARD CONTROL =====
 
   // Request to close/minimize dashboard

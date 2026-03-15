@@ -1,8 +1,8 @@
 """
 Vibemind Workspace Tools
 
-ElevenLabs client tools for Ideas, Projects, and Canvas operations.
-These tools are called directly by ElevenLabs agents via voice commands.
+Client tools for Ideas, Projects, and Canvas operations.
+These tools are called directly by voice agents via voice commands.
 
 Tool Categories:
 - Ideas: capture_idea, list_ideas, score_idea, get_idea
@@ -877,7 +877,7 @@ def delete_bubble_node(params: Dict[str, Any]) -> str:
 # TOOL REGISTRY
 # ==============================================================================
 
-# All tools that can be registered with ElevenLabs
+# All available tools
 WORKSPACE_TOOLS = {
     # Ideas
     "capture_idea": capture_idea,

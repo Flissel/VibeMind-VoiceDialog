@@ -171,6 +171,12 @@ body {
     box-shadow: none;
 }
 
+#voice-indicator.connecting {
+    background: #ffaa44;
+    box-shadow: 0 0 10px #ffaa44, 0 0 20px rgba(255, 170, 68, 0.5);
+    animation: pulse 1s infinite;
+}
+
 #voice-indicator.active {
     background: #44ff88;
     box-shadow: 0 0 10px #44ff88, 0 0 20px rgba(68, 255, 136, 0.5);

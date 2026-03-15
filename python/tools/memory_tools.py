@@ -297,7 +297,7 @@ async def get_command_suggestions(
 
 
 # =============================================================================
-# TOOL DEFINITIONS for ElevenLabs
+# TOOL DEFINITIONS
 # =============================================================================
 
 MEMORY_TOOLS = [

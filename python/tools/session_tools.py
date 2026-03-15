@@ -7,7 +7,7 @@ Tools for managing the voice conversation session including:
 - Graceful session ending
 - Session status checking
 
-These tools help handle ElevenLabs session timeouts gracefully by allowing
+These tools help handle voice session timeouts gracefully by allowing
 the user or agent to manage session state.
 """
 
@@ -36,7 +36,7 @@ _is_tool_running: bool = False
 _last_user_speech_time: float = 0.0
 TOOL_RUNNING_KEEPALIVE_BLOCK_SECONDS = 15  # Don't send keepalive within 15s of user speech
 
-# Configurable timeout (in seconds) - ElevenLabs default is ~10 minutes
+# Configurable timeout (in seconds) - default is ~10 minutes
 SESSION_TIMEOUT_SECONDS = int(os.getenv("VOICE_SESSION_TIMEOUT", 540))  # 9 minutes default (before 10 min limit)
 INACTIVITY_WARNING_SECONDS = int(os.getenv("VOICE_INACTIVITY_WARNING", 300))  # 5 minutes of inactivity
 
@@ -197,7 +197,7 @@ def request_session_restart(params: Dict[str, Any]) -> str:
     Voice triggers: "Restart the session", "Refresh voice", "Reset timer"
     
     This signals Electron to stop and restart the voice session,
-    which resets the ElevenLabs 10-minute session limit.
+    which resets the 10-minute session limit.
     
     Args (via params):
         reason: Optional reason for restart

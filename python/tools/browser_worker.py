@@ -4,7 +4,7 @@ VibeMind Browser Worker
 Playwright-based browser automation for searching images, fetching content,
 and other web operations requested by the AI voice assistant.
 
-Designed to be called from ElevenLabs client tools when user asks things like:
+Designed to be called from client tools when user asks things like:
 - "Find images for my cookbook cover"
 - "Search for pictures of mountains"
 - "Get some reference images for my project"
@@ -287,7 +287,7 @@ class BrowserWorker:
 
 
 # =============================================================================
-# TOOL FUNCTIONS (for ElevenLabs integration)
+# TOOL FUNCTIONS
 # =============================================================================
 
 # Global worker instance
@@ -396,7 +396,7 @@ def download_image_tool(params: Dict[str, Any]) -> str:
         return "Failed to download the image."
 
 
-# Tool registry for ElevenLabs
+# Tool registry
 BROWSER_TOOLS = {
     "search_images": search_images_tool,
     "download_image": download_image_tool,

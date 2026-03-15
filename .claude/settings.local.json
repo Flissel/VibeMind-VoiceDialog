@@ -132,7 +132,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git -C \"c:/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog\" submodule status)",
       "Bash(bash scripts/build-rowboat.sh)",
-      "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")"
+      "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "WebFetch(domain:developers.openai.com)"
     ],
     "deny": [],
     "ask": []
