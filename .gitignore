@@ -78,6 +78,7 @@ electron-app/rowboat-services.cjs
 
 # Claude Code worktrees and local settings
 .claude/worktrees/
+.worktrees/
 .claude/settings.local.json
 
 # Diagnostic reports
