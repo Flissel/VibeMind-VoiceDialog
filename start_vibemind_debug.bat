@@ -16,6 +16,13 @@ REM Kill any existing Electron processes early
 echo Cleaning up old Electron processes...
 taskkill /F /IM electron.exe 2>nul
 
+REM Kill stale Python processes holding camera/ports from previous crashes
+echo Cleaning up stale Python processes on eyeTerm ports...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8099" ^| findstr "LISTENING"') do (
+    echo Killing stale process on port 8099: PID %%a
+    taskkill /F /PID %%a 2>nul
+)
+
 REM ================================================
 REM Start MoireServer for advanced OCR (port 8766)
 REM WINDOWED MODE - for debugging

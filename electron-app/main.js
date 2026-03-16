@@ -28,6 +28,15 @@ const SweDesignManager = require('./swe-design-manager');
 // ClawPort Dashboard Integration
 const ClawPortManager = require('./clawport-manager');
 
+// Brain Dashboard Integration
+const BrainManager = require('./brain-manager');
+
+// Agent Farm Integration
+const AgentFarmManager = require('./agentfarm-manager');
+
+// eyeTerm Camera Preview Integration
+const EyeTermManager = require('./eyeterm-manager');
+
 // Enable remote debugging port for CDP (Chrome DevTools Protocol)
 // This allows external tools to connect and manipulate the renderer
 // Safety check: only set if app is available (not running as Node)
@@ -56,6 +65,15 @@ let sweDesignManager = null;
 // ClawPort Dashboard manager
 let clawportManager = null;
 
+// Brain Dashboard manager
+let brainManager = null;
+
+// Agent Farm manager
+let agentfarmManager = null;
+
+// eyeTerm camera preview manager
+let eyetermManager = null;
+
 // Pending Python response handlers (for request-response IPC pattern)
 const pendingPythonResponses = new Map();
 
@@ -70,8 +88,34 @@ try {
 }
 
 /**
+ * Read Claude Code OAuth token from ~/.claude/.credentials.json
+ * Returns the access token if valid, null otherwise.
+ * Claude Code CLI keeps this token fresh via its own refresh mechanism.
+ */
+function getClaudeCodeToken() {
+    const os = require('os');
+    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+    try {
+        if (!fs.existsSync(credPath)) return null;
+        const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+        const oauth = creds?.claudeAiOauth;
+        if (!oauth?.accessToken) return null;
+
+        // Check expiry (with 5 minute buffer)
+        if (oauth.expiresAt && oauth.expiresAt < Date.now() + 300000) {
+            console.log('[Main] Claude Code OAuth token expired — falling back to .env keys');
+            return null;
+        }
+
+        return oauth.accessToken;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Auto-configure Rowboat's ~/.rowboat/config/models.json from VibeMind .env
- * Only writes if no apiKey is configured yet (first-time setup).
+ * Priority: CLAUDE_CODE_OAUTH > ANTHROPIC_API_KEY > OPENROUTER > OPENAI
  */
 async function autoConfigureRowboatModels() {
     const os = require('os');
@@ -83,24 +127,43 @@ async function autoConfigureRowboatModels() {
             currentConfig = JSON.parse(raw);
         } catch { /* file doesn't exist yet — will create */ }
 
-        // Determine desired config from .env (Priority: ANTHROPIC > OPENROUTER > OPENAI)
+        // Determine desired config (Priority: CLAUDE_CODE > ANTHROPIC > OPENROUTER > OPENAI)
         let desiredConfig = null;
         let source = '';
 
-        const anthropicKey = process.env.ANTHROPIC_API_KEY;
-        if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
+        // 1. Claude Code Max OAuth token (highest priority)
+        const claudeCodeToken = getClaudeCodeToken();
+        if (claudeCodeToken) {
             desiredConfig = {
-                provider: { flavor: 'anthropic', apiKey: anthropicKey },
+                provider: { flavor: 'anthropic', apiKey: claudeCodeToken },
                 model: process.env.ROWBOAT_MODEL || 'claude-sonnet-4-20250514',
             };
-            source = 'Anthropic';
-        } else if (process.env.OPENROUTER_API_KEY) {
+            source = 'Claude Code Max OAuth';
+        }
+
+        // 2. Explicit Anthropic API key from .env
+        if (!desiredConfig) {
+            const anthropicKey = process.env.ANTHROPIC_API_KEY;
+            if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
+                desiredConfig = {
+                    provider: { flavor: 'anthropic', apiKey: anthropicKey },
+                    model: process.env.ROWBOAT_MODEL || 'claude-sonnet-4-20250514',
+                };
+                source = 'Anthropic';
+            }
+        }
+
+        // 3. OpenRouter
+        if (!desiredConfig && process.env.OPENROUTER_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
                 model: process.env.ROWBOAT_MODEL || 'anthropic/claude-sonnet-4',
             };
             source = 'OpenRouter';
-        } else if (process.env.OPENAI_API_KEY) {
+        }
+
+        // 4. OpenAI (fallback)
+        if (!desiredConfig && process.env.OPENAI_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openai', apiKey: process.env.OPENAI_API_KEY },
                 model: process.env.ROWBOAT_MODEL || 'gpt-4.1',
@@ -121,9 +184,9 @@ async function autoConfigureRowboatModels() {
 
         if (needsUpdate) {
             await fs.promises.writeFile(modelsPath, JSON.stringify(desiredConfig, null, 2));
-            console.log(`[Main] Rowboat auto-configured with ${source} from .env`);
+            console.log(`[Main] Rowboat auto-configured with ${source}`);
         } else {
-            console.log(`[Main] Rowboat models already match .env (${source}), skipping`);
+            console.log(`[Main] Rowboat models already match (${source}), skipping`);
         }
     } catch (e) {
         console.warn('[Main] Could not auto-configure Rowboat models:', e.message);
@@ -240,8 +303,12 @@ function startPythonBackend() {
             try {
                 const message = JSON.parse(line);
                 
-                // Log all Python messages for debugging
-                console.log('[Python→Electron]:', JSON.stringify(message).substring(0, 200));
+                // Log IPC as structured JSON so CDP Debug Agent can color it
+                // Emit in renderer context so CDP Debug Agent sees it
+                if (mainWindow?.webContents) {
+                    const j = JSON.stringify({__ipc_log: true, dir: '\u2192', type: message.type, preview: JSON.stringify(message).substring(0, 150)});
+                    mainWindow.webContents.executeJavaScript(`console.log(${JSON.stringify(j)})`).catch(() => {});
+                }
                 
                 // Log errors specifically
                 if (message.type === 'voice_error' || message.error) {
@@ -290,7 +357,6 @@ function startPythonBackend() {
                 // Forward to renderer
                 if (mainWindow && mainWindow.webContents) {
                     mainWindow.webContents.send('python-message', message);
-                    debugLog('Forwarded to renderer:', message.type);
                 } else {
                     console.warn('[Main] Cannot forward - mainWindow not ready');
                 }
@@ -301,15 +367,98 @@ function startPythonBackend() {
         }
     });
 
-    // Handle stderr from Python (errors/logs)
+    // Handle stderr from Python (space-colored JSON logs)
+    // Python's SpaceJsonFormatter emits one JSON object per line when piped.
+    // We parse and render with ANSI colors for terminal + forward to renderer.
+
+    const RST = '\x1b[0m';
+    const SPACE_ANSI = {
+        bubbles:      '\x1b[96m',  // Bright Cyan
+        ideas:        '\x1b[92m',  // Bright Green
+        coding:       '\x1b[93m',  // Bright Yellow
+        desktop:      '\x1b[95m',  // Bright Magenta
+        rowboat:      '\x1b[94m',  // Blue
+        research:     '\x1b[91m',  // Red
+        minibook:     '\x1b[97m',  // White Bold
+        schedule:     '\x1b[36m',  // Cyan
+        voice:        '\x1b[33m',  // Dark Yellow
+        orchestrator: '\x1b[35m',  // Dark Magenta
+        brain:        '\x1b[32m',  // Dark Green
+        system:       '\x1b[2m',   // Dim
+    };
+    const LEVEL_ANSI = {
+        DEBUG:    '\x1b[2m',       // Dim
+        INFO:     '',              // Default
+        WARNING:  '\x1b[93m',     // Yellow
+        ERROR:    '\x1b[91m',     // Red
+        CRITICAL: '\x1b[91;1m',   // Bold Red
+    };
+    const SPACE_TAGS = {
+        bubbles: '[BUBBLES]', ideas: '[IDEAS]', coding: '[CODING]',
+        desktop: '[DESKTOP]', rowboat: '[ROWBOAT]', research: '[RESEARCH]',
+        minibook: '[MINIBOOK]', schedule: '[SCHEDULE]', voice: '[VOICE]',
+        orchestrator: '[ORCH]', brain: '[BRAIN]', system: '[SYSTEM]',
+    };
+
+    let stderrBuffer = '';
     pythonProcess.stderr.on('data', (data) => {
-        const output = data.toString().trim();
-        if (output) {
-            console.error('[Python stderr]:', output);
+        stderrBuffer += data.toString();
+        const lines = stderrBuffer.split('\n');
+        stderrBuffer = lines.pop(); // keep incomplete last line in buffer
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            try {
+                const log = JSON.parse(trimmed);
+                if (log.log) {
+                    const tag = (SPACE_TAGS[log.s] || '[SYSTEM]').padEnd(10);
+                    const spaceColor = SPACE_ANSI[log.s] || SPACE_ANSI.system;
+                    const levelColor = LEVEL_ANSI[log.l] || '';
+                    const levelPad = (log.l || '').padEnd(5);
+                    const dimTs = '\x1b[2m';
+
+                    const colored = `${spaceColor}${tag}${RST} ${levelColor}${levelPad}${RST} ${dimTs}[${log.t}]${RST} ${log.m}`;
+
+                    if (log.l === 'ERROR' || log.l === 'CRITICAL') {
+                        process.stderr.write(colored + '\n');
+                    } else {
+                        process.stdout.write(colored + '\n');
+                    }
+
+                    // Forward to renderer for optional in-app log panel
+                    if (mainWindow?.webContents) {
+                        mainWindow.webContents.send('python-log', log);
+                    }
+                    // Emit in renderer context so CDP Debug Agent sees it
+                    if (mainWindow?.webContents) {
+                        const j = JSON.stringify({__space_log: true, ...log});
+                        mainWindow.webContents.executeJavaScript(
+                            `console.log(${JSON.stringify(j)})`
+                        ).catch(() => {});
+                    }
+                    continue;
+                }
+            } catch (e) {
+                // Not JSON — fall through
+            }
+            // Plain text fallback — print to terminal AND emit in renderer
+            process.stdout.write(`[Python] ${trimmed}\n`);
+            if (mainWindow?.webContents) {
+                mainWindow.webContents.executeJavaScript(
+                    `console.log('[Python stderr]: ' + ${JSON.stringify(trimmed)})`
+                ).catch(() => {});
+            }
         }
     });
 
     pythonProcess.on('close', (code) => {
+        // Flush remaining stderr buffer
+        if (stderrBuffer.trim()) {
+            console.error('[Python stderr]:', stderrBuffer.trim());
+        }
+        stderrBuffer = '';
         console.log('[Main] Python process exited with code:', code);
         if (code !== 0) {
             console.error('[Main] Python crashed! Check the errors above.');
@@ -325,7 +474,11 @@ function startPythonBackend() {
 function sendToPython(message) {
     if (pythonProcess && pythonProcess.stdin) {
         const json = JSON.stringify(message);
-        console.log('[Electron→Python]:', json.substring(0, 200));
+        // Emit in renderer context so CDP Debug Agent sees it
+        if (mainWindow?.webContents) {
+            const j = JSON.stringify({__ipc_log: true, dir: '\u2190', type: message.type, preview: json.substring(0, 150)});
+            mainWindow.webContents.executeJavaScript(`console.log(${JSON.stringify(j)})`).catch(() => {});
+        }
         pythonProcess.stdin.write(json + '\n');
     } else {
         console.error('[Main] Cannot send to Python - process not running');
@@ -483,6 +636,49 @@ function readREProjectSummary(projectDir, folderName) {
         } catch { /* ignore */ }
     }
 
+    // Fallback 1: Read epics.json if user_stories.json was missing or empty
+    if (!userStoriesCount) {
+        const epicsPath = path.join(projectDir, 'user_stories', 'epics', 'epics.json');
+        if (fs.existsSync(epicsPath)) {
+            try {
+                const epics = JSON.parse(fs.readFileSync(epicsPath, 'utf-8'));
+                if (Array.isArray(epics)) {
+                    const allStoryIds = new Set();
+                    const allReqIds = new Set();
+                    for (const epic of epics) {
+                        if (Array.isArray(epic.user_stories)) {
+                            for (const sid of epic.user_stories) allStoryIds.add(sid);
+                        }
+                        if (Array.isArray(epic.parent_requirements)) {
+                            for (const rid of epic.parent_requirements) allReqIds.add(rid);
+                        }
+                    }
+                    userStoriesCount = allStoryIds.size;
+                    requirementsCount = allReqIds.size || userStoriesCount;
+                }
+            } catch { /* ignore */ }
+        }
+    }
+
+    // Fallback 2: Read content_analysis.json if both user_stories.json and epics.json missing
+    if (!userStoriesCount) {
+        const contentAnalysisPath = path.join(projectDir, 'content_analysis.json');
+        if (fs.existsSync(contentAnalysisPath)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(contentAnalysisPath, 'utf-8'));
+                const usSummary = data.artifact_summaries?.user_stories || {};
+                userStoriesCount = usSummary.count || 0;
+                // Extract unique requirement IDs from items
+                const items = usSummary.items || [];
+                const reqIds = new Set();
+                for (const item of items) {
+                    if (item.parent_requirement_id) reqIds.add(item.parent_requirement_id);
+                }
+                requirementsCount = reqIds.size || userStoriesCount;
+            } catch { /* ignore */ }
+        }
+    }
+
     const taskListPath = path.join(projectDir, 'tasks', 'task_list.json');
     if (fs.existsSync(taskListPath)) {
         try {
@@ -610,6 +806,53 @@ function readREProjectDetail(projectDir) {
         } catch { /* ignore */ }
     }
 
+    // Read epics data
+    let epicsList = [];
+    const epicsPath = path.join(projectDir, 'user_stories', 'epics', 'epics.json');
+    if (fs.existsSync(epicsPath)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(epicsPath, 'utf-8'));
+            if (Array.isArray(data)) {
+                epicsList = data.map((e) => ({
+                    id: e.id || '',
+                    title: e.title || '',
+                    description: e.description || '',
+                    status: e.status || 'draft',
+                    priority: e.priority || '',
+                    story_points: e.story_points || 0,
+                    user_stories: e.user_stories || [],
+                    parent_requirements: e.parent_requirements || [],
+                    acceptance_criteria: e.acceptance_criteria || [],
+                }));
+            }
+        } catch { /* ignore */ }
+    }
+
+    // Read pipeline manifest for progress
+    let pipelineStages = [];
+    let pipelineSummary = {};
+    const pipelinePath = path.join(projectDir, 'pipeline_manifest.json');
+    if (fs.existsSync(pipelinePath)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(pipelinePath, 'utf-8'));
+            pipelineSummary = {
+                total_stages: (data.stages || []).length,
+                completed_stages: (data.stages || []).filter((s) => s.status === 'completed').length,
+                total_cost_usd: data.total_cost_usd || 0,
+                total_duration_ms: data.total_duration_ms || 0,
+                started_at: data.started_at || '',
+                completed_at: data.completed_at || '',
+            };
+            pipelineStages = (data.stages || []).map((s) => ({
+                name: s.name || '',
+                status: s.status || '',
+                duration_ms: s.duration_ms || 0,
+                cost_usd: s.cost_usd || 0,
+                llm_calls: s.llm_calls || 0,
+            }));
+        } catch { /* ignore */ }
+    }
+
     return {
         ...summary,
         tech_stack_full: techStackFull,
@@ -617,6 +860,9 @@ function readREProjectDetail(projectDir) {
         quality_issues_list: qualityIssuesList,
         master_document_excerpt: masterDocExcerpt,
         feature_breakdown: featureBreakdown,
+        epics_list: epicsList,
+        pipeline_stages: pipelineStages,
+        pipeline_summary: pipelineSummary,
     };
 }
 
@@ -1336,16 +1582,12 @@ function setupIpcHandlers() {
     // Dashboard View Control
     ipcMain.on('show-dashboard', () => {
         if (dashboardManager) {
-            // Mutual exclusion: hide rowboat + swedesign + clawport when showing dashboard
-            if (rowboatManager && rowboatManager.getIsVisible()) {
-                rowboatManager.hide();
-            }
-            if (sweDesignManager && sweDesignManager.getIsVisible()) {
-                sweDesignManager.hide();
-            }
-            if (clawportManager && clawportManager.getIsVisible()) {
-                clawportManager.hide();
-            }
+            // Mutual exclusion: hide all other BrowserViews when showing dashboard
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             dashboardManager.show();
             console.log('[Main] Dashboard shown');
         }
@@ -1368,16 +1610,12 @@ function setupIpcHandlers() {
 
     ipcMain.on('show-rowboat', () => {
         if (rowboatManager) {
-            // Mutual exclusion: hide dashboard + swedesign + clawport when showing rowboat
-            if (dashboardManager && dashboardManager.getIsVisible()) {
-                dashboardManager.hide();
-            }
-            if (sweDesignManager && sweDesignManager.getIsVisible()) {
-                sweDesignManager.hide();
-            }
-            if (clawportManager && clawportManager.getIsVisible()) {
-                clawportManager.hide();
-            }
+            // Mutual exclusion: hide all other BrowserViews when showing rowboat
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             rowboatManager.show();
             console.log('[Main] Rowboat shown');
         }
@@ -1400,16 +1638,12 @@ function setupIpcHandlers() {
 
     ipcMain.on('show-swedesign', async () => {
         if (sweDesignManager) {
-            // Mutual exclusion: hide dashboard + rowboat + clawport when showing swedesign
-            if (dashboardManager && dashboardManager.getIsVisible()) {
-                dashboardManager.hide();
-            }
-            if (rowboatManager && rowboatManager.getIsVisible()) {
-                rowboatManager.hide();
-            }
-            if (clawportManager && clawportManager.getIsVisible()) {
-                clawportManager.hide();
-            }
+            // Mutual exclusion: hide all other BrowserViews when showing swedesign
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             await sweDesignManager.show();
             console.log('[Main] SWE Design shown');
         }
@@ -1436,6 +1670,8 @@ function setupIpcHandlers() {
             if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
             if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
             if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             clawportManager.show();
             console.log('[Main] ClawPort shown');
         }
@@ -1450,6 +1686,159 @@ function setupIpcHandlers() {
 
     ipcMain.handle('is-clawport-visible', () => {
         return clawportManager ? clawportManager.getIsVisible() : false;
+    });
+
+    // ========================================
+    // BRAIN DASHBOARD VIEW CONTROL
+    // ========================================
+
+    ipcMain.on('show-brain', async () => {
+        if (brainManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            await brainManager.show();
+            console.log('[Main] Brain Dashboard shown');
+        }
+    });
+
+    ipcMain.on('hide-brain', () => {
+        if (brainManager) {
+            brainManager.hide();
+            console.log('[Main] Brain Dashboard hidden');
+        }
+    });
+
+    ipcMain.handle('is-brain-visible', () => {
+        return brainManager ? brainManager.getIsVisible() : false;
+    });
+
+    // ========================================
+    // AGENT FARM VIEW CONTROL
+    // ========================================
+
+    ipcMain.on('show-agentfarm', () => {
+        if (agentfarmManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            agentfarmManager.show();
+            console.log('[Main] Agent Farm shown');
+        }
+    });
+
+    ipcMain.on('hide-agentfarm', () => {
+        if (agentfarmManager) {
+            agentfarmManager.hide();
+            console.log('[Main] Agent Farm hidden');
+        }
+    });
+
+    ipcMain.handle('is-agentfarm-visible', () => {
+        return agentfarmManager ? agentfarmManager.getIsVisible() : false;
+    });
+
+    // ── Agent Farm IPC → Python handlers ──
+
+    ipcMain.handle('agentfarm:get-projects', async (_event, { statusFilter, limit }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_projects', status_filter: statusFilter, limit }, 'generated_projects_list');
+        } catch (e) {
+            return { type: 'generated_projects_list', projects: [], error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:get-project-status', async (_event, { projectId, jobId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_generation_status', project_id: projectId, job_id: jobId }, 'generation_status');
+        } catch (e) {
+            return { type: 'generation_status', error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-status', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_status' }, 'n8n_status_result');
+        } catch (e) {
+            return { online: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-list', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_list' }, 'n8n_list_result');
+        } catch (e) {
+            return { workflows: [], error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-generate', async (_event, { description }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_generate', description }, 'n8n_generate_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-activate', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_activate', workflow_id: workflowId }, 'n8n_activate_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-deactivate', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_deactivate', workflow_id: workflowId }, 'n8n_deactivate_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-delete', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_delete', workflow_id: workflowId }, 'n8n_delete_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    // ========================================
+    // EYETERM CAMERA PREVIEW CONTROL
+    // ========================================
+
+    ipcMain.on('eyeterm:toggle', () => {
+        if (eyetermManager) {
+            const visible = eyetermManager.toggle();
+            console.log('[Main] eyeTerm camera preview:', visible ? 'shown' : 'hidden');
+        }
+    });
+
+    ipcMain.handle('eyeterm:get-status', () => {
+        return eyetermManager ? eyetermManager.getStatus() : { visible: false };
+    });
+
+    ipcMain.handle('eyeterm:toggle-cursor', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'eyeterm_toggle_cursor' }, 'eyeterm_cursor_status');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('eyeterm:calibrate', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'eyeterm_calibrate' }, 'eyeterm_calibrate_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     });
 
     // ── ClawPort IPC → Python handlers ──
@@ -1502,7 +1891,38 @@ function setupIpcHandlers() {
         }
     });
 
+    ipcMain.handle('clawport:get-projects', async (_event, { statusFilter, limit }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'get_generated_projects', status_filter: statusFilter, limit: limit || 20 },
+                'generated_projects_list'
+            );
+        } catch (e) {
+            return { type: 'generated_projects_list', projects: [] };
+        }
+    });
+
+    ipcMain.handle('clawport:get-generation-status', async (_event, { projectId, jobId }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'get_generation_status', project_id: projectId, job_id: jobId },
+                'generation_status'
+            );
+        } catch (e) {
+            return { type: 'generation_status', error: e.message };
+        }
+    });
+
     ipcMain.handle('clawport:chat-text-input', async (_event, { text }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'chat_text_input', text }, 'chat_response', 30000);
+        } catch (e) {
+            return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };
+        }
+    });
+
+    // Game console chat overlay (renderer 3D view → same pipeline as voice)
+    ipcMain.handle('renderer:chat-text-input', async (_event, { text }) => {
         try {
             return await sendToPythonAndWait({ type: 'chat_text_input', text }, 'chat_response', 30000);
         } catch (e) {
@@ -1515,6 +1935,56 @@ function setupIpcHandlers() {
             return await sendToPythonAndWait({ type: 'get_conversation_history', limit }, 'conversation_history');
         } catch (e) {
             return { type: 'conversation_history', messages: [] };
+        }
+    });
+
+    // ── n8n Workflow Builder ──
+
+    ipcMain.handle('clawport:n8n-status', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_status' }, 'n8n_status_result', 10000);
+        } catch (e) {
+            return { online: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:n8n-list', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_list' }, 'n8n_list_result', 10000);
+        } catch (e) {
+            return { workflows: [] };
+        }
+    });
+
+    ipcMain.handle('clawport:n8n-generate', async (_event, { description }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_generate', description }, 'n8n_generate_result', 60000);
+        } catch (e) {
+            return { success: false, message: `Timeout: ${e.message}` };
+        }
+    });
+
+    ipcMain.handle('clawport:n8n-activate', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_activate', workflow_id: workflowId }, 'n8n_activate_result', 10000);
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:n8n-deactivate', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_deactivate', workflow_id: workflowId }, 'n8n_deactivate_result', 10000);
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:n8n-delete', async (_event, { workflowId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_delete', workflow_id: workflowId }, 'n8n_delete_result', 10000);
+        } catch (e) {
+            return { success: false, message: e.message };
         }
     });
 
@@ -1644,6 +2114,12 @@ function registerShortcuts() {
         }
         sendToPython({ type: 'navigate_to_space', space: 'desktop' });
     });
+
+    // Ctrl+Shift+C: Trigger eyeTerm calibration
+    globalShortcut.register('CommandOrControl+Shift+C', () => {
+        console.log('[Main] Shortcut: eyeTerm Calibration');
+        sendToPython({ type: 'eyeterm_calibrate' });
+    });
 }
 
 // ============================================================================
@@ -1684,6 +2160,41 @@ app.whenReady().then(async () => {
 
     // Initialize ClawPort Dashboard Manager
     clawportManager = new ClawPortManager(mainWindow);
+
+    // Initialize Brain Dashboard Manager
+    brainManager = new BrainManager(mainWindow);
+
+    // Initialize Agent Farm Manager
+    agentfarmManager = new AgentFarmManager(mainWindow);
+
+    // Initialize eyeTerm Camera Preview Manager
+    eyetermManager = new EyeTermManager(mainWindow);
+
+    // ========================================
+    // N8N DOCKER AUTO-START
+    // ========================================
+    // Start n8n container in background if N8N_ENABLED=true
+    if (process.env.N8N_ENABLED === 'true') {
+        const n8nCompose = path.join(__dirname, '..', 'docker-compose.n8n.yml');
+        if (fs.existsSync(n8nCompose)) {
+            console.log('[Main] Starting n8n Docker container...');
+            const { exec: execCb } = require('child_process');
+            execCb(
+                `docker compose -f "${n8nCompose}" up -d`,
+                { cwd: path.join(__dirname, '..') },
+                (err, stdout, stderr) => {
+                    if (err) {
+                        console.warn('[Main] n8n Docker start failed:', err.message);
+                    } else {
+                        console.log('[Main] n8n Docker started successfully');
+                        if (stdout.trim()) console.log('[Main] n8n:', stdout.trim());
+                    }
+                }
+            );
+        } else {
+            console.warn('[Main] docker-compose.n8n.yml not found, skipping n8n auto-start');
+        }
+    }
 
     // ========================================
     // ROWBOAT @x/core SERVICES INITIALIZATION
@@ -1778,9 +2289,14 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    // Kill Python process
-    if (pythonProcess) {
-        pythonProcess.kill();
+    // Signal Python to shut down gracefully by closing stdin (triggers EOF → cleanup)
+    if (pythonProcess && pythonProcess.stdin && !pythonProcess.stdin.destroyed) {
+        try {
+            pythonProcess.stdin.end();
+            console.log('[Main] Closed Python stdin (graceful shutdown signal)');
+        } catch (e) {
+            console.warn('[Main] stdin.end() error:', e.message);
+        }
     }
 
     // Unregister shortcuts
@@ -1795,9 +2311,16 @@ let dockerCleanupDone = false;
 app.on('before-quit', (event) => {
     if (dockerManager && !dockerCleanupDone) {
         event.preventDefault();
+        // Docker cleanup with 5s timeout to prevent hanging
+        const dockerTimeout = setTimeout(() => {
+            console.warn('[Main] Docker cleanup timed out (5s), forcing quit');
+            dockerCleanupDone = true;
+            app.quit();
+        }, 5000);
         dockerManager.stopAllContainers()
             .catch(e => console.warn('[Main] Docker cleanup error:', e.message))
             .finally(() => {
+                clearTimeout(dockerTimeout);
                 dockerCleanupDone = true;
                 app.quit();
             });
@@ -1806,8 +2329,24 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
+    // Safety net: if Python hasn't exited 15s after stdin close, force kill
     if (pythonProcess) {
-        pythonProcess.kill();
+        const killTimer = setTimeout(() => {
+            if (pythonProcess) {
+                console.warn('[Main] Python did not exit within 15s, force killing');
+                try { pythonProcess.kill(); } catch (e) { /* ignore */ }
+            }
+        }, 15000);
+
+        pythonProcess.on('close', () => {
+            clearTimeout(killTimer);
+            console.log('[Main] Python exited cleanly');
+        });
+
+        // If stdin wasn't closed yet (e.g. quit without window-all-closed), close it now
+        if (pythonProcess.stdin && !pythonProcess.stdin.destroyed) {
+            try { pythonProcess.stdin.end(); } catch (e) { /* ignore */ }
+        }
     }
 
     // Stop Rowboat watchers (guard: may never have been started)
@@ -1818,20 +2357,11 @@ app.on('will-quit', () => {
         console.log('[Rowboat] Watchers stopped');
     }
 
-    // Destroy Rowboat BrowserView
-    if (rowboatManager) {
-        rowboatManager.destroy();
-    }
-
-    // Destroy SWE Design BrowserView
-    if (sweDesignManager) {
-        sweDesignManager.destroy();
-    }
-
-    // Destroy ClawPort Dashboard BrowserView
-    if (clawportManager) {
-        clawportManager.destroy();
-    }
+    // Destroy BrowserView managers
+    if (rowboatManager) rowboatManager.destroy();
+    if (sweDesignManager) sweDesignManager.destroy();
+    if (clawportManager) clawportManager.destroy();
+    if (brainManager) brainManager.destroy();
 
     globalShortcut.unregisterAll();
 });

@@ -39,9 +39,11 @@ try:
         # Debug: log key env vars
         force_sync = os.getenv("FORCE_SYNC_MODE", "false")
         use_v2 = os.getenv("USE_VOICE_BRIDGE_V2", "false")
-        print(f"[Python DEBUG] .env loaded: FORCE_SYNC_MODE={force_sync}, USE_VOICE_BRIDGE_V2={use_v2}", file=sys.stderr)
+        # Log before SpaceLogger is set up — emit JSON so main.js can parse it
+        import json as _j
+        print(_j.dumps({"log":True,"s":"system","l":"DEBUG","t":"","m":f".env loaded: FORCE_SYNC_MODE={force_sync}, USE_VOICE_BRIDGE_V2={use_v2}","n":"electron_backend"}), file=sys.stderr)
 except ImportError:
-    print("[Python DEBUG] dotenv not installed, using system env vars", file=sys.stderr)
+    pass  # dotenv not installed — system env vars used
 
 # Try to import requests for HTTP communication with Coding Engine
 try:
@@ -63,10 +65,16 @@ _bubble_id_map: Dict[str, int] = {}  # db_uuid -> local_id
 # Debug flag
 DEBUG = True
 
+# Global shutdown event — daemon threads check this to exit loops gracefully
+_shutdown_event = threading.Event()
+
+# Module logger — auto-detected as "system" space by SpaceLogger
+_logger = logging.getLogger(__name__)
+
 def debug_log(msg: str):
-    """Log debug message to stderr (visible in Electron terminal)."""
+    """Log debug message via SpaceLogger (colored in terminal)."""
     if DEBUG:
-        print(f"[Python DEBUG] {msg}", file=sys.stderr, flush=True)
+        _logger.debug(msg)
 
 
 def get_current_bubble_id() -> Optional[int]:
@@ -95,8 +103,10 @@ def get_backend() -> Optional['ElectronBackend']:
 # ==============================================================================
 # LOGGING SETUP
 # ==============================================================================
-# Suppress logging to stderr (would interfere with Electron)
-logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+# Space-colored logging — single handler on root logger, outputs JSON when piped by Electron
+from swarm.logging.space_logger import setup_space_logging
+setup_space_logging()
+
 logger = logging.getLogger(__name__)
 
 
@@ -265,6 +275,8 @@ class ElectronBackend:
                 self.coding_engine_runner = CodingEngineRunner(
                     coding_engine_path=self.coding_engine_path,
                     on_status_update=self._on_generation_status_update,
+                    on_issue_detected=self._on_issue_detected,
+                    on_quality_update=self._on_quality_summary_update,
                 )
                 # Connect coding tools to our IPC and runner
                 if set_coding_sender:
@@ -332,10 +344,15 @@ class ElectronBackend:
             debug_log("Navigation tools connected to Electron IPC")
             logger.info("Navigation tools connected to Electron IPC")
 
-        # Load bubbles from database
-        self._load_bubbles_from_db()
-        
-        debug_log(f"ElectronBackend initialized with {len(self.bubbles)} bubbles")
+        # Load bubbles from database in background (sends node_added IPC per bubble)
+        import threading
+        threading.Thread(
+            target=self._load_bubbles_from_db,
+            daemon=True,
+            name="bubble-loader"
+        ).start()
+
+        debug_log("ElectronBackend initialized (bubbles loading in background)")
 
         # No default bubbles - bubbles are created via voice commands
         # and stored in the database
@@ -387,7 +404,7 @@ class ElectronBackend:
                 time.sleep(3)
 
                 first_run = True
-                while True:
+                while not _shutdown_event.is_set():
                     try:
                         from spaces.rowboat.tools.roarboot_client import get_roarboot_client
                         client = get_roarboot_client()
@@ -457,7 +474,8 @@ class ElectronBackend:
                         debug_log(f"Roarboot: health check error: {e}")
 
                     # Wait before next check (shorter on first run for faster startup)
-                    time.sleep(10 if first_run else 60)
+                    # Uses _shutdown_event.wait() so thread exits promptly on shutdown
+                    _shutdown_event.wait(10 if first_run else 60)
                     first_run = False
 
             except ImportError as e:
@@ -482,12 +500,45 @@ class ElectronBackend:
         self._automation_ui_proc = None
         def _autostart_automation_ui():
             import time
-            time.sleep(2)  # Let other components init first
+            print("[Automation_ui] Autostart thread: sleeping 2s...", file=sys.stderr, flush=True)
+            time.sleep(2)
             try:
-                self._start_automation_ui_backend()
+                print("[Automation_ui] Calling _start_automation_ui_backend()...", file=sys.stderr, flush=True)
+                result = self._start_automation_ui_backend()
+                print(f"[Automation_ui] _start_automation_ui_backend returned: {result}", file=sys.stderr, flush=True)
             except Exception as e:
+                import traceback
+                print(f"[Automation_ui] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
+                print(traceback.format_exc(), file=sys.stderr, flush=True)
                 debug_log(f"Automation_ui: auto-start error: {e}")
         threading.Thread(target=_autostart_automation_ui, daemon=True, name="automation-ui-autostart").start()
+
+        # eyeTerm gaze/cursor controller (optional — needs camera + mediapipe)
+        self._eyeterm = None
+        _eyeterm_env = os.environ.get("EYETERM_ENABLED", "false")
+        # Log via debug_log (structured JSON) + plain stderr for double visibility
+        debug_log(f"eyeTerm: EYETERM_ENABLED={_eyeterm_env!r}")
+        print(f"[eyeTerm] EYETERM_ENABLED={_eyeterm_env!r}", file=sys.stderr, flush=True)
+        if _eyeterm_env.lower() == "true":
+            def _autostart_eyeterm():
+                import time
+                # Short delay to let Electron window settle — eyeTerm is
+                # independent of Automation_ui and doesn't need to wait for it.
+                print("[eyeTerm] Starting in 5s...", file=sys.stderr, flush=True)
+                time.sleep(5)
+                try:
+                    print("[eyeTerm] Calling _start_eyeterm()...", file=sys.stderr, flush=True)
+                    self._start_eyeterm()
+                    print("[eyeTerm] _start_eyeterm() completed OK", file=sys.stderr, flush=True)
+                except Exception as e:
+                    import traceback
+                    print(f"[eyeTerm] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
+                    print(traceback.format_exc(), file=sys.stderr, flush=True)
+            threading.Thread(target=_autostart_eyeterm, daemon=True, name="eyeterm-autostart").start()
+            debug_log("eyeTerm: autostart thread launched")
+        else:
+            debug_log("eyeTerm: DISABLED (EYETERM_ENABLED != true)")
+            print("[eyeTerm] DISABLED (EYETERM_ENABLED != true)", file=sys.stderr, flush=True)
 
         # SWE Design server lifecycle is now handled by Electron-side embed.js
         # (swe-design-manager.js → requirements_engineer/electron/embed.js)
@@ -501,15 +552,21 @@ class ElectronBackend:
             self.send_message({"type": "automation_ui_status", "status": "running"})
             return True
 
+        print("[Automation_ui] _start_automation_ui_backend called", file=sys.stderr, flush=True)
         debug_log("Starting Automation_ui backend...")
         try:
             server_path = Path(__file__).parent / "spaces" / "desktop" / "Automation_ui" / "backend" / "server.py"
+            print(f"[Automation_ui] server_path={server_path}, exists={server_path.exists()}", file=sys.stderr, flush=True)
             if server_path.exists():
                 # Build env: inherit current env + set SQLite DB + non-debug mode
                 env = os.environ.copy()
                 db_path = server_path.parent / "automation_ui.db"
                 env["DATABASE_URL"] = f"sqlite:///{db_path}"
                 env["DEBUG"] = "False"  # Avoid uvicorn reload mode in subprocess
+                env["PYTHONIOENCODING"] = "utf-8"  # Emoji log messages on Windows
+                # Ensure Redis URL is set (Automation_ui defaults to 6381 otherwise)
+                if "REDIS_URL" not in env:
+                    env["REDIS_URL"] = "redis://localhost:6379/0"
                 self._automation_ui_proc = subprocess.Popen(
                     [sys.executable, str(server_path)],
                     cwd=str(server_path.parent.parent),
@@ -519,6 +576,46 @@ class ElectronBackend:
                 )
                 debug_log(f"Automation_ui backend started (PID: {self._automation_ui_proc.pid})")
                 self.send_message({"type": "automation_ui_status", "status": "starting"})
+
+                # Drain stderr in background to prevent pipe buffer deadlock
+                # (Windows pipe buffer is ~4KB — uvicorn fills it instantly)
+                self._automation_ui_stderr_lines = []
+                def _drain_stderr():
+                    proc = self._automation_ui_proc
+                    if not proc or not proc.stderr:
+                        return
+                    for line in iter(proc.stderr.readline, b''):
+                        decoded = line.decode("utf-8", errors="replace").rstrip()
+                        if decoded:
+                            self._automation_ui_stderr_lines.append(decoded)
+                            # Keep last 50 lines for debugging
+                            if len(self._automation_ui_stderr_lines) > 50:
+                                self._automation_ui_stderr_lines.pop(0)
+                threading.Thread(target=_drain_stderr, daemon=True, name="automation-ui-stderr").start()
+
+                # Wait for health check in background, then notify renderer
+                def _wait_for_health():
+                    import time
+                    import httpx
+                    for attempt in range(15):
+                        time.sleep(2)
+                        try:
+                            r = httpx.get("http://localhost:8007/api/health/health", timeout=2)
+                            if r.status_code == 200:
+                                debug_log("Automation_ui backend is healthy")
+                                self.send_message({"type": "automation_ui_status", "status": "running"})
+                                return
+                        except Exception:
+                            pass
+                        # Check if process died
+                        if self._automation_ui_proc and self._automation_ui_proc.poll() is not None:
+                            stderr_tail = "\n".join(self._automation_ui_stderr_lines[-5:])
+                            debug_log(f"Automation_ui crashed (exit {self._automation_ui_proc.returncode}): {stderr_tail}")
+                            self.send_message({"type": "automation_ui_status", "status": "error", "error": f"Process exited: {stderr_tail[:200]}"})
+                            return
+                    debug_log("Automation_ui health check timed out after 30s")
+                    debug_log(f"Automation_ui stderr tail: {chr(10).join(self._automation_ui_stderr_lines[-5:])}")
+                threading.Thread(target=_wait_for_health, daemon=True, name="automation-ui-health").start()
                 return True
             else:
                 debug_log(f"Automation_ui server.py not found at {server_path}")
@@ -529,6 +626,36 @@ class ElectronBackend:
             self.send_message({"type": "automation_ui_status", "status": "error", "error": str(e)})
             return False
 
+
+    def _start_eyeterm(self):
+        """Start eyeTerm headless gaze/cursor controller."""
+        try:
+            debug_log("eyeTerm: importing EyeTermHeadless...")
+            print("[eyeTerm] Importing EyeTermHeadless...", file=sys.stderr, flush=True)
+            from spaces.desktop.eyeterm.headless import EyeTermHeadless
+            debug_log("eyeTerm: import OK, creating instance")
+            print("[eyeTerm] Import OK, creating instance...", file=sys.stderr, flush=True)
+
+            def _on_voice_command(transcript, gaze_context):
+                """Forward eyeTerm voice commands to the Moire Voice chat."""
+                debug_log(f"eyeTerm voice command: {transcript[:80]}")
+                self._handle_chat_text_input({"text": transcript})
+
+            self._eyeterm = EyeTermHeadless(
+                on_voice_command=_on_voice_command,
+                broadcast_fn=self.send_message,
+            )
+            print("[eyeTerm] Calling .start()...", file=sys.stderr, flush=True)
+            self._eyeterm.start()
+            debug_log("eyeTerm: STARTED OK — MJPEG on port 8099")
+            print("[eyeTerm] STARTED OK — MJPEG on port 8099", file=sys.stderr, flush=True)
+            self.send_message({"type": "eyeterm_status", "status": "running"})
+        except ImportError as e:
+            print(f"[eyeTerm] IMPORT ERROR: {e}", file=sys.stderr, flush=True)
+        except Exception as e:
+            import traceback
+            print(f"[eyeTerm] START ERROR: {e}", file=sys.stderr, flush=True)
+            print(traceback.format_exc(), file=sys.stderr, flush=True)
 
     def _check_collision(self, new_pos: Dict[str, float], min_distance: float = 1.2) -> bool:
         """Check if a position collides with existing bubbles."""
@@ -652,11 +779,9 @@ class ElectronBackend:
                 self.next_bubble_id += 1
 
             logger.info(f"Loaded {len(ideas)} bubbles from database")
-            print(f"[Python] Loaded {len(ideas)} bubbles from database", file=sys.stderr)
 
         except Exception as e:
             logger.warning(f"Failed to load bubbles from database: {e}")
-            print(f"[Python] Failed to load bubbles: {e}", file=sys.stderr)
 
     def _generate_vnc_url(self, project_id: str, vnc_port: int) -> str:
         """
@@ -1810,6 +1935,90 @@ class ElectronBackend:
         else:
             debug_log("stop_voice_impl: new session active — skipping voice_stopped")
 
+    async def cleanup(self):
+        """Coordinated shutdown of all services. Budget: 12s total."""
+        debug_log("cleanup() starting...")
+
+        # Signal all daemon threads to stop their loops
+        _shutdown_event.set()
+
+        # 1. Stop voice session + VoiceBridgeV2 (5s budget)
+        try:
+            await asyncio.wait_for(self._stop_voice_impl(), timeout=5.0)
+            debug_log("cleanup: voice stopped")
+        except asyncio.TimeoutError:
+            debug_log("cleanup: voice stop timed out (5s)")
+        except Exception as e:
+            debug_log(f"cleanup: voice stop error: {e}")
+
+        # 2. Stop Automation UI subprocess (3s budget)
+        if hasattr(self, '_automation_ui_proc') and self._automation_ui_proc:
+            try:
+                self._automation_ui_proc.terminate()
+                self._automation_ui_proc.wait(timeout=3)
+                debug_log("cleanup: automation_ui stopped")
+            except subprocess.TimeoutExpired:
+                try:
+                    self._automation_ui_proc.kill()
+                    debug_log("cleanup: automation_ui force-killed")
+                except Exception:
+                    pass
+            except Exception as e:
+                debug_log(f"cleanup: automation_ui stop error: {e}")
+
+        # 2b. Stop eyeTerm (camera + MJPEG stream on port 8099)
+        for attr in ('_eyeterm', '_eyeterm_app'):
+            et = getattr(self, attr, None)
+            if et:
+                try:
+                    et.stop()
+                    debug_log(f"cleanup: {attr} stopped")
+                except Exception as e:
+                    debug_log(f"cleanup: {attr} stop error: {e}")
+                setattr(self, attr, None)
+
+        # 3. Stop Rowboat update checker
+        if hasattr(self, '_rowboat_update_checker'):
+            try:
+                self._rowboat_update_checker.stop()
+                debug_log("cleanup: update checker stopped")
+            except Exception:
+                pass
+
+        # 4. Close MongoDB publisher connection
+        try:
+            from publishing import get_ideas_publisher
+            pub = get_ideas_publisher()
+            if hasattr(pub, 'close'):
+                pub.close()
+                debug_log("cleanup: MongoDB publisher closed")
+        except Exception:
+            pass
+
+        # 5. Force reset EventBus (closes Redis)
+        try:
+            from swarm.event_bus import force_reset_event_bus
+            force_reset_event_bus()
+            debug_log("cleanup: EventBus reset")
+        except Exception as e:
+            debug_log(f"cleanup: EventBus reset error: {e}")
+
+        # 6. Cancel all remaining asyncio tasks (2s budget)
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if pending:
+            debug_log(f"cleanup: cancelling {len(pending)} remaining tasks...")
+            for task in pending:
+                task.cancel()
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending, return_exceptions=True),
+                    timeout=2.0,
+                )
+            except asyncio.TimeoutError:
+                debug_log("cleanup: task cancellation timed out (2s)")
+
+        debug_log("cleanup() complete")
+
     def _handle_user_transcript(self, text: str):
         """Handle transcribed user speech."""
         debug_log(f"[USER SPEECH] {text}")
@@ -2081,6 +2290,78 @@ class ElectronBackend:
             debug_log(f"Getting stage shuttle data: {shuttle_id}")
             asyncio.create_task(self._handle_get_stage_shuttle_data(shuttle_id))
 
+        # ========================================
+        # SHUTTLE WIZARD (interactive steps)
+        # ========================================
+
+        elif msg_type == "wizard_get_state":
+            shuttle_id = message.get("shuttle_id")
+            debug_log(f"Wizard get state: {shuttle_id}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            result = handler.get_state(shuttle_id)
+            self.send_message({"type": "wizard_state", "shuttle_id": shuttle_id, **result})
+
+        elif msg_type == "wizard_init_from_bubble":
+            shuttle_id = message.get("shuttle_id")
+            bubble_id = message.get("bubble_id")
+            debug_log(f"Wizard init from bubble: {shuttle_id} / {bubble_id}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            result = handler.init_from_bubble(shuttle_id, bubble_id)
+            self.send_message({"type": "wizard_initialized", "shuttle_id": shuttle_id, **result})
+
+        elif msg_type == "wizard_submit_step":
+            shuttle_id = message.get("shuttle_id")
+            step = message.get("step")
+            data = message.get("data", {})
+            debug_log(f"Wizard submit step: {shuttle_id} / {step}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            result = handler.submit_step(shuttle_id, step, data)
+            self.send_message({"type": "wizard_step_saved", "shuttle_id": shuttle_id, **result})
+
+        elif msg_type == "wizard_run_agent":
+            shuttle_id = message.get("shuttle_id")
+            team = message.get("team")
+            input_data = message.get("input", {})
+            debug_log(f"Wizard run agent: {shuttle_id} / {team}")
+            async def _run_wizard_agent():
+                from spaces.shuttles.wizard_handler import get_wizard_handler
+                handler = get_wizard_handler()
+                result = await handler.run_agent(shuttle_id, team, input_data)
+                self.send_message({"type": "wizard_agent_result", "shuttle_id": shuttle_id, **result})
+            asyncio.create_task(_run_wizard_agent())
+
+        elif msg_type == "wizard_finalize":
+            shuttle_id = message.get("shuttle_id")
+            debug_log(f"Wizard finalize: {shuttle_id}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            result = handler.finalize(shuttle_id)
+            self.send_message({"type": "wizard_finalized", "shuttle_id": shuttle_id, **result})
+
+        elif msg_type == "wizard_approve_suggestion":
+            suggestion_id = message.get("suggestion_id")
+            debug_log(f"Wizard approve suggestion: {suggestion_id}")
+            async def _approve():
+                from spaces.shuttles.wizard_handler import get_wizard_handler
+                handler = get_wizard_handler()
+                result = await handler.approve_suggestion(suggestion_id)
+                self.send_message({"type": "wizard_suggestion_resolved", **result})
+            asyncio.create_task(_approve())
+
+        elif msg_type == "wizard_reject_suggestion":
+            suggestion_id = message.get("suggestion_id")
+            reason = message.get("reason", "")
+            debug_log(f"Wizard reject suggestion: {suggestion_id}")
+            async def _reject():
+                from spaces.shuttles.wizard_handler import get_wizard_handler
+                handler = get_wizard_handler()
+                result = await handler.reject_suggestion(suggestion_id, reason)
+                self.send_message({"type": "wizard_suggestion_resolved", **result})
+            asyncio.create_task(_reject())
+
         elif msg_type == "start_automation_ui":
             # Start Automation_ui backend on-demand (for Vapi Voice Control)
             self._start_automation_ui_backend()
@@ -2213,6 +2494,62 @@ class ElectronBackend:
             debug_log(f"Tool action from UI toolbar: {event_type} with {payload}")
             asyncio.create_task(self._handle_tool_action(event_type, payload))
 
+        # ====================================================================
+        # CLAWPORT DASHBOARD - Schedule, Agents, Chat, Memory, N8N
+        # ====================================================================
+
+        elif msg_type == "get_scheduled_tasks":
+            asyncio.create_task(self._handle_get_scheduled_tasks(message))
+
+        elif msg_type == "update_task_status":
+            asyncio.create_task(self._handle_update_task_status(message))
+
+        elif msg_type == "get_agent_status":
+            asyncio.create_task(self._handle_get_agent_status_sync())
+
+        elif msg_type == "chat_text_input":
+            asyncio.create_task(self._handle_chat_text_input(message))
+
+        elif msg_type == "get_conversation_history":
+            asyncio.create_task(self._handle_get_conversation_history(message))
+
+        elif msg_type == "get_memory_overview":
+            asyncio.create_task(self._handle_get_memory_overview())
+
+        elif msg_type == "search_memory":
+            asyncio.create_task(self._handle_search_memory(message))
+
+        elif msg_type == "get_recent_memory":
+            asyncio.create_task(self._handle_get_recent_memory(message))
+
+        elif msg_type == "n8n_status":
+            asyncio.create_task(self._handle_n8n_status())
+
+        elif msg_type == "n8n_list":
+            asyncio.create_task(self._handle_n8n_list())
+
+        elif msg_type == "n8n_generate":
+            asyncio.create_task(self._handle_n8n_generate(message))
+
+        elif msg_type == "n8n_activate":
+            asyncio.create_task(self._handle_n8n_activate(message))
+
+        elif msg_type == "n8n_deactivate":
+            asyncio.create_task(self._handle_n8n_deactivate(message))
+
+        elif msg_type == "n8n_delete":
+            asyncio.create_task(self._handle_n8n_delete(message))
+
+        # ── eyeTerm handlers ──
+        elif msg_type == "eyeterm_start":
+            asyncio.create_task(self._handle_eyeterm_start(message))
+        elif msg_type == "eyeterm_stop":
+            asyncio.create_task(self._handle_eyeterm_stop())
+        elif msg_type == "eyeterm_toggle_cursor":
+            asyncio.create_task(self._handle_eyeterm_toggle_cursor())
+        elif msg_type == "eyeterm_calibrate":
+            asyncio.create_task(self._handle_eyeterm_calibrate())
+
     # ========================================================================
     # UI TOOLBAR HANDLER
     # ========================================================================
@@ -2249,6 +2586,483 @@ class ElectronBackend:
             })
 
     # ========================================================================
+    # CLAWPORT DASHBOARD IPC Handlers
+    # ========================================================================
+
+    async def _handle_get_scheduled_tasks(self, message: dict):
+        """Get scheduled tasks for ClawPort Schedule tab."""
+        try:
+            from data import ScheduledTasksRepository
+            repo = ScheduledTasksRepository()
+            status = message.get("status")
+            limit = int(message.get("limit", 50))
+            tasks = repo.list(status=status, limit=limit)
+            tasks_data = []
+            for t in tasks:
+                tasks_data.append({
+                    "id": t.id,
+                    "title": t.title,
+                    "description": t.description or "",
+                    "action_text": t.action_text or "",
+                    "trigger_type": t.trigger_type,
+                    "trigger_config": t.trigger_config or "",
+                    "execution_mode": t.execution_mode or "",
+                    "timezone": t.timezone or "Europe/Berlin",
+                    "status": t.status,
+                    "next_run_at": t.next_run_at.isoformat() if t.next_run_at else None,
+                    "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None,
+                    "run_count": t.run_count or 0,
+                    "max_runs": t.max_runs,
+                    "last_result": t.last_result,
+                    "last_error": t.last_error,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                    "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+                    "metadata": t.metadata if isinstance(t.metadata, dict) else {},
+                })
+            self.send_message({
+                "type": "scheduled_tasks_list",
+                "tasks": tasks_data,
+                "total": len(tasks_data),
+            })
+        except Exception as e:
+            debug_log(f"Error getting scheduled tasks: {e}")
+            self.send_message({
+                "type": "scheduled_tasks_list",
+                "tasks": [],
+                "total": 0,
+                "error": str(e),
+            })
+
+    async def _handle_update_task_status(self, message: dict):
+        """Update a scheduled task's status (pause/resume/cancel)."""
+        try:
+            from data import ScheduledTasksRepository
+            repo = ScheduledTasksRepository()
+            task_id = message.get("task_id")
+            new_status = message.get("new_status")
+            if not task_id or not new_status:
+                self.send_message({
+                    "type": "task_status_updated",
+                    "success": False,
+                    "task_id": task_id,
+                    "new_status": new_status,
+                    "error": "task_id and new_status required",
+                })
+                return
+            repo.update_status(task_id, new_status)
+            self.send_message({
+                "type": "task_status_updated",
+                "success": True,
+                "task_id": task_id,
+                "new_status": new_status,
+            })
+        except Exception as e:
+            debug_log(f"Error updating task status: {e}")
+            self.send_message({
+                "type": "task_status_updated",
+                "success": False,
+                "task_id": message.get("task_id"),
+                "new_status": message.get("new_status"),
+                "error": str(e),
+            })
+
+    async def _handle_get_agent_status_sync(self):
+        """Get status of all backend agents for ClawPort Agents tab."""
+        try:
+            from swarm.listeners.status_listener import get_status_listener
+            listener = get_status_listener()
+            agents_data = []
+            for name, info in listener.get_all_status().items():
+                agents_data.append({
+                    "name": name,
+                    "status": info.get("status", "idle"),
+                    "last_event_type": info.get("last_event_type"),
+                    "last_event_at": info.get("last_event_at"),
+                    "last_result": info.get("last_result"),
+                    "error": info.get("error"),
+                })
+            self.send_message({
+                "type": "agent_status_list",
+                "agents": agents_data,
+            })
+        except Exception as e:
+            debug_log(f"Error getting agent status: {e}")
+            self.send_message({
+                "type": "agent_status_list",
+                "agents": [],
+                "error": str(e),
+            })
+
+    async def _handle_chat_text_input(self, message: dict):
+        """Handle text chat input from ClawPort Chat tab."""
+        text = message.get("text", "").strip()
+        if not text:
+            self.send_message({
+                "type": "chat_response",
+                "success": False,
+                "message": "Empty input",
+            })
+            return
+        try:
+            from swarm.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            if not orchestrator:
+                self.send_message({
+                    "type": "chat_response",
+                    "success": False,
+                    "message": "Orchestrator not available",
+                })
+                return
+            result = await orchestrator.process_intent(text)
+            self.send_message({
+                "type": "chat_response",
+                "success": True,
+                "message": result.response_hint if result else "OK",
+                "event_type": result.event_type if result else None,
+            })
+        except Exception as e:
+            debug_log(f"Chat input error: {e}")
+            self.send_message({
+                "type": "chat_response",
+                "success": False,
+                "message": str(e),
+            })
+
+    async def _handle_get_conversation_history(self, message: dict):
+        """Get conversation history for ClawPort Chat tab."""
+        try:
+            limit = int(message.get("limit", 50))
+            from tools.conversation_tools import get_conversation_history
+            history = get_conversation_history(limit=limit)
+            self.send_message({
+                "type": "conversation_history",
+                "messages": history if isinstance(history, list) else [],
+            })
+        except Exception as e:
+            debug_log(f"Error getting conversation history: {e}")
+            self.send_message({
+                "type": "conversation_history",
+                "messages": [],
+            })
+
+    async def _handle_get_memory_overview(self):
+        """Get memory services overview for ClawPort Memory tab."""
+        try:
+            from tools.memory_tools import get_memory_overview
+            overview = get_memory_overview()
+            self.send_message({
+                "type": "memory_overview",
+                "data": overview if isinstance(overview, dict) else {
+                    "task_memory": {"available": False},
+                    "conversation_memory": {"available": False},
+                    "user_profiles": {"available": False},
+                },
+            })
+        except Exception as e:
+            debug_log(f"Error getting memory overview: {e}")
+            self.send_message({
+                "type": "memory_overview",
+                "data": {
+                    "task_memory": {"available": False, "error": str(e)},
+                    "conversation_memory": {"available": False},
+                    "user_profiles": {"available": False},
+                },
+            })
+
+    async def _handle_search_memory(self, message: dict):
+        """Search memory for ClawPort Memory tab."""
+        try:
+            query = message.get("query", "")
+            category = message.get("category", "task_memory")
+            limit = int(message.get("limit", 10))
+            from tools.memory_tools import search_memory
+            results = search_memory(query=query, category=category, limit=limit)
+            self.send_message({
+                "type": "memory_search_results",
+                "category": category,
+                "results": results if isinstance(results, list) else [],
+            })
+        except Exception as e:
+            debug_log(f"Error searching memory: {e}")
+            self.send_message({
+                "type": "memory_search_results",
+                "category": message.get("category", "task_memory"),
+                "results": [],
+            })
+
+    async def _handle_get_recent_memory(self, message: dict):
+        """Get recent memory entries for ClawPort Memory tab."""
+        try:
+            category = message.get("category", "task_memory")
+            limit = int(message.get("limit", 10))
+            from tools.memory_tools import get_recent_memory
+            results = get_recent_memory(category=category, limit=limit)
+            self.send_message({
+                "type": "recent_memory",
+                "category": category,
+                "results": results if isinstance(results, list) else [],
+            })
+        except Exception as e:
+            debug_log(f"Error getting recent memory: {e}")
+            self.send_message({
+                "type": "recent_memory",
+                "category": message.get("category", "task_memory"),
+                "results": [],
+            })
+
+    # ── N8N Workflow Builder ──────────────────────────────────────────────
+
+    async def _handle_n8n_status(self):
+        """Check n8n instance status."""
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import get_n8n_status
+            result = get_n8n_status()
+            self.send_message({
+                "type": "n8n_status_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n status error: {e}")
+            self.send_message({
+                "type": "n8n_status_result",
+                "success": False,
+                "message": str(e),
+                "online": False,
+            })
+
+    async def _handle_n8n_list(self):
+        """List all n8n workflows."""
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import list_workflows
+            result = list_workflows()
+            self.send_message({
+                "type": "n8n_list_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n list error: {e}")
+            self.send_message({
+                "type": "n8n_list_result",
+                "success": False,
+                "message": str(e),
+                "workflows": [],
+            })
+
+    async def _handle_n8n_generate(self, message: dict):
+        """Generate an n8n workflow from natural language description."""
+        description = message.get("description", "").strip()
+        if not description:
+            self.send_message({
+                "type": "n8n_generate_result",
+                "success": False,
+                "message": "No description provided.",
+            })
+            return
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import generate_workflow
+            result = generate_workflow(description=description)
+            self.send_message({
+                "type": "n8n_generate_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n generate error: {e}")
+            self.send_message({
+                "type": "n8n_generate_result",
+                "success": False,
+                "message": str(e),
+            })
+
+    async def _handle_n8n_activate(self, message: dict):
+        """Activate an n8n workflow."""
+        workflow_id = message.get("workflow_id")
+        if not workflow_id:
+            self.send_message({
+                "type": "n8n_activate_result",
+                "success": False,
+                "message": "workflow_id required",
+            })
+            return
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import activate_workflow
+            result = activate_workflow(workflow_id=workflow_id)
+            self.send_message({
+                "type": "n8n_activate_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n activate error: {e}")
+            self.send_message({
+                "type": "n8n_activate_result",
+                "success": False,
+                "message": str(e),
+            })
+
+    async def _handle_n8n_deactivate(self, message: dict):
+        """Deactivate an n8n workflow."""
+        workflow_id = message.get("workflow_id")
+        if not workflow_id:
+            self.send_message({
+                "type": "n8n_deactivate_result",
+                "success": False,
+                "message": "workflow_id required",
+            })
+            return
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import deactivate_workflow
+            result = deactivate_workflow(workflow_id=workflow_id)
+            self.send_message({
+                "type": "n8n_deactivate_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n deactivate error: {e}")
+            self.send_message({
+                "type": "n8n_deactivate_result",
+                "success": False,
+                "message": str(e),
+            })
+
+    async def _handle_n8n_delete(self, message: dict):
+        """Delete an n8n workflow."""
+        workflow_id = message.get("workflow_id")
+        if not workflow_id:
+            self.send_message({
+                "type": "n8n_delete_result",
+                "success": False,
+                "message": "workflow_id required",
+            })
+            return
+        try:
+            from spaces.n8n.tools.n8n_workflow_tools import delete_workflow
+            result = delete_workflow(workflow_id=workflow_id)
+            self.send_message({
+                "type": "n8n_delete_result",
+                **result,
+            })
+        except Exception as e:
+            debug_log(f"n8n delete error: {e}")
+            self.send_message({
+                "type": "n8n_delete_result",
+                "success": False,
+                "message": str(e),
+            })
+
+    # ========================================================================
+    # EYETERM IPC Handlers
+    # ========================================================================
+
+    async def _handle_eyeterm_start(self, message: dict):
+        """Start eyeTerm in a background thread."""
+        if hasattr(self, '_eyeterm_app') and self._eyeterm_app:
+            self.send_message({"type": "eyeterm_status", "status": "already_running"})
+            return
+        try:
+            import threading
+            from spaces.desktop.eyeterm.config import AppConfig
+            from spaces.desktop.eyeterm.app import EyeTermApp
+
+            config = AppConfig.from_env()
+            # Enable streaming for Electron embedding
+            config.stream.enabled = True
+            config.stream.port = int(os.environ.get("EYETERM_STREAM_PORT", "8099"))
+            # Apply cursor config from env
+            config.cursor.enabled = os.environ.get("EYETERM_CURSOR_ENABLED", "false").lower() == "true"
+
+            self._eyeterm_app = EyeTermApp(config)
+
+            # Wire command router to IntentOrchestrator for complex tasks
+            self._wire_eyeterm_orchestrator()
+
+            thread = threading.Thread(
+                target=self._eyeterm_app.run,
+                name="eyeterm-main",
+                daemon=True,
+            )
+            thread.start()
+            self.send_message({"type": "eyeterm_status", "status": "started"})
+            debug_log("eyeTerm started in background thread")
+        except Exception as e:
+            debug_log(f"eyeTerm start failed: {e}")
+            self.send_message({"type": "eyeterm_status", "status": "error", "message": str(e)})
+
+    def _wire_eyeterm_orchestrator(self):
+        """Wire eyeTerm's CommandRouter to route complex tasks through VibeMind orchestrator."""
+        if not hasattr(self, '_eyeterm_app') or not self._eyeterm_app:
+            return
+
+        async def _route_to_orchestrator(transcript, gaze_context):
+            """Route complex task through IntentOrchestrator (same path as chat panel)."""
+            try:
+                from swarm.orchestrator import get_orchestrator
+                orchestrator = get_orchestrator()
+                if orchestrator:
+                    result = await orchestrator.process_intent(
+                        text=transcript,
+                        user_id="eyeterm",
+                        session_id="eyeterm",
+                        extra_context=gaze_context,
+                    )
+                    if result and result.response_hint:
+                        debug_log(f"eyeTerm agent result: {result.response_hint[:100]}")
+            except Exception as e:
+                debug_log(f"eyeTerm orchestrator routing failed: {e}")
+
+        def _agent_team_callback(transcript, gaze_context):
+            """Thread-safe callback to route to async orchestrator."""
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.run_coroutine_threadsafe(
+                        _route_to_orchestrator(transcript, gaze_context), loop
+                    )
+            except Exception as e:
+                debug_log(f"eyeTerm agent callback failed: {e}")
+
+        self._eyeterm_app._command_router._on_agent_team = _agent_team_callback
+
+    async def _handle_eyeterm_stop(self):
+        """Stop eyeTerm."""
+        if hasattr(self, '_eyeterm_app') and self._eyeterm_app:
+            self._eyeterm_app._running = False
+            self._eyeterm_app = None
+            self.send_message({"type": "eyeterm_status", "status": "stopped"})
+        else:
+            self.send_message({"type": "eyeterm_status", "status": "not_running"})
+
+    async def _handle_eyeterm_toggle_cursor(self):
+        """Toggle eyeTerm cursor control."""
+        if hasattr(self, '_eyeterm_app') and self._eyeterm_app:
+            driver = self._eyeterm_app._cursor_driver
+            if driver:
+                state = driver.toggle()
+                self.send_message({
+                    "type": "eyeterm_cursor_status",
+                    "success": True,
+                    "enabled": state,
+                })
+                return
+        self.send_message({"type": "eyeterm_cursor_status", "success": False, "message": "eyeTerm not running"})
+
+    async def _handle_eyeterm_calibrate(self):
+        """Trigger eyeTerm calibration (non-blocking for headless mode)."""
+        # Headless instance (primary)
+        if hasattr(self, '_eyeterm') and self._eyeterm:
+            success = self._eyeterm.calibrate()
+            self.send_message({
+                "type": "eyeterm_calibrate_result",
+                "success": success,
+                "message": "Kalibrierung gestartet" if success else "eyeTerm nicht bereit",
+            })
+            return
+        # App instance (legacy)
+        if hasattr(self, '_eyeterm_app') and self._eyeterm_app:
+            self._eyeterm_app._run_calibration()
+            self.send_message({"type": "eyeterm_calibrate_result", "success": True})
+            return
+        self.send_message({"type": "eyeterm_calibrate_result", "success": False, "message": "eyeTerm not running"})
+
+    # ========================================================================
     # PROJECTS SPACE IPC Handlers
     # ========================================================================
 
@@ -2256,6 +3070,24 @@ class ElectronBackend:
         """Get list of all projects - both code-generated and shuttle-created."""
         try:
             repo = ProjectsRepository()
+
+            # --- Discover projects from filesystem (idempotent) ---
+            if self.coding_engine_path:
+                try:
+                    from spaces.coding.engine.project_discovery import ProjectDiscoveryService
+                    discovery = ProjectDiscoveryService(self.coding_engine_path)
+                    discovered = discovery.discover_projects()
+                    synced_count = 0
+                    for d in discovered:
+                        result = repo.sync_from_discovery(d)
+                        if result:
+                            synced_count += 1
+                    if synced_count > 0:
+                        debug_log(f"Synced {synced_count} discovered projects to DB")
+                except Exception as e:
+                    debug_log(f"Project discovery failed: {e}")
+            # --- End discovery ---
+
             status_filter = message.get("status_filter")
             limit = int(message.get("limit", 20))
 
@@ -2289,6 +3121,9 @@ class ElectronBackend:
                     if shuttle:
                         linked_shuttle = shuttle.shuttle_id
 
+                # Enrichment metadata from discovery (stored in metadata JSON)
+                proj_meta = p.metadata if isinstance(p.metadata, dict) else {}
+
                 projects_data.append({
                     "id": p.id,
                     "name": p.name,
@@ -2305,6 +3140,18 @@ class ElectronBackend:
                     "project_path": p.project_path,
                     "error_message": p.error_message,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
+                    # Enrichment fields from discovery
+                    "total_issues": proj_meta.get("total_issues", 0),
+                    "issue_counts": proj_meta.get("issue_counts", {}),
+                    "quality_score": proj_meta.get("quality_score", 0),
+                    "total_artifacts": proj_meta.get("total_artifacts", 0),
+                    "total_cost_usd": proj_meta.get("total_cost_usd", 0),
+                    "total_duration_ms": proj_meta.get("total_duration_ms", 0),
+                    "stages_completed": proj_meta.get("stages_completed", 0),
+                    "total_stages": proj_meta.get("total_stages", 0),
+                    "task_count": proj_meta.get("task_count", 0),
+                    "diagram_count": proj_meta.get("diagram_count", 0),
+                    "user_story_count": proj_meta.get("user_story_count", 0),
                 })
             
             self.send_message({
@@ -2884,6 +3731,38 @@ class ElectronBackend:
                 "error": error
             })
 
+    def _on_issue_detected(self, job_id: str, issue: dict):
+        """Callback when a quality issue is detected during generation."""
+        debug_log(f"Issue detected in job {job_id}: {issue.get('id', '?')} [{issue.get('severity', '?')}]")
+        self.send_message({
+            "type": "project_issue_detected",
+            "job_id": job_id,
+            "issue": {
+                "id": issue.get("id", ""),
+                "category": issue.get("category", ""),
+                "severity": issue.get("severity", "medium"),
+                "title": issue.get("title", ""),
+                "description": issue.get("description", ""),
+                "affected_artifacts": issue.get("affected_artifacts", []),
+                "suggestion": issue.get("suggestion", ""),
+                "auto_fixable": issue.get("auto_fixable", False),
+            }
+        })
+
+    def _on_quality_summary_update(self, job_id: str, summary: dict):
+        """Callback when quality summary is updated during generation."""
+        debug_log(f"Quality summary update for job {job_id}: {summary.get('total_issues', 0)} issues")
+        self.send_message({
+            "type": "project_quality_update",
+            "job_id": job_id,
+            "summary": {
+                "total_issues": summary.get("total_issues", 0),
+                "by_severity": summary.get("by_severity", {}),
+                "by_category": summary.get("by_category", {}),
+                "auto_fixed": summary.get("auto_fixed", 0),
+            }
+        })
+
 
 # ==============================================================================
 # MAIN - Async Event Loop (Windows-kompatibel)
@@ -2971,26 +3850,14 @@ async def main():
                 import traceback
                 debug_log(traceback.format_exc())
     finally:
-        # Graceful shutdown - prevent Windows asyncio errors
+        # Coordinated graceful shutdown with 12s total budget
         debug_log("Performing graceful shutdown...")
-
-        # Force reset EventBus to close Redis connections cleanly
         try:
-            from swarm.event_bus import force_reset_event_bus
-            force_reset_event_bus()
-            debug_log("EventBus reset complete")
+            await asyncio.wait_for(backend.cleanup(), timeout=12.0)
+        except asyncio.TimeoutError:
+            debug_log("cleanup() TIMED OUT (12s) — forcing exit")
         except Exception as e:
-            debug_log(f"EventBus reset error (ignored): {e}")
-
-        # Cancel any pending asyncio tasks
-        pending_tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        if pending_tasks:
-            debug_log(f"Cancelling {len(pending_tasks)} pending tasks...")
-            for task in pending_tasks:
-                task.cancel()
-            # Wait briefly for tasks to finish
-            await asyncio.gather(*pending_tasks, return_exceptions=True)
-            debug_log("All tasks cancelled")
+            debug_log(f"cleanup() error: {e}")
 
     debug_log("main() finished")
 
