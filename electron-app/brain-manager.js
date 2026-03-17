@@ -1,8 +1,8 @@
 /**
- * SWE Design Manager for VibeMind
+ * Brain Dashboard Manager for VibeMind
  *
- * Self-contained manager for the SWE Design (Requirements Engineer) dashboard.
- * Spawns the Python aiohttp server and creates a BrowserView overlay.
+ * Self-contained manager for the Brain (Tahlamus) dashboard.
+ * Spawns the Python FastAPI brain_server and creates a BrowserView overlay.
  *
  * Server lifecycle:
  *   show()    → start server (if needed) + create BrowserView
@@ -15,7 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-class SweDesignManager {
+class BrainManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
     this.view = null;
@@ -32,12 +32,21 @@ class SweDesignManager {
     const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
     this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
 
-    // RE project root (where start_dashboard.py lives)
-    this.reProjectRoot = path.join(
-      projectRoot, 'python', 'spaces', 'shuttles', 'swe_desgine'
-    );
+    // Brain project root — try submodule first, then standalone Desktop location
+    const submodulePath = path.join(projectRoot, 'python', 'spaces', 'brain', 'the_brain');
+    const standalonePath = path.join('C:', 'Users', 'User', 'Desktop', 'the_brain', 'the_brain');
 
-    this.port = 8086; // 8085 often held by zombie; use 8086 as default
+    if (fs.existsSync(path.join(submodulePath, 'web', 'brain_server.py'))) {
+      this.brainProjectRoot = submodulePath;
+    } else if (fs.existsSync(path.join(standalonePath, 'web', 'brain_server.py'))) {
+      this.brainProjectRoot = standalonePath;
+    } else {
+      this.brainProjectRoot = standalonePath; // fallback
+    }
+
+    this.port = 5000;
+    this._loadRetries = 0;
+    this._maxLoadRetries = 10;
 
     // Resize handler
     if (this.mainWindow) {
@@ -50,24 +59,19 @@ class SweDesignManager {
   }
 
   /**
-   * Start the Python dashboard server with port retry.
-   * Tries up to 3 consecutive ports if the default is in use.
-   * Returns a promise that resolves with the actual port when the server is ready.
+   * Start the Brain FastAPI server with port retry.
    */
   async _startServer() {
     if (this._serverReady) return this.port;
 
-    const scriptPath = path.join(this.reProjectRoot, 'start_dashboard.py');
-    if (!fs.existsSync(scriptPath)) {
-      throw new Error(`SWE Design dashboard script not found: ${scriptPath}`);
-    }
+    const serverModule = 'web.brain_server';
 
     // Try up to 3 ports
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const tryPort = this.port + attempt;
       try {
-        await this._tryStartOnPort(scriptPath, tryPort);
+        await this._tryStartOnPort(serverModule, tryPort);
         this.port = tryPort;
         return this.port;
       } catch (err) {
@@ -75,7 +79,7 @@ class SweDesignManager {
                                err.message.includes('address already in use') ||
                                err.message.includes('EADDRINUSE');
         if (isPortConflict && attempt < maxRetries - 1) {
-          console.log(`[SweDesignManager] Port ${tryPort} busy, trying ${tryPort + 1}...`);
+          console.log(`[BrainManager] Port ${tryPort} busy, trying ${tryPort + 1}...`);
           continue;
         }
         throw err;
@@ -86,16 +90,16 @@ class SweDesignManager {
   /**
    * Try to start the server on a specific port.
    */
-  _tryStartOnPort(scriptPath, port) {
+  _tryStartOnPort(serverModule, port) {
     return new Promise((resolve, reject) => {
-      console.log(`[SweDesignManager] Starting server on port ${port}...`);
+      console.log(`[BrainManager] Starting brain server on port ${port}...`);
+      console.log(`[BrainManager] CWD: ${this.brainProjectRoot}`);
 
       const proc = spawn(this.pythonPath, [
-        scriptPath,
+        '-m', serverModule,
         '--port', String(port),
-        '--no-browser',
       ], {
-        cwd: this.reProjectRoot,
+        cwd: this.brainProjectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env },
       });
@@ -109,19 +113,26 @@ class SweDesignManager {
         if (!resolved) {
           resolved = true;
           this._serverReady = true;
-          console.log('[SweDesignManager] Server start timeout — assuming ready on port', port);
+          console.log('[BrainManager] Server start timeout — assuming ready on port', port);
           resolve(port);
         }
-      }, 10000);
+      }, 15000);
 
       proc.stdout.on('data', (data) => {
         const line = data.toString();
-        process.stdout.write(`[SWE-Server] ${line}`);
-        if (!resolved && (line.includes('Dashboard running') || line.includes('localhost'))) {
+        process.stdout.write(`[Brain-Server] ${line}`);
+        // Also emit via console.log so CDP Debug Agent sees it
+        for (const l of line.split('\n').filter(s => s.trim())) {
+          console.log(`[Brain-Server] ${l.trim()}`);
+        }
+        if (!resolved && (
+          line.includes('Uvicorn running') ||
+          line.includes('Application startup complete')
+        )) {
           resolved = true;
           clearTimeout(timeout);
           this._serverReady = true;
-          console.log('[SweDesignManager] Server ready on port', port);
+          console.log('[BrainManager] Server ready on port', port);
           resolve(port);
         }
       });
@@ -129,11 +140,20 @@ class SweDesignManager {
       proc.stderr.on('data', (data) => {
         const line = data.toString();
         stderrBuf += line;
-        process.stderr.write(`[SWE-Server] ${line}`);
-        if (!resolved && (line.includes('Running on') || line.includes('localhost'))) {
+        process.stderr.write(`[Brain-Server] ${line}`);
+        // Also emit via console.log so CDP Debug Agent sees it
+        for (const l of line.split('\n').filter(s => s.trim())) {
+          console.log(`[Brain-Server] ${l.trim()}`);
+        }
+        if (!resolved && (
+          line.includes('Uvicorn running') ||
+          line.includes('Application startup complete') ||
+          line.includes('Running on http')
+        )) {
           resolved = true;
           clearTimeout(timeout);
           this._serverReady = true;
+          console.log('[BrainManager] Server ready on port', port);
           resolve(port);
         }
       });
@@ -142,37 +162,36 @@ class SweDesignManager {
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;
-          reject(new Error(`Failed to start server: ${err.message}`));
+          reject(new Error(`Failed to start brain server: ${err.message}`));
         }
       });
 
       proc.on('exit', (code) => {
-        console.log(`[SweDesignManager] Server exited with code ${code}`);
+        console.log(`[BrainManager] Server exited with code ${code}`);
         this._serverProcess = null;
         this._serverReady = false;
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
-          // Include stderr in error for port-conflict detection
-          reject(new Error(`Server exited with code ${code}: ${stderrBuf.slice(-300)}`));
+          reject(new Error(`Brain server exited with code ${code}: ${stderrBuf.slice(-300)}`));
         }
       });
     });
   }
 
   /**
-   * Show the SWE Design wizard BrowserView.
-   * Starts the Python dashboard server on first call.
+   * Show the Brain dashboard BrowserView.
+   * Starts the Python server on first call.
    */
   async show() {
     if (!this.mainWindow) {
-      console.error('[SweDesignManager] No main window available');
+      console.error('[BrainManager] No main window available');
       return;
     }
 
     // Prevent concurrent start attempts
     if (this._starting) {
-      console.log('[SweDesignManager] Already starting, please wait...');
+      console.log('[BrainManager] Already starting, please wait...');
       return;
     }
 
@@ -180,7 +199,7 @@ class SweDesignManager {
       // Start server if not running
       if (!this._serverReady) {
         this._starting = true;
-        console.log('[SweDesignManager] Starting RE dashboard server...');
+        console.log('[BrainManager] Starting brain dashboard server...');
         this.port = await this._startServer();
         this._starting = false;
       }
@@ -199,9 +218,9 @@ class SweDesignManager {
         this.mainWindow.setBrowserView(this.view);
         this._updateBounds();
 
-        // Load the server URL
-        const url = `http://localhost:${this.port}`;
-        console.log('[SweDesignManager] Loading:', url);
+        // Load the Unified Brain Dashboard (dark theme, thought stream, chat)
+        const url = `http://localhost:${this.port}/brain`;
+        console.log('[BrainManager] Loading:', url);
         this.view.webContents.loadURL(url);
 
         // Handle external links
@@ -212,39 +231,59 @@ class SweDesignManager {
 
         // Notify renderer of load status
         this.view.webContents.on('did-finish-load', () => {
+          this._loadRetries = 0; // Reset on success
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('python-message', {
-              type: 'swedesign_view_status',
+              type: 'brain_view_status',
               status: 'ready',
             });
           }
-          console.log('[SweDesignManager] Dashboard loaded');
+          console.log('[BrainManager] Dashboard loaded successfully');
         });
 
         this.view.webContents.on('did-fail-load', (_ev, code, desc) => {
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          console.error(`[BrainManager] Load failed (attempt ${this._loadRetries + 1}/${this._maxLoadRetries}):`, code, desc);
+          // Retry on connection refused (server still starting)
+          if (code === -102 && this._serverProcess && this._loadRetries < this._maxLoadRetries) {
+            this._loadRetries++;
+            const delay = Math.min(2000 * this._loadRetries, 5000);
+            console.log(`[BrainManager] Server not ready yet, retrying in ${delay}ms...`);
+            setTimeout(() => {
+              if (this.view && !this.view.webContents.isDestroyed()) {
+                const retryUrl = `http://localhost:${this.port}/brain`;
+                console.log('[BrainManager] Retrying:', retryUrl);
+                this.view.webContents.loadURL(retryUrl);
+              }
+            }, delay);
+          } else if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('python-message', {
-              type: 'swedesign_view_status',
+              type: 'brain_view_status',
               status: 'error',
               message: `Load failed: ${desc} (${code})`,
             });
           }
-          console.error('[SweDesignManager] Load failed:', code, desc);
         });
       } else {
         // Re-attach existing view
         this.mainWindow.setBrowserView(this.view);
         this._updateBounds();
+        // Reload if previous load failed
+        if (this._loadRetries > 0) {
+          const url = `http://localhost:${this.port}/brain`;
+          console.log('[BrainManager] Reloading after previous failure:', url);
+          this._loadRetries = 0;
+          this.view.webContents.loadURL(url);
+        }
       }
 
       this.isVisible = true;
-      console.log('[SweDesignManager] Shown');
+      console.log('[BrainManager] Shown');
     } catch (err) {
       this._starting = false;
-      console.error('[SweDesignManager] Failed to show:', err.message);
+      console.error('[BrainManager] Failed to show:', err.message);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
-          type: 'swedesign_view_status',
+          type: 'brain_view_status',
           status: 'error',
           message: err.message,
         });
@@ -259,11 +298,11 @@ class SweDesignManager {
     if (!this.mainWindow || !this.view) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[SweDesignManager] Hidden');
+    console.log('[BrainManager] Hidden');
   }
 
   /**
-   * Relay a push event to the SWE Design BrowserView
+   * Relay a push event to the Brain BrowserView
    */
   relayEvent(channel, payload) {
     if (this.view && !this.view.webContents.isDestroyed()) {
@@ -272,7 +311,7 @@ class SweDesignManager {
   }
 
   /**
-   * Reload the wizard content
+   * Reload the dashboard
    */
   reload() {
     if (this.view && !this.view.webContents.isDestroyed()) {
@@ -305,7 +344,7 @@ class SweDesignManager {
       this._serverProcess = null;
     }
     this._serverReady = false;
-    console.log('[SweDesignManager] Destroyed');
+    console.log('[BrainManager] Destroyed');
   }
 
   // -- Private helpers --
@@ -326,4 +365,4 @@ class SweDesignManager {
   }
 }
 
-module.exports = SweDesignManager;
+module.exports = BrainManager;

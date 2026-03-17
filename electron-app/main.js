@@ -5,6 +5,9 @@
  * and IPC communication between renderer and Python.
  */
 
+// Sentry error tracking (lazy-init after app.whenReady)
+const sentry = require('./sentry');
+
 const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, shell } = require('electron');
 const { spawn } = require('child_process');
 
@@ -88,34 +91,10 @@ try {
 }
 
 /**
- * Read Claude Code OAuth token from ~/.claude/.credentials.json
- * Returns the access token if valid, null otherwise.
- * Claude Code CLI keeps this token fresh via its own refresh mechanism.
- */
-function getClaudeCodeToken() {
-    const os = require('os');
-    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-    try {
-        if (!fs.existsSync(credPath)) return null;
-        const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-        const oauth = creds?.claudeAiOauth;
-        if (!oauth?.accessToken) return null;
-
-        // Check expiry (with 5 minute buffer)
-        if (oauth.expiresAt && oauth.expiresAt < Date.now() + 300000) {
-            console.log('[Main] Claude Code OAuth token expired — falling back to .env keys');
-            return null;
-        }
-
-        return oauth.accessToken;
-    } catch {
-        return null;
-    }
-}
-
-/**
  * Auto-configure Rowboat's ~/.rowboat/config/models.json from VibeMind .env
- * Priority: CLAUDE_CODE_OAUTH > ANTHROPIC_API_KEY > OPENROUTER > OPENAI
+ * Priority: ANTHROPIC_API_KEY > OPENROUTER > OPENAI
+ * Note: Claude Code OAuth tokens are NOT valid Anthropic API keys and cannot
+ * be used for direct API calls to api.anthropic.com.
  */
 async function autoConfigureRowboatModels() {
     const os = require('os');
@@ -127,22 +106,12 @@ async function autoConfigureRowboatModels() {
             currentConfig = JSON.parse(raw);
         } catch { /* file doesn't exist yet — will create */ }
 
-        // Determine desired config (Priority: CLAUDE_CODE > ANTHROPIC > OPENROUTER > OPENAI)
+        // Determine desired config (Priority: ANTHROPIC > OPENROUTER > OPENAI)
         let desiredConfig = null;
         let source = '';
 
-        // 1. Claude Code Max OAuth token (highest priority)
-        const claudeCodeToken = getClaudeCodeToken();
-        if (claudeCodeToken) {
-            desiredConfig = {
-                provider: { flavor: 'anthropic', apiKey: claudeCodeToken },
-                model: process.env.ROWBOAT_MODEL || 'claude-sonnet-4-20250514',
-            };
-            source = 'Claude Code Max OAuth';
-        }
-
-        // 2. Explicit Anthropic API key from .env
-        if (!desiredConfig) {
+        // 1. Explicit Anthropic API key from .env
+        {
             const anthropicKey = process.env.ANTHROPIC_API_KEY;
             if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
                 desiredConfig = {
@@ -153,7 +122,7 @@ async function autoConfigureRowboatModels() {
             }
         }
 
-        // 3. OpenRouter
+        // 2. OpenRouter
         if (!desiredConfig && process.env.OPENROUTER_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
@@ -162,7 +131,7 @@ async function autoConfigureRowboatModels() {
             source = 'OpenRouter';
         }
 
-        // 4. OpenAI (fallback)
+        // 3. OpenAI (fallback)
         if (!desiredConfig && process.env.OPENAI_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openai', apiKey: process.env.OPENAI_API_KEY },
@@ -295,6 +264,7 @@ function startPythonBackend() {
     });
     
     console.log('[Main] Python process started with PID:', pythonProcess.pid);
+    sentry.setContext('python_backend', { status: 'running', pid: pythonProcess.pid });
 
     // Handle stdout from Python (JSON messages)
     pythonProcess.stdout.on('data', (data) => {
@@ -302,7 +272,8 @@ function startPythonBackend() {
         for (const line of lines) {
             try {
                 const message = JSON.parse(line);
-                
+                sentry.addBreadcrumb({ category: 'ipc.python', message: `<- ${message.type}`, level: 'info' });
+
                 // Log IPC as structured JSON so CDP Debug Agent can color it
                 // Emit in renderer context so CDP Debug Agent sees it
                 if (mainWindow?.webContents) {
@@ -460,6 +431,8 @@ function startPythonBackend() {
         }
         stderrBuffer = '';
         console.log('[Main] Python process exited with code:', code);
+        sentry.setContext('python_backend', { status: 'exited', exitCode: code });
+        if (code !== 0) { sentry.captureMessage(`Python backend crashed (exit ${code})`, 'error'); }
         if (code !== 0) {
             console.error('[Main] Python crashed! Check the errors above.');
         }
@@ -474,6 +447,7 @@ function startPythonBackend() {
 function sendToPython(message) {
     if (pythonProcess && pythonProcess.stdin) {
         const json = JSON.stringify(message);
+        sentry.addBreadcrumb({ category: 'ipc.python', message: `-> ${message.type}`, level: 'info' });
         // Emit in renderer context so CDP Debug Agent sees it
         if (mainWindow?.webContents) {
             const j = JSON.stringify({__ipc_log: true, dir: '\u2190', type: message.type, preview: json.substring(0, 150)});
@@ -502,6 +476,7 @@ function sendToPythonAndWait(message, responseType, timeoutMs = 10000) {
             resolve(response);
         });
 
+        sentry.addBreadcrumb({ category: 'ipc.python.rpc', message: `-> ${message.type} (await ${responseType})`, level: 'info' });
         sendToPython(message);
     });
 }
@@ -513,12 +488,8 @@ function sendToPythonAndWait(message, responseType, timeoutMs = 10000) {
 // Agent to Space mapping for automatic navigation
 const AGENT_SPACE_MAP = {
     'rachel': 'ideas',
-    'alice': 'ideas',      // Alice is the hub, stays in ideas
-    'adam': 'desktop',
-    'antoni': 'projects',
-    'multiverse': 'ideas',
-    'sofia': 'projects',   // Sofia is the project manager
-    'rowboat': 'roarboot', // Rowboat agent → Roarboot space
+    'rowboat': 'roarboot',
+    'director': 'video',
 };
 
 function handleAgentTransfer(message) {
@@ -530,7 +501,8 @@ function handleAgentTransfer(message) {
     
     console.log(`[Main] Agent Transfer: ${from_agent} → ${to_agent}`);
     currentAgent = to_agent;
-    
+    sentry.setTag('agent', to_agent);
+
     // Determine target space for the new agent
     const targetSpace = AGENT_SPACE_MAP[to_agent.toLowerCase()] || 'ideas';
     const shouldNavigate = targetSpace !== currentSpace;
@@ -553,7 +525,8 @@ function handleAgentTransfer(message) {
     if (shouldNavigate) {
         console.log(`[Main] Auto-navigating to ${targetSpace} for agent ${to_agent}`);
         currentSpace = targetSpace;
-        
+        sentry.setTag('space', targetSpace);
+
         // Send space_changed to trigger animated navigation
         if (mainWindow && mainWindow.webContents) {
             mainWindow.webContents.send('python-message', {
@@ -577,7 +550,8 @@ function handleSpaceNavigation(message) {
     if (target_space && target_space !== currentSpace) {
         console.log(`[Main] Navigating to space: ${target_space}`);
         currentSpace = target_space;
-        
+        sentry.setTag('space', currentSpace);
+
         // Send space change to renderer
         if (mainWindow && mainWindow.webContents) {
             mainWindow.webContents.send('python-message', {
@@ -1445,7 +1419,7 @@ function setupIpcHandlers() {
     // Projects (from req-orchestrator API - matches Coding Engine standalone endpoints)
     const ORCHESTRATOR_API = process.env.ORCHESTRATOR_API_URL || 'http://localhost:8087';
     const TECHSTACK_API = `${ORCHESTRATOR_API}/api/v1/techstack`;
-    const fetch = require('node-fetch');
+    // Electron has global fetch built-in (Node 18+)
 
     ipcMain.handle('projects:get-all', async () => {
         try {
@@ -1633,6 +1607,20 @@ function setupIpcHandlers() {
     });
 
     // ========================================
+    // CLAUDE CODE TOKEN (for Settings UI badge)
+    // ========================================
+
+    ipcMain.handle('get-claude-code-token', async () => {
+        const token = getClaudeCodeToken();
+        if (!token) return { available: false };
+        return {
+            available: true,
+            token,
+            subscriptionType: 'max',
+        };
+    });
+
+    // ========================================
     // SWE DESIGN (FACTORY SPACE) VIEW CONTROL
     // ========================================
 
@@ -1740,6 +1728,24 @@ function setupIpcHandlers() {
         }
     });
 
+    ipcMain.on('show-agentfarm-tab', (_event, tab) => {
+        if (agentfarmManager) {
+            // Mutual exclusion
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            agentfarmManager.show();
+            // Send tab switch to the AgentFarm BrowserView
+            const view = agentfarmManager.getBrowserView?.() || agentfarmManager.view;
+            if (view && view.webContents) {
+                view.webContents.send('agentfarm-switch-tab', { tab });
+            }
+            console.log(`[Main] Agent Farm shown (tab: ${tab})`);
+        }
+    });
+
     ipcMain.handle('is-agentfarm-visible', () => {
         return agentfarmManager ? agentfarmManager.getIsVisible() : false;
     });
@@ -1805,6 +1811,125 @@ function setupIpcHandlers() {
     ipcMain.handle('agentfarm:n8n-delete', async (_event, { workflowId }) => {
         try {
             return await sendToPythonAndWait({ type: 'n8n_delete', workflow_id: workflowId }, 'n8n_delete_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    // ── AgentFarm Autogen Handlers ──────────────────────────────
+    ipcMain.handle('agentfarm:create-team', async (_, templateId, config) => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_create_team', template_id: templateId, ...config },
+            'agentfarm_create_team_result'
+        );
+    });
+
+    ipcMain.handle('agentfarm:run-team', async (_, teamId, task) => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_run', team_id: teamId, task },
+            'agentfarm_run_result'
+        );
+    });
+
+    ipcMain.handle('agentfarm:farm-status', async () => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_status' },
+            'agentfarm_status_result'
+        );
+    });
+
+    ipcMain.handle('agentfarm:list-teams', async () => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_list_teams' },
+            'agentfarm_list_teams_result'
+        );
+    });
+
+    ipcMain.handle('agentfarm:stop-run', async (_, runId) => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_stop_run', run_id: runId },
+            'agentfarm_stop_run_result'
+        );
+    });
+
+    ipcMain.handle('agentfarm:run-results', async (_, runId) => {
+        return await sendToPythonAndWait(
+            { type: 'agentfarm_run_results', run_id: runId },
+            'agentfarm_run_results_result'
+        );
+    });
+
+    // ========================================
+    // VIDEO PRODUCTION (Agent Farm Video tab)
+    // ========================================
+
+    ipcMain.handle('agentfarm:video-status', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_status' }, 'video_status_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-team-run', async (_event, { step }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_team_run', step }, 'video_team_run_result', 600000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-vision', async (_event, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_vision', ...params }, 'video_vision_result', 600000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-demo-analyze', async (_event, { input_file, target_duration }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_demo_analyze', input_file, target_duration }, 'video_demo_analyze_result', 120000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-demo-build', async (_event, { config_path }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_demo_build', config_path }, 'video_demo_build_result', 600000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-lipsync', async (_event, { person }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_lipsync', person }, 'video_lipsync_result', 600000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-lipsync-analyze', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_lipsync_analyze' }, 'video_lipsync_analyze_result', 120000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-voice-clone', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_voice_clone' }, 'video_voice_clone_result', 120000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-voice-tts', async (_event, { person }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_voice_tts', person }, 'video_voice_tts_result', 120000);
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -1938,6 +2063,40 @@ function setupIpcHandlers() {
         }
     });
 
+    // ── Plugin Management ──
+
+    ipcMain.handle('clawport:get-plugins', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_plugins' }, 'plugin_list');
+        } catch (e) {
+            return { type: 'plugin_list', plugins: [], total_enabled: 0, total_available: 0 };
+        }
+    });
+
+    ipcMain.handle('clawport:accept-plugin', async (_event, { pluginId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'accept_plugin', plugin_id: pluginId }, 'plugin_action_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:reject-plugin', async (_event, { pluginId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'reject_plugin', plugin_id: pluginId }, 'plugin_action_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:toggle-plugin', async (_event, { pluginId, enabled }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'toggle_plugin', plugin_id: pluginId, enabled }, 'plugin_action_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
     // ── n8n Workflow Builder ──
 
     ipcMain.handle('clawport:n8n-status', async () => {
@@ -1983,6 +2142,74 @@ function setupIpcHandlers() {
     ipcMain.handle('clawport:n8n-delete', async (_event, { workflowId }) => {
         try {
             return await sendToPythonAndWait({ type: 'n8n_delete', workflow_id: workflowId }, 'n8n_delete_result', 10000);
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    // ── AgentFarm / Autogen ──
+
+    ipcMain.handle('clawport:agentfarm-create-team', async (_event, { templateId, config }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_create_team', template_id: templateId, ...config },
+                'agentfarm_create_team_result'
+            );
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:agentfarm-run-team', async (_event, { teamId, task }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_run', team_id: teamId, task },
+                'agentfarm_run_result'
+            );
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:agentfarm-status', async () => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_status' },
+                'agentfarm_status_result'
+            );
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:agentfarm-list-teams', async () => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_list_teams' },
+                'agentfarm_list_teams_result'
+            );
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:agentfarm-stop-run', async (_event, { runId }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_stop_run', run_id: runId },
+                'agentfarm_stop_run_result'
+            );
+        } catch (e) {
+            return { success: false, message: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:agentfarm-run-results', async (_event, { runId }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'agentfarm_run_results', run_id: runId },
+                'agentfarm_run_results_result'
+            );
         } catch (e) {
             return { success: false, message: e.message };
         }
@@ -2125,6 +2352,9 @@ function registerShortcuts() {
 // ============================================================================
 
 app.whenReady().then(async () => {
+    // Initialize Sentry error tracking (requires app to be ready)
+    sentry.initSentry();
+
     // Initialize Coding Engine managers
     dockerManager = new DockerManager();
     portAllocator = new PortAllocator();

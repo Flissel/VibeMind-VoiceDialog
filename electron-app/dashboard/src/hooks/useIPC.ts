@@ -5,6 +5,9 @@ import type {
   ScheduledTasksResponse,
   AgentStatusResponse,
   ConversationHistoryResponse,
+  ProjectsResponse,
+  GenerationStatusResponse,
+  PluginListResponse,
 } from '../types'
 
 /**
@@ -97,6 +100,73 @@ export function useConversationHistory(limit = 50) {
     () => api.getConversationHistory(limit),
     [limit]
   )
+}
+
+// ── Projects ──
+
+export function useProjects(statusFilter?: string) {
+  return useIPCQuery<ProjectsResponse>(
+    () => api.getProjects(statusFilter, 50),
+    [statusFilter]
+  )
+}
+
+export function useGenerationStatus(projectId?: string, jobId?: string) {
+  return useIPCQuery<GenerationStatusResponse>(
+    () => api.getGenerationStatus(projectId, jobId),
+    [projectId, jobId]
+  )
+}
+
+// ── Plugins ──
+
+export function usePlugins() {
+  return useIPCQuery<PluginListResponse>(() => api.getPlugins(), [])
+}
+
+export async function acceptPlugin(pluginId: string) {
+  if (!api) throw new Error('API not available')
+  return api.acceptPlugin(pluginId)
+}
+
+export async function rejectPlugin(pluginId: string) {
+  if (!api) throw new Error('API not available')
+  return api.rejectPlugin(pluginId)
+}
+
+export async function togglePlugin(pluginId: string, enabled: boolean) {
+  if (!api) throw new Error('API not available')
+  return api.togglePlugin(pluginId, enabled)
+}
+
+// ── AgentFarm / Autogen ──
+
+export function useAgentFarmTeams() {
+  return useIPCQuery<any>(() => api.agentfarmListTeams(), [])
+}
+
+export function useAgentFarmStatus() {
+  return useIPCQuery<any>(() => api.agentfarmStatus(), [])
+}
+
+export async function createAgentTeam(templateId: string | null, config?: any) {
+  if (!api) throw new Error('API not available')
+  return api.agentfarmCreateTeam(templateId, config)
+}
+
+export async function runAgentTeam(teamId: string, task: string) {
+  if (!api) throw new Error('API not available')
+  return api.agentfarmRunTeam(teamId, task)
+}
+
+export async function stopAgentRun(runId: string) {
+  if (!api) throw new Error('API not available')
+  return api.agentfarmStopRun(runId)
+}
+
+export async function getAgentRunResults(runId: string) {
+  if (!api) throw new Error('API not available')
+  return api.agentfarmRunResults(runId)
 }
 
 // ── Python message listener ──

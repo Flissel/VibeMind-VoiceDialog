@@ -82,10 +82,10 @@ export function MemoryBrowser() {
     return (
       <div className="flex flex-col items-center justify-center" style={{ height: 300, color: 'var(--text-secondary)', gap: 'var(--space-3)' }}>
         <span style={{ fontSize: 'var(--text-title3)' }}>&#x26A0;&#xFE0F;</span>
-        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Fehler beim Laden</span>
+        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Error Loading</span>
         <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>{overviewError}</span>
         <button onClick={refreshOverview} style={{ marginTop: 'var(--space-2)', padding: '6px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'var(--fill-secondary)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 'var(--text-footnote)' }}>
-          Erneut versuchen
+          Try Again
         </button>
       </div>
     )
@@ -118,9 +118,9 @@ export function MemoryBrowser() {
       {/* Service Status Cards */}
       <div className="flex gap-3" style={{ marginBottom: 'var(--space-4)' }}>
         {[
-          { key: 'task_memory', label: 'Task Memory', desc: 'Intent-Ausfuehrung & Ergebnisse', icon: '\u{1F4CB}' },
-          { key: 'conversation_memory', label: 'Conversation Memory', desc: 'Cross-Session Kontext', icon: '\u{1F4AC}' },
-          { key: 'user_profiles', label: 'User Profiles', desc: 'Praeferenzen & Habits', icon: '\u{1F464}' },
+          { key: 'task_memory', label: 'Task Memory', desc: 'Intent Execution & Results', icon: '\u{1F4CB}' },
+          { key: 'conversation_memory', label: 'Conversation Memory', desc: 'Cross-Session Context', icon: '\u{1F4AC}' },
+          { key: 'user_profiles', label: 'User Profiles', desc: 'Preferences & Habits', icon: '\u{1F464}' },
         ].map(svc => {
           const available = memoryData?.[svc.key as keyof typeof memoryData] as { available: boolean } | undefined
           const isUp = available?.available ?? false
@@ -145,7 +145,7 @@ export function MemoryBrowser() {
                 }} />
               </div>
               <div style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)' }}>
-                {isUp ? svc.desc : 'Nicht konfiguriert'}
+                {isUp ? svc.desc : 'Not Configured'}
               </div>
             </div>
           )
@@ -164,10 +164,10 @@ export function MemoryBrowser() {
         }}>
           <span style={{ fontSize: 32, opacity: 0.5 }}>&#x1F9E0;</span>
           <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>
-            Memory Services nicht konfiguriert
+            Memory Services Not Configured
           </span>
           <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)', textAlign: 'center', maxWidth: 400, lineHeight: 'var(--leading-relaxed)' }}>
-            Aktiviere Memory Services in .env:
+            Enable Memory Services in .env:
           </span>
           <div style={{
             padding: 'var(--space-3)',
@@ -213,8 +213,8 @@ export function MemoryBrowser() {
       {anyAvailable && (
         <div style={{ marginBottom: 'var(--space-4)' }}>
           <h3 style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 'var(--space-3)' }}>
-            Suche
-          </h3>
+            Search
+       </h3>
 
           {/* Category toggle + search */}
           <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-3)' }}>
@@ -246,7 +246,7 @@ export function MemoryBrowser() {
             <div className="flex items-center flex-1 gap-2" style={{ marginLeft: 'auto', maxWidth: 350 }}>
               <input
                 type="text"
-                placeholder="Semantische Suche..."
+                placeholder="Semantic Search..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -276,7 +276,7 @@ export function MemoryBrowser() {
                   fontWeight: 'var(--weight-medium)',
                 }}
               >
-                Suchen
+                Search
               </button>
             </div>
           </div>
@@ -284,14 +284,14 @@ export function MemoryBrowser() {
           {/* Search Results */}
           {searchLoading && (
             <div className="flex items-center justify-center" style={{ height: 100, color: 'var(--text-tertiary)' }}>
-              Suche...
+              Searching...
             </div>
           )}
 
           {activeSearch && !searchLoading && searchResults.length === 0 && (
             <div className="flex flex-col items-center justify-center" style={{ height: 100, color: 'var(--text-tertiary)', gap: 'var(--space-1)' }}>
-              <span style={{ fontSize: 'var(--text-footnote)' }}>Keine Ergebnisse</span>
-              <span style={{ fontSize: 'var(--text-caption1)' }}>Versuche eine andere Suchanfrage</span>
+              <span style={{ fontSize: 'var(--text-footnote)' }}>No Results</span>
+              <span style={{ fontSize: 'var(--text-caption1)' }}>Try a different search query</span>
             </div>
           )}
 

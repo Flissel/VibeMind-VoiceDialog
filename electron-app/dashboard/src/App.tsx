@@ -4,12 +4,14 @@ import { ScheduleMonitor } from './features/ScheduleMonitor'
 import { AgentStatus } from './features/AgentStatus'
 import { ChatPanel } from './features/ChatPanel'
 import { MemoryBrowser } from './features/MemoryBrowser'
+import { PluginBrowser } from './features/PluginBrowser'
 
 const TABS: { key: DashboardTab; label: string; icon: string }[] = [
   { key: 'schedule', label: 'Schedule', icon: '\u{1F4C5}' },
   { key: 'agents', label: 'Agents', icon: '\u{1F916}' },
   { key: 'chat', label: 'Chat', icon: '\u{1F4AC}' },
   { key: 'memory', label: 'Memory', icon: '\u{1F9E0}' },
+  { key: 'plugins', label: 'Plugins', icon: '\u{1F9E9}' },
 ]
 
 export default function App() {
@@ -67,6 +69,7 @@ export default function App() {
           {activeTab === 'agents' && <AgentStatus />}
           {activeTab === 'chat' && <ChatPanel />}
           {activeTab === 'memory' && <MemoryBrowser />}
+          {activeTab === 'plugins' && <PluginBrowser />}
         </div>
       </div>
     </div>

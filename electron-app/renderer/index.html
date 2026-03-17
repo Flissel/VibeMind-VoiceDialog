@@ -57,6 +57,10 @@
                 <span class="space-icon">&#x1F4CA;</span>
                 <span class="space-name">Dashboard</span>
             </button>
+            <button class="space-tab" id="tab-video" data-space="video">
+                <span class="space-icon">&#x1F3AC;</span>
+                <span class="space-name">Video Studio</span>
+            </button>
             <button class="space-tab" id="tab-agentfarm" data-space="agentfarm">
                 <span class="space-icon">&#x1F3E1;</span>
                 <span class="space-name">Agent Farm</span>
@@ -2096,13 +2100,13 @@
             shuttlePanel?.classList.add('hidden');
         });
 
-        // Navigate with Alice button
+        // Navigate shuttle
         shuttleNavigateBtn?.addEventListener('click', () => {
-            console.log('[Shuttle] Navigate with Alice clicked');
+            console.log('[Shuttle] Navigate clicked');
             if (window.vibemind?.sendToPython) {
                 window.vibemind.sendToPython({
                     type: 'shuttle_navigate',
-                    action: 'transfer_to_alice'
+                    action: 'navigate'
                 });
             }
             shuttlePanel?.classList.add('hidden');

@@ -1,5 +1,5 @@
 {
-  "name": "vibemind-dashboard",
+  "name": "vibemind-agentfarm",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,13 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@sentry/react": "^10.43.0",
-    "lucide-react": "^0.575.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@sentry/vite-plugin": "^5.1.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
