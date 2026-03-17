@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class LoggingConfig:
@@ -184,6 +186,7 @@ def get_config() -> VoiceConfig:
     Returns:
         VoiceConfig instance
     """
+    logger.debug("get_config called")
     global _config_manager
     if _config_manager is None:
         _config_manager = ConfigManager()

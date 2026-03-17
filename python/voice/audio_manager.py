@@ -12,6 +12,7 @@ Features:
 """
 
 import base64
+import concurrent.futures
 import logging
 import threading
 import numpy as np
@@ -76,6 +77,28 @@ class AudioManager:
             f"block_size={block_size}"
         )
 
+    def _create_input_stream(self) -> None:
+        """Create and start input stream (runs in thread pool for timeout support)."""
+        try:
+            default_input = sd.query_devices(kind="input")
+            logger.debug(
+                f"[AudioManager] Default input device: "
+                f"'{default_input['name']}' (index={default_input['index']}, "
+                f"channels={default_input['max_input_channels']}, "
+                f"rate={default_input['default_samplerate']})"
+            )
+        except Exception as dev_err:
+            logger.debug(f"[AudioManager] Could not query input device: {dev_err}")
+
+        self._input_stream = sd.InputStream(
+            samplerate=self._sample_rate,
+            channels=self._channels,
+            dtype="int16",
+            blocksize=self._block_size,
+            callback=self._input_callback,
+        )
+        self._input_stream.start()
+
     def start_capture(self) -> None:
         """Start microphone capture. Audio chunks are sent via on_audio_chunk callback."""
         if self._is_capturing:
@@ -83,31 +106,15 @@ class AudioManager:
             return
 
         try:
-            # Log available and selected input device for debugging
-            import sys
-            try:
-                default_input = sd.query_devices(kind="input")
-                print(
-                    f"[Python DEBUG] [AudioManager] Default input device: "
-                    f"'{default_input['name']}' (index={default_input['index']}, "
-                    f"channels={default_input['max_input_channels']}, "
-                    f"rate={default_input['default_samplerate']})",
-                    file=sys.stderr, flush=True,
-                )
-            except Exception as dev_err:
-                print(f"[Python DEBUG] [AudioManager] Could not query input device: {dev_err}", file=sys.stderr, flush=True)
-
-            self._input_stream = sd.InputStream(
-                samplerate=self._sample_rate,
-                channels=self._channels,
-                dtype="int16",
-                blocksize=self._block_size,
-                callback=self._input_callback,
-            )
-            self._input_stream.start()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self._create_input_stream)
+                future.result(timeout=15)
             self._is_capturing = True
             logger.info("Microphone capture started")
 
+        except concurrent.futures.TimeoutError:
+            logger.error("Audio capture init timed out (15s) — PortAudio hung")
+            raise RuntimeError("Audio device init timed out")
         except Exception as e:
             logger.error(f"Failed to start microphone capture: {e}")
             raise
@@ -128,23 +135,32 @@ class AudioManager:
         except Exception as e:
             logger.error(f"Error stopping microphone capture: {e}")
 
+    def _create_output_stream(self) -> None:
+        """Create and start output stream (runs in thread pool for timeout support)."""
+        self._output_stream = sd.OutputStream(
+            samplerate=self._sample_rate,
+            channels=self._channels,
+            dtype="int16",
+            blocksize=self._block_size,
+            callback=self._output_callback,
+        )
+        self._output_stream.start()
+
     def start_playback(self) -> None:
         """Start audio playback stream."""
         if self._is_playing:
             return
 
         try:
-            self._output_stream = sd.OutputStream(
-                samplerate=self._sample_rate,
-                channels=self._channels,
-                dtype="int16",
-                blocksize=self._block_size,
-                callback=self._output_callback,
-            )
-            self._output_stream.start()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self._create_output_stream)
+                future.result(timeout=15)
             self._is_playing = True
             logger.info("Audio playback started")
 
+        except concurrent.futures.TimeoutError:
+            logger.error("Audio playback init timed out (15s) — PortAudio hung")
+            raise RuntimeError("Audio device init timed out")
         except Exception as e:
             logger.error(f"Failed to start audio playback: {e}")
             raise

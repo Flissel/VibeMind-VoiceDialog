@@ -30,6 +30,7 @@ _ideas_publisher = None
 _swe_design_publisher = None
 _arch_team_publisher = None
 _coding_publisher = None
+_doc_publisher = None
 
 
 def _try_create_mongo_publisher():
@@ -99,6 +100,20 @@ def get_coding_publisher():
         from .coding_publisher import CodingPublisher
         _coding_publisher = CodingPublisher()
     return _coding_publisher
+
+
+def get_doc_publisher():
+    """Get the Doc → filesystem publisher (singleton).
+
+    Writes project documentation as Markdown files to ~/.rowboat/docs/.
+    """
+    global _doc_publisher
+    if _doc_publisher is None:
+        if not is_publishing_enabled():
+            return _NoOpPublisher()
+        from .doc_publisher import DocPublisher
+        _doc_publisher = DocPublisher()
+    return _doc_publisher
 
 
 class _NoOpPublisher:

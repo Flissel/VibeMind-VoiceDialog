@@ -10,20 +10,15 @@ Stores and retrieves:
 """
 
 import json
-import uuid
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from .database import Database, get_database
 from .models import Task, TaskStatus
+from .repository_utils import generate_id
 
 logger = logging.getLogger(__name__)
-
-
-def generate_id() -> str:
-    """Generate a unique ID for new entities."""
-    return str(uuid.uuid4())[:8]
 
 
 class TaskMemoryRepository:

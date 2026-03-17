@@ -1,0 +1,35 @@
+{
+  "id": "research",
+  "version": "1.0.0",
+  "name": "ZeroClaw Research",
+  "description": "Web-Recherche, Scraping, Zusammenfassungen und Export nach Ideas/Rowboat",
+  "author": "VibeMind Team",
+  "category": "research",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.research.agents.zeroclaw_research_agent",
+  "agent_class": "ZeroClawResearchAgent",
+  "agent_factory": "get_zeroclaw_research_agent",
+
+  "stream": "events:tasks:zeroclaw",
+  "event_routes": {
+    "research.web": "events:tasks:zeroclaw",
+    "research.scrape": "events:tasks:zeroclaw",
+    "research.summarize": "events:tasks:zeroclaw",
+    "research.to_idea": "events:tasks:zeroclaw",
+    "research.to_rowboat": "events:tasks:zeroclaw"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["recherche", "suche", "web", "scrape", "zusammenfassung"],
+    "keywords_en": ["research", "search", "web", "scrape", "summary"],
+    "example_utterances": [
+      {"text": "Recherchiere im Web nach X", "event_type": "research.web"},
+      {"text": "Fasse die Seite zusammen", "event_type": "research.summarize"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": "USE_ZEROCLAW",
+  "dependencies": []
+}

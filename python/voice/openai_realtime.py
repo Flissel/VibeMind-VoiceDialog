@@ -207,7 +207,7 @@ class OpenAIRealtimeVoiceSession:
 
         def _dbg(msg):
             elapsed = time.time() - _t0
-            print(f"[Python DEBUG] [RealtimeVoice] [{elapsed:.3f}s] {msg}", file=sys.stderr, flush=True)
+            logger.debug(f"[RealtimeVoice] [{elapsed:.3f}s] {msg}")
 
         # Ensure the event loop has a dedicated ThreadPoolExecutor so
         # DNS resolution inside the websockets library doesn't get starved
@@ -404,25 +404,25 @@ class OpenAIRealtimeVoiceSession:
                     ),
                 }
             )
-            print("[Python DEBUG] [RealtimeVoice] Greeting triggered (audio buffered until device ready)", file=sys.stderr, flush=True)
+            logger.debug("[RealtimeVoice] Greeting triggered (audio buffered until device ready)")
 
         # Start audio I/O in thread executor (non-blocking).
         async def _init_audio():
             try:
                 loop = asyncio.get_running_loop()
-                print("[Python DEBUG] [RealtimeVoice] Starting audio I/O (in executor)...", file=sys.stderr, flush=True)
+                logger.debug("[RealtimeVoice] Starting audio I/O (in executor)...")
                 _t0_audio = time.time()
                 await loop.run_in_executor(None, self._audio_manager.start_capture)
                 await loop.run_in_executor(None, self._audio_manager.start_playback)
                 _audio_dur = time.time() - _t0_audio
-                print(f"[Python DEBUG] [RealtimeVoice] Audio I/O ready ({_audio_dur:.1f}s)", file=sys.stderr, flush=True)
+                logger.debug(f"[RealtimeVoice] Audio I/O ready ({_audio_dur:.1f}s)")
             except Exception as e:
-                print(f"[Python DEBUG] [RealtimeVoice] Audio init error: {e}", file=sys.stderr, flush=True)
+                logger.debug(f"[RealtimeVoice] Audio init error: {e}")
                 logger.error(f"Audio init error: {e}")
 
         self._audio_init_task = asyncio.create_task(_init_audio())
 
-        print("[Python DEBUG] [RealtimeVoice] Voice session ACTIVE - audio initializing in background", file=sys.stderr, flush=True)
+        logger.debug("[RealtimeVoice] Voice session ACTIVE - audio initializing in background")
         logger.info("Voice session started - audio initializing")
 
     async def disconnect(self) -> None:
@@ -510,7 +510,7 @@ class OpenAIRealtimeVoiceSession:
             )
             # NO response.create() — Rachel picks this up naturally
             # on the next user turn. No interruption, no race condition.
-            print(f"[Python DEBUG] [RealtimeVoice] Result injected into context: {text[:80]}...", file=sys.stderr, flush=True)
+            logger.debug(f"[RealtimeVoice] Result injected into context: {text[:80]}...")
             logger.info(f"Injected system message (silent): {text[:80]}...")
         except Exception as e:
             logger.error(f"Error injecting system message: {e}")
@@ -628,7 +628,7 @@ class OpenAIRealtimeVoiceSession:
                                 is_speaking = True
                                 speech_start_time = now
                                 silence_commit_pending = False
-                                print(f"[Python DEBUG] [RealtimeVoice] CLIENT VAD: Speech STARTED (RMS={rms:.0f})", file=sys.stderr, flush=True)
+                                logger.debug(f"[RealtimeVoice] CLIENT VAD: Speech STARTED (RMS={rms:.0f})")
                                 # Notify UI
                                 if self._on_vad_speech_started:
                                     self._on_vad_speech_started()
@@ -647,10 +647,9 @@ class OpenAIRealtimeVoiceSession:
                             silence_commit_pending = False
                             is_speaking = False
                             speech_duration = time.time() - speech_start_time
-                            print(
-                                f"[Python DEBUG] [RealtimeVoice] CLIENT VAD: Speech STOPPED "
-                                f"({speech_duration:.1f}s) — committing buffer + requesting response",
-                                file=sys.stderr, flush=True,
+                            logger.debug(
+                                f"[RealtimeVoice] CLIENT VAD: Speech STOPPED "
+                                f"({speech_duration:.1f}s) — committing buffer + requesting response"
                             )
                             if self._on_vad_speech_stopped:
                                 self._on_vad_speech_stopped()
@@ -665,22 +664,21 @@ class OpenAIRealtimeVoiceSession:
                                 if "already_has_active_response" in err_str:
                                     logger.debug("Response already active, skipping create")
                                 else:
-                                    print(f"[Python DEBUG] [RealtimeVoice] Commit/response error: {commit_err}", file=sys.stderr, flush=True)
+                                    logger.debug(f"[RealtimeVoice] Commit/response error: {commit_err}")
 
                     # Log progress every 5 seconds
                     if now - last_log_time > 5.0:
                         vad_mode = "server" if self._server_vad_active else "client"
-                        print(
-                            f"[Python DEBUG] [RealtimeVoice] Audio: {chunks_sent} chunks sent, "
-                            f"queue={self._audio_queue.qsize()}, RMS={rms:.0f}, VAD={vad_mode}",
-                            file=sys.stderr, flush=True,
+                        logger.debug(
+                            f"[RealtimeVoice] Audio: {chunks_sent} chunks sent, "
+                            f"queue={self._audio_queue.qsize()}, RMS={rms:.0f}, VAD={vad_mode}"
                         )
                         last_log_time = now
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"[Python DEBUG] [RealtimeVoice] Audio send error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                logger.debug(f"[RealtimeVoice] Audio send error: {type(e).__name__}: {e}")
                 logger.error(f"Audio send error: {e}")
                 await asyncio.sleep(0.1)
 
@@ -697,7 +695,7 @@ class OpenAIRealtimeVoiceSession:
         """
         event_count = 0
         try:
-            print("[Python DEBUG] [RealtimeVoice] Event loop started, waiting for events...", file=sys.stderr, flush=True)
+            logger.debug("[RealtimeVoice] Event loop started, waiting for events...")
             async for event in self._connection:
                 if not self._is_running:
                     break
@@ -713,18 +711,18 @@ class OpenAIRealtimeVoiceSession:
                     "error",
                 )
                 if event_count <= 5 or is_important or event_count % 100 == 0:
-                    print(f"[Python DEBUG] [RealtimeVoice] Event #{event_count}: {event.type}", file=sys.stderr, flush=True)
+                    logger.debug(f"[RealtimeVoice] Event #{event_count}: {event.type}")
 
                 try:
                     await self._handle_event(event)
                 except Exception as e:
-                    print(f"[Python DEBUG] [RealtimeVoice] Event handler error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                    logger.debug(f"[RealtimeVoice] Event handler error: {type(e).__name__}: {e}")
                     logger.error(f"Event handler error: {e}", exc_info=True)
 
         except asyncio.CancelledError:
             logger.debug("Event loop cancelled")
         except Exception as e:
-            print(f"[Python DEBUG] [RealtimeVoice] Event loop CRASHED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            logger.debug(f"[RealtimeVoice] Event loop CRASHED: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc(file=sys.stderr)
             logger.error(f"Event loop error: {e}")
@@ -757,7 +755,7 @@ class OpenAIRealtimeVoiceSession:
             # Agent transcript complete
             transcript = self._current_agent_transcript.strip()
             if transcript:
-                print(f"[Python DEBUG] [RealtimeVoice] Rachel: {transcript[:100]}", file=sys.stderr, flush=True)
+                logger.debug(f"[RealtimeVoice] Rachel: {transcript[:100]}")
                 logger.info(f"Agent: {transcript}")
                 if self._on_agent_transcript:
                     self._on_agent_transcript(transcript)
@@ -770,7 +768,7 @@ class OpenAIRealtimeVoiceSession:
             # User speech transcript
             transcript = getattr(event, "transcript", "")
             if transcript:
-                print(f"[Python DEBUG] [RealtimeVoice] User: {transcript[:100]}", file=sys.stderr, flush=True)
+                logger.debug(f"[RealtimeVoice] User: {transcript[:100]}")
                 logger.info(f"User: {transcript}")
                 if self._on_user_transcript:
                     self._on_user_transcript(transcript)
@@ -800,14 +798,14 @@ class OpenAIRealtimeVoiceSession:
 
         # === VAD Events (server_vad — currently disabled, kept as fallback) ===
         elif event_type == "input_audio_buffer.speech_started":
-            print("[Python DEBUG] [RealtimeVoice] SERVER VAD: Speech STARTED", file=sys.stderr, flush=True)
+            logger.debug("[RealtimeVoice] SERVER VAD: Speech STARTED")
             # Clear playback to allow interruption
             self._audio_manager.clear_playback_buffer()
             if self._on_vad_speech_started:
                 self._on_vad_speech_started()
 
         elif event_type == "input_audio_buffer.speech_stopped":
-            print("[Python DEBUG] [RealtimeVoice] SERVER VAD: Speech STOPPED", file=sys.stderr, flush=True)
+            logger.debug("[RealtimeVoice] SERVER VAD: Speech STOPPED")
             if self._on_vad_speech_stopped:
                 self._on_vad_speech_stopped()
 
@@ -877,7 +875,7 @@ class OpenAIRealtimeVoiceSession:
             name: Function name (e.g., 'send_intent')
             arguments_str: JSON string of function arguments
         """
-        print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call START: {name}", file=sys.stderr, flush=True)
+        logger.debug(f"[RealtimeVoice] _execute_function_call START: {name}")
 
         logger.info(f"Function call: {name}({arguments_str[:100]})")
 
@@ -907,7 +905,7 @@ class OpenAIRealtimeVoiceSession:
                 logger.error(f"Tool execution error: {e}")
                 result = f"Fehler bei der Ausfuehrung: {str(e)}"
 
-        print(f"[Python DEBUG] [RealtimeVoice] Tool result ready, sending back: {result[:80]}", file=sys.stderr, flush=True)
+        logger.debug(f"[RealtimeVoice] Tool result ready, sending back: {result[:80]}")
 
         # Send result back to OpenAI Realtime
         try:
@@ -931,11 +929,11 @@ class OpenAIRealtimeVoiceSession:
                 else:
                     raise
 
-            print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call DONE: result sent to OpenAI", file=sys.stderr, flush=True)
+            logger.debug("[RealtimeVoice] _execute_function_call DONE: result sent to OpenAI")
             logger.info(f"Tool result sent: {result[:100]}")
 
         except Exception as e:
-            print(f"[Python DEBUG] [RealtimeVoice] _execute_function_call ERROR: {e}", file=sys.stderr, flush=True)
+            logger.debug(f"[RealtimeVoice] _execute_function_call ERROR: {e}")
             logger.error(f"Error sending tool result: {e}")
 
     def _should_reconnect(self) -> bool:
