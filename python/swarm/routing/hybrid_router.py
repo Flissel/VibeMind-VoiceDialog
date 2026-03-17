@@ -100,10 +100,13 @@ class HybridRouter:
             matched_by="default", tier=0,
         )
 
-    def _try_tier1_prefix(self, event_type: str) -> Optional[RouteResult]:
+    def _try_tier1_prefix(self, event_type) -> Optional[RouteResult]:
         """Tier 1: Exact prefix match from EVENT_TO_TOOL bindings."""
         if not event_type or event_type == "unknown":
             return None
+        # Guard: Ollama sometimes returns list instead of string
+        if not isinstance(event_type, str):
+            event_type = str(event_type)
 
         prefix = event_type.split(".")[0] + "."
         binding = self._event_cache.get(prefix)
