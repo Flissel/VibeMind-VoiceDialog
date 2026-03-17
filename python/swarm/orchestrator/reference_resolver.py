@@ -150,13 +150,16 @@ class DroPEReferenceResolver:
 
         return False
 
-    def resolve(self, utterance: str, conversation_history: str) -> str:
+    def resolve(self, utterance: str, conversation_history: str,
+                session_store=None, session_key=None) -> str:
         """
         Resolve ambiguous references using conversation history.
 
         Args:
             utterance: Current user input (e.g., "Mach das nochmal")
             conversation_history: Past conversation context from ConversationRouter
+            session_store: Optional SessionStore for last_route lookup
+            session_key: Optional SessionKey for session-aware resolution
 
         Returns:
             Resolved utterance with concrete references, or original if resolution fails
@@ -169,6 +172,19 @@ class DroPEReferenceResolver:
         if not self.needs_resolution(utterance):
             logger.debug(f"[DroPE] No resolution needed for: {utterance}")
             return utterance
+
+        # Try session last_route for "nochmal" / "wieder" references
+        if session_store and session_key:
+            try:
+                entry = session_store.get_or_create(session_key)
+                if entry.last_route:
+                    text_lower = utterance.lower()
+                    if any(w in text_lower for w in ["nochmal", "wieder", "erneut"]):
+                        resolved = f"Wiederhole: {entry.last_route.event_type}"
+                        logger.info(f"[DroPE] Session last_route: '{utterance}' -> '{resolved}'")
+                        return resolved
+            except Exception as e:
+                logger.debug(f"[DroPE] Session last_route lookup failed: {e}")
 
         # Skip if no history to resolve from
         if not conversation_history or not conversation_history.strip():
@@ -255,6 +271,7 @@ def get_reference_resolver() -> Optional[DroPEReferenceResolver]:
     Returns:
         DroPEReferenceResolver instance if enabled, None otherwise
     """
+    logger.debug("get_reference_resolver called")
     global _resolver
 
     # Check feature flag first

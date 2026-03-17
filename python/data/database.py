@@ -6,9 +6,12 @@ Handles database connection, schema creation, and migrations.
 
 import sqlite3
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 # Default database location
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "vibemind.db"
@@ -24,7 +27,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 14
+    SCHEMA_VERSION = 17
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -622,6 +625,65 @@ class Database:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_sched_created ON scheduled_tasks(created_at DESC)")
             except Exception:
                 pass  # Indexes may already exist
+
+        # Migration 14 -> 15: Add previous_content_json for format revert
+        if from_version < 15:
+            try:
+                conn.execute("ALTER TABLE canvas_nodes ADD COLUMN previous_content_json TEXT")
+            except Exception:
+                pass  # Column may already exist
+
+        # Migration 15 -> 16: Plugin state table
+        if from_version < 16:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS plugin_state (
+                        plugin_id TEXT PRIMARY KEY,
+                        enabled INTEGER DEFAULT 0,
+                        version_seen TEXT,
+                        accepted_at TIMESTAMP,
+                        rejected_at TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+
+        # Migration 16 -> 17: HybridRouter sessions + identity links
+        if from_version < 17:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_key   TEXT PRIMARY KEY,
+                        agent_id      TEXT NOT NULL,
+                        channel       TEXT NOT NULL,
+                        canonical_id  TEXT,
+                        space_state   TEXT,
+                        last_route    TEXT,
+                        last_active   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS session_history (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_key   TEXT NOT NULL REFERENCES sessions(session_key),
+                        speaker       TEXT NOT NULL,
+                        text          TEXT NOT NULL,
+                        event_type    TEXT,
+                        timestamp     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS identity_links (
+                        channel       TEXT NOT NULL,
+                        peer_id       TEXT NOT NULL,
+                        canonical_id  TEXT NOT NULL,
+                        PRIMARY KEY (channel, peer_id)
+                    )
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_session_history_key ON session_history(session_key)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_identity_canonical ON identity_links(canonical_id)")
+            except Exception:
+                pass  # Tables may already exist
 
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))
