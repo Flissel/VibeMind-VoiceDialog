@@ -5,14 +5,14 @@ import { useAgentStatus } from '../hooks/useIPC'
 /* ── Helpers ───────────────────────────────────────────────── */
 
 const AGENT_META: Record<string, { label: string; icon: string; color: string }> = {
-  bubbles: { label: 'Bubbles', icon: '\u{1F4AD}', color: 'var(--system-purple)' },
-  ideas: { label: 'Ideas', icon: '\u{1F4A1}', color: 'var(--system-yellow)' },
-  coding: { label: 'Coding', icon: '\u{1F9EC}', color: 'var(--system-green)' },
-  desktop: { label: 'Desktop', icon: '\u{1F5A5}', color: 'var(--system-blue)' },
-  roarboot: { label: 'Rowboat', icon: '\u{1F6A3}', color: 'var(--system-teal)' },
-  zeroclaw: { label: 'Research', icon: '\u{1F50D}', color: 'var(--system-orange)' },
-  minibook: { label: 'Minibook', icon: '\u{1F4D6}', color: 'var(--system-red)' },
-  schedule: { label: 'Schedule', icon: '\u{23F0}', color: 'var(--system-purple)' },
+  bubbles: { label: 'Bubbles', icon: '\u{1F4AD}', color: '#4488ff' },
+  ideas: { label: 'Ideas', icon: '\u{1F4A1}', color: '#4488ff' },
+  coding: { label: 'Coding', icon: '\u{1F9EC}', color: '#44ff88' },
+  desktop: { label: 'Desktop', icon: '\u{1F5A5}', color: '#ff8844' },
+  roarboot: { label: 'Rowboat', icon: '\u{1F6A3}', color: '#22ccaa' },
+  zeroclaw: { label: 'Research', icon: '\u{1F50D}', color: '#ff6633' },
+  minibook: { label: 'Minibook', icon: '\u{1F4D6}', color: '#ff66aa' },
+  schedule: { label: 'Schedule', icon: '\u{23F0}', color: '#8866ff' },
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -23,23 +23,23 @@ const STATUS_DOT: Record<string, string> = {
 }
 
 function formatTs(ts: string | null): string {
-  if (!ts) return 'Noch kein Event'
+  if (!ts) return 'No Event Yet'
   const d = new Date(ts)
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
 
-  if (diffMs < 60000) return 'Gerade eben'
-  if (diffMs < 3600000) return `Vor ${Math.floor(diffMs / 60000)}m`
-  if (diffMs < 86400000) return `Vor ${Math.floor(diffMs / 3600000)}h`
+  if (diffMs < 60000) return 'Just Now'
+  if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)}m ago`
+  if (diffMs < 86400000) return `${Math.floor(diffMs / 3600000)}h ago`
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 type FilterKey = 'all' | 'active' | 'error'
 
 const PILLS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'Alle' },
-  { key: 'active', label: 'Aktiv' },
-  { key: 'error', label: 'Fehler' },
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'error', label: 'Error' },
 ]
 
 /* ── Component ─────────────────────────────────────────────── */
@@ -75,10 +75,10 @@ export function AgentStatus() {
     return (
       <div className="flex flex-col items-center justify-center" style={{ height: 300, color: 'var(--text-secondary)', gap: 'var(--space-3)' }}>
         <span style={{ fontSize: 'var(--text-title3)' }}>&#x26A0;&#xFE0F;</span>
-        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Fehler beim Laden</span>
+        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Error Loading</span>
         <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>{error}</span>
         <button onClick={refresh} style={{ marginTop: 'var(--space-2)', padding: '6px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'var(--fill-secondary)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 'var(--text-footnote)' }}>
-          Erneut versuchen
+          Try Again
         </button>
       </div>
     )
@@ -146,7 +146,7 @@ export function AgentStatus() {
                 }} />
               </div>
               <div className="truncate" style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)' }}>
-                {agent.last_event_type ?? 'Kein Event'}
+                {agent.last_event_type ?? 'No Event'}
               </div>
               <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-quaternary)', marginTop: 2 }}>
                 {formatTs(agent.last_event_at)}
@@ -230,7 +230,7 @@ export function AgentStatus() {
           )
         })}
         <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
-          {filtered.length} von {agents.length} Agents
+          {filtered.length} of {agents.length} Agents
         </span>
       </div>
 

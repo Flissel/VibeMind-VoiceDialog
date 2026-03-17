@@ -38,11 +38,11 @@ function parseTriggerConfig(task: ScheduledTask): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'var(--system-green)',
-  paused: 'var(--system-orange)',
-  completed: 'var(--system-blue)',
+  active: '#5eff8a',
+  paused: '#ffc145',
+  completed: '#8b8eff',
   cancelled: 'var(--text-tertiary)',
-  failed: 'var(--system-red)',
+  failed: '#ff5a6e',
 }
 
 const FILTER_PILLS = [
@@ -96,10 +96,10 @@ export function ScheduleMonitor() {
     return (
       <div className="flex flex-col items-center justify-center" style={{ height: 300, color: 'var(--text-secondary)', gap: 'var(--space-3)' }}>
         <span style={{ fontSize: 'var(--text-title3)' }}>&#x26A0;&#xFE0F;</span>
-        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Fehler beim Laden</span>
+        <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Error Loading</span>
         <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>{error}</span>
         <button onClick={refresh} style={{ marginTop: 'var(--space-2)', padding: '6px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'var(--fill-secondary)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 'var(--text-footnote)' }}>
-          Erneut versuchen
+          Try Again
         </button>
       </div>
     )
@@ -132,10 +132,10 @@ export function ScheduleMonitor() {
       {/* Summary Cards */}
       <div className="flex gap-3" style={{ marginBottom: 'var(--space-4)' }}>
         {[
-          { label: 'Gesamt', value: tasks.length, color: 'var(--text-primary)' },
-          { label: 'Aktiv', value: tasks.filter(t => t.status === 'active').length, color: 'var(--system-green)' },
-          { label: 'Pausiert', value: tasks.filter(t => t.status === 'paused').length, color: 'var(--system-orange)' },
-          { label: 'Fehler', value: tasks.filter(t => t.status === 'failed' || t.last_error).length, color: 'var(--system-red)' },
+          { label: 'Total', value: tasks.length, color: 'var(--text-primary)' },
+          { label: 'Active', value: tasks.filter(t => t.status === 'active').length, color: 'var(--system-green)' },
+          { label: 'Paused', value: tasks.filter(t => t.status === 'paused').length, color: 'var(--system-orange)' },
+          { label: 'Error', value: tasks.filter(t => t.status === 'failed' || t.last_error).length, color: 'var(--system-red)' },
         ].map(card => (
           <div key={card.label} style={{
             flex: 1,
@@ -181,10 +181,10 @@ export function ScheduleMonitor() {
       {tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center" style={{ height: 200, color: 'var(--text-secondary)', gap: 'var(--space-2)' }}>
           <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>
-            Keine geplanten Tasks
+            No Scheduled Tasks
           </span>
           <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>
-            Erstelle Tasks via Voice: "Erinnere mich morgen um 9 Uhr..."
+            Create tasks via voice: "Remind me tomorrow at 9 AM..."
           </span>
         </div>
       ) : (
@@ -254,7 +254,7 @@ export function ScheduleMonitor() {
                       onClick={() => handleStatusChange(task.id, 'paused')}
                       disabled={actionLoading === task.id}
                       className="hover-bg"
-                      title="Pausieren"
+                      title="Pause"
                       style={{
                         width: 28, height: 28, borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--separator)', background: 'transparent',
@@ -271,7 +271,7 @@ export function ScheduleMonitor() {
                       onClick={() => handleStatusChange(task.id, 'active')}
                       disabled={actionLoading === task.id}
                       className="hover-bg"
-                      title="Fortsetzen"
+                      title="Resume"
                       style={{
                         width: 28, height: 28, borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--separator)', background: 'transparent',
@@ -288,7 +288,7 @@ export function ScheduleMonitor() {
                       onClick={() => handleStatusChange(task.id, 'cancelled')}
                       disabled={actionLoading === task.id}
                       className="hover-bg"
-                      title="Abbrechen"
+                      title="Cancel"
                       style={{
                         width: 28, height: 28, borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--separator)', background: 'transparent',

@@ -5,6 +5,12 @@
  * This bridges the renderer (Three.js) with the main process (Python backend).
  */
 
+// Sentry renderer initialization (must be before contextBridge)
+try {
+    const SentryRenderer = require('@sentry/electron/renderer');
+    if (process.env.SENTRY_DSN) { SentryRenderer.init(); }
+} catch (e) { /* Sentry is optional */ }
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods to the renderer
@@ -25,6 +31,10 @@ contextBridge.exposeInMainWorld('vibemind', {
 
     // Send generic message to Python
     sendToPython: (message) => ipcRenderer.send('to-python', message),
+
+    // Inline game console chat (renderer → main → Python → process_intent)
+    sendChatMessage: (text) =>
+        ipcRenderer.invoke('renderer:chat-text-input', { text }),
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {
@@ -273,6 +283,11 @@ contextBridge.exposeInMainWorld('vibemind', {
     hideRowboat: () => ipcRenderer.send('hide-rowboat'),
     isRowboatVisible: () => ipcRenderer.invoke('is-rowboat-visible'),
 
+    // ===== CLAUDE CODE TOKEN =====
+
+    // Get Claude Code OAuth token (for Settings UI auto-detect)
+    getClaudeCodeToken: () => ipcRenderer.invoke('get-claude-code-token'),
+
     // ===== SWE DESIGN (FACTORY SPACE) =====
 
     // SWE Design BrowserView Control
@@ -286,6 +301,21 @@ contextBridge.exposeInMainWorld('vibemind', {
     showClawPort: () => ipcRenderer.send('show-clawport'),
     hideClawPort: () => ipcRenderer.send('hide-clawport'),
     isClawPortVisible: () => ipcRenderer.invoke('is-clawport-visible'),
+
+    // ===== BRAIN DASHBOARD =====
+
+    // Brain BrowserView Control
+    showBrain: () => ipcRenderer.send('show-brain'),
+    hideBrain: () => ipcRenderer.send('hide-brain'),
+    isBrainVisible: () => ipcRenderer.invoke('is-brain-visible'),
+
+    // ===== AGENT FARM =====
+
+    // Agent Farm BrowserView Control
+    showAgentFarm: () => ipcRenderer.send('show-agentfarm'),
+    showAgentFarmTab: (tab) => ipcRenderer.send('show-agentfarm-tab', tab),
+    hideAgentFarm: () => ipcRenderer.send('hide-agentfarm'),
+    isAgentFarmVisible: () => ipcRenderer.invoke('is-agentfarm-visible'),
 
     // Docker Management (for Coding Engine containers)
     docker: {

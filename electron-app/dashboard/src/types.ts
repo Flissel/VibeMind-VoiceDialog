@@ -117,6 +117,81 @@ export interface ConversationHistoryResponse {
   }>
 }
 
+// ── Projects ──
+
+export interface ProjectInfo {
+  id: string
+  name: string
+  description: string | null
+  status: string // shuttling, active, generating, completed, idle
+  generation_status: string | null
+  convergence_progress: number | null
+  tech_stack: string | null
+  job_id: string | null
+  project_path: string | null
+  error_message: string | null
+  created_at: string | null
+  total_issues: number
+  quality_score: number
+  task_count: number
+  stages_completed: number
+  total_stages: number
+}
+
+export interface ProjectsResponse {
+  type: 'generated_projects_list'
+  projects: ProjectInfo[]
+  error?: string
+}
+
+export interface GenerationStatusResponse {
+  type: 'generation_status'
+  project_id?: string
+  name?: string
+  status?: string
+  progress?: number
+  phase?: string
+  phase_error?: string
+  error?: string
+}
+
+// ── Plugins ──
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  author: string
+  category: string
+  changelog: string
+  stream: string
+  event_count: number
+  enabled: boolean
+  builtin: boolean
+  is_new: boolean
+  is_updated: boolean
+  env_flag: string | null
+  dependencies: string[]
+}
+
+export interface PluginListResponse {
+  type: 'plugin_list'
+  plugins: PluginInfo[]
+  total_enabled: number
+  total_available: number
+  error?: string
+}
+
+export interface PluginActionResponse {
+  type: 'plugin_action_result'
+  action: 'accept' | 'reject' | 'toggle'
+  plugin_id: string
+  success: boolean
+  enabled?: boolean
+  error?: string
+}
+
 // ── Tab ──
 
-export type DashboardTab = 'schedule' | 'agents' | 'chat' | 'memory'
+export type DashboardTab = 'schedule' | 'agents' | 'chat' | 'memory' | 'plugins'

@@ -97,7 +97,7 @@ export function ChatPanel() {
     const response: ChatMessage = {
       id: nextId(),
       role: 'assistant',
-      content: (msg.message as string) || 'Keine Antwort',
+      content: (msg.message as string) || 'No Response',
       timestamp: Date.now(),
       event_type: msg.event_type as string | undefined,
     }
@@ -128,7 +128,7 @@ export function ChatPanel() {
       setMessages(prev => [...prev, {
         id: nextId(),
         role: 'system',
-        content: `Fehler: ${e instanceof Error ? e.message : String(e)}`,
+        content: `Error: ${e instanceof Error ? e.message : String(e)}`,
         timestamp: Date.now(),
       }])
       setLoading(false)
@@ -150,7 +150,7 @@ export function ChatPanel() {
           Chat
         </h2>
         <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)' }}>
-          Text-Eingabe &#x2192; Intent Orchestrator
+          Text Input &#x2192; Intent Orchestrator
         </span>
       </div>
 
@@ -170,16 +170,16 @@ export function ChatPanel() {
           <div className="flex flex-col items-center justify-center" style={{ height: '100%', minHeight: 200, color: 'var(--text-tertiary)', gap: 'var(--space-2)' }}>
             <span style={{ fontSize: 32, opacity: 0.5 }}>&#x1F4AC;</span>
             <span style={{ fontSize: 'var(--text-footnote)', fontWeight: 'var(--weight-medium)' }}>
-              Text-basierte Steuerung
+              Text-Based Control
             </span>
             <span style={{ fontSize: 'var(--text-caption1)', textAlign: 'center', maxWidth: 300, lineHeight: 'var(--leading-relaxed)' }}>
-              Gleicher Pfad wie Voice: Deine Eingabe wird klassifiziert und vom passenden Agent ausgefuehrt.
+              Same path as Voice: Your input is classified and executed by the matching agent.
             </span>
             <div style={{ marginTop: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
               {[
-                'Zeig mir meine Bubbles',
-                'Erstelle eine Idee: API Design',
-                'Wie ist der Code-Status?',
+                'Show me my bubbles',
+                'Create an idea: API Design',
+                "What's the code status?",
               ].map(example => (
                 <button
                   key={example}
@@ -266,7 +266,7 @@ export function ChatPanel() {
                   color: 'var(--text-tertiary)',
                   fontSize: 'var(--text-footnote)',
                 }}>
-                  Verarbeite...
+                  Processing...
                 </div>
               </div>
             )}
@@ -292,7 +292,7 @@ export function ChatPanel() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Nachricht eingeben..."
+          placeholder="Type a message..."
           disabled={loading}
           className="focus-ring"
           style={{
