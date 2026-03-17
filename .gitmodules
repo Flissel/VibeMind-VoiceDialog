@@ -22,3 +22,9 @@
 [submodule "python/spaces/brain/the_brain"]
 	path = python/spaces/brain/the_brain
 	url = https://github.com/Flissel/the_brain.git
+[submodule "python/spaces/video/vibevideo"]
+	path = python/spaces/video/vibevideo
+	url = https://github.com/Flissel/vibevideo.git
+[submodule "python/spaces/video/vibevideo_deepfake"]
+	path = python/spaces/video/vibevideo_deepfake
+	url = https://github.com/Flissel/vibevideo-deepfake.git
