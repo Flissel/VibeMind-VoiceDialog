@@ -2,6 +2,64 @@
 
 The Minibook space provides document collaboration and content enrichment capabilities. It includes a central execution hub (MinibookHub), an enrichment pipeline, and integration with the external minibook submodule.
 
+## MinibookHub — Zentrales Routing
+
+MinibookHub ist nicht nur ein Space, sondern der **primäre Orchestrierungsmodus** des gesamten Systems. Wenn `USE_MINIBOOK_HUB=true` gesetzt ist, wird jeder User-Intent über MinibookHub geroutet — nicht nur minibook-spezifische Events. MinibookHub enriched den Intent, bestimmt die zuständigen Spaces, dispatcht parallel an die SpaceResponders und aggregiert die Ergebnisse.
+
+### Architektur
+
+```
+User Intent
+    → MinibookHub (minibook_hub.py)
+        → EnrichmentPipeline (enrichment/pipeline.py)
+            1. ContextGather  — History, State, User Prefs
+            2. SpaceRouter    — Deterministic + LLM + Keyword Routing
+            3. TaskEnricher   — Per-Agent Payload Building
+            4. Validation     — Schema + Completeness Check
+        → Minibook API (HTTP POST to external minibook service)
+        → SpaceMinibookResponders (workers/minibook_workers.py, 8 Threads)
+        → ResultAggregator (result_aggregator.py)
+    → Response (sync or async via NotificationQueue)
+```
+
+### Kernkomponenten
+
+| Datei | Pfad | Beschreibung |
+| ------- | ------ | ------------- |
+| `minibook_hub.py` | `python/spaces/minibook/minibook_hub.py` | Central dispatch — empfängt Intents, koordiniert Pipeline + Workers |
+| `pipeline.py` | `python/spaces/minibook/enrichment/pipeline.py` | 4-Stage Enrichment Pipeline (Context → Route → Enrich → Validate) |
+| `space_router.py` | `python/spaces/minibook/enrichment/space_router.py` | Deterministic + LLM + Keyword Routing — bestimmt welche Spaces zuständig sind |
+| `context_gather.py` | `python/spaces/minibook/enrichment/context_gather.py` | Sammelt Conversation History, Real-Time State und User Preferences |
+| `task_enricher.py` | `python/spaces/minibook/enrichment/task_enricher.py` | Baut per-Agent Payloads mit space-spezifischem Kontext |
+| `rachel_interface.py` | `python/spaces/minibook/rachel_interface.py` | Voice Agent Status Dashboard — liefert Rachel Prompt-Metadata |
+| `result_aggregator.py` | `python/spaces/minibook/result_aggregator.py` | Sync/Async Result Collection — wartet auf alle SpaceResponders |
+| `minibook_workers.py` | `python/spaces/minibook/workers/minibook_workers.py` | SpaceMinibookResponders — 8 parallele Threads, einer pro Space |
+
+### Konfiguration
+
+```bash
+# Hub Mode aktivieren (routet ALLE Intents über MinibookHub)
+USE_MINIBOOK_HUB=true
+
+# Minibook API Endpoint (externer Service)
+MINIBOOK_URL=http://localhost:3480
+
+# LLM für Space-Routing (wenn Deterministic/Keyword nicht matcht)
+MINIBOOK_ENRICHMENT_MODEL=openai/gpt-4o-mini
+
+# Timeouts
+MINIBOOK_HUB_SYNC_TIMEOUT=10       # Sekunden — Single-Space Wait
+MINIBOOK_HUB_ASYNC_TIMEOUT=120     # Sekunden — Multi-Space Gesamttimeout
+```
+
+### Docker
+
+```bash
+docker compose -f docker-compose.minibook.yml up -d
+```
+
+Dies startet den Minibook API Service auf Port 3480.
+
 ## Directory Structure
 
 ```

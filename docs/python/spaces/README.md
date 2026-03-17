@@ -1,6 +1,6 @@
 # Spaces
 
-VibeMind has 8 domain spaces. Each space is a self-contained module in `python/spaces/` with its own agents, tools, workers, and broadcast agents.
+VibeMind has 10 domain spaces. Each space is a self-contained module in `python/spaces/` with its own agents, tools, workers, and broadcast agents.
 
 ## Space Directory
 
@@ -14,8 +14,12 @@ VibeMind has 8 domain spaces. Each space is a self-contained module in `python/s
 | Research | `research/` | ZeroClawResearchAgent | `events:tasks:zeroclaw` | 5 research.* events |
 | Minibook | `minibook/` | MinibookBackendAgent | `events:tasks:minibook` | 6 minibook.* events |
 | Schedule | `schedule/` | ScheduleBackendAgent | `events:tasks:schedule` | 6 schedule.* events |
+| N8n | `n8n/` | N8nBackendAgent | `events:tasks:n8n` | 8 n8n.* events |
 
 > **Note:** Shuttles (`python/spaces/shuttles/`) contains only the SWE Design submodule -- no dedicated agent or tools.
+> **Note:** Brain (`python/spaces/brain/`) contains the Tahlamus submodule -- a standalone neuroscience-inspired cognitive system with its own microservices (ports 5000–5002), not a traditional backend agent.
+
+| Brain | `brain/` | — (standalone) | — | Tahlamus cognitive routing (submodule) |
 
 ## Space Internal Structure
 
