@@ -423,7 +423,7 @@ class IntentOrchestrator:
             try:
                 self._stream_dispatcher = get_stream_listener_dispatcher()
                 logger.info("StreamListener initialized (LLM-based parallel routing)")
-                print("[Python DEBUG] [STREAM LISTENER] Initialized with all domain listeners", file=sys.stderr, flush=True)
+                logger.debug("[STREAM LISTENER] Initialized with all domain listeners")
             except Exception as e:
                 logger.warning(f"Failed to initialize StreamListener: {e}")
                 self._use_stream_listener = False
@@ -439,7 +439,7 @@ class IntentOrchestrator:
             try:
                 self._space_agents["ideas"] = get_ideas_space_agent()
                 logger.info("SpaceAgents initialized (ideas)")
-                print("[Python DEBUG] [SPACE AGENTS] Ideas agent initialized", file=sys.stderr, flush=True)
+                logger.debug("[SPACE AGENTS] Ideas agent initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize SpaceAgents: {e}")
                 self._use_space_agents = False
@@ -447,6 +447,17 @@ class IntentOrchestrator:
         # MinibookHub — Central execution hub (Phase: Minibook als zentraler Hub)
         # When USE_MINIBOOK_HUB=true, all intents route through Minibook
         self._minibook_hub = None
+
+        # HybridRouter — Tier-based deterministic routing (Phase 0)
+        # Resolves 90% of intents without LLM. Falls through to MinibookHub for multi-space.
+        self._hybrid_router = None
+        if os.getenv("USE_HYBRID_ROUTER", "true").lower() == "true":
+            try:
+                from swarm.routing.hybrid_router import HybridRouter
+                self._hybrid_router = HybridRouter()
+                logger.info("HybridRouter enabled (Phase 0 routing)")
+            except Exception as e:
+                logger.warning(f"HybridRouter init failed, using MinibookHub only: {e}")
 
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
@@ -655,37 +666,37 @@ class IntentOrchestrator:
                 """Format desktop tool result for voice output."""
                 if isinstance(result, dict):
                     if result.get("success"):
-                        return result.get("message", "Erledigt.")
+                        return result.get("message", "Done.")
                     else:
-                        return f"Fehler: {result.get('error', result.get('message', 'Unbekannter Fehler'))}"
+                        return f"Error: {result.get('error', result.get('message', 'Unknown error'))}"
                 return str(result)
 
             # Sync wrapper functions for desktop tools
             def desktop_task_sync(params):
                 goal = params.get("goal", "") or params.get("description", "")
                 if not goal:
-                    return "Was soll ich auf dem Desktop machen?"
+                    return "What should I do on the desktop?"
                 result = _run_async(execute_desktop_task(goal))
                 return _format_desktop_result(result)
 
             def click_element_sync(params):
                 desc = params.get("element_description", "") or params.get("description", "")
                 if not desc:
-                    return "Welches Element soll ich anklicken?"
+                    return "Which element should I click?"
                 result = _run_async(click_element(desc))
                 return _format_desktop_result(result)
 
             def type_text_sync(params):
                 text = params.get("text", "")
                 if not text:
-                    return "Was soll ich tippen?"
+                    return "What should I type?"
                 result = _run_async(type_text(text))
                 return _format_desktop_result(result)
 
             def press_key_sync(params):
                 key = params.get("key", "")
                 if not key:
-                    return "Welche Taste soll ich druecken?"
+                    return "Which key should I press?"
                 result = _run_async(press_key(key))
                 return _format_desktop_result(result)
 
@@ -811,9 +822,9 @@ class IntentOrchestrator:
                 """Format exploration result for voice output."""
                 if isinstance(result, dict):
                     if result.get("success"):
-                        return result.get("message", "Exploration gestartet.")
+                        return result.get("message", "Exploration started.")
                     else:
-                        return result.get("message", "Exploration fehlgeschlagen.")
+                        return result.get("message", "Exploration failed.")
                 return str(result)
 
             def explore_start_sync(params):
@@ -911,28 +922,28 @@ class IntentOrchestrator:
                 """Format requirements result for voice output."""
                 if isinstance(result, dict):
                     if result.get("error"):
-                        return f"Fehler: {result.get('error', 'Unbekannter Fehler')}"
+                        return f"Error: {result.get('error', 'Unknown error')}"
                     elif "bubbles" in result:
                         bubbles = result.get("bubbles", [])
                         if not bubbles:
-                            return "Du hast noch keine Bubbles mit Requirements."
+                            return "You don't have any Spaces with Requirements yet."
                         count = len(bubbles)
-                        names = [b.get("bubble_title", b.get("title", "Unbenannt")) for b in bubbles[:5]]
+                        names = [b.get("bubble_title", b.get("title", "Untitled")) for b in bubbles[:5]]
                         if count <= 5:
-                            return f"Du hast {count} Bubbles mit Requirements: {', '.join(names)}."
-                        return f"Du hast {count} Bubbles mit Requirements. Die ersten sind: {', '.join(names)}."
+                            return f"You have {count} Spaces with Requirements: {', '.join(names)}."
+                        return f"You have {count} Spaces with Requirements. The first ones are: {', '.join(names)}."
                     elif "requirements" in result:
                         requirements = result.get("requirements", [])
                         if not requirements:
-                            return "Keine Requirements gefunden."
+                            return "No Requirements found."
                         count = len(requirements)
-                        return f"Ich habe {count} Requirements generiert."
+                        return f"I generated {count} Requirements."
                     elif "metadata" in result:
                         metadata = result.get("metadata", {})
-                        bubble_title = metadata.get("bubble_title", "Unbenannt")
+                        bubble_title = metadata.get("bubble_title", "Untitled")
                         node_count = metadata.get("node_count", 0)
                         total_words = metadata.get("total_words", 0)
-                        return f"Für Bubble '{bubble_title}': {node_count} Nodes mit {total_words} Wörtern."
+                        return f"For Space '{bubble_title}': {node_count} nodes with {total_words} words."
                     else:
                         return str(result)
                 return str(result)
@@ -946,7 +957,7 @@ class IntentOrchestrator:
                 """Hole die Requirements für eine spezifische Bubble."""
                 bubble_id = params.get("bubble_id")
                 if not bubble_id:
-                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
+                    return "Which Space should I analyze? Please provide a Space ID."
                 result = _run_async_requirements(get_bubble_requirements(bubble_id))
                 return _format_requirements_result(result)
 
@@ -954,7 +965,7 @@ class IntentOrchestrator:
                 """Verarbeite die Inhalte einer Bubble und generiere Requirements."""
                 bubble_id = params.get("bubble_id")
                 if not bubble_id:
-                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
+                    return "Which Space should I analyze? Please provide a Space ID."
                 result = _run_async_requirements(process_bubble_requirements(bubble_id))
                 return _format_requirements_result(result)
 
@@ -980,7 +991,7 @@ class IntentOrchestrator:
 
             def _fmt_roarboot(result):
                 if isinstance(result, dict):
-                    return result.get("response_hint", result.get("message", "Erledigt."))
+                    return result.get("response_hint", result.get("message", "Done."))
                 return str(result)
 
             self._tool_executors.update({
@@ -1071,9 +1082,9 @@ class IntentOrchestrator:
                 def _fmt_schedule(result):
                     if isinstance(result, dict):
                         if result.get("success"):
-                            return result.get("response_hint", result.get("message", "Erledigt."))
+                            return result.get("response_hint", result.get("message", "Done."))
                         else:
-                            return result.get("response_hint", f"Fehler: {result.get('message', 'Unbekannter Fehler')}")
+                            return result.get("response_hint", f"Error: {result.get('message', 'Unknown error')}")
                     return str(result)
 
                 self._tool_executors.update({
@@ -1231,24 +1242,80 @@ class IntentOrchestrator:
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
 
             # =================================================================
-            # PHASE 0.5: MINIBOOK HUB DISPATCH (if enabled)
+            # PHASE 0: HYBRID ROUTER (deterministic fast-path)
             # =================================================================
-            # When USE_MINIBOOK_HUB=true, ALL intents route through Minibook
-            # for centralized execution and auditability.
-            # EXCLUSIVE MODE: No fallthrough to PHASE 1-3.
+            # Tiers 1-4: Resolve deterministically without MinibookHub roundtrip.
+            # Tier 5 (multi-space): Delegates to MinibookHub.
+            if self._hybrid_router and not domain_hint:
+                try:
+                    # Classify first to get event_type for prefix matching
+                    _pre_event_type = ""
+                    try:
+                        from swarm.orchestrator.intent_classifier import IntentClassifier
+                        _classifier = IntentClassifier()
+                        _classification = await _classifier.classify(intent_text)
+                        _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                    except Exception:
+                        pass
+
+                    route_result = await self._hybrid_router.resolve(
+                        event_type=_pre_event_type,
+                        user_input=intent_text,
+                        current_space=getattr(self, '_current_space', None),
+                    )
+
+                    if route_result.tier >= 1 and route_result.tier <= 4 and route_result.multi_space is None:
+                        # Single-space deterministic match → direct execute
+                        logger.info(
+                            f"[HybridRouter] Tier {route_result.tier}: "
+                            f"{route_result.event_type} -> {route_result.space} "
+                            f"({route_result.matched_by})"
+                        )
+                        tool_name = route_result.event_type
+                        if tool_name in self._tool_executors:
+                            tool_fn = self._tool_executors[tool_name]
+                            try:
+                                tool_params = _classification.get("parameters", {}) if _classification else {}
+                                result = tool_fn(**tool_params) if tool_params else tool_fn()
+                                if asyncio.iscoroutine(result):
+                                    result = await result
+                                response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                return OrchestrationResult(
+                                    job_id="",
+                                    event_type=route_result.event_type,
+                                    stream=route_result.space,
+                                    response_hint=response,
+                                )
+                            except Exception as exec_err:
+                                logger.warning(f"[HybridRouter] Direct exec failed: {exec_err}, falling through")
+
+                    elif route_result.tier == 5 and route_result.multi_space:
+                        # Multi-space → delegate to MinibookHub
+                        logger.info(f"[HybridRouter] Tier 5 multi-space -> MinibookHub")
+                        if self._minibook_hub:
+                            hub_result = await self._minibook_hub.dispatch(intent_text, context)
+                            if hub_result and getattr(hub_result, 'success', False):
+                                return hub_result
+
+                except Exception as router_err:
+                    logger.warning(f"[HybridRouter] Phase 0 failed: {router_err}, falling through to MinibookHub")
+
+            # =================================================================
+            # PHASE 0.5: MINIBOOK HUB FALLBACK
+            # =================================================================
+            # When HybridRouter didn't resolve, try MinibookHub as fallback.
             if self._minibook_hub and not domain_hint:
                 try:
                     hub_result = await self._minibook_hub.dispatch(intent_text, context)
                     if hub_result and getattr(hub_result, 'success', False):
                         logger.info(f"[MinibookHub] Dispatched: {getattr(hub_result, 'event_type', '?')}")
                         return hub_result
-                    # hub_result is None or not successful
-                    logger.warning("[MinibookHub] Dispatch returned no result — exclusive mode, no fallback")
+                    logger.warning("[MinibookHub] Dispatch returned no result")
                     return OrchestrationResult(
                         job_id="",
                         event_type="minibook.timeout",
                         stream="minibook_hub",
-                        response_hint="Die Aufgabe wurde gesendet, aber MinibookHub hat keine Antwort erhalten. Bitte versuche es nochmal.",
+                        response_hint="The task was sent, but MinibookHub didn't respond. Please try again.",
                         is_conversational=True,
                     )
                 except Exception as hub_err:
@@ -1461,7 +1528,7 @@ class IntentOrchestrator:
         """
         import asyncio as _asyncio
 
-        print(f"[Python DEBUG] [STREAM LISTENER] Evaluating: {intent_text[:80]}...", file=sys.stderr, flush=True)
+        logger.debug(f"[STREAM LISTENER] Evaluating: {intent_text[:80]}...")
 
         # Step 1: Optional IntentEnhancer for ASR cleanup (keep this)
         enhanced_text = intent_text
@@ -1518,14 +1585,13 @@ class IntentOrchestrator:
 
         # Step 4: Handle result
         if not distribution.winner:
-            print("[Python DEBUG] [STREAM LISTENER] No winner (all below threshold)", file=sys.stderr, flush=True)
+            logger.debug("[STREAM LISTENER] No winner (all below threshold)")
             return None  # Fall through to traditional pipeline
 
         winner = distribution.winner
-        print(
-            f"[Python DEBUG] [STREAM LISTENER] Winner: {winner.space} "
-            f"({winner.confidence:.2f}) -> {winner.event_type}",
-            file=sys.stderr, flush=True,
+        logger.debug(
+            f"[STREAM LISTENER] Winner: {winner.space} "
+            f"({winner.confidence:.2f}) -> {winner.event_type}"
         )
 
         # Handle ambiguity
@@ -1534,7 +1600,7 @@ class IntentOrchestrator:
                 f"[StreamListener] Ambiguous: top-2 too close. "
                 f"Falling through to RAG classifier for disambiguation."
             )
-            print("[Python DEBUG] [STREAM LISTENER] Ambiguous, falling through", file=sys.stderr, flush=True)
+            logger.debug("[STREAM LISTENER] Ambiguous, falling through")
             return None  # Fall through
 
         # Check if conversational event
@@ -1565,12 +1631,11 @@ class IntentOrchestrator:
                 )
                 agent_result = await agent.execute(intent_text, agent_context)
 
-                print(
-                    f"[Python DEBUG] [SPACE AGENT:{winner.space}] "
+                logger.debug(
+                    f"[SPACE AGENT:{winner.space}] "
                     f"{agent_result.turns} turns, "
                     f"tools={[tc.name for tc in agent_result.tool_calls]}, "
-                    f"{agent_result.total_latency_ms:.0f}ms",
-                    file=sys.stderr, flush=True
+                    f"{agent_result.total_latency_ms:.0f}ms"
                 )
 
                 return OrchestrationResult(
@@ -1582,7 +1647,7 @@ class IntentOrchestrator:
                 )
             except Exception as e:
                 logger.warning(f"[SpaceAgent:{winner.space}] Error, falling through to _process_sync: {e}")
-                print(f"[Python DEBUG] [SPACE AGENT] Error: {e}, falling through", file=sys.stderr, flush=True)
+                logger.debug(f"[SPACE AGENT] Error: {e}, falling through")
 
         # Step 5b: Flat _process_sync execution (fallback)
         payload = winner.payload or {}
@@ -1684,7 +1749,7 @@ class IntentOrchestrator:
                         f"[Enhancement] Enhanced: '{intent_text[:100]}' -> '{enhanced.normalized_text[:100]}' "
                         f"(rules: {enhanced.rules_applied})"
                     )
-                    print(f"[Python DEBUG] [ENHANCER] Applied rules: {enhanced.rules_applied}", file=sys.stderr)
+                    logger.debug(f"[ENHANCER] Applied rules: {enhanced.rules_applied}")
                     intent_text = enhanced.normalized_text
                     rules_applied = enhanced.rules_applied
                     enhanced_input = enhanced
@@ -1696,14 +1761,14 @@ class IntentOrchestrator:
         if self._use_rag_classifier and self.rag_classifier:
             try:
                 logger.info("Running RAG classification with Supermemory")
-                print(f"[Python DEBUG] [RAG CLASSIFIER] Processing: {intent_text[:100]}...", file=sys.stderr, flush=True)
+                logger.debug(f"[RAG CLASSIFIER] Processing: {intent_text[:100]}...")
 
                 # Get bubble context for classifier
                 try:
                     from swarm.context import get_bubble_context_provider
                     bubble_context = get_bubble_context_provider().get_current_context()
-                    print(f"[Python DEBUG] [CONTEXT] Current: {bubble_context.get('bubble_name')}, "
-                          f"Ideas: {bubble_context.get('idea_count', 0)}", file=sys.stderr, flush=True)
+                    logger.debug(f"[CONTEXT] Current: {bubble_context.get('bubble_name')}, "
+                          f"Ideas: {bubble_context.get('idea_count', 0)}")
                 except Exception as ctx_error:
                     logger.debug(f"[RAG] Could not get bubble context: {ctx_error}")
                     bubble_context = None
@@ -1714,48 +1779,48 @@ class IntentOrchestrator:
                     try:
                         routing_context = await self.conversation_router.get_routing_context(intent_text)
                         if routing_context:
-                            print(f"[Python DEBUG] [ROUTING CONTEXT] Found similar past intents", file=sys.stderr, flush=True)
+                            logger.debug("[ROUTING CONTEXT] Found similar past intents")
                             logger.debug(f"[ConversationRouter] Context: {routing_context[:100]}...")
                     except Exception as router_err:
                         logger.debug(f"[ConversationRouter] Could not get routing context: {router_err}")
 
                 # === DroPE Reference Resolution ===
                 # Resolve ambiguous references like "das", "nochmal", "es" using conversation history
-                print(f"[Python DEBUG] [DroPE] Checking... HAS_DROPE={HAS_DROPE_RESOLVER}", file=sys.stderr, flush=True)
+                logger.debug(f"[DroPE] Checking... HAS_DROPE={HAS_DROPE_RESOLVER}")
                 if HAS_DROPE_RESOLVER and get_reference_resolver:
-                    print(f"[Python DEBUG] [DroPE] Getting resolver...", file=sys.stderr, flush=True)
+                    logger.debug("[DroPE] Getting resolver...")
                     resolver = get_reference_resolver()
                     if resolver and resolver.is_available:
-                        print(f"[Python DEBUG] [DroPE] Resolver available, calling resolve()...", file=sys.stderr, flush=True)
+                        logger.debug("[DroPE] Resolver available, calling resolve()...")
                         try:
                             resolved_text = resolver.resolve(intent_text, routing_context)
                             if resolved_text != intent_text:
-                                print(f"[Python DEBUG] [DroPE] Resolved: '{intent_text}' → '{resolved_text}'", file=sys.stderr)
+                                logger.debug(f"[DroPE] Resolved: '{intent_text}' -> '{resolved_text}'")
                                 logger.info(f"[DroPE] Resolved reference: '{intent_text}' → '{resolved_text}'")
                                 intent_text = resolved_text
                             else:
-                                print(f"[Python DEBUG] [DroPE] No change needed", file=sys.stderr, flush=True)
+                                logger.debug("[DroPE] No change needed")
                         except Exception as drope_err:
-                            print(f"[Python DEBUG] [DroPE] ERROR: {drope_err}", file=sys.stderr, flush=True)
+                            logger.debug(f"[DroPE] ERROR: {drope_err}")
                             logger.debug(f"[DroPE] Resolution skipped: {drope_err}")
                     else:
-                        print(f"[Python DEBUG] [DroPE] Resolver not available", file=sys.stderr, flush=True)
+                        logger.debug("[DroPE] Resolver not available")
                 else:
-                    print(f"[Python DEBUG] [DroPE] Skipped (disabled)", file=sys.stderr, flush=True)
+                    logger.debug("[DroPE] Skipped (disabled)")
                 # === End DroPE ===
 
                 # Enrich intent with routing context if available
-                print(f"[Python DEBUG] [ORCHESTRATOR] Enriching intent...", file=sys.stderr, flush=True)
+                logger.debug("[ORCHESTRATOR] Enriching intent...")
                 enriched_for_rag = intent_text
                 if routing_context:
                     enriched_for_rag = f"{routing_context}\n\nAktueller Input: {intent_text}"
 
-                print(f"[Python DEBUG] [ORCHESTRATOR] Calling RAG classifier...", file=sys.stderr, flush=True)
+                logger.debug("[ORCHESTRATOR] Calling RAG classifier...")
                 try:
                     result = await self.rag_classifier.classify(enriched_for_rag, bubble_context=bubble_context)
-                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier returned: {result.event_type if result else 'None'}", file=sys.stderr, flush=True)
+                    logger.debug(f"[ORCHESTRATOR] RAG classifier returned: {result.event_type if result else 'None'}")
                 except Exception as rag_err:
-                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier EXCEPTION: {type(rag_err).__name__}: {rag_err}", file=sys.stderr, flush=True)
+                    logger.debug(f"[ORCHESTRATOR] RAG classifier EXCEPTION: {type(rag_err).__name__}: {rag_err}")
                     import traceback
                     traceback.print_exc(file=sys.stderr)
                     raise
@@ -1767,9 +1832,9 @@ class IntentOrchestrator:
                     logger.debug(f"[Enhancement] Confidence boosted: {original_conf:.2f} -> {result.confidence:.2f}")
 
                 if result and result.confidence >= 0.4:
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Result: {result.event_type} ({result.confidence:.0%})", file=sys.stderr)
-                    print(f"[Python DEBUG] [RAG REASONING] {result.reasoning}", file=sys.stderr)
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Used rules: {result.used_rules}", file=sys.stderr)
+                    logger.debug(f"[RAG CLASSIFIER] Result: {result.event_type} ({result.confidence:.0%})")
+                    logger.debug(f"[RAG REASONING] {result.reasoning}")
+                    logger.debug(f"[RAG CLASSIFIER] Used rules: {result.used_rules}")
 
                     # Update real-time state for Rachel's awareness
                     if HAS_REAL_TIME_STATE and get_real_time_state:
@@ -1827,9 +1892,9 @@ class IntentOrchestrator:
                             logger.debug(f"[ConversationRouter] Failed to store interaction: {store_err}")
 
                     if result.is_multi_step and result.steps:
-                        print(f"[Python DEBUG] [RAG MULTI-STEP] {len(result.steps)} steps detected", file=sys.stderr)
+                        logger.debug(f"[RAG MULTI-STEP] {len(result.steps)} steps detected")
                         for i, step in enumerate(result.steps):
-                            print(f"[Python DEBUG] [RAG MULTI-STEP] Step {i+1}: {step.get('event_type')}", file=sys.stderr)
+                            logger.debug(f"[RAG MULTI-STEP] Step {i+1}: {step.get('event_type')}")
 
                         # Use existing multi-step processor
                         return await self._process_multi_step(
@@ -1958,11 +2023,11 @@ class IntentOrchestrator:
                         is_conversational=False
                     )
                 else:
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Low confidence: {result.confidence if result else 'None'}", file=sys.stderr)
+                    logger.debug(f"[RAG CLASSIFIER] Low confidence: {result.confidence if result else 'None'}")
 
             except Exception as e:
                 logger.warning(f"RAG classification failed: {e}")
-                print(f"[Python DEBUG] [RAG CLASSIFIER] Error: {e}", file=sys.stderr)
+                logger.debug(f"[RAG CLASSIFIER] Error: {e}")
 
         # Fallback to IntentAnalysisTeam
         if not self._use_intent_analysis or not self.analysis_team:
@@ -1978,24 +2043,24 @@ class IntentOrchestrator:
                 session_id=context.session_id if context else "default"
             )
 
-            print(f"[Python DEBUG] [CORE ANALYSIS] Context built: space={user_context.current_space}, "
-                  f"recent={len(user_context.recent_actions)}", file=sys.stderr)
+            logger.debug(f"[CORE ANALYSIS] Context built: space={user_context.current_space}, "
+                  f"recent={len(user_context.recent_actions)}")
 
             # Run parallel intent analysis
             hypotheses = await self.analysis_team.analyze(intent_text, user_context)
 
             if hypotheses:
                 hyp_summary = ", ".join([f"{h.event_type}({h.confidence:.0%})" for h in hypotheses[:3]])
-                print(f"[Python DEBUG] [CORE ANALYSIS] Hypotheses: [{hyp_summary}]", file=sys.stderr)
+                logger.debug(f"[CORE ANALYSIS] Hypotheses: [{hyp_summary}]")
 
             # Select best hypothesis with enhanced threshold
             best = self.analysis_team.select_best(hypotheses, threshold=0.3)  # Lower threshold for core
 
             if not best:
-                print(f"[Python DEBUG] [CORE ANALYSIS] No confident hypothesis found", file=sys.stderr)
+                logger.debug("[CORE ANALYSIS] No confident hypothesis found")
                 return None
 
-            print(f"[Python DEBUG] [CORE ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}", file=sys.stderr)
+            logger.debug(f"[CORE ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}")
 
             # Handle conversational events
             if best.event_type in self.CONVERSATIONAL_EVENTS:
@@ -2348,8 +2413,8 @@ class IntentOrchestrator:
                 session_id=context.session_id if context else "default"
             )
 
-            print(f"[Python DEBUG] [ANALYSIS] Building context: space={user_context.current_space}, "
-                  f"recent={len(user_context.recent_actions)}", file=sys.stderr)
+            logger.debug(f"[ANALYSIS] Building context: space={user_context.current_space}, "
+                  f"recent={len(user_context.recent_actions)}")
 
             # 2. Run parallel intent analysis
             hypotheses = await self.analysis_team.analyze(intent_text, user_context)
@@ -2357,17 +2422,17 @@ class IntentOrchestrator:
             # Log hypotheses
             if hypotheses:
                 hyp_summary = ", ".join([f"{h.event_type}({h.confidence:.0%})" for h in hypotheses[:3]])
-                print(f"[Python DEBUG] [ANALYSIS] Hypotheses: [{hyp_summary}]", file=sys.stderr)
+                logger.debug(f"[ANALYSIS] Hypotheses: [{hyp_summary}]")
 
             # 3. Select best hypothesis
             best = self.analysis_team.select_best(hypotheses, threshold=0.5)
 
             if not best:
                 # No confident hypothesis - use fallback classifier
-                print(f"[Python DEBUG] [ANALYSIS] No confident hypothesis, falling back to classifier", file=sys.stderr)
+                logger.debug("[ANALYSIS] No confident hypothesis, falling back to classifier")
                 return await self._process_intent_legacy(intent_text, context)
 
-            print(f"[Python DEBUG] [ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}", file=sys.stderr)
+            logger.debug(f"[ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}")
 
             # 4. Check if conversational
             if best.event_type in self.CONVERSATIONAL_EVENTS:
@@ -2461,10 +2526,9 @@ class IntentOrchestrator:
                 steps = classification.get("steps", [])
                 response_hint = classification.get("response_hint", "Ich fuehre mehrere Aktionen aus...")
 
-                import sys
-                print(f"[Python DEBUG] [MULTI-STEP] {len(steps)} steps detected", file=sys.stderr)
+                logger.debug(f"[MULTI-STEP] {len(steps)} steps detected")
                 for i, step in enumerate(steps):
-                    print(f"[Python DEBUG] [MULTI-STEP] Step {i+1}: {step.get('event_type')}", file=sys.stderr)
+                    logger.debug(f"[MULTI-STEP] Step {i+1}: {step.get('event_type')}")
 
                 return await self._process_multi_step(steps, response_hint, context)
 
@@ -2473,8 +2537,7 @@ class IntentOrchestrator:
             payload = classification["payload"]
             response_hint = classification.get("response_hint", "Ich bearbeite deine Anfrage...")
 
-            import sys
-            print(f"[Python DEBUG] [CLASSIFICATION] type={event_type}, payload={payload}", file=sys.stderr)
+            logger.debug(f"[CLASSIFICATION] type={event_type}, payload={payload}")
 
             if event_type in self.CONVERSATIONAL_EVENTS:
                 return OrchestrationResult(
@@ -2689,7 +2752,7 @@ class IntentOrchestrator:
         if executor:
             try:
                 logger.info(f"SYNC fallback: Executing {event_type} directly")
-                print(f"[Python DEBUG] [TOOL EXEC] {event_type} with payload: {payload}", file=sys.stderr, flush=True)
+                logger.debug(f"[TOOL EXEC] {event_type} with payload: {payload}")
 
                 # Track with status monitor
                 monitor_op_id = None
@@ -2720,7 +2783,7 @@ class IntentOrchestrator:
                         mark_tool_end()
 
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                print(f"[Python DEBUG] [TOOL EXEC] {event_type} completed in {latency_ms:.1f}ms", file=sys.stderr, flush=True)
+                logger.debug(f"[TOOL EXEC] {event_type} completed in {latency_ms:.1f}ms")
 
                 # Complete monitoring
                 if _status_monitor and monitor_op_id:
@@ -2841,7 +2904,7 @@ class IntentOrchestrator:
                         ))
             except Exception as e:
                 logger.error(f"Sync execution failed for {event_type}: {e}")
-                print(f"[Python DEBUG] [TOOL EXEC] FAILED {event_type}: {e}", file=sys.stderr, flush=True)
+                logger.debug(f"[TOOL EXEC] FAILED {event_type}: {e}")
                 # Complete monitoring with error
                 if _status_monitor and monitor_op_id:
                     _status_monitor.complete_operation(monitor_op_id, success=False, error=str(e))
@@ -2877,7 +2940,7 @@ class IntentOrchestrator:
 
         # Fallback response if tool not available
         logger.warning(f"No sync executor for {event_type}")
-        print(f"[Python DEBUG] [TOOL EXEC] NO EXECUTOR for {event_type}!", file=sys.stderr, flush=True)
+        logger.debug(f"[TOOL EXEC] NO EXECUTOR for {event_type}!")
         return OrchestrationResult(
             job_id="",
             event_type=event_type,
@@ -2935,7 +2998,7 @@ class IntentOrchestrator:
                 job_id=job_id,
                 event_type="multi_step",
                 stream="local",
-                response_hint="Keine Schritte zu ausfuehren.",
+                response_hint="No steps to execute.",
                 is_conversational=True
             )
 
@@ -2949,7 +3012,7 @@ class IntentOrchestrator:
 
         # Order steps by dependencies
         ordered_steps = self._order_by_dependencies(steps)
-        print(f"[Python DEBUG] [MULTI-STEP] Executing {len(ordered_steps)} steps in order", file=sys.stderr, flush=True)
+        logger.debug(f"[MULTI-STEP] Executing {len(ordered_steps)} steps in order")
         logger.info(f"Multi-step: Executing {len(ordered_steps)} steps in order")
 
         # Log dependency ordering reasoning
@@ -2991,7 +3054,7 @@ class IntentOrchestrator:
             # Get executor for this event type
             executor = self._tool_executors.get(event_type)
             if not executor:
-                print(f"[Python DEBUG] [MULTI-STEP] [{i+1}/{len(ordered_steps)}] No executor for {event_type}, skipping", file=sys.stderr, flush=True)
+                logger.debug(f"[MULTI-STEP] [{i+1}/{len(ordered_steps)}] No executor for {event_type}, skipping")
                 logger.warning(f"Multi-step [{i+1}/{len(ordered_steps)}]: No executor for {event_type}, skipping")
                 results.append({
                     "event_type": event_type,
@@ -3001,7 +3064,7 @@ class IntentOrchestrator:
                 continue
 
             try:
-                print(f"[Python DEBUG] [MULTI-STEP] [{i+1}/{total_steps}] Executing {event_type} payload={payload}", file=sys.stderr, flush=True)
+                logger.debug(f"[MULTI-STEP] [{i+1}/{total_steps}] Executing {event_type} payload={payload}")
                 logger.info(f"Multi-step [{i+1}/{total_steps}]: Executing {event_type}")
 
                 # Log tool start reasoning
@@ -3128,7 +3191,7 @@ class IntentOrchestrator:
             stream="local",
             response_hint=summary,
             is_conversational=False,
-            error=None if all_success else "Einige Schritte fehlgeschlagen"
+            error=None if all_success else "Some steps failed"
         )
 
     def _order_by_dependencies(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -3252,7 +3315,7 @@ class IntentOrchestrator:
             # Take most meaningful results
             for r in successful:
                 result_text = r.get("result", "")
-                if result_text and result_text != "Erledigt.":
+                if result_text and result_text != "Done.":
                     # Truncate long results
                     if len(result_text) > 80:
                         result_text = result_text[:77] + "..."
@@ -3262,7 +3325,7 @@ class IntentOrchestrator:
 
         if failed:
             fail_count = len(failed)
-            parts.append(f"{fail_count} Schritt{'e' if fail_count > 1 else ''} fehlgeschlagen")
+            parts.append(f"{fail_count} step{'s' if fail_count > 1 else ''} failed")
 
         if parts:
             # Join with natural connectors
@@ -3290,7 +3353,7 @@ class IntentOrchestrator:
     def _format_result_for_voice(self, event_type: str, result: Any) -> str:
         """Format tool result for natural voice output."""
         if result is None:
-            return "Erledigt."
+            return "Done."
 
         if isinstance(result, str):
             return result
@@ -3302,26 +3365,26 @@ class IntentOrchestrator:
             if "bubbles" in result:
                 bubbles = result["bubbles"]
                 if not bubbles:
-                    return "Du hast noch keine Spaces."
+                    return "You don't have any Spaces yet."
                 count = len(bubbles)
-                names = [b.get("title", b.get("name", "Unbenannt")) for b in bubbles[:5]]
+                names = [b.get("title", b.get("name", "Untitled")) for b in bubbles[:5]]
                 if count <= 5:
-                    return f"Du hast {count} Spaces: {', '.join(names)}."
-                return f"Du hast {count} Spaces. Die ersten sind: {', '.join(names)}."
+                    return f"You have {count} Spaces: {', '.join(names)}."
+                return f"You have {count} Spaces. The first ones are: {', '.join(names)}."
             if "ideas" in result:
                 ideas = result["ideas"]
                 if not ideas:
-                    return "Keine Ideen gefunden."
+                    return "No ideas found."
                 count = len(ideas)
-                return f"Ich habe {count} Ideen gefunden."
+                return f"I found {count} ideas."
             if "id" in result:
                 # Created something
-                return f"Erledigt. ID: {result['id']}"
+                return f"Done. ID: {result['id']}"
 
         if isinstance(result, list):
             if not result:
-                return "Keine Ergebnisse gefunden."
-            return f"Ich habe {len(result)} Eintraege gefunden."
+                return "No results found."
+            return f"I found {len(result)} entries."
 
         return str(result)[:200]
 
