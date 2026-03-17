@@ -91,6 +91,8 @@ class ConnectionEvaluator:
         Returns:
             EvaluationResult with scores and reasoning
         """
+        logger.debug("evaluate_connection: source=%s, target=%s, use_llm=%s",
+                     source_bubble.get("title"), target_bubble.get("title"), use_llm)
         # Step 1: Calculate embedding similarity
         embedding_similarity = self._calculate_embedding_similarity(
             source_bubble, target_bubble
@@ -371,6 +373,8 @@ REASONING: [Erklärung]"""
         Returns:
             List of (bubble, evaluation_result) tuples sorted by score
         """
+        logger.debug("evaluate_candidates: source=%s, candidates=%s, top_k=%s",
+                     source_bubble.get("title"), len(candidate_bubbles), top_k)
         # Step 1: Calculate embedding similarities for all candidates
         similarities = []
         for candidate in candidate_bubbles:

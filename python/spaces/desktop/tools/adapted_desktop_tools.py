@@ -5,6 +5,10 @@ Real implementation migrated to: spaces/desktop/adapted/desktop_tools.py
 This file re-exports for backward compatibility.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from spaces.desktop.adapted.desktop_tools import (
     execute_desktop_task,
     click_element,

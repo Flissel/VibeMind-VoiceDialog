@@ -9,14 +9,13 @@ Handles:
 
 import logging
 import os
-import sys
 from typing import Dict, Any, List, Optional
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [MinibookCollab] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[MinibookCollab] %s", msg)
 
 
 # =============================================================================
@@ -107,6 +106,16 @@ SPACE_AGENT_REGISTRY: Dict[str, Dict[str, str]] = {
             "Zustaendig fuer alles mit Zeitbezug (in X Minuten, um X Uhr, jeden Montag)."
         ),
     },
+    "n8n": {
+        "name": "vibemind_n8n",
+        "domain_prefix": "n8n.",
+        "role": (
+            "n8n Workflow Builder: Workflows generieren, auflisten, aktivieren, "
+            "deaktivieren, loeschen, testen. Society of Mind Multi-Agent System "
+            "plant, baut und testet n8n Workflows iterativ via Chat Trigger. "
+            "Zustaendig fuer Automatisierung und Workflow-Erstellung."
+        ),
+    },
 }
 
 # Keywords that hint at a specific space being needed
@@ -120,6 +129,7 @@ SPACE_KEYWORDS: Dict[str, List[str]] = {
     "swe_design": ["spec", "spezifikation", "requirement", "architektur", "design factory"],
     "transformer": ["transform", "umwandel", "pipeline", "shuttle"],
     "schedule": ["erinner", "erinnerung", "alarm", "timer", "zeitplan", "schedule", "snooze", "taeglich", "wecker"],
+    "n8n": ["n8n", "workflow", "automatisier", "automation", "webhook", "trigger", "pipeline", "agent workflow"],
 }
 
 
@@ -147,7 +157,7 @@ def register_all_space_agents(
             client.register_agent(orchestrator_name)
             _debug_print(f"Registered orchestrator agent '{orchestrator_name}'")
         except Exception as e:
-            logger.warning(f"Could not register orchestrator: {e}")
+            _logger.warning(f"Could not register orchestrator: {e}")
 
     # Create or use existing collaboration project
     if not project_id:
@@ -160,7 +170,7 @@ def register_all_space_agents(
             project_id = project.get("id", "")
             _debug_print(f"Created collaboration project: {project_id}")
         except Exception as e:
-            logger.warning(f"Could not create project: {e}")
+            _logger.warning(f"Could not create project: {e}")
             # Try to find existing project
             try:
                 projects = client.list_projects(agent_name=orchestrator_name)
@@ -189,7 +199,7 @@ def register_all_space_agents(
             _debug_print(f"Registered space '{space_key}' as agent '{agent_name}'")
 
         except Exception as e:
-            logger.warning(f"Could not register space '{space_key}': {e}")
+            _logger.warning(f"Could not register space '{space_key}': {e}")
             _debug_print(f"FAILED to register '{space_key}': {e}")
 
     _debug_print(f"Registered {len(SPACE_AGENT_REGISTRY)} space agents for project {project_id}")
@@ -304,7 +314,7 @@ def start_collaboration(task: str, goal: str = "") -> Dict[str, Any]:
                     original_request=task,
                 )
         except Exception as e:
-            logger.warning(f"Could not register discussion with poller: {e}")
+            _logger.warning(f"Could not register discussion with poller: {e}")
 
         space_names = ", ".join(needed_spaces)
         _debug_print(f"Collaboration started: post_id={post_id}, spaces={space_names}")
@@ -321,7 +331,7 @@ def start_collaboration(task: str, goal: str = "") -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Collaboration post failed: {e}")
+        _logger.error(f"Collaboration post failed: {e}")
         return {
             "success": False,
             "error": str(e),

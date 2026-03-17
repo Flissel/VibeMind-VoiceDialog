@@ -190,7 +190,7 @@ class ClickCollector:
             return
 
         # Store thread id so stop() can post WM_QUIT to this thread
-        self._thread_id = self._user32.GetCurrentThreadId()
+        self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
 
         HOOKPROC = ctypes.WINFUNCTYPE(
             ctypes.c_long,

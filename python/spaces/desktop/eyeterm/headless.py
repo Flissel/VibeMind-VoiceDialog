@@ -86,6 +86,8 @@ class EyeTermHeadless:
         self._gaze_valid: bool = False
         self._screen_width: int = 1920
         self._screen_height: int = 1080
+        self._last_camera_retry: float = 0.0  # monotonic timestamp of last retry
+        self._camera_retry_interval: float = 5.0  # seconds between retries
 
         # CSV data logger
         self._csv_file = None
@@ -348,9 +350,9 @@ class EyeTermHeadless:
             from .cursor.click_collector import ClickCollector
             _diag = _math.hypot(sw, sh)
             self._click_collector = ClickCollector(
-                buffer_size=self._config.cursor.click_buffer_size,
-                max_residual_px=int(self._config.cursor.click_max_residual_frac * _diag),
-                max_age_ms=self._config.cursor.click_max_age_ms,
+                maxlen=self._config.cursor.click_buffer_size,
+                max_residual=float(int(self._config.cursor.click_max_residual_frac * _diag)),
+                max_age=self._config.cursor.click_max_age_ms / 1000.0,
             )
             self._click_collector.start()
             self._log("ClickCollector + ResidualGrid + AccuracyGate initialized")
@@ -542,6 +544,16 @@ class EyeTermHeadless:
         import cv2
         import numpy as np
 
+        # Camera retry: if camera failed at startup, try again every 5s
+        if self._camera is None:
+            now_mono = time.monotonic()
+            if now_mono - self._last_camera_retry >= self._camera_retry_interval:
+                self._last_camera_retry = now_mono
+                self._open_camera_with_timeout(timeout_sec=3.0)
+                if self._camera is not None:
+                    self._log("Camera connected on retry!")
+                    self._placeholder_sent = False
+
         frame = self._camera.read() if self._camera else None
         if frame is None:
             # Send placeholder so MJPEG stream stays alive (not "offline")
@@ -616,22 +628,29 @@ class EyeTermHeadless:
                     if self._click_collector:
                         self._click_collector.update_prediction(screen_x, screen_y, True)
 
-                    # Process new clicks: update grid + check accuracy
+                    # Process new clicks only (dedup by timestamp)
                     if self._click_collector and self._residual_grid:
                         new_clicks = self._click_collector.get_recent(5)
+                        had_new = False
                         for sample in new_clicks:
-                            self._residual_grid.update(
-                                sample.predicted_x, sample.predicted_y,
-                                sample.click_x, sample.click_y,
-                            )
+                            if sample.timestamp > self._last_processed_click_ts:
+                                had_new = True
+                                self._residual_grid.update(
+                                    sample.predicted_x, sample.predicted_y,
+                                    sample.click_x, sample.click_y,
+                                )
 
-                    # Accuracy gate: only enable cursor when 75%+ accurate
-                    if self._accuracy_gate and self._click_collector:
-                        recent = self._click_collector.get_recent(20)
-                        self._accuracy_gate.update(recent)
-                        if self._accuracy_gate.check_drift(recent) and self._residual_grid:
-                            self._residual_grid.reset()
-                            self._log("Drift detected — grid reset")
+                        # Accuracy gate + drift check ONLY when new clicks arrived
+                        if had_new and self._accuracy_gate:
+                            recent = self._click_collector.get_recent(20)
+                            old_phase = self._accuracy_gate.phase
+                            self._accuracy_gate.update(recent)
+                            if self._accuracy_gate.phase != old_phase:
+                                self._log(f"AccuracyGate: {old_phase} → {self._accuracy_gate.phase}")
+                                # Reset grid once when entering degraded (drift detected)
+                                if self._accuracy_gate.phase == "degraded" and self._residual_grid:
+                                    self._residual_grid.reset()
+                                    self._log("Grid reset (drift)")
 
                     if self._cursor_driver:
                         self._cursor_driver.set_face_detected(True)
@@ -732,8 +751,12 @@ class EyeTermHeadless:
                         acc = ""
                         phase = ""
                         if self._accuracy_gate:
-                            acc = f"{self._accuracy_gate._accuracy:.2f}"
                             phase = self._accuracy_gate.phase
+                            # Compute accuracy from recent clicks
+                            rc = self._click_collector.get_recent(20) if self._click_collector else []
+                            if rc:
+                                hits = sum(1 for c in rc if c.residual_px <= self._accuracy_gate.accuracy_radius_px)
+                                acc = f"{hits / len(rc):.2f}"
                         self._click_csv_writer.writerow([
                             f"{sample.timestamp:.3f}",
                             sample.click_x, sample.click_y,

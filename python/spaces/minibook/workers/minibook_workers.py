@@ -13,16 +13,15 @@ SpaceMinibookResponder:
 
 import asyncio
 import logging
-import sys
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Set, Optional, Callable
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [MinibookWorker] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[MinibookWorker] %s", msg)
 
 
 # =============================================================================
@@ -154,7 +153,7 @@ class DiscussionPollerWorker:
                         del self._active[post_id]
 
                 except Exception as e:
-                    logger.warning(f"Poll error for discussion {post_id}: {e}")
+                    _logger.warning(f"Poll error for discussion {post_id}: {e}")
 
             await asyncio.sleep(self._poll_interval)
 
@@ -178,7 +177,7 @@ class DiscussionPollerWorker:
         """Deliver partial results (timeout, not all agents responded)."""
         missing = discussion.mentioned_agents - discussion.responded_agents
         summary = self._aggregate_responses(discussion)
-        summary += f"\n(Timeout: {', '.join(missing)} haben nicht geantwortet)"
+        summary += f"\n(Timeout: {', '.join(missing)} did not respond)"
         _debug_print(f"Delivering partial results for {post_id}")
         await self._inject_or_queue(summary, discussion)
 
@@ -200,7 +199,7 @@ class DiscussionPollerWorker:
                     _debug_print("Result injected via voice session")
                     return
                 except Exception as e:
-                    logger.warning(f"Voice injection failed: {e}")
+                    _logger.warning(f"Voice injection failed: {e}")
 
         # Fallback: NotificationQueue
         try:
@@ -214,7 +213,7 @@ class DiscussionPollerWorker:
             )
             _debug_print("Result queued in NotificationQueue (fallback)")
         except Exception as e:
-            logger.error(f"Could not deliver result: {e}")
+            _logger.error(f"Could not deliver result: {e}")
 
     def _aggregate_responses(self, discussion: ActiveDiscussion) -> str:
         """Format all agent responses into a summary string."""
@@ -225,7 +224,7 @@ class DiscussionPollerWorker:
             parts.append(f"{short_name}: {content}")
 
         if not parts:
-            return "Keine Ergebnisse erhalten."
+            return "No results received."
 
         return "\n".join(parts)
 
@@ -371,7 +370,7 @@ class SpaceMinibookResponder:
                             f"responded to {post_id}"
                         )
                     except Exception as e:
-                        logger.error(f"Failed to post comment: {e}")
+                        _logger.error(f"Failed to post comment: {e}")
 
                     # Mark notification as read
                     if notif_id:
@@ -385,7 +384,7 @@ class SpaceMinibookResponder:
             except Exception as e:
                 # Connection errors are expected if Minibook is down
                 if "Connection" not in str(type(e).__name__):
-                    logger.warning(f"SpaceResponder {self._agent_name} error: {e}")
+                    _logger.warning(f"SpaceResponder {self._agent_name} error: {e}")
 
             await asyncio.sleep(self._poll_interval)
 
@@ -423,7 +422,7 @@ class SpaceMinibookResponder:
             return None
 
         except Exception as e:
-            logger.warning(f"Failed to fetch post content: {e}")
+            _logger.warning(f"Failed to fetch post content: {e}")
             return None
 
     async def _handle_mention(self, content: str) -> str:
@@ -520,8 +519,8 @@ class SpaceMinibookResponder:
         # Anti-loop guard
         if event_type.startswith("minibook."):
             return (
-                f"[{self._space_key}] Aufgabe empfangen, "
-                f"aber liegt ausserhalb meiner Domain."
+                f"[{self._space_key}] Task received, "
+                f"but outside my domain."
             )
 
         # --- Priority 1: SpaceAgent (agentic multi-tool loop) ---
@@ -531,7 +530,7 @@ class SpaceMinibookResponder:
                 if result:
                     return result
             except Exception as e:
-                logger.warning(
+                _logger.warning(
                     f"SpaceAgent {self._space_key} failed: {e}, "
                     f"falling back to orchestrator"
                 )
@@ -541,7 +540,7 @@ class SpaceMinibookResponder:
         if user_text:
             return await self._execute_via_orchestrator(user_text)
 
-        return "Keine ausfuehrbare Aufgabe erkannt."
+        return "No actionable task recognized."
 
     async def _execute_via_space_agent(
         self, user_text: str, context_data: Dict[str, Any]
@@ -584,7 +583,7 @@ class SpaceMinibookResponder:
             return result.summary
 
         if result and result.error:
-            logger.warning(f"SpaceAgent {self._space_key} returned error: {result.error}")
+            _logger.warning(f"SpaceAgent {self._space_key} returned error: {result.error}")
 
         return None
 
@@ -618,16 +617,16 @@ class SpaceMinibookResponder:
         # Remove trailing newlines left after stripping
         clean_content = clean_content.strip()
         if not clean_content:
-            return "Keine Aufgabe erkannt."
+            return "No task recognized."
 
         if self._executor:
             try:
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, self._executor, clean_content)
-                return str(result) if result else "Erledigt."
+                return str(result) if result else "Done."
             except Exception as e:
-                logger.error(f"SpaceResponder {self._agent_name} execution error: {e}")
-                return f"Fehler: {e}"
+                _logger.error(f"SpaceResponder {self._agent_name} execution error: {e}")
+                return f"Error: {e}"
 
         return await self._execute_via_orchestrator(clean_content)
 
@@ -666,8 +665,8 @@ class SpaceMinibookResponder:
 
             return result.response_hint
         except Exception as e:
-            logger.error(f"SpaceResponder fallback error: {e}")
-            return f"Konnte Anfrage nicht verarbeiten: {e}"
+            _logger.error(f"SpaceResponder fallback error: {e}")
+            return f"Could not process request: {e}"
 
 
 # =============================================================================
@@ -729,15 +728,15 @@ def _make_space_executor(space_key: str, domain_prefix: str) -> Callable:
                     f"'{event_type}' — blocking recursion"
                 )
                 return (
-                    f"[{space_key}] Aufgabe liegt ausserhalb "
-                    f"meiner Domain ({domain_prefix})."
+                    f"[{space_key}] Task outside "
+                    f"my domain ({domain_prefix})."
                 )
 
-            return result.response_hint or "Erledigt."
+            return result.response_hint or "Done."
 
         except Exception as e:
-            logger.error(f"Space executor '{space_key}' error: {e}")
-            return f"Fehler in {space_key}: {e}"
+            _logger.error(f"Space executor '{space_key}' error: {e}")
+            return f"Error in {space_key}: {e}"
 
     return executor
 
@@ -766,7 +765,7 @@ def _load_space_agents() -> Dict[str, Any]:
         agents["ideas"] = get_ideas_space_agent()
         _debug_print("Loaded IdeasSpaceAgent (47 tools)")
     except Exception as e:
-        logger.warning(f"Could not load IdeasSpaceAgent: {e}")
+        _logger.warning(f"Could not load IdeasSpaceAgent: {e}")
 
     # Future SpaceAgents:
     # try:
@@ -793,6 +792,7 @@ def create_space_responders(
     Returns:
         Dict mapping space_key → SpaceMinibookResponder
     """
+    _logger.debug("create_space_responders called: poll_interval=%s", poll_interval)
     from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
 
     # Load SpaceAgents where available

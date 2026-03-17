@@ -88,6 +88,7 @@ from .summary_tools import (
     get_requirement_clarifications,
     sync_shuttle_from_orchestrator,
     create_stage_shuttles,
+    generate_project_doc,
     # Helper functions
     _fetch_orchestrator_project_state,
     # Registry
@@ -178,6 +179,7 @@ __all__ = [
     "get_requirement_clarifications",
     "sync_shuttle_from_orchestrator",
     "create_stage_shuttles",
+    "generate_project_doc",
     "_fetch_orchestrator_project_state",
     "SUMMARY_TOOLS",
     "register_summary_tools",

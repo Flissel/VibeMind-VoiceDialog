@@ -421,6 +421,7 @@ def list_summaries(params: Dict[str, Any]) -> str:
     Returns:
         str: List of ideas with summaries
     """
+    logger.debug("list_summaries: listing all summaries")
     canvas_repo = _get_canvas_repo()
     ideas_repo = _get_ideas_repo()
 
@@ -456,6 +457,7 @@ def get_summary(params: Dict[str, Any]) -> str:
         str: The summary or message if none exists
     """
     idea_name = params.get("idea_name", "").strip()
+    logger.debug("get_summary: idea_name=%s", idea_name)
 
     # Get current bubble if no name specified - use local import from spaces
     if not idea_name:
@@ -1793,6 +1795,18 @@ def submit_to_req_orchestrator(params: Dict[str, Any]) -> str:
         "tech_stack": recommended_stack
     })
 
+    # Publish shuttle data to Rowboat knowledge base
+    try:
+        from publishing import get_ideas_publisher
+        publisher = get_ideas_publisher()
+        if hasattr(publisher, "publish_shuttle_data"):
+            publisher.publish_shuttle_data(shuttle.bubble_id)
+            logger.info(
+                f"Shuttle data published to Rowboat for bubble {shuttle.bubble_id}"
+            )
+    except Exception as e:
+        logger.debug(f"Shuttle Rowboat publish skipped: {e}")
+
     return "\n".join(response_lines)
 
 
@@ -1805,6 +1819,7 @@ def get_requirement_clarifications(params: Dict[str, Any]) -> str:
     Returns:
         str: List of clarification questions
     """
+    logger.debug("get_requirement_clarifications: checking pending clarifications")
     clarifications = _get_pending_clarifications()
 
     if not clarifications:
@@ -2376,6 +2391,438 @@ def create_stage_shuttles(params: Dict[str, Any]) -> str:
 
 
 # ==============================================================================
+# PROJECT DOCUMENTATION GENERATION (LLM-SYNTHESIZED EXPORT)
+# ==============================================================================
+
+def _collect_bubble_content(bubble_id: str, idea) -> Dict[str, Any]:
+    """
+    Collect ALL content from a bubble for project documentation.
+
+    Returns a dict with categorized content ready for LLM synthesis.
+    """
+    ideas_repo = _get_ideas_repo()
+    canvas_repo = _get_canvas_repo()
+
+    # 1. Child ideas (parent_id = bubble_id)
+    from data.models import Idea
+    child_rows = ideas_repo.db.fetch_all(
+        "SELECT * FROM ideas WHERE parent_id = ?", (bubble_id,)
+    )
+    child_ideas = [Idea.from_dict(dict(r)) for r in child_rows]
+
+    # 2. Canvas nodes grouped by type
+    all_nodes = canvas_repo.list_nodes(limit=2000)
+    bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+
+    nodes_by_type = {}
+    for node in bubble_nodes:
+        ntype = node.node_type or "note"
+        nodes_by_type.setdefault(ntype, []).append(node)
+
+    # 3. Project structure from metadata
+    project_structure = (idea.metadata or {}).get("project_structure")
+
+    # 4. Mermaid diagrams
+    mermaid_diagrams = []
+    try:
+        from data import MermaidDiagramsRepository
+        mermaid_repo = MermaidDiagramsRepository()
+        mermaid_diagrams = mermaid_repo.list_by_idea(bubble_id)
+    except Exception as e:
+        logger.debug(f"Could not load mermaid diagrams: {e}")
+
+    # 5. Summaries from nodes
+    summaries = [n for n in bubble_nodes if n.summary]
+
+    return {
+        "bubble": idea,
+        "child_ideas": child_ideas,
+        "nodes_by_type": nodes_by_type,
+        "all_nodes": bubble_nodes,
+        "project_structure": project_structure,
+        "mermaid_diagrams": mermaid_diagrams,
+        "summaries": summaries,
+    }
+
+
+def _build_doc_input_text(content: Dict[str, Any]) -> str:
+    """
+    Build structured input text from collected content for LLM synthesis.
+    """
+    from spaces.ideas.tools.format_dispatcher import _extract_content_text
+
+    parts = []
+    bubble = content["bubble"]
+
+    # Bubble overview
+    parts.append(f"=== BUBBLE: {bubble.title} ===")
+    if bubble.description:
+        parts.append(f"Beschreibung: {bubble.description}")
+    parts.append("")
+
+    # Whitepaper content (highest quality existing synthesis)
+    whitepapers = content["nodes_by_type"].get("whitepaper", [])
+    if whitepapers:
+        parts.append("=== WHITEPAPER (bereits generierte Zusammenfassung) ===")
+        for wp in whitepapers:
+            if wp.content:
+                parts.append(wp.content)
+        parts.append("")
+
+    # Summaries
+    if content["summaries"]:
+        parts.append("=== ZUSAMMENFASSUNGEN ===")
+        for node in content["summaries"]:
+            parts.append(f"- {node.title}: {node.summary}")
+        parts.append("")
+
+    # Child ideas
+    if content["child_ideas"]:
+        parts.append("=== IDEEN ===")
+        for idea in content["child_ideas"]:
+            parts.append(f"### {idea.title}")
+            if idea.description:
+                parts.append(idea.description)
+            if idea.tags:
+                parts.append(f"Tags: {', '.join(idea.tags)}")
+            parts.append("")
+
+    # Regular notes
+    notes = content["nodes_by_type"].get("note", [])
+    if notes:
+        parts.append("=== NOTIZEN ===")
+        for node in notes:
+            parts.append(f"### {node.title or 'Untitled'}")
+            if node.content_json:
+                parts.append(_extract_content_text(node.content_json, node.content or ""))
+            elif node.content:
+                parts.append(node.content)
+            parts.append("")
+
+    # Project structure
+    ps = content["project_structure"]
+    if ps:
+        parts.append("=== PROJEKTSTRUKTUR ===")
+        if ps.get("project_name"):
+            parts.append(f"Projektname: {ps['project_name']}")
+        if ps.get("description"):
+            parts.append(f"Beschreibung: {ps['description']}")
+
+        func_reqs = ps.get("requirements", {}).get("functional", [])
+        if func_reqs:
+            parts.append("\nFunktionale Anforderungen:")
+            for req in func_reqs:
+                parts.append(f"- [{req.get('id', '?')}] {req.get('description', '')} (Prioritaet: {req.get('priority', 'medium')})")
+
+        nfunc_reqs = ps.get("requirements", {}).get("non_functional", [])
+        if nfunc_reqs:
+            parts.append("\nNicht-funktionale Anforderungen:")
+            for req in nfunc_reqs:
+                parts.append(f"- [{req.get('id', '?')}] {req.get('description', '')} ({req.get('category', '')})")
+
+        features = ps.get("features", [])
+        if features:
+            parts.append("\nFeatures:")
+            for f in features:
+                parts.append(f"- {f.get('name', '?')}: {f.get('description', '')} (Prioritaet: {f.get('priority', 'medium')})")
+
+        phases = ps.get("phases", [])
+        if phases:
+            parts.append("\nImplementierungsphasen:")
+            for phase in phases:
+                parts.append(f"- {phase.get('name', '?')}")
+                for d in phase.get("deliverables", []):
+                    parts.append(f"  - {d}")
+        parts.append("")
+
+    # Feature docs
+    feature_docs = content["nodes_by_type"].get("feature_doc", [])
+    if feature_docs:
+        parts.append("=== FEATURE-DOKUMENTATION ===")
+        for doc in feature_docs:
+            parts.append(f"### {doc.title or 'Feature'}")
+            if doc.content:
+                parts.append(doc.content)
+            parts.append("")
+
+    # Structured content (SWOT, Kanban, etc.)
+    structured_types = ["kanban", "swot", "mindmap", "user_story", "flowchart",
+                        "action_list", "table", "pros_cons_table", "hierarchy",
+                        "technical_specs", "comparison_table"]
+    for node in content["all_nodes"]:
+        if node.content_json and node.node_type not in ("whitepaper", "feature_doc", "feature_index", "projektdoku"):
+            content_type = node.content_json.get("type", "")
+            if content_type in structured_types:
+                parts.append(f"=== STRUKTURIERTER INHALT: {node.title or content_type} ({content_type}) ===")
+                parts.append(_extract_content_text(node.content_json, node.content or ""))
+                parts.append("")
+
+    # Mermaid diagrams
+    if content["mermaid_diagrams"]:
+        parts.append("=== DIAGRAMME ===")
+        for diagram in content["mermaid_diagrams"]:
+            parts.append(f"### {diagram.title} ({diagram.diagram_type})")
+            parts.append(diagram.to_markdown())
+            parts.append("")
+
+    return "\n".join(parts)
+
+
+def _synthesize_project_doc(title: str, input_text: str, stats: Dict[str, int]) -> Optional[str]:
+    """
+    Call LLM to synthesize a cohesive project document from collected content.
+    """
+    client = _get_openrouter_client()
+    if not client:
+        logger.error("OpenRouter client not available for doc synthesis")
+        return None
+
+    model = os.getenv("OPENROUTER_DOC_MODEL", "openai/gpt-4o")
+
+    system_prompt = """Du bist ein professioneller technischer Redakteur. Deine Aufgabe ist es,
+aus fragmentierten Ideen, Notizen und strukturierten Inhalten ein kohaerentes, professionelles
+Projektdokument zu erstellen.
+
+REGELN:
+- Schreibe auf Deutsch (es sei denn der Input ist komplett Englisch)
+- Erstelle ein zusammenhaengendes Narrativ, keine blosse Auflistung
+- Verwende sauberes Markdown mit klarer Hierarchie (# ## ### etc.)
+- Mermaid-Diagramme UNVERAENDERT als ```mermaid Code-Bloecke einbetten
+- Widersprueche zwischen Ideen erkennen und als "Hinweis:" markieren
+- Luecken identifizieren (z.B. "Hinweis: Keine nicht-funktionalen Anforderungen definiert")
+- SWOT-Analysen, Kanban-Boards etc. sinnvoll in den Fliesstext integrieren
+- Am Ende ein kurzes Fazit mit naechsten Schritten
+
+DOKUMENTSTRUKTUR:
+1. Projektuebersicht (Einleitung + Kernidee)
+2. Zusammenfassung (Executive Summary)
+3. Ideen & Konzepte (thematisch gruppiert, nicht als Liste)
+4. Anforderungen (funktional + nicht-funktional, falls vorhanden)
+5. Features (mit Beschreibung und Prioritaet)
+6. Implementierungsphasen (falls vorhanden)
+7. Diagramme (Mermaid-Bloecke einbetten)
+8. Analyse & Strukturierte Inhalte (SWOT, Kanban etc.)
+9. Fazit & Naechste Schritte
+
+Ueberspringe Sektionen die keine Inhalte haben. Beginne NICHT mit einem Inhaltsverzeichnis -
+starte direkt mit der Projektuebersicht."""
+
+    user_prompt = f"""Erstelle ein professionelles Projektdokument aus folgenden gesammelten Inhalten:
+
+PROJEKTTITEL: {title}
+STATISTIK: {stats.get('ideas', 0)} Ideen, {stats.get('features', 0)} Features, {stats.get('diagrams', 0)} Diagramme, {stats.get('nodes', 0)} Canvas-Nodes
+
+--- GESAMMELTE INHALTE ---
+
+{input_text[:12000]}
+
+--- ENDE DER INHALTE ---
+
+Erstelle jetzt das vollstaendige Projektdokument als sauberes Markdown.
+Beginne mit: # {title} — Projektdokumentation"""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=4000,
+            temperature=0.4,
+        )
+
+        content = response.choices[0].message.content.strip()
+        logger.info(f"Project doc synthesized ({len(content)} chars, model: {model})")
+        return content
+
+    except Exception as e:
+        logger.error(f"LLM doc synthesis failed: {e}")
+        return None
+
+
+def _fallback_assemble_doc(title: str, content: Dict[str, Any]) -> str:
+    """
+    Fallback: assemble document without LLM when API is unavailable.
+    """
+    from spaces.ideas.tools.format_dispatcher import _extract_content_text
+    from datetime import datetime
+
+    lines = [
+        f"# {title} — Projektdokumentation",
+        "",
+        f"> Generiert am {datetime.now().strftime('%d.%m.%Y %H:%M')} (ohne LLM-Synthese)",
+        "",
+    ]
+
+    bubble = content["bubble"]
+    if bubble.description:
+        lines.extend(["## Projektuebersicht", "", bubble.description, ""])
+
+    # Whitepapers
+    for wp in content["nodes_by_type"].get("whitepaper", []):
+        if wp.content:
+            lines.extend(["## Whitepaper", "", wp.content, ""])
+
+    # Ideas
+    if content["child_ideas"]:
+        lines.append("## Ideen")
+        lines.append("")
+        for idea in content["child_ideas"]:
+            lines.append(f"### {idea.title}")
+            if idea.description:
+                lines.append(idea.description)
+            lines.append("")
+
+    # Project structure
+    ps = content["project_structure"]
+    if ps:
+        features = ps.get("features", [])
+        if features:
+            lines.append("## Features")
+            lines.append("")
+            for f in features:
+                lines.append(f"- **{f.get('name', '?')}** ({f.get('priority', 'medium')}): {f.get('description', '')}")
+            lines.append("")
+
+    # Mermaid diagrams
+    if content["mermaid_diagrams"]:
+        lines.append("## Diagramme")
+        lines.append("")
+        for d in content["mermaid_diagrams"]:
+            lines.append(f"### {d.title}")
+            lines.append(d.to_markdown())
+            lines.append("")
+
+    lines.extend(["---", f"*Automatisch generiert von VibeMind am {datetime.now().strftime('%d.%m.%Y')}*"])
+    return "\n".join(lines)
+
+
+def generate_project_doc(params: Dict[str, Any]) -> str:
+    """
+    Generate a cohesive project documentation from all bubble content via LLM.
+
+    Collects ideas, whitepapers, project structures, feature docs, diagrams,
+    and structured content — then synthesizes them into a professional
+    Markdown document using an LLM.
+
+    Voice triggers: "Erstelle Projektdoku", "Generiere Dokumentation",
+                   "Exportiere als Dokument", "Erstelle Doku"
+
+    Args (via params):
+        bubble_name: Name of bubble to document (optional - uses current)
+
+    Returns:
+        str: Summary of generated documentation with file path
+    """
+    bubble_name = (params.get("bubble_name") or "").strip()
+
+    logger.info(f"generate_project_doc called: bubble_name='{bubble_name}'")
+
+    # Resolve bubble
+    current_bubble_id = None
+    try:
+        from spaces.ideas.tools.bubble_tools import get_current_bubble_db_id
+        current_bubble_id = get_current_bubble_db_id()
+    except ImportError:
+        pass
+
+    ideas_repo = _get_ideas_repo()
+
+    if bubble_name:
+        idea = ideas_repo.get_by_title(bubble_name)
+        if not idea:
+            return f"Bubble '{bubble_name}' nicht gefunden."
+    else:
+        if current_bubble_id:
+            idea = ideas_repo.get(current_bubble_id)
+            if not idea:
+                return "Aktuelle Bubble nicht gefunden."
+        else:
+            return "Bitte gib einen Bubble-Namen an oder betrete zuerst eine Bubble."
+
+    # Phase A: Collect all content
+    collected = _collect_bubble_content(idea.id, idea)
+
+    # Check if there's anything to document
+    total_nodes = len(collected["all_nodes"])
+    total_ideas = len(collected["child_ideas"])
+    if total_nodes == 0 and total_ideas == 0:
+        return f"'{idea.title}' hat noch keine Inhalte. Fuege zuerst Ideen oder Notizen hinzu."
+
+    # Build stats
+    stats = {
+        "ideas": total_ideas,
+        "nodes": total_nodes,
+        "features": len(collected["project_structure"].get("features", [])) if collected["project_structure"] else 0,
+        "diagrams": len(collected["mermaid_diagrams"]),
+    }
+
+    # Phase B: LLM synthesis
+    input_text = _build_doc_input_text(collected)
+    doc_markdown = _synthesize_project_doc(idea.title, input_text, stats)
+
+    # Fallback to assembly if LLM fails
+    if not doc_markdown:
+        logger.warning("LLM synthesis failed, using fallback assembly")
+        doc_markdown = _fallback_assemble_doc(idea.title, collected)
+
+    # Phase C: Persist
+    # 1. Write to filesystem
+    file_path = None
+    try:
+        from publishing import get_doc_publisher
+        publisher = get_doc_publisher()
+        from publishing.base_publisher import _slugify
+        slug = _slugify(idea.title)
+        file_path = publisher.publish_doc(slug, idea.title, doc_markdown)
+    except Exception as e:
+        logger.error(f"DocPublisher failed: {e}")
+
+    # 2. Create canvas node
+    canvas_repo = _get_canvas_repo()
+    existing_nodes = [
+        n for n in collected["all_nodes"]
+        if n.node_type == "projektdoku"
+    ]
+
+    # Update existing or create new
+    if existing_nodes:
+        doc_node = existing_nodes[0]
+        doc_node.content = doc_markdown
+        canvas_repo.update_node(doc_node)
+        logger.info(f"Updated existing projektdoku node: {doc_node.id}")
+    else:
+        doc_node = canvas_repo.create_node(
+            node_type="projektdoku",
+            title=f"{idea.title} — Projektdokumentation",
+            content=doc_markdown,
+            linked_idea_id=idea.id,
+            x=100,
+            y=-200,
+        )
+        logger.info(f"Created projektdoku canvas node: {doc_node.id}")
+
+    # 3. Broadcast to Electron
+    _broadcast_to_electron({
+        "type": "projektdoku_generated",
+        "bubble_id": idea.id,
+        "bubble_title": idea.title,
+        "node_id": doc_node.id,
+        "file_path": str(file_path) if file_path else None,
+        "stats": stats,
+    })
+
+    # Build response
+    path_hint = f" Datei: {file_path}" if file_path else ""
+    return (
+        f"Projektdokumentation fuer '{idea.title}' erstellt — "
+        f"{stats['ideas']} Ideen, {stats['features']} Features, "
+        f"{stats['diagrams']} Diagramme.{path_hint}"
+    )
+
+
+# ==============================================================================
 # TOOL REGISTRY
 # ==============================================================================
 
@@ -2390,6 +2837,7 @@ SUMMARY_TOOLS = {
     "get_requirement_clarifications": get_requirement_clarifications,
     "sync_shuttle_from_orchestrator": sync_shuttle_from_orchestrator,
     "create_stage_shuttles": create_stage_shuttles,
+    "generate_project_doc": generate_project_doc,
 }
 
 
@@ -2412,6 +2860,7 @@ __all__ = [
     "get_requirement_clarifications",
     "sync_shuttle_from_orchestrator",
     "create_stage_shuttles",
+    "generate_project_doc",
     "_fetch_orchestrator_project_state",
     "SUMMARY_TOOLS",
     "register_summary_tools",

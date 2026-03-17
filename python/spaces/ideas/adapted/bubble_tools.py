@@ -6,8 +6,11 @@ These can be used directly as FunctionTool in AssistantAgent.
 """
 
 from typing import Optional
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Add python/ root to path (4 levels up from spaces/ideas/adapted/)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -36,7 +39,7 @@ def create_bubble(title: str = None, description: str = "") -> str:
         Confirmation message
     """
     if not title:
-        return "Fehler: Kein Space-Name angegeben. Bitte sag mir wie der neue Space heissen soll."
+        return "Error: No Space name provided. Please tell me what the Space should be called."
     from spaces.ideas.tools.bubble_tools import create_bubble as _create_bubble
     return _create_bubble({"title": title, "description": description})
 
@@ -52,7 +55,7 @@ def enter_bubble(bubble_name: str = None) -> str:
         Confirmation message
     """
     if not bubble_name:
-        return "Fehler: Kein Space-Name angegeben. Bitte sag mir welchen Space du betreten moechtest."
+        return "Error: No Space name. Please tell me which Space to enter."
     from spaces.ideas.tools.bubble_tools import enter_bubble as _enter_bubble
     return _enter_bubble({"bubble_name": bubble_name})
 
@@ -97,18 +100,18 @@ def delete_bubble(bubble_name: str = None, _targets: list = None, _target_type: 
                 failed.append(f"{target} ({e})")
 
         if deleted:
-            msg = f"Ich habe {len(deleted)} Spaces gelöscht: {', '.join(deleted)}."
+            msg = f"Deleted {len(deleted)} Spaces: {', '.join(deleted)}."
             if failed:
-                msg += f" Fehlgeschlagen: {', '.join(failed)}."
+                msg += f" Failed: {', '.join(failed)}."
             return msg
         elif failed:
-            return f"Konnte keine Spaces löschen. Fehlgeschlagen: {', '.join(failed)}."
+            return f"Could not delete any Spaces. Failed: {', '.join(failed)}."
         else:
-            return "Keine Spaces zum Löschen gefunden."
+            return "No Spaces found to delete."
 
     # Single bubble deletion
     if not bubble_name:
-        return "Fehler: Kein Space-Name angegeben. Bitte sag mir welchen Space du loeschen moechtest."
+        return "Error: No Space name. Please tell me which Space to delete."
     return _delete_bubble({"bubble_name": bubble_name})
 
 
@@ -223,7 +226,7 @@ def update_bubble(bubble_name: str = "", new_title: str = "", new_description: s
         Confirmation message
     """
     if not new_title and not new_description:
-        return "Fehler: Bitte sag mir den neuen Namen oder die neue Beschreibung."
+        return "Error: Please tell me the new name or description."
     from spaces.ideas.tools.bubble_tools import update_bubble as _update_bubble
     return _update_bubble({
         "bubble_name": bubble_name,

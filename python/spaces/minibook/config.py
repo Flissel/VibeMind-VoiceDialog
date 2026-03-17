@@ -5,9 +5,12 @@ Configuration for the Minibook inter-space collaboration layer.
 Minibook runs locally and VibeMind communicates via its REST API.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

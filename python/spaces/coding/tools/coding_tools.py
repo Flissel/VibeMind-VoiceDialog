@@ -17,10 +17,13 @@ Usage:
 import sys
 import os
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Add python/ directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -86,6 +89,7 @@ def generate_code(params: Dict[str, Any]) -> str:
         Status message with job_id for tracking
     """
     title = params.get("title", "").strip()
+    logger.debug("generate_code: title=%s", title)
 
     if not title:
         return "What should the project be called? Give me a title."
@@ -162,6 +166,15 @@ def generate_code(params: Dict[str, Any]) -> str:
         except Exception:
             pass
 
+        # Publish project to Rowboat MongoDB (for Brain seeding)
+        try:
+            from publishing import get_ideas_publisher
+            pub = get_ideas_publisher()
+            if hasattr(pub, 'publish_project'):
+                pub.publish_project(project.id)
+        except Exception:
+            pass
+
         return f"Starting generation of '{title}' with {tech_stack}. Job ID: {job_id}. This may take a few minutes. Ask for status with 'What's the status of {job_id}?'"
 
     except Exception as e:
@@ -192,6 +205,7 @@ def get_generation_status(params: Dict[str, Any]) -> str:
     """
     job_id = params.get("job_id")
     project_name = params.get("project_name", "").strip()
+    logger.debug("get_generation_status: job_id=%s, project_name=%s", job_id, project_name)
 
     repo = ProjectsRepository()
     project = None
@@ -280,6 +294,7 @@ def start_preview(params: Dict[str, Any]) -> str:
     job_id = params.get("job_id")
     project_name = params.get("project_name", "").strip()
     resolution = params.get("resolution", "1280x720")
+    logger.debug("start_preview: job_id=%s, project_name=%s", job_id, project_name)
 
     repo = ProjectsRepository()
     project = None
@@ -349,6 +364,7 @@ def stop_preview(params: Dict[str, Any]) -> str:
     """
     job_id = params.get("job_id")
     project_name = params.get("project_name", "").strip()
+    logger.debug("stop_preview: job_id=%s, project_name=%s", job_id, project_name)
 
     repo = ProjectsRepository()
     project = None
@@ -406,6 +422,7 @@ def list_generated_projects(params: Dict[str, Any]) -> str:
     """
     status_filter = params.get("status_filter")
     limit = int(params.get("limit", 10))
+    logger.debug("list_generated_projects: status_filter=%s, limit=%s", status_filter, limit)
 
     repo = ProjectsRepository()
 
@@ -462,6 +479,7 @@ def cancel_generation(params: Dict[str, Any]) -> str:
         Confirmation message
     """
     job_id = params.get("job_id")
+    logger.debug("cancel_generation: job_id=%s", job_id)
 
     if not job_id:
         return "Which job should I cancel? Give me a job ID."

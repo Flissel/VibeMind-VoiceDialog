@@ -169,6 +169,8 @@ class ExplorationClarificationAgent:
         context: str = ""
     ) -> ClarificationQuestion:
         """Create a question about exploration direction."""
+        logger.debug("create_direction_question: candidates=%s, context=%s",
+                     len(candidates), context[:50] if context else "")
         options = [c.get("title", "Unbekannt") for c in candidates[:4]]
 
         question_text = "Welchen Bereich soll ich als nächstes erkunden?"
@@ -283,6 +285,8 @@ class ExplorationClarificationAgent:
 
         Returns: Selected bubble ID, or None if timeout/cancel
         """
+        logger.debug("ask_for_direction: candidates=%s, context=%s",
+                     len(candidates), context[:50] if context else "")
         if not candidates:
             return None
 

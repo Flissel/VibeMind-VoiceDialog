@@ -7,14 +7,13 @@ return pattern: {"success": bool, "message": str, ...}
 """
 
 import logging
-import sys
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [MinibookTools] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[MinibookTools] %s", msg)
 
 
 def get_minibook_status() -> Dict[str, Any]:
@@ -24,6 +23,7 @@ def get_minibook_status() -> Dict[str, Any]:
     Event: minibook.status
     Voice: "Minibook Status", "Ist Minibook verbunden?"
     """
+    _logger.debug("get_minibook_status called")
     from .minibook_client import get_minibook_client
 
     client = get_minibook_client()
@@ -32,24 +32,24 @@ def get_minibook_status() -> Dict[str, Any]:
     if status.get("success"):
         agent_count = status.get("agent_count", 0)
         registered = status.get("registered_agents", [])
-        reg_str = ", ".join(registered) if registered else "keine"
+        reg_str = ", ".join(registered) if registered else "none"
         return {
             "success": True,
-            "message": f"Minibook verbunden ({status['url']})",
+            "message": f"Minibook connected ({status['url']})",
             "response_hint": (
-                f"Minibook ist verbunden. "
-                f"{agent_count} Agents insgesamt, "
-                f"davon {len(registered)} von VibeMind registriert: {reg_str}."
+                f"Minibook is connected. "
+                f"{agent_count} agents total, "
+                f"{len(registered)} registered by VibeMind: {reg_str}."
             ),
             **status,
         }
     else:
         return {
             "success": False,
-            "message": f"Minibook nicht erreichbar: {status.get('error', '?')}",
+            "message": f"Minibook not reachable: {status.get('error', '?')}",
             "response_hint": (
-                f"Minibook ist gerade nicht erreichbar unter {status.get('url', '?')}. "
-                "Stelle sicher dass Minibook laeuft."
+                f"Minibook is currently not reachable at {status.get('url', '?')}. "
+                "Make sure Minibook is running."
             ),
             **status,
         }
@@ -74,17 +74,17 @@ def start_discussion(
     if not status.get("success"):
         return {
             "success": False,
-            "response_hint": "Minibook ist nicht erreichbar.",
+            "response_hint": "Minibook is not reachable.",
         }
 
     project_id = client.project_id
     if not project_id:
         return {
             "success": False,
-            "response_hint": "Kein Minibook-Projekt konfiguriert.",
+            "response_hint": "No Minibook project configured.",
         }
 
-    content = message or topic or "Neue Diskussion"
+    content = message or topic or "New discussion"
 
     try:
         post_data = client.create_post(
@@ -99,14 +99,14 @@ def start_discussion(
         return {
             "success": True,
             "post_id": post_id,
-            "response_hint": f"Diskussion gestartet: {content[:100]}",
+            "response_hint": f"Discussion started: {content[:100]}",
         }
 
     except Exception as e:
-        logger.error(f"Failed to start discussion: {e}")
+        _logger.error(f"Failed to start discussion: {e}")
         return {
             "success": False,
-            "response_hint": f"Konnte Diskussion nicht starten: {e}",
+            "response_hint": f"Could not start discussion: {e}",
         }
 
 
@@ -127,7 +127,7 @@ def get_discussion_results(discussion_id: str = "") -> Dict[str, Any]:
         if not project_id:
             return {
                 "success": False,
-                "response_hint": "Kein Projekt konfiguriert.",
+                "response_hint": "No project configured.",
             }
 
         try:
@@ -135,20 +135,20 @@ def get_discussion_results(discussion_id: str = "") -> Dict[str, Any]:
             if not posts:
                 return {
                     "success": True,
-                    "response_hint": "Keine Diskussionen vorhanden.",
+                    "response_hint": "No discussions available.",
                 }
             # Take the most recent post
             discussion_id = posts[-1].get("id", "")
         except Exception as e:
             return {
                 "success": False,
-                "response_hint": f"Fehler beim Abrufen der Diskussionen: {e}",
+                "response_hint": f"Error fetching discussions: {e}",
             }
 
     if not discussion_id:
         return {
             "success": False,
-            "response_hint": "Keine Diskussions-ID verfuegbar.",
+            "response_hint": "No discussion ID available.",
         }
 
     try:
@@ -159,7 +159,7 @@ def get_discussion_results(discussion_id: str = "") -> Dict[str, Any]:
                 "success": True,
                 "discussion_id": discussion_id,
                 "comment_count": 0,
-                "response_hint": "Noch keine Antworten auf diese Diskussion.",
+                "response_hint": "No responses to this discussion yet.",
             }
 
         # Format results
@@ -176,15 +176,15 @@ def get_discussion_results(discussion_id: str = "") -> Dict[str, Any]:
             "comment_count": len(comments),
             "results": results,
             "response_hint": (
-                f"Die Diskussion hat {len(comments)} Antworten:\n{results_str}"
+                f"The discussion has {len(comments)} responses:\n{results_str}"
             ),
         }
 
     except Exception as e:
-        logger.error(f"Failed to get discussion results: {e}")
+        _logger.error(f"Failed to get discussion results: {e}")
         return {
             "success": False,
-            "response_hint": f"Fehler beim Abrufen der Ergebnisse: {e}",
+            "response_hint": f"Error fetching results: {e}",
         }
 
 
@@ -203,7 +203,7 @@ def list_projects() -> Dict[str, Any]:
     if not status.get("success"):
         return {
             "success": False,
-            "response_hint": "Minibook ist nicht erreichbar.",
+            "response_hint": "Minibook is not reachable.",
         }
 
     try:
@@ -213,7 +213,7 @@ def list_projects() -> Dict[str, Any]:
             return {
                 "success": True,
                 "projects": [],
-                "response_hint": "Keine Projekte vorhanden.",
+                "response_hint": "No projects available.",
             }
 
         names = [p.get("name", "?") for p in projects]
@@ -221,14 +221,14 @@ def list_projects() -> Dict[str, Any]:
             "success": True,
             "projects": projects,
             "project_count": len(projects),
-            "response_hint": f"Es gibt {len(projects)} Projekte: {', '.join(names)}",
+            "response_hint": f"There are {len(projects)} projects: {', '.join(names)}",
         }
 
     except Exception as e:
-        logger.error(f"Failed to list projects: {e}")
+        _logger.error(f"Failed to list projects: {e}")
         return {
             "success": False,
-            "response_hint": f"Fehler beim Abrufen der Projekte: {e}",
+            "response_hint": f"Error fetching projects: {e}",
         }
 
 

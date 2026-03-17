@@ -55,7 +55,26 @@ async def execute_desktop_task(goal: str) -> Dict[str, Any]:
     """
     try:
         result = await moire.execute_task(goal, timeout=120.0)
-        
+
+        # Buffer action for Rowboat MongoDB (for Brain seeding)
+        if result.success:
+            try:
+                from publishing import get_ideas_publisher
+                pub = get_ideas_publisher()
+                if hasattr(pub, 'buffer_desktop_action'):
+                    pub.buffer_desktop_action(
+                        result.task_id or "default",
+                        {
+                            "action_type": "execute_desktop_task",
+                            "target": goal,
+                            "timestamp": __import__('datetime').datetime.utcnow().isoformat(),
+                            "duration_seconds": round(result.duration_seconds, 2),
+                            "actions_executed": result.actions_executed,
+                        },
+                    )
+            except Exception:
+                pass
+
         return {
             "success": result.success,
             "message": result.message,
@@ -397,13 +416,14 @@ async def cleanup_desktop_tools():
 def register_desktop_tools(tools_manager) -> None:
     """
     Registriert Desktop Tools im ClientToolsManager.
-    
+
     WICHTIG: Diese Funktion muss in voice_dialog_main.py aufgerufen werden,
     damit Adam's Desktop Tool Calls korrekt ausgeführt werden.
-    
+
     Args:
         tools_manager: ClientToolsManager instance
     """
+    logger.debug("register_desktop_tools called")
     print("Registering desktop tools...")
     
     # Wrapper functions that call async functions synchronously
@@ -537,6 +557,7 @@ def register_desktop_tools(tools_manager) -> None:
 
 async def test_desktop_tools():
     """Test-Funktion für Desktop Tools."""
+    logger.debug("test_desktop_tools called")
     print("Testing Desktop Tools (External MoireTracker v2)...")
     
     # Test press_key
