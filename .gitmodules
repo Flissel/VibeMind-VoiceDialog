@@ -28,3 +28,6 @@
 [submodule "python/spaces/video/vibevideo_deepfake"]
 	path = python/spaces/video/vibevideo_deepfake
 	url = https://github.com/Flissel/vibevideo-deepfake.git
+[submodule "external/Autogen_AgentFarm"]
+	path = external/Autogen_AgentFarm
+	url = https://github.com/Flissel/Autogen_AgentFarm.git
