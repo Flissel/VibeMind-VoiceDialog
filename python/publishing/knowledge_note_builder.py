@@ -5,8 +5,11 @@ Notes follow the Rowboat knowledge graph template structure
 (Projects, Topics) so the Graph Builder can auto-index them.
 """
 
+import logging
 from datetime import datetime
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def build_project_note(
@@ -35,6 +38,7 @@ def build_project_note(
         related_topics: List of related topic titles for cross-linking
         source_space: VibeMind space that generated this (ideas, swe_design, etc.)
     """
+    logger.debug("build_project_note: title=%s status=%s", title, status)
     lines = [f"# {title}", ""]
 
     # Info section
@@ -94,6 +98,7 @@ def build_topic_note(
     related_projects: Optional[List[str]] = None,
 ) -> str:
     """Build a Topic knowledge note."""
+    logger.debug("build_topic_note: title=%s", title)
     lines = [f"# {title}", ""]
 
     if description:

@@ -344,6 +344,21 @@ class ElectronBackend:
             debug_log("Navigation tools connected to Electron IPC")
             logger.info("Navigation tools connected to Electron IPC")
 
+        # ── IPC Handler Modules ──
+        from ipc.n8n_handlers import N8nHandlers
+        from ipc.clawport_handlers import ClawPortHandlers
+        from ipc.exploration_handlers import ExplorationHandlers
+        from ipc.eyeterm_handlers import EyeTermHandlers
+        from ipc.project_manager import ProjectManager
+        from ipc.shuttle_handlers import ShuttleHandlers
+        self._n8n = N8nHandlers(self)
+        self._clawport = ClawPortHandlers(self)
+        self._exploration = ExplorationHandlers(self)
+        self._eyeterm = EyeTermHandlers(self)
+        self._project_mgr = ProjectManager(self)
+        self._shuttle = ShuttleHandlers(self)
+        debug_log("IPC handler modules loaded")
+
         # Load bubbles from database in background (sends node_added IPC per bubble)
         import threading
         threading.Thread(
@@ -357,14 +372,55 @@ class ElectronBackend:
         # No default bubbles - bubbles are created via voice commands
         # and stored in the database
 
-        # Initial Rowboat sync (background, non-blocking)
+        # Initial Rowboat sync + Brain seeding (background, non-blocking)
         import threading
         def _sync_to_rowboat():
             try:
                 import time
                 time.sleep(2)
                 from publishing import get_ideas_publisher
-                get_ideas_publisher().sync_all()
+                publisher = get_ideas_publisher()
+                publisher.sync_all()
+
+                # Wire up BrainSeeder (if enabled)
+                try:
+                    from spaces.brain.brain_seeder import BrainSeeder
+                    seeder = BrainSeeder(
+                        mongo_client=getattr(publisher, '_client', None),
+                        db_name=getattr(publisher, '_db_name', ''),
+                        project_id=getattr(publisher, '_project_id', ''),
+                    )
+                    # Register callback for future publishes
+                    if hasattr(publisher, 'on_source_updated'):
+                        publisher.on_source_updated(seeder.on_source_ready)
+                    # Startup seed
+                    seeder.seed_all()
+                except Exception as e:
+                    debug_log(f"BrainSeeder init (non-critical): {e}")
+
+                # Start periodic flush timers for buffered data
+                def _periodic_flush():
+                    tick = 0
+                    while True:
+                        time.sleep(30)
+                        tick += 1
+                        # Desktop buffer: every 30s
+                        try:
+                            if hasattr(publisher, 'flush_desktop_buffer'):
+                                publisher.flush_desktop_buffer()
+                        except Exception:
+                            pass
+                        # Agent metrics: every 5min (10 ticks of 30s)
+                        if tick % 10 == 0:
+                            try:
+                                if hasattr(publisher, 'flush_agent_metrics'):
+                                    publisher.flush_agent_metrics()
+                            except Exception:
+                                pass
+                threading.Thread(
+                    target=_periodic_flush, daemon=True, name="publisher-flush"
+                ).start()
+
             except Exception as e:
                 debug_log(f"Rowboat sync failed (non-critical): {e}")
         threading.Thread(target=_sync_to_rowboat, daemon=True, name="rowboat-sync").start()
@@ -454,14 +510,14 @@ class ElectronBackend:
                                         self.send_message({
                                             "type": "roarboot_status",
                                             "status": "error",
-                                            "message": result.get("message", "Docker Start fehlgeschlagen"),
+                                            "message": result.get("message", "Docker start failed"),
                                         })
                                 except Exception as e:
                                     debug_log(f"Roarboot: Docker auto-start error: {e}")
                                     self.send_message({
                                         "type": "roarboot_status",
                                         "status": "error",
-                                        "message": f"Docker Fehler: {e}",
+                                        "message": f"Docker error: {e}",
                                     })
                             else:
                                 self.send_message({
@@ -514,7 +570,7 @@ class ElectronBackend:
         threading.Thread(target=_autostart_automation_ui, daemon=True, name="automation-ui-autostart").start()
 
         # eyeTerm gaze/cursor controller (optional — needs camera + mediapipe)
-        self._eyeterm = None
+        self._eyeterm_headless = None
         _eyeterm_env = os.environ.get("EYETERM_ENABLED", "false")
         # Log via debug_log (structured JSON) + plain stderr for double visibility
         debug_log(f"eyeTerm: EYETERM_ENABLED={_eyeterm_env!r}")
@@ -641,12 +697,12 @@ class ElectronBackend:
                 debug_log(f"eyeTerm voice command: {transcript[:80]}")
                 self._handle_chat_text_input({"text": transcript})
 
-            self._eyeterm = EyeTermHeadless(
+            self._eyeterm_headless = EyeTermHeadless(
                 on_voice_command=_on_voice_command,
                 broadcast_fn=self.send_message,
             )
             print("[eyeTerm] Calling .start()...", file=sys.stderr, flush=True)
-            self._eyeterm.start()
+            self._eyeterm_headless.start()
             debug_log("eyeTerm: STARTED OK — MJPEG on port 8099")
             print("[eyeTerm] STARTED OK — MJPEG on port 8099", file=sys.stderr, flush=True)
             self.send_message({"type": "eyeterm_status", "status": "running"})
@@ -1680,7 +1736,7 @@ class ElectronBackend:
                 notifications = queue.get_and_clear()
 
                 if not notifications:
-                    return "Keine neuen Ergebnisse."
+                    return "No new results."
 
                 parts = []
                 for n in notifications:
@@ -1693,7 +1749,7 @@ class ElectronBackend:
 
             except Exception as e:
                 debug_log(f"check_results error: {e}")
-                return "Konnte Ergebnisse nicht abrufen."
+                return "Failed to retrieve results."
 
         else:
             debug_log(f"[REALTIME TOOL] Unknown tool: {name}")
@@ -1967,7 +2023,7 @@ class ElectronBackend:
                 debug_log(f"cleanup: automation_ui stop error: {e}")
 
         # 2b. Stop eyeTerm (camera + MJPEG stream on port 8099)
-        for attr in ('_eyeterm', '_eyeterm_app'):
+        for attr in ('_eyeterm_headless', '_eyeterm_app'):
             et = getattr(self, attr, None)
             if et:
                 try:
@@ -2142,14 +2198,14 @@ class ElectronBackend:
             enable_vnc = message.get("enable_vnc", True)
             vnc_resolution = message.get("vnc_resolution", "1280x720")
             debug_log(f"Starting project preview: {project_id} at {project_path}")
-            asyncio.create_task(self._start_project_preview(
+            asyncio.create_task(self._project_mgr.handle_start_project_preview(
                 project_id, project_path, enable_vnc, vnc_resolution
             ))
-        
+
         elif msg_type == "stop_project_preview":
             project_id = message.get("project_id")
             debug_log(f"Stopping project preview: {project_id}")
-            asyncio.create_task(self._stop_project_preview(project_id))
+            asyncio.create_task(self._project_mgr.handle_stop_project_preview(project_id))
 
         elif msg_type == "get_preview_status":
             project_id = message.get("project_id")
@@ -2165,19 +2221,19 @@ class ElectronBackend:
         # ====================================================================
         
         elif msg_type == "get_generated_projects":
-            asyncio.create_task(self._handle_get_generated_projects(message))
-        
+            asyncio.create_task(self._project_mgr.handle_get_generated_projects(message))
+
         elif msg_type == "get_generation_status":
-            asyncio.create_task(self._handle_get_generation_status(message))
-        
+            asyncio.create_task(self._project_mgr.handle_get_generation_status(message))
+
         elif msg_type == "start_code_generation":
-            asyncio.create_task(self._handle_start_code_generation(message))
-        
+            asyncio.create_task(self._project_mgr.handle_start_code_generation(message))
+
         elif msg_type == "cancel_code_generation":
-            asyncio.create_task(self._handle_cancel_code_generation(message))
-        
+            asyncio.create_task(self._project_mgr.handle_cancel_code_generation(message))
+
         elif msg_type == "enter_projects_space":
-            asyncio.create_task(self._handle_enter_projects_space(message))
+            asyncio.create_task(self._project_mgr.handle_enter_projects_space(message))
         
         # ====================================================================
         # NAVIGATION IPC Handlers (from voice commands via navigation_tools)
@@ -2279,16 +2335,14 @@ class ElectronBackend:
             })
 
         elif msg_type == "get_shuttle_requirements":
-            # Get requirements data for shuttle interior view
             shuttle_id = message.get("shuttle_id")
             debug_log(f"Getting requirements for shuttle: {shuttle_id}")
-            asyncio.create_task(self._handle_get_shuttle_requirements(shuttle_id))
+            asyncio.create_task(self._shuttle.handle_get_shuttle_requirements(shuttle_id))
 
         elif msg_type == "get_stage_shuttle_data":
-            # PHASE 13: Get stage-specific shuttle data
             shuttle_id = message.get("shuttle_id")
             debug_log(f"Getting stage shuttle data: {shuttle_id}")
-            asyncio.create_task(self._handle_get_stage_shuttle_data(shuttle_id))
+            asyncio.create_task(self._shuttle.handle_get_stage_shuttle_data(shuttle_id))
 
         # ========================================
         # SHUTTLE WIZARD (interactive steps)
@@ -2455,34 +2509,30 @@ class ElectronBackend:
             mode = message.get("mode", "auto")
             context = message.get("context")
             debug_log(f"Starting exploration: bubble={bubble_id}, mode={mode}, depth={depth}")
-            asyncio.create_task(self._handle_exploration_start(bubble_id, depth, mode, context))
+            asyncio.create_task(self._exploration.handle_exploration_start(bubble_id, depth, mode, context))
 
         elif msg_type == "exploration_stop":
-            # Stop exploration
             debug_log("Stopping exploration")
-            asyncio.create_task(self._handle_exploration_stop())
+            asyncio.create_task(self._exploration.handle_exploration_stop())
 
         elif msg_type == "exploration_respond":
-            # Handle response to exploration question
             question_id = message.get("question_id")
             response_type = message.get("response_type")
             selected_option = message.get("selected_option")
             custom_text = message.get("custom_text")
             debug_log(f"Exploration response: {response_type} for question {question_id}")
-            asyncio.create_task(self._handle_exploration_respond(
+            asyncio.create_task(self._exploration.handle_exploration_respond(
                 question_id, response_type, selected_option, custom_text
             ))
 
         elif msg_type == "exploration_direction":
-            # Set exploration direction (guided mode)
             direction = message.get("direction")
             bubble_id = message.get("bubble_id")
             debug_log(f"Setting exploration direction: {direction}")
-            asyncio.create_task(self._handle_exploration_direction(direction, bubble_id))
+            asyncio.create_task(self._exploration.handle_exploration_direction(direction, bubble_id))
 
         elif msg_type == "exploration_status":
-            # Get exploration status
-            asyncio.create_task(self._handle_exploration_status())
+            asyncio.create_task(self._exploration.handle_exploration_status())
 
         # ====================================================================
         # UI TOOLBAR - Direct Tool Execution (user clicks tool in sidebar)
@@ -2499,56 +2549,134 @@ class ElectronBackend:
         # ====================================================================
 
         elif msg_type == "get_scheduled_tasks":
-            asyncio.create_task(self._handle_get_scheduled_tasks(message))
+            asyncio.create_task(self._clawport.handle_get_scheduled_tasks(message))
 
         elif msg_type == "update_task_status":
-            asyncio.create_task(self._handle_update_task_status(message))
+            asyncio.create_task(self._clawport.handle_update_task_status(message))
 
         elif msg_type == "get_agent_status":
-            asyncio.create_task(self._handle_get_agent_status_sync())
+            asyncio.create_task(self._clawport.handle_get_agent_status_sync())
 
         elif msg_type == "chat_text_input":
-            asyncio.create_task(self._handle_chat_text_input(message))
+            asyncio.create_task(self._clawport.handle_chat_text_input(message))
 
         elif msg_type == "get_conversation_history":
-            asyncio.create_task(self._handle_get_conversation_history(message))
+            asyncio.create_task(self._clawport.handle_get_conversation_history(message))
 
         elif msg_type == "get_memory_overview":
-            asyncio.create_task(self._handle_get_memory_overview())
+            asyncio.create_task(self._clawport.handle_get_memory_overview())
 
         elif msg_type == "search_memory":
-            asyncio.create_task(self._handle_search_memory(message))
+            asyncio.create_task(self._clawport.handle_search_memory(message))
 
         elif msg_type == "get_recent_memory":
-            asyncio.create_task(self._handle_get_recent_memory(message))
+            asyncio.create_task(self._clawport.handle_get_recent_memory(message))
+
+        # ── Plugin Management ──
+        elif msg_type == "get_plugins":
+            asyncio.create_task(self._clawport.handle_get_plugins())
+
+        elif msg_type == "accept_plugin":
+            asyncio.create_task(self._clawport.handle_accept_plugin(message))
+
+        elif msg_type == "reject_plugin":
+            asyncio.create_task(self._clawport.handle_reject_plugin(message))
+
+        elif msg_type == "toggle_plugin":
+            asyncio.create_task(self._clawport.handle_toggle_plugin(message))
 
         elif msg_type == "n8n_status":
-            asyncio.create_task(self._handle_n8n_status())
+            asyncio.create_task(self._n8n.handle_n8n_status())
 
         elif msg_type == "n8n_list":
-            asyncio.create_task(self._handle_n8n_list())
+            asyncio.create_task(self._n8n.handle_n8n_list())
 
         elif msg_type == "n8n_generate":
-            asyncio.create_task(self._handle_n8n_generate(message))
+            asyncio.create_task(self._n8n.handle_n8n_generate(message))
 
         elif msg_type == "n8n_activate":
-            asyncio.create_task(self._handle_n8n_activate(message))
+            asyncio.create_task(self._n8n.handle_n8n_activate(message))
 
         elif msg_type == "n8n_deactivate":
-            asyncio.create_task(self._handle_n8n_deactivate(message))
+            asyncio.create_task(self._n8n.handle_n8n_deactivate(message))
 
         elif msg_type == "n8n_delete":
-            asyncio.create_task(self._handle_n8n_delete(message))
+            asyncio.create_task(self._n8n.handle_n8n_delete(message))
+
+        # ── AgentFarm handlers ──
+        elif msg_type == "agentfarm_create_team":
+            asyncio.create_task(self._handle_agentfarm_create_team(message))
+
+        elif msg_type == "agentfarm_run":
+            asyncio.create_task(self._handle_agentfarm_run(message))
+
+        elif msg_type == "agentfarm_status":
+            asyncio.create_task(self._handle_agentfarm_status())
+
+        elif msg_type == "agentfarm_list_teams":
+            asyncio.create_task(self._handle_agentfarm_list_teams())
+
+        elif msg_type == "agentfarm_stop_run":
+            asyncio.create_task(self._handle_agentfarm_stop_run(message))
+
+        elif msg_type == "agentfarm_run_results":
+            asyncio.create_task(self._handle_agentfarm_run_results(message))
+
+        # ── Video Production handlers ──
+        elif msg_type == "video_status":
+            asyncio.create_task(self._handle_video_tool("video_status", "video_status_result"))
+        elif msg_type == "video_team_run":
+            asyncio.create_task(self._handle_video_tool("team_run_step", "video_team_run_result", message))
+        elif msg_type == "video_vision":
+            asyncio.create_task(self._handle_video_tool("vision_generate", "video_vision_result", message))
+        elif msg_type == "video_demo_analyze":
+            asyncio.create_task(self._handle_video_tool("demo_analyze", "video_demo_analyze_result", message))
+        elif msg_type == "video_demo_build":
+            asyncio.create_task(self._handle_video_tool("demo_build", "video_demo_build_result", message))
+        elif msg_type == "video_lipsync":
+            asyncio.create_task(self._handle_video_tool("lipsync_run", "video_lipsync_result", message))
+        elif msg_type == "video_lipsync_analyze":
+            asyncio.create_task(self._handle_video_tool("lipsync_analyze", "video_lipsync_analyze_result"))
+        elif msg_type == "video_voice_clone":
+            asyncio.create_task(self._handle_video_tool("voice_clone", "video_voice_clone_result"))
+        elif msg_type == "video_voice_tts":
+            asyncio.create_task(self._handle_video_tool("voice_tts", "video_voice_tts_result", message))
+
+        # ── Rowboat update checker ──
+        elif msg_type == "check_rowboat_update":
+            self._handle_check_rowboat_update()
 
         # ── eyeTerm handlers ──
         elif msg_type == "eyeterm_start":
-            asyncio.create_task(self._handle_eyeterm_start(message))
+            asyncio.create_task(self._eyeterm.handle_eyeterm_start(message))
         elif msg_type == "eyeterm_stop":
-            asyncio.create_task(self._handle_eyeterm_stop())
+            asyncio.create_task(self._eyeterm.handle_eyeterm_stop())
         elif msg_type == "eyeterm_toggle_cursor":
-            asyncio.create_task(self._handle_eyeterm_toggle_cursor())
+            asyncio.create_task(self._eyeterm.handle_eyeterm_toggle_cursor())
         elif msg_type == "eyeterm_calibrate":
-            asyncio.create_task(self._handle_eyeterm_calibrate())
+            asyncio.create_task(self._eyeterm.handle_eyeterm_calibrate())
+
+    # ========================================================================
+    # ROWBOAT UPDATE CHECKER
+    # ========================================================================
+
+    def _handle_check_rowboat_update(self):
+        """Handle manual Rowboat update check request from Electron."""
+        if hasattr(self, '_rowboat_update_checker') and self._rowboat_update_checker:
+            import threading
+            threading.Thread(
+                target=self._rowboat_update_checker.check_now,
+                daemon=True,
+                name="rowboat-update-manual",
+            ).start()
+            debug_log("Manual Rowboat update check triggered")
+        else:
+            debug_log("Rowboat update checker not available")
+            self.send_message({
+                "type": "rowboat_update_check_result",
+                "up_to_date": False,
+                "error": "Update checker not initialized",
+            })
 
     # ========================================================================
     # UI TOOLBAR HANDLER
@@ -2947,6 +3075,83 @@ class ElectronBackend:
                 "success": False,
                 "message": str(e),
             })
+
+    # ── AgentFarm Handlers ──────────────────────────────────────────
+
+    async def _handle_agentfarm_create_team(self, message):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import create_team
+            result = create_team(
+                template_id=message.get("template_id"),
+                team_name=message.get("team_name"),
+                team_config=message.get("team_config"),
+            )
+            self.send_message({"type": "agentfarm_create_team_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_create_team_result", "success": False, "message": str(e)})
+
+    async def _handle_agentfarm_run(self, message):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import run_team
+            result = await run_team(
+                team_id=message.get("team_id", ""),
+                task=message.get("task", ""),
+            )
+            self.send_message({"type": "agentfarm_run_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_run_result", "success": False, "message": str(e)})
+
+    async def _handle_agentfarm_status(self):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import get_farm_status
+            result = get_farm_status()
+            self.send_message({"type": "agentfarm_status_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_status_result", "success": False, "message": str(e)})
+
+    async def _handle_agentfarm_list_teams(self):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import list_teams
+            result = list_teams()
+            self.send_message({"type": "agentfarm_list_teams_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_list_teams_result", "success": False, "message": str(e)})
+
+    async def _handle_agentfarm_stop_run(self, message):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import stop_run
+            result = stop_run(run_id=message.get("run_id", ""))
+            self.send_message({"type": "agentfarm_stop_run_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_stop_run_result", "success": False, "message": str(e)})
+
+    async def _handle_agentfarm_run_results(self, message):
+        try:
+            from spaces.autogen.tools.agentfarm_tools import get_run_results
+            result = get_run_results(run_id=message.get("run_id", ""))
+            self.send_message({"type": "agentfarm_run_results_result", **result})
+        except Exception as e:
+            self.send_message({"type": "agentfarm_run_results_result", "success": False, "message": str(e)})
+
+    # ========================================================================
+    # VIDEO PRODUCTION IPC Handlers
+    # ========================================================================
+
+    async def _handle_video_tool(self, tool_name: str, response_type: str, message: dict = None):
+        """Generic handler for video production tool calls."""
+        try:
+            import spaces.video.tools.video_tools as vt
+            tool_fn = getattr(vt, tool_name, None)
+            if not tool_fn:
+                self.send_message({"type": response_type, "success": False, "message": f"Unknown tool: {tool_name}"})
+                return
+            # Extract params from message (exclude 'type')
+            params = {k: v for k, v in (message or {}).items() if k != "type"} if message else {}
+            result = tool_fn(**params)
+            self.send_message({"type": response_type, **result})
+        except Exception as e:
+            debug_log(f"Video tool error ({tool_name}): {e}")
+            self.send_message({"type": response_type, "success": False, "message": str(e)})
 
     # ========================================================================
     # EYETERM IPC Handlers

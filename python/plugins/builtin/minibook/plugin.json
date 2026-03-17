@@ -1,0 +1,36 @@
+{
+  "id": "minibook",
+  "version": "1.0.0",
+  "name": "Minibook Collaboration",
+  "description": "Inter-Space-Kollaboration: Diskussionen zwischen Agents, Ergebnis-Aggregation",
+  "author": "VibeMind Team",
+  "category": "collaboration",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.minibook.agents.minibook_agent",
+  "agent_class": "MinibookBackendAgent",
+  "agent_factory": "get_minibook_agent",
+
+  "stream": "events:tasks:minibook",
+  "event_routes": {
+    "minibook.discuss": "events:tasks:minibook",
+    "minibook.collaborate": "events:tasks:minibook",
+    "minibook.status": "events:tasks:minibook",
+    "minibook.results": "events:tasks:minibook",
+    "minibook.list_projects": "events:tasks:minibook",
+    "minibook.poll": "events:tasks:minibook"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["minibook", "kollaboration", "diskussion", "zusammenarbeit"],
+    "keywords_en": ["minibook", "collaboration", "discussion"],
+    "example_utterances": [
+      {"text": "Diskutiere das Thema mit allen Agents", "event_type": "minibook.discuss"},
+      {"text": "Minibook Status", "event_type": "minibook.status"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": "MINIBOOK_ENABLED",
+  "dependencies": []
+}

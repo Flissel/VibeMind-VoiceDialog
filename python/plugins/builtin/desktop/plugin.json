@@ -1,0 +1,50 @@
+{
+  "id": "desktop",
+  "version": "1.0.0",
+  "name": "Desktop Automation",
+  "description": "Desktop-Steuerung: Apps oeffnen, Klicks, Screenshots, Messaging und Web-Suche",
+  "author": "VibeMind Team",
+  "category": "automation",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.desktop.agents.desktop_agent",
+  "agent_class": "DesktopAgent",
+  "agent_factory": "get_desktop_agent",
+
+  "stream": "events:tasks:desktop",
+  "event_routes": {
+    "desktop.open_app": "events:tasks:desktop",
+    "desktop.click": "events:tasks:desktop",
+    "desktop.type": "events:tasks:desktop",
+    "desktop.press_key": "events:tasks:desktop",
+    "desktop.screenshot": "events:tasks:desktop",
+    "desktop.scroll": "events:tasks:desktop",
+    "desktop.task": "events:tasks:desktop",
+    "desktop.task.create": "events:tasks:desktop",
+    "desktop.task.update": "events:tasks:desktop",
+    "desktop.task.list": "events:tasks:desktop",
+    "desktop.moire.scan": "events:tasks:desktop",
+    "desktop.moire.find": "events:tasks:desktop",
+    "messaging.whatsapp": "events:tasks:desktop",
+    "messaging.telegram": "events:tasks:desktop",
+    "messaging.send": "events:tasks:desktop",
+    "web.search": "events:tasks:desktop",
+    "web.fetch": "events:tasks:desktop",
+    "openclaw.status": "events:tasks:desktop",
+    "openclaw.notifications": "events:tasks:desktop"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["oeffne", "klick", "screenshot", "desktop", "whatsapp", "telegram"],
+    "keywords_en": ["open", "click", "screenshot", "desktop", "whatsapp", "telegram"],
+    "example_utterances": [
+      {"text": "Oeffne Chrome", "event_type": "desktop.open_app"},
+      {"text": "Klick auf OK", "event_type": "desktop.click"},
+      {"text": "Screenshot", "event_type": "desktop.screenshot"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": null,
+  "dependencies": []
+}

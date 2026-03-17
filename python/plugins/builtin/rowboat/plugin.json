@@ -1,0 +1,43 @@
+{
+  "id": "rowboat",
+  "version": "1.0.0",
+  "name": "Rowboat Knowledge Graph",
+  "description": "Rowboat-Wissensgraph: Suche, Queries, E-Mail-Entwuerfe, Meeting-Briefs und Docker-Management",
+  "author": "VibeMind Team",
+  "category": "knowledge",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.rowboat.agents.roarboot_agent",
+  "agent_class": "RoarbootBackendAgent",
+  "agent_factory": "get_roarboot_agent",
+
+  "stream": "events:tasks:roarboot",
+  "event_routes": {
+    "roarboot.search": "events:tasks:roarboot",
+    "roarboot.query": "events:tasks:roarboot",
+    "roarboot.email_draft": "events:tasks:roarboot",
+    "roarboot.meeting_brief": "events:tasks:roarboot",
+    "roarboot.deck": "events:tasks:roarboot",
+    "roarboot.voice_note": "events:tasks:roarboot",
+    "roarboot.status": "events:tasks:roarboot",
+    "roarboot.open": "events:tasks:roarboot",
+    "roarboot.reset": "events:tasks:roarboot",
+    "roarboot.docker.start": "events:tasks:roarboot",
+    "roarboot.docker.stop": "events:tasks:roarboot",
+    "roarboot.docker.restart": "events:tasks:roarboot",
+    "roarboot.docker.status": "events:tasks:roarboot"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["rowboat", "wissensgraph", "suche", "email", "meeting"],
+    "keywords_en": ["rowboat", "knowledge", "search", "email", "meeting"],
+    "example_utterances": [
+      {"text": "Suche in Rowboat nach X", "event_type": "roarboot.search"},
+      {"text": "Rowboat Status", "event_type": "roarboot.status"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": null,
+  "dependencies": []
+}

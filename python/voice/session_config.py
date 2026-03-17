@@ -8,8 +8,11 @@ Audio Format: PCM 16-bit, 24kHz, mono, little-endian
 VAD: Client-side silence detection (server_vad disabled)
 """
 
+import logging
 import os
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Defaults
 DEFAULT_MODEL = "gpt-4o-realtime-preview"
@@ -106,6 +109,7 @@ def create_session_config(
     Returns:
         Session configuration dict for session.update event
     """
+    logger.debug("create_session_config called: vad_type=%s, vad_threshold=%s", vad_type, vad_threshold)
     voice = voice or os.getenv("OPENAI_REALTIME_VOICE", DEFAULT_VOICE)
     model = model or os.getenv("OPENAI_REALTIME_MODEL", DEFAULT_MODEL)
 

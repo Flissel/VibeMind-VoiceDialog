@@ -242,6 +242,7 @@ class CanvasNode:
     # Structured formatting fields (for LLM-generated structured content)
     format_schema: Optional[Dict[str, Any]] = None  # JSON Schema defining allowed structure
     content_json: Optional[Dict[str, Any]] = None   # Structured JSON content (alternative to plain text)
+    previous_content_json: Optional[Dict[str, Any]] = None  # Previous content_json for revert
     last_formatted: Optional[datetime] = None       # When content was last structured by LLM
 
     def to_dict(self) -> Dict[str, Any]:
@@ -264,6 +265,7 @@ class CanvasNode:
             # Structured formatting fields
             "format_schema": json.dumps(self.format_schema) if self.format_schema else None,
             "content_json": json.dumps(self.content_json) if self.content_json else None,
+            "previous_content_json": json.dumps(self.previous_content_json) if self.previous_content_json else None,
             "last_formatted": self.last_formatted.isoformat() if self.last_formatted else None,
         }
 
@@ -275,6 +277,7 @@ class CanvasNode:
         # Parse structured formatting fields
         format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
         content_json = json.loads(data.get("content_json", "{}")) if isinstance(data.get("content_json"), str) and data.get("content_json") else None
+        previous_content_json = json.loads(data.get("previous_content_json", "{}")) if isinstance(data.get("previous_content_json"), str) and data.get("previous_content_json") else None
 
         last_formatted = data.get("last_formatted")
         if isinstance(last_formatted, str):
@@ -296,6 +299,7 @@ class CanvasNode:
             # Structured formatting fields
             format_schema=format_schema,
             content_json=content_json,
+            previous_content_json=previous_content_json,
             last_formatted=last_formatted,
         )
 

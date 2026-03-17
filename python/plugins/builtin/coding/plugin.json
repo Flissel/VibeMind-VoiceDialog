@@ -1,0 +1,39 @@
+{
+  "id": "coding",
+  "version": "1.0.0",
+  "name": "Coding Engine",
+  "description": "Code-Generierung, Modifikation und Live-Preview via Coding Engine",
+  "author": "VibeMind Team",
+  "category": "development",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.coding.agents.coding_agent",
+  "agent_class": "CodingAgent",
+  "agent_factory": "get_coding_agent",
+
+  "stream": "events:tasks:coding",
+  "event_routes": {
+    "code.generate": "events:tasks:coding",
+    "code.modify": "events:tasks:coding",
+    "code.status": "events:tasks:coding",
+    "code.show": "events:tasks:coding",
+    "code.preview.start": "events:tasks:coding",
+    "code.preview.stop": "events:tasks:coding",
+    "code.list": "events:tasks:coding",
+    "code.cancel": "events:tasks:coding",
+    "idea.to_project": "events:tasks:coding"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["code", "app", "programmiere", "generiere", "preview"],
+    "keywords_en": ["code", "app", "generate", "program", "preview"],
+    "example_utterances": [
+      {"text": "Erstelle eine App fuer X", "event_type": "code.generate"},
+      {"text": "Wie ist der Code-Status?", "event_type": "code.status"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": null,
+  "dependencies": []
+}

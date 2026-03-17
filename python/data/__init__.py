@@ -18,6 +18,7 @@ from .repository import (
     CanvasRepository,
     ConversationRepository,
     ShuttlesRepository,
+    MermaidDiagramsRepository,
     ScheduledTaskRepository,
     promote_idea_to_project,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "CanvasRepository",
     "ConversationRepository",
     "ShuttlesRepository",
+    "MermaidDiagramsRepository",
     "ScheduledTaskRepository",
     "TaskMemoryRepository",
     "get_task_memory_repository",

@@ -9,10 +9,13 @@ Handles storage and retrieval of:
 
 import os
 import json
+import logging
 import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -54,7 +57,7 @@ class SupermemoryClient:
             "metadata": metadata or {}
         }
 
-        response = requests.post(url, headers=self.headers, json=payload)
+        response = requests.post(url, headers=self.headers, json=payload, timeout=10)
         response.raise_for_status()
 
         return response.json()
@@ -188,7 +191,7 @@ class SupermemoryClient:
 
         for payload in payloads_to_try:
             try:
-                response = requests.post(url, headers=self.headers, json=payload)
+                response = requests.post(url, headers=self.headers, json=payload, timeout=10)
                 if response.status_code == 400:
                     # Try next payload format
                     continue
@@ -243,6 +246,7 @@ class SupermemoryClient:
         Returns:
             Dict of preference_key: preference_value
         """
+        logger.debug("get_user_preferences: session_id=%s", session_id)
         results = self.retrieve_context(
             session_id=session_id,
             query="user preference",
@@ -275,6 +279,7 @@ class SupermemoryClient:
         Returns:
             List of project dicts
         """
+        logger.debug("get_projects: session_id=%s", session_id)
         results = self.retrieve_context(
             session_id=session_id,
             query="project",
