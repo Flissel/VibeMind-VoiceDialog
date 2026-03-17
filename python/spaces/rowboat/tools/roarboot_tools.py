@@ -59,8 +59,8 @@ def search_knowledge(query: str) -> Dict[str, Any]:
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Keine Ergebnisse."),
-        "response_hint": result.get("response", "Ich konnte nichts finden.")[:200],
+        "message": result.get("response", "No results."),
+        "response_hint": result.get("response", "I couldn't find anything.")[:200],
     }
 
 
@@ -91,8 +91,8 @@ def query_knowledge(subject: str, question: str = None) -> Dict[str, Any]:
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Keine Informationen gefunden."),
-        "response_hint": result.get("response", "Ich habe keine Informationen dazu.")[:200],
+        "message": result.get("response", "No information found."),
+        "response_hint": result.get("response", "I don't have information on that.")[:200],
     }
 
 
@@ -125,8 +125,8 @@ def draft_email(recipient: str, topic: str, context: str = "") -> Dict[str, Any]
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Email-Entwurf konnte nicht erstellt werden."),
-        "response_hint": f"Ich habe einen Email-Entwurf an {recipient} zum Thema {topic} erstellt.",
+        "message": result.get("response", "Email draft could not be created."),
+        "response_hint": f"I created an email draft to {recipient} about {topic}.",
     }
 
 
@@ -157,8 +157,8 @@ def generate_meeting_brief(meeting: str, participants: str = "") -> Dict[str, An
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Meeting-Brief konnte nicht erstellt werden."),
-        "response_hint": f"Ich habe einen Meeting-Brief fuer {meeting} vorbereitet.",
+        "message": result.get("response", "Meeting brief could not be created."),
+        "response_hint": f"I prepared a meeting brief for {meeting}.",
     }
 
 
@@ -189,8 +189,8 @@ def generate_deck(topic: str, context: str = "") -> Dict[str, Any]:
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Praesentation konnte nicht erstellt werden."),
-        "response_hint": f"Ich habe eine Praesentation ueber {topic} erstellt.",
+        "message": result.get("response", "Presentation could not be created."),
+        "response_hint": f"I created a presentation about {topic}.",
     }
 
 
@@ -219,8 +219,8 @@ def process_voice_note(text: str) -> Dict[str, Any]:
 
     return {
         "success": result.get("success", False),
-        "message": result.get("response", "Notiz konnte nicht verarbeitet werden."),
-        "response_hint": "Ich habe deine Notiz verarbeitet und den Knowledge Graph aktualisiert.",
+        "message": result.get("response", "Note could not be processed."),
+        "response_hint": "I processed your note and updated the knowledge graph.",
     }
 
 
@@ -245,8 +245,8 @@ def get_status() -> Dict[str, Any]:
 
     return {
         "success": result.get("success", False),
-        "message": result.get("message", "Status unbekannt."),
-        "response_hint": result.get("message", "Status unbekannt."),
+        "message": result.get("message", "Status unknown."),
+        "response_hint": result.get("message", "Status unknown."),
     }
 
 
@@ -287,14 +287,14 @@ def open_webview(context: str = "default") -> Dict[str, Any]:
     if status.get("success"):
         return {
             "success": True,
-            "message": "Rowboat WebView geoeffnet.",
-            "response_hint": "Ich oeffne Rowboat fuer dich.",
+            "message": "Rowboat WebView opened.",
+            "response_hint": "Opening Rowboat for you.",
         }
     else:
         return {
             "success": False,
-            "message": f"Rowboat nicht erreichbar: {status.get('message', '')}",
-            "response_hint": "Rowboat ist leider nicht erreichbar. Ist der Docker-Container gestartet?",
+            "message": f"Rowboat not reachable: {status.get('message', '')}",
+            "response_hint": "Rowboat is not reachable. Is the Docker container started?",
         }
 
 
@@ -319,14 +319,14 @@ def reset_conversation(context: str = None) -> Dict[str, Any]:
     active_after = len(client.list_conversations())
 
     if context:
-        msg = f"Roarboot-Gespraech '{context}' zurueckgesetzt."
+        msg = f"Roarboot conversation '{context}' reset."
     else:
-        msg = f"Alle Roarboot-Gespraeche zurueckgesetzt ({active_before} -> {active_after})."
+        msg = f"All Roarboot conversations reset ({active_before} -> {active_after})."
 
     return {
         "success": True,
         "message": msg,
-        "response_hint": "Neues Gespraech mit Roarboot gestartet.",
+        "response_hint": "New conversation with Roarboot started.",
     }
 
 

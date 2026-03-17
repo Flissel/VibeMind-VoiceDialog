@@ -141,8 +141,8 @@ class AccuracyGate:
             if accuracy < self._threshold_off:
                 self._phase = PHASE_DEGRADED
                 logger.warning("AccuracyGate: ready → degraded (accuracy=%.2f)", accuracy)
-            # check drift as secondary signal
-            elif self.check_drift(recent_clicks):
+            # Drift check only with enough data (prevents false positives)
+            elif n >= _DRIFT_WINDOW and self.check_drift(recent_clicks):
                 self._phase = PHASE_DEGRADED
                 logger.warning("AccuracyGate: ready → degraded (drift detected)")
 

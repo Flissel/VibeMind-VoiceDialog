@@ -8,6 +8,9 @@ Note: Coding tools require the Hybrid Run Coding Engine to be available.
 """
 
 from typing import Optional, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def generate_code(
@@ -31,7 +34,7 @@ def generate_code(
         Status message with job_id for tracking
     """
     if not title:
-        return "Fehler: Kein Projekt-Titel angegeben. Bitte sag mir wie das Projekt heissen soll."
+        return "Error: No project title provided. Please tell me what the project should be called."
     try:
         from .coding_tools import generate_code as _generate
         return _generate({
@@ -142,7 +145,7 @@ def cancel_generation(job_id: str = None) -> str:
         Confirmation message
     """
     if not job_id:
-        return "Fehler: Keine Job-ID angegeben. Bitte sag mir welchen Job ich abbrechen soll."
+        return "Error: No job ID provided. Please tell me which job to cancel."
     try:
         from .coding_tools import cancel_generation as _cancel
         return _cancel({"job_id": job_id})

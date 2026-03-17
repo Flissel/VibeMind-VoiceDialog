@@ -128,6 +128,7 @@ class AutomationUIClient:
         - total_steps (int): number of tool calls executed
         - steps (list): individual step results collected during stream
         """
+        logger.debug("llm_intent called: text=%s", text[:80])
         cid = conversation_id or VIBEMIND_CONVERSATION_ID
         payload = {"text": text, "conversation_id": cid}
 

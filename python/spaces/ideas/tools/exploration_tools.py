@@ -470,6 +470,7 @@ async def get_exploration_status() -> Dict[str, Any]:
     - "Exploration Status"
     - "Wie weit bist du?"
     """
+    logger.debug("get_exploration_status: checking state")
     global _exploration_state
 
     if not _exploration_state["is_running"]:
@@ -504,6 +505,7 @@ async def accept_connection(connection_id: Optional[str] = None) -> Dict[str, An
     - "Akzeptiere diese Verbindung"
     - "Speichere Verbindung"
     """
+    logger.debug("accept_connection: connection_id=%s", connection_id)
     global _exploration_state
 
     searcher = _exploration_state.get("searcher")
@@ -571,6 +573,7 @@ async def reject_connection(connection_id: Optional[str] = None) -> Dict[str, An
     - "Lehne ab"
     - "Diese Verbindung ist nicht gut"
     """
+    logger.debug("reject_connection: connection_id=%s", connection_id)
     global _exploration_state
 
     searcher = _exploration_state.get("searcher")
@@ -661,6 +664,7 @@ async def visualize_exploration() -> Dict[str, Any]:
     - "Zeige gefundene Verbindungen"
     - "Was hast du gefunden?"
     """
+    logger.debug("visualize_exploration: fetching visualization data")
     global _exploration_state
 
     searcher = _exploration_state.get("searcher")

@@ -550,6 +550,7 @@ def register_moire_tools(tools_manager) -> None:
 
 async def test_moire_tools():
     """Test Moire Server tools."""
+    logger.debug("test_moire_tools called")
     print("Testing Moire Server Tools...")
     print(f"  websockets available: {HAS_WEBSOCKETS}")
 

@@ -18,6 +18,7 @@ import json
 import time
 import logging
 import subprocess
+import threading
 import urllib.request
 import urllib.error
 from typing import Optional, Callable, Dict, Any
@@ -235,7 +236,13 @@ class RowboatUpdateChecker:
                 logger.info("[UpdateChecker] Restoring local changes...")
                 pop_result = self._run_git("stash", "pop")
                 if pop_result.returncode != 0:
-                    logger.warning(f"[UpdateChecker] Stash pop had conflicts: {pop_result.stderr.strip()}")
+                    conflict_msg = pop_result.stderr.strip()
+                    logger.warning(f"[UpdateChecker] Stash pop had conflicts: {conflict_msg}")
+                    self._send_message({
+                        "type": "rowboat_update_error",
+                        "error": f"Stash pop conflict after update: {conflict_msg}",
+                        "details": "Local changes conflicted with the pulled update. Manual resolution may be needed.",
+                    })
 
             # 5. Get new version
             new_version = self._get_current_version() or "unknown"
@@ -262,66 +269,119 @@ class RowboatUpdateChecker:
         Perform a single update check.
         Returns release info if an update is available, None otherwise.
         """
+        logger.info("[UpdateChecker] Running update check...")
+
         self._current_version = self._get_current_version()
         if not self._current_version:
-            logger.warning("[UpdateChecker] Cannot determine current version")
+            logger.warning("[UpdateChecker] Cannot determine current version — skipping check")
             return None
+
+        logger.info(f"[UpdateChecker] Current local version: {self._current_version}")
 
         release = self._get_latest_release()
         if not release:
+            logger.info("[UpdateChecker] GitHub API returned no releases")
             return None
 
         latest_tag = release["tag_name"]
+        logger.info(f"[UpdateChecker] Latest GitHub release: {latest_tag} ({release.get('name', 'unnamed')})")
+
+        if not latest_tag:
+            logger.warning("[UpdateChecker] Release tag_name is empty — cannot compare versions")
+            return None
+
         if self._is_newer(self._current_version, latest_tag):
             self._latest_version = latest_tag
-            logger.info(f"[UpdateChecker] Update available: {self._current_version} → {latest_tag}")
+            logger.info(f"[UpdateChecker] Update available: {self._current_version} -> {latest_tag}")
             return release
 
-        logger.debug(f"[UpdateChecker] Up to date: {self._current_version}")
+        logger.info(f"[UpdateChecker] Up to date (local={self._current_version}, remote={latest_tag})")
         return None
+
+    def check_now(self) -> Optional[Dict[str, Any]]:
+        """
+        Trigger an immediate update check from outside the timer loop.
+        Can be called from an IPC handler. Returns the check result.
+        """
+        logger.info("[UpdateChecker] Manual check triggered")
+        try:
+            release = self.check_once()
+            if release:
+                self._handle_release(release)
+            else:
+                self._send_message({
+                    "type": "rowboat_update_check_result",
+                    "up_to_date": True,
+                    "current_version": self._current_version or "unknown",
+                })
+            return release
+        except Exception as e:
+            logger.error(f"[UpdateChecker] Manual check failed: {e}")
+            self._send_message({
+                "type": "rowboat_update_check_result",
+                "up_to_date": False,
+                "error": str(e),
+            })
+            return None
+
+    def _handle_release(self, release: Dict[str, Any]):
+        """Handle a detected release: auto-pull or notify."""
+        if self._auto_pull:
+            result = self._auto_pull_update()
+            if result["success"]:
+                self._send_message({
+                    "type": "rowboat_update_applied",
+                    "old_version": result["old_version"],
+                    "new_version": result["new_version"],
+                    "release_name": release.get("name", ""),
+                    "changelog": release.get("body", ""),
+                })
+            else:
+                logger.warning(f"[UpdateChecker] Auto-pull failed: {result['error']}")
+                self._send_message({
+                    "type": "rowboat_update_available",
+                    "current_version": self._current_version,
+                    "latest_version": release["tag_name"],
+                    "release_name": release.get("name", ""),
+                    "release_url": release.get("html_url", ""),
+                    "changelog": release.get("body", ""),
+                    "auto_pull_error": result["error"],
+                })
+        else:
+            self._send_message({
+                "type": "rowboat_update_available",
+                "current_version": self._current_version,
+                "latest_version": release["tag_name"],
+                "release_name": release.get("name", ""),
+                "release_url": release.get("html_url", ""),
+                "changelog": release.get("body", ""),
+            })
 
     def _run_loop(self):
         """Main loop: check periodically, auto-pull if enabled, and notify."""
         # Short delay to let the app stabilize
         time.sleep(10)
 
+        # First check — log result clearly
+        logger.info("[UpdateChecker] Running first update check after startup...")
+        try:
+            release = self.check_once()
+            if release:
+                logger.info(f"[UpdateChecker] First check: UPDATE AVAILABLE ({release['tag_name']})")
+                self._handle_release(release)
+            else:
+                logger.info(f"[UpdateChecker] First check: no update available (current={self._current_version or 'unknown'})")
+        except Exception as e:
+            logger.error(f"[UpdateChecker] First check failed: {e}")
+
+        # Wait for next interval, then loop
+        time.sleep(self._interval)
+
         while self._running:
             try:
                 release = self.check_once()
                 if release:
-                    if self._auto_pull:
-                        # Auto-pull and notify result
-                        result = self._auto_pull_update()
-                        if result["success"]:
-                            self._send_message({
-                                "type": "rowboat_update_applied",
-                                "old_version": result["old_version"],
-                                "new_version": result["new_version"],
-                                "release_name": release.get("name", ""),
-                                "changelog": release.get("body", ""),
-                            })
-                        else:
-                            # Pull failed — fall back to manual notification
-                            logger.warning(f"[UpdateChecker] Auto-pull failed: {result['error']}")
-                            self._send_message({
-                                "type": "rowboat_update_available",
-                                "current_version": self._current_version,
-                                "latest_version": release["tag_name"],
-                                "release_name": release.get("name", ""),
-                                "release_url": release.get("html_url", ""),
-                                "changelog": release.get("body", ""),
-                                "auto_pull_error": result["error"],
-                            })
-                    else:
-                        # Auto-pull disabled — just notify
-                        self._send_message({
-                            "type": "rowboat_update_available",
-                            "current_version": self._current_version,
-                            "latest_version": release["tag_name"],
-                            "release_name": release.get("name", ""),
-                            "release_url": release.get("html_url", ""),
-                            "changelog": release.get("body", ""),
-                        })
+                    self._handle_release(release)
             except Exception as e:
                 logger.error(f"[UpdateChecker] Check failed: {e}")
 
@@ -330,8 +390,6 @@ class RowboatUpdateChecker:
 
     def start(self):
         """Start the update checker as a daemon thread."""
-        import threading
-
         if self._running:
             return
 

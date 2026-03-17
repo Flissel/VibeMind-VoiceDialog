@@ -11,15 +11,14 @@ Falls back to keyword-based routing if LLM is unavailable.
 import json
 import logging
 import os
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [SpaceRouter] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[SpaceRouter] %s", msg)
 
 
 @dataclass
@@ -229,10 +228,10 @@ class SpaceRouter:
             )
 
         except json.JSONDecodeError as e:
-            logger.warning(f"SpaceRouter: LLM returned invalid JSON: {e}")
+            _logger.warning(f"SpaceRouter: LLM returned invalid JSON: {e}")
             return None
         except Exception as e:
-            logger.warning(f"SpaceRouter: LLM routing failed: {e}")
+            _logger.warning(f"SpaceRouter: LLM routing failed: {e}")
             return None
 
     def _route_by_keywords(self, user_text: str) -> RoutingDecision:

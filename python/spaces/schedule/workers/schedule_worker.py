@@ -15,7 +15,6 @@ Delivery:
 
 import asyncio
 import logging
-import sys
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
@@ -28,11 +27,11 @@ from data import (
 )
 from spaces.schedule.config import get_config
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [ScheduleWorker] {msg}", file=sys.stderr, flush=True)
+    __logger.debug("[ScheduleWorker] %s", msg)
 
 
 class ScheduleWorker:
@@ -67,7 +66,7 @@ class ScheduleWorker:
             from apscheduler.schedulers.asyncio import AsyncIOScheduler
             from apscheduler.jobstores.memory import MemoryJobStore
         except ImportError:
-            logger.error(
+            _logger.error(
                 "APScheduler not installed. Run: pip install APScheduler>=3.10.0"
             )
             _debug_print("ERROR: APScheduler not installed!")
@@ -94,10 +93,10 @@ class ScheduleWorker:
                 self.add_job(task)
                 loaded += 1
             except Exception as e:
-                logger.warning(f"Failed to register job {task.id}: {e}")
+                _logger.warning(f"Failed to register job {task.id}: {e}")
 
         _debug_print(f"Loaded {loaded}/{len(active_tasks)} active tasks from DB")
-        logger.info(f"ScheduleWorker started: {loaded} active tasks loaded")
+        _logger.info(f"ScheduleWorker started: {loaded} active tasks loaded")
 
     async def stop(self):
         """Shut down the scheduler gracefully."""
@@ -114,12 +113,12 @@ class ScheduleWorker:
             task: The task to register
         """
         if not self._scheduler:
-            logger.warning("Scheduler not started — cannot add job")
+            _logger.warning("Scheduler not started — cannot add job")
             return
 
         trigger = self._build_trigger(task)
         if trigger is None:
-            logger.warning(f"Could not build trigger for task {task.id}")
+            _logger.warning(f"Could not build trigger for task {task.id}")
             return
 
         # Remove existing job if re-registering
@@ -146,7 +145,7 @@ class ScheduleWorker:
             self._scheduler.remove_job(task_id)
             _debug_print(f"Job removed: {task_id}")
         except Exception as e:
-            logger.debug(f"Job {task_id} not found in scheduler: {e}")
+            _logger.debug(f"Job {task_id} not found in scheduler: {e}")
 
     def _build_trigger(self, task: ScheduledTask):
         """Build an APScheduler trigger from task config."""
@@ -201,11 +200,11 @@ class ScheduleWorker:
         _debug_print(f"Task firing: {task_id}")
         task = self._repo.get(task_id)
         if not task:
-            logger.error(f"Task {task_id} not found in DB — skipping")
+            _logger.error(f"Task {task_id} not found in DB — skipping")
             return
 
         if task.status != ScheduleStatus.ACTIVE:
-            logger.info(f"Task {task_id} is not active ({task.status}) — skipping")
+            _logger.info(f"Task {task_id} is not active ({task.status}) — skipping")
             return
 
         result_text = None
@@ -218,7 +217,7 @@ class ScheduleWorker:
                 result_text = await self._execute_simple(task)
         except Exception as e:
             error_text = str(e)
-            logger.error(f"Task {task_id} execution failed: {e}")
+            _logger.error(f"Task {task_id} execution failed: {e}")
             _debug_print(f"Task {task_id} FAILED: {e}")
 
         # Update DB
@@ -263,7 +262,7 @@ class ScheduleWorker:
                     elif hasattr(result, "message") and result.message:
                         return f"Geplante Aufgabe '{task.title}': {result.message}"
                 except Exception as e:
-                    logger.error(f"IntentOrchestrator failed for task {task.id}: {e}")
+                    _logger.error(f"IntentOrchestrator failed for task {task.id}: {e}")
                     return f"Erinnerung: {task.title}"
 
         # Fallback: just announce
@@ -289,11 +288,11 @@ class ScheduleWorker:
             else:
                 return f"Konnte Kollaboration fuer '{task.title}' nicht starten: {result.get('message', '?')}"
         except ImportError:
-            logger.error("Minibook not available for complex execution")
+            _logger.error("Minibook not available for complex execution")
             # Fallback to simple
             return await self._execute_simple(task)
         except Exception as e:
-            logger.error(f"Complex execution failed for {task.id}: {e}")
+            _logger.error(f"Complex execution failed for {task.id}: {e}")
             return f"Fehler bei '{task.title}': {e}"
 
     def _is_pure_reminder(self, text: str) -> bool:
@@ -333,7 +332,7 @@ class ScheduleWorker:
                     _debug_print(f"Result injected via voice: {text[:60]}...")
                     return
                 except Exception as e:
-                    logger.warning(f"Voice injection failed: {e}")
+                    _logger.warning(f"Voice injection failed: {e}")
 
         # Fallback: NotificationQueue
         try:
@@ -351,7 +350,7 @@ class ScheduleWorker:
             )
             _debug_print(f"Result queued in NotificationQueue: {text[:60]}...")
         except Exception as e:
-            logger.error(f"Could not deliver schedule result: {e}")
+            _logger.error(f"Could not deliver schedule result: {e}")
 
     # -----------------------------------------------------------------
     # Status

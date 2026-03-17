@@ -14,15 +14,14 @@ Delivers results via:
 
 import asyncio
 import logging
-import sys
 import time
 from typing import Dict, Any, List, Optional, Callable
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [ResultAggregator] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[ResultAggregator] %s", msg)
 
 
 class ResultAggregator:
@@ -119,7 +118,7 @@ class ResultAggregator:
                     return result
 
             except Exception as e:
-                logger.warning(f"Sync-wait poll error: {e}")
+                _logger.warning(f"Sync-wait poll error: {e}")
 
             await asyncio.sleep(self._poll_interval)
 
@@ -176,7 +175,7 @@ class ResultAggregator:
                 _debug_print("Async-track: DiscussionPoller not available")
 
         except Exception as e:
-            logger.warning(f"Could not register multi-space tracking: {e}")
+            _logger.warning(f"Could not register multi-space tracking: {e}")
 
     # =========================================================================
     # Result Delivery
@@ -220,7 +219,7 @@ class ResultAggregator:
                     _debug_print("Result delivered via voice session")
                     return True
                 except Exception as e:
-                    logger.warning(f"Voice injection failed: {e}")
+                    _logger.warning(f"Voice injection failed: {e}")
 
         # Fallback: NotificationQueue
         try:
@@ -235,7 +234,7 @@ class ResultAggregator:
             _debug_print("Result queued in NotificationQueue (fallback)")
             return False
         except Exception as e:
-            logger.error(f"Could not deliver result: {e}")
+            _logger.error(f"Could not deliver result: {e}")
             return False
 
 

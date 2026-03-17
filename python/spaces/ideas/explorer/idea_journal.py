@@ -151,6 +151,8 @@ class IdeaJournal:
         Returns:
             List of best nodes sorted by score descending
         """
+        logger.debug("get_best_nodes: top_k=%s, only_valid=%s, min_score=%s",
+                     top_k, only_valid, min_score)
         nodes = self.valid_nodes if only_valid else self.nodes
         nodes = [n for n in nodes if n.combined_score >= min_score]
         nodes.sort(key=lambda n: n.combined_score, reverse=True)
@@ -198,6 +200,7 @@ class IdeaJournal:
 
     def get_path_to_root(self, node: IdeaNode) -> List[IdeaNode]:
         """Get the path from a node back to its root."""
+        logger.debug("get_path_to_root: node_id=%s", node.id)
         path = [node]
         current = node
         while current.parent is not None:
@@ -217,6 +220,7 @@ class IdeaJournal:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get exploration statistics."""
+        logger.debug("get_stats: total_nodes=%s", len(self.nodes))
         if not self.nodes:
             return {
                 "total_nodes": 0,

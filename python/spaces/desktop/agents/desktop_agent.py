@@ -51,6 +51,9 @@ class DesktopAgent(BaseBackendAgent):
         "web.fetch": "web_fetch",
         "openclaw.status": "get_clawdbot_status",
         "openclaw.notifications": "get_notifications",
+        # eyeTerm gaze/cursor control
+        "desktop.eyeterm.toggle": "eyeterm_toggle",
+        "desktop.eyeterm.calibrate": "eyeterm_calibrate",
     }
 
     # Parameter normalization: map classifier output to tool expected params

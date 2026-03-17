@@ -72,7 +72,9 @@ class CodingEngineRunner:
     def __init__(
         self,
         coding_engine_path: str,
-        on_status_update: Optional[Callable[[str, str, float, str, Optional[str]], None]] = None
+        on_status_update: Optional[Callable[[str, str, float, str, Optional[str]], None]] = None,
+        on_issue_detected: Optional[Callable[[str, dict], None]] = None,
+        on_quality_update: Optional[Callable[[str, dict], None]] = None,
     ):
         """
         Initialize the CodingEngineRunner.
@@ -80,11 +82,15 @@ class CodingEngineRunner:
         Args:
             coding_engine_path: Path to the Coding_engine directory
             on_status_update: Callback(job_id, status, progress, phase, error)
+            on_issue_detected: Callback(job_id, issue_dict) - called per issue detected
+            on_quality_update: Callback(job_id, summary_dict) - called on quality summary change
         """
         global _runner_instance
 
         self.coding_engine_path = Path(coding_engine_path)
         self.on_status_update = on_status_update
+        self.on_issue_detected = on_issue_detected
+        self.on_quality_update = on_quality_update
         self.jobs: Dict[str, GenerationJob] = {}
         self._used_ports: set = set()
         self._lock = threading.Lock()
@@ -329,6 +335,11 @@ class CodingEngineRunner:
 
             stderr_task = asyncio.create_task(_stream_stderr())
 
+            # Start quality file watcher for live issue detection
+            quality_watcher_task = asyncio.create_task(
+                self._watch_quality_files(job)
+            )
+
             # Stream stdout for status updates
             async for line in process.stdout:
                 line_str = line.decode('utf-8', errors='replace').strip()
@@ -349,6 +360,16 @@ class CodingEngineRunner:
             # Wait for process completion
             return_code = await process.wait()
             await stderr_task  # Ensure stderr is fully read
+
+            # Stop quality file watcher
+            quality_watcher_task.cancel()
+            try:
+                await quality_watcher_task
+            except asyncio.CancelledError:
+                pass
+
+            # Do final quality file check after process completes
+            await self._check_quality_file_final(job)
 
             stderr_str = "\n".join(stderr_lines) if stderr_lines else None
             if stderr_str:
@@ -387,6 +408,7 @@ class CodingEngineRunner:
 
     def _handle_progress_update(self, job: GenerationJob, data: dict):
         """Handle JSON progress update from subprocess."""
+        logger.debug("_handle_progress_update: job_id=%s, data=%s", job.job_id, data)
         if "status" in data:
             job.status = data["status"]
         if "progress" in data:
@@ -426,10 +448,36 @@ class CodingEngineRunner:
         elif "testing" in line_lower or "validation" in line_lower:
             job.status = "testing"
             self._notify_status(job)
+        elif "self-critique" in line_lower or "self_critique" in line_lower:
+            job.phase = "Quality Analysis"
+            self._notify_status(job)
+        elif "quality_gate" in line_lower or "quality gate" in line_lower:
+            job.phase = "Quality Gate"
+            self._notify_status(job)
         elif "error" in line_lower or "failed" in line_lower:
             if job.status not in ("completed", "cancelled"):
                 job.phase_error = line
                 self._notify_status(job)
+
+        # Detect inline issues from stdout
+        if "[issue]" in line_lower or "critique issue" in line_lower:
+            severity = "medium"
+            if "critical" in line_lower:
+                severity = "critical"
+            elif "high" in line_lower:
+                severity = "high"
+            elif "low" in line_lower:
+                severity = "low"
+
+            inline_issue = {
+                "id": f"LIVE-{datetime.now().strftime('%H%M%S')}",
+                "severity": severity,
+                "title": line.strip()[:120],
+                "description": line.strip(),
+                "category": "live_detection",
+                "auto_fixable": False,
+            }
+            self._notify_issue(job, inline_issue)
 
     def _notify_status(self, job: GenerationJob):
         """Send status update via callback."""
@@ -444,6 +492,111 @@ class CodingEngineRunner:
                 )
             except Exception as e:
                 logger.warning(f"Status callback error: {e}")
+
+    def _notify_issue(self, job: GenerationJob, issue: dict):
+        """Notify about a single detected issue."""
+        if self.on_issue_detected:
+            try:
+                self.on_issue_detected(job.job_id, issue)
+            except Exception as e:
+                logger.warning(f"Issue callback error: {e}")
+
+    def _notify_quality_summary(self, job: GenerationJob, summary: dict):
+        """Notify about quality summary update."""
+        if self.on_quality_update:
+            try:
+                self.on_quality_update(job.job_id, summary)
+            except Exception as e:
+                logger.warning(f"Quality callback error: {e}")
+
+    async def _watch_quality_files(self, job: GenerationJob):
+        """
+        Poll the output directory for quality report files during generation.
+        Detects new issues and broadcasts them in real-time.
+        """
+        if not job.output_dir:
+            return
+
+        output_path = Path(job.output_dir)
+        # Also check the Data/all_services path (where pipeline writes to)
+        data_dir = self.coding_engine_path / "Data" / "all_services"
+        quality_paths = [
+            output_path / "quality" / "self_critique_report.json",
+        ]
+        # Add data dir pattern for the project
+        if data_dir.exists():
+            for entry in data_dir.iterdir():
+                if entry.is_dir() and job.project_name.lower().replace(" ", "-") in entry.name.lower():
+                    quality_paths.append(entry / "quality" / "self_critique_report.json")
+
+        last_mtime = 0
+        last_issue_count = 0
+
+        while True:
+            await asyncio.sleep(3)  # Poll every 3 seconds
+
+            for quality_file in quality_paths:
+                if not quality_file.exists():
+                    continue
+
+                try:
+                    current_mtime = quality_file.stat().st_mtime
+                    if current_mtime <= last_mtime:
+                        continue
+
+                    last_mtime = current_mtime
+
+                    with open(quality_file, "r", encoding="utf-8") as f:
+                        report = json.load(f)
+
+                    issues = report.get("issues", [])
+                    new_issues = issues[last_issue_count:]
+                    last_issue_count = len(issues)
+
+                    # Broadcast each new issue
+                    for issue in new_issues:
+                        self._notify_issue(job, issue)
+
+                    # Broadcast summary update
+                    summary = report.get("summary", {})
+                    if summary:
+                        self._notify_quality_summary(job, summary)
+
+                except (json.JSONDecodeError, IOError) as e:
+                    # File may be partially written — retry on next poll
+                    logger.debug(f"Quality file read error (may be partial write): {e}")
+                    continue
+
+    async def _check_quality_file_final(self, job: GenerationJob):
+        """Final check for quality files after process completes."""
+        if not job.output_dir:
+            return
+
+        # Check all possible quality file locations
+        paths_to_check = [
+            Path(job.output_dir) / "quality" / "self_critique_report.json",
+        ]
+        data_dir = self.coding_engine_path / "Data" / "all_services"
+        if data_dir.exists():
+            for entry in data_dir.iterdir():
+                if entry.is_dir() and job.project_name.lower().replace(" ", "-") in entry.name.lower():
+                    paths_to_check.append(entry / "quality" / "self_critique_report.json")
+
+        for quality_file in paths_to_check:
+            if not quality_file.exists():
+                continue
+            try:
+                with open(quality_file, "r", encoding="utf-8") as f:
+                    report = json.load(f)
+                issues = report.get("issues", [])
+                for issue in issues:
+                    self._notify_issue(job, issue)
+                summary = report.get("summary", {})
+                if summary:
+                    self._notify_quality_summary(job, summary)
+                break  # Only process from first found file
+            except Exception as e:
+                logger.warning(f"Final quality check failed: {e}")
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         """

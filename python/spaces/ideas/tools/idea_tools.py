@@ -137,7 +137,7 @@ def _get_available_idea_names(nodes: List, exclude: Optional = None, limit: int 
             names.append(n.title)
         if len(names) >= limit:
             break
-    return ", ".join(names) if names else "keine"
+    return ", ".join(names) if names else "none"
 
 
 def calculate_spiral_position(
@@ -163,6 +163,7 @@ def calculate_spiral_position(
     Returns:
         Tuple of (x, y) coordinates for the new node
     """
+    logger.debug("calculate_spiral_position: count=%s, center=(%s,%s)", count, center_x, center_y)
     angle_step = 0.7  # radians per node (golden angle approximation)
     radius_step = 35  # pixels per loop
 
@@ -342,7 +343,7 @@ def count_ideas(params: Dict[str, Any] = None) -> Dict[str, Any]:
         return {
             "success": True,
             "count": 0,
-            "message": "Du bist im Multiverse. Betrete einen Space, um Ideen zu zählen."
+            "message": "You are in the Multiverse. Enter a Space to count ideas."
         }
 
     repo = _get_canvas_repo()
@@ -355,11 +356,11 @@ def count_ideas(params: Dict[str, Any] = None) -> Dict[str, Any]:
 
     # Construct German message with proper grammar
     if count == 0:
-        message = "In diesem Space sind keine Ideen."
+        message = "There are no ideas in this Space."
     elif count == 1:
-        message = "Du hast 1 Idee in diesem Space."
+        message = "You have 1 idea in this Space."
     else:
-        message = f"Du hast {count} Ideen in diesem Space."
+        message = f"You have {count} ideas in this Space."
 
     return {
         "success": True,
@@ -456,11 +457,11 @@ def create_idea_batch(params: Dict[str, Any]) -> str:
     count = min(int(params.get("count", 5)), 20)
 
     if not topic:
-        return "Welches Thema sollen die Ideen haben?"
+        return "What topic should the ideas be about?"
 
     bubble_id = _get_current_bubble_id()
     if bubble_id is None:
-        return "Betrete zuerst einen Space bevor du Ideen erstellen kannst."
+        return "Enter a Space first before creating ideas."
 
     # Generate idea titles via LLM
     try:
@@ -470,7 +471,7 @@ def create_idea_batch(params: Dict[str, Any]) -> str:
 
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return "OPENROUTER_API_KEY nicht gesetzt."
+            return "OPENROUTER_API_KEY not set."
 
         client = OpenAI(
             api_key=api_key,
@@ -507,7 +508,7 @@ def create_idea_batch(params: Dict[str, Any]) -> str:
         ideas = _json.loads(response_text)
     except Exception as e:
         logger.error(f"Failed to generate ideas: {e}")
-        return f"Fehler bei der Ideen-Generierung: {e}"
+        return f"Error generating ideas: {e}"
 
     # Create all ideas in the current bubble
     repo = _get_canvas_repo()
@@ -558,8 +559,8 @@ def create_idea_batch(params: Dict[str, Any]) -> str:
     logger.info(f"Batch created {len(created)} ideas in bubble {bubble_id}")
     titles_str = ", ".join(created[:5])
     if len(created) > 5:
-        titles_str += f" ... und {len(created) - 5} weitere"
-    return f"{len(created)} Ideen zu '{topic}' erstellt: {titles_str}"
+        titles_str += f" ... and {len(created) - 5} more"
+    return f"{len(created)} ideas created for '{topic}': {titles_str}"
 
 
 def add_image(params: Dict[str, Any]) -> str:
@@ -642,6 +643,7 @@ def find_idea(params: Dict[str, Any]) -> str:
         str: Matching notes or "no matches"
     """
     query = params.get("query", "").strip().lower()
+    logger.debug("find_idea: query=%s", query)
 
     if not query:
         return "What would you like me to search for?"
@@ -707,7 +709,7 @@ def _generate_content_for_topic(topic: str, idea_title: str) -> str:
 
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return f"[Konnte keinen Content generieren - OPENROUTER_API_KEY fehlt]\n\nTopic: {topic}"
+            return f"[Could not generate content - OPENROUTER_API_KEY missing]\n\nTopic: {topic}"
 
         client = OpenAI(
             api_key=api_key,
@@ -736,7 +738,7 @@ def _generate_content_for_topic(topic: str, idea_title: str) -> str:
 
     except Exception as e:
         logger.warning(f"Content generation failed: {e}")
-        return f"[Content-Generierung fehlgeschlagen: {e}]\n\nTopic: {topic}"
+        return f"[Content generation failed: {e}]\n\nTopic: {topic}"
 
 
 def update_idea(params: Dict[str, Any]) -> str:
@@ -766,7 +768,7 @@ def update_idea(params: Dict[str, Any]) -> str:
 
     # For generate mode, we need a topic instead of new_content
     if mode == "generate" and not topic:
-        return "Was soll ich generieren? Bitte gib ein Thema an."
+        return "What should I generate? Please provide a topic."
 
     # For literal mode, we need new_content or new_title
     if mode != "generate" and not new_content and not new_title:
@@ -848,14 +850,14 @@ def classify_idea(params: Dict[str, Any]) -> str:
         nodes = all_nodes
 
     if not nodes:
-        return "Keine Ideen zum Klassifizieren gefunden."
+        return "No ideas found to classify."
 
     # Find specific idea or use first one
     if idea_name:
         match = _fuzzy_find_idea(nodes, idea_name)
         if not match:
             available = _get_available_idea_names(nodes)
-            return f"Idee '{idea_name}' nicht gefunden. Verfuegbar: {available}"
+            return f"Idea '{idea_name}' not found. Available: {available}"
     else:
         # Use root node or first node
         match = nodes[0]
@@ -871,7 +873,7 @@ def classify_idea(params: Dict[str, Any]) -> str:
 
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return f"Klassifizierung nicht moeglich - OPENROUTER_API_KEY fehlt. Idee: {match.title}"
+            return f"Classification not possible - OPENROUTER_API_KEY missing. Idea: {match.title}"
 
         client = OpenAI(
             api_key=api_key,
@@ -908,11 +910,11 @@ Antworte kurz und strukturiert auf Deutsch."""
         classification = response.choices[0].message.content.strip()
         logger.info(f"Classified idea '{match.title}'")
 
-        return f"Klassifizierung fuer '{match.title}':\n\n{classification}"
+        return f"Classification for '{match.title}':\n\n{classification}"
 
     except Exception as e:
         logger.warning(f"Classification failed: {e}")
-        return f"Klassifizierung fehlgeschlagen: {e}"
+        return f"Classification failed: {e}"
 
 
 def connect_ideas(params: Dict[str, Any]) -> str:
@@ -946,9 +948,9 @@ def connect_ideas(params: Dict[str, Any]) -> str:
     # If no ideas provided or very few, show available ideas
     if not idea1 or not idea2:
         if not nodes:
-            return "Diese Bubble hat noch keine Ideen. Erstelle zuerst ein paar Ideen."
+            return "This Space has no ideas yet. Create some ideas first."
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Welche Ideen soll ich verbinden? Verfuegbar: {available}"
+        return f"Which ideas should I connect? Available: {available}"
 
     # Helper: Resolve numeric index (e.g., "1", "2") or fuzzy match
     def resolve_idea(ref: str):
@@ -969,15 +971,15 @@ def connect_ideas(params: Dict[str, Any]) -> str:
     # Helpful error messages with available ideas
     if not node1:
         available = _get_available_idea_names(nodes, limit=5)
-        return f"'{idea1}' nicht gefunden. Verfuegbare Ideen: {available}"
+        return f"'{idea1}' not found. Available ideas: {available}"
 
     if not node2:
         available = _get_available_idea_names(nodes, exclude=node1, limit=5)
-        return f"'{idea2}' nicht gefunden. Verfuegbare Ideen: {available}"
+        return f"'{idea2}' not found. Available ideas: {available}"
 
     # Don't connect an idea to itself
     if node1.id == node2.id:
-        return f"'{node1.title}' kann nicht mit sich selbst verbunden werden."
+        return f"'{node1.title}' cannot be connected to itself."
 
     # Create edge
     edge = repo.create_edge(node1.id, node2.id, "related")
@@ -993,7 +995,7 @@ def connect_ideas(params: Dict[str, Any]) -> str:
     })
 
     logger.info(f"Connected '{node1.title}' to '{node2.title}'")
-    return f"'{node1.title}' und '{node2.title}' sind jetzt verbunden."
+    return f"'{node1.title}' and '{node2.title}' are now connected."
 
 
 def disconnect_ideas(params: Dict[str, Any]) -> str:
@@ -1040,9 +1042,9 @@ def disconnect_ideas(params: Dict[str, Any]) -> str:
     # If no ideas provided, show available ideas
     if not idea1 or not idea2:
         if not nodes:
-            return "Diese Bubble hat noch keine Ideen."
+            return "This Space has no ideas yet."
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Welche Ideen soll ich trennen? Verfuegbar: {available}"
+        return f"Which ideas should I disconnect? Available: {available}"
 
     # Helper: Resolve numeric index or fuzzy match
     def resolve_idea(ref: str):
@@ -1062,11 +1064,11 @@ def disconnect_ideas(params: Dict[str, Any]) -> str:
 
     if not node1:
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Idee '{idea1}' nicht gefunden. Verfuegbar: {available}"
+        return f"Idea '{idea1}' not found. Available: {available}"
 
     if not node2:
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Idee '{idea2}' nicht gefunden. Verfuegbar: {available}"
+        return f"Idea '{idea2}' not found. Available: {available}"
 
     # Find and delete the edge between them
     all_edges = repo.list_edges(limit=1000)
@@ -1079,7 +1081,7 @@ def disconnect_ideas(params: Dict[str, Any]) -> str:
             break
 
     if not edge_found:
-        return f"'{node1.title}' und '{node2.title}' sind nicht verbunden."
+        return f"'{node1.title}' and '{node2.title}' are not connected."
 
     # Delete the edge
     repo.delete_edge(edge_found.id)
@@ -1093,7 +1095,7 @@ def disconnect_ideas(params: Dict[str, Any]) -> str:
     })
 
     logger.info(f"Disconnected '{node1.title}' from '{node2.title}'")
-    return f"Verbindung zwischen '{node1.title}' und '{node2.title}' wurde entfernt."
+    return f"Connection between '{node1.title}' and '{node2.title}' removed."
 
 
 def connect_ideas_multi(params: Dict[str, Any]) -> str:
@@ -1122,10 +1124,10 @@ def connect_ideas_multi(params: Dict[str, Any]) -> str:
         targets = [t.strip() for t in targets if t.strip()]
 
     if not source:
-        return "Bitte gib die Quell-Idee an (z.B. 'Verbinde 2 mit 3, 4, 5')."
+        return "Please specify the source idea (e.g. 'Connect 2 with 3, 4, 5')."
 
     if not targets:
-        return "Bitte gib mindestens ein Ziel an (z.B. 'Verbinde 2 mit 3, 4, 5')."
+        return "Please specify at least one target (e.g. 'Connect 2 with 3, 4, 5')."
 
     bubble_id = _get_current_bubble_id()
     repo = _get_canvas_repo()
@@ -1138,7 +1140,7 @@ def connect_ideas_multi(params: Dict[str, Any]) -> str:
         nodes = all_nodes
 
     if not nodes:
-        return "Diese Bubble hat noch keine Ideen. Erstelle zuerst ein paar Ideen."
+        return "This Space has no ideas yet. Create some ideas first."
 
     # Helper: Resolve numeric index (via index_mapping) or fuzzy match
     def resolve(ref: str):
@@ -1160,7 +1162,7 @@ def connect_ideas_multi(params: Dict[str, Any]) -> str:
     source_node = resolve(source)
     if not source_node:
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Quelle '{source}' nicht gefunden. Verfuegbar: {available}"
+        return f"Source '{source}' not found. Available: {available}"
 
     # Connect to each target
     created = []
@@ -1204,14 +1206,14 @@ def connect_ideas_multi(params: Dict[str, Any]) -> str:
     # Build response message
     parts = []
     if created:
-        parts.append(f"'{source_node.title}' mit {len(created)} Ideen verbunden: {', '.join(created)}")
+        parts.append(f"'{source_node.title}' connected with {len(created)} ideas: {', '.join(created)}")
     if already_connected:
-        parts.append(f"Bereits verbunden: {', '.join(already_connected)}")
+        parts.append(f"Already connected: {', '.join(already_connected)}")
     if failed:
-        parts.append(f"Nicht gefunden: {', '.join(failed)}")
+        parts.append(f"Not found: {', '.join(failed)}")
 
     if not parts:
-        return "Keine Verbindungen erstellt."
+        return "No connections created."
 
     logger.info(f"Multi-connect from '{source_node.title}': {len(created)} created")
     return ". ".join(parts)
@@ -1234,7 +1236,7 @@ def link_idea_to_root(params: Dict[str, Any]) -> str:
     bubble_id = params.get("bubble_id") or _get_current_bubble_id()
 
     if not idea_name:
-        return "Bitte gib den Namen der Idee an, die mit dem Root verknüpft werden soll."
+        return "Please provide the name of the idea to link with the Root node."
 
     repo = _get_canvas_repo()
 
@@ -1248,16 +1250,16 @@ def link_idea_to_root(params: Dict[str, Any]) -> str:
     # Find the idea using fuzzy matching (pass nodes first, then name)
     idea = _fuzzy_find_idea(nodes, idea_name)
     if not idea:
-        return f"Idee '{idea_name}' nicht gefunden."
+        return f"Idea '{idea_name}' not found."
 
     # Find root node in this bubble
     root = next((n for n in nodes if n.node_type == "root"), None)
     if not root:
-        return "Kein Root-Node in dieser Bubble gefunden."
+        return "No Root node found in this Space."
 
     # Check if idea is the root itself
     if idea.id == root.id:
-        return "Der Root-Node kann nicht mit sich selbst verknüpft werden."
+        return "Root node cannot be linked with itself."
 
     # Check if already linked
     all_edges = repo.list_edges(limit=1000)
@@ -1267,7 +1269,7 @@ def link_idea_to_root(params: Dict[str, Any]) -> str:
         for e in all_edges
     )
     if already_linked:
-        return f"'{idea.title}' ist bereits mit dem Root-Node verbunden."
+        return f"'{idea.title}' is already connected to the Root node."
 
     # Create edge from root to idea
     from data.models import CanvasEdge
@@ -1291,7 +1293,7 @@ def link_idea_to_root(params: Dict[str, Any]) -> str:
     })
 
     logger.info(f"Linked '{idea.title}' to root node '{root.title}'")
-    return f"'{idea.title}' mit Root-Node '{root.title}' verknüpft."
+    return f"'{idea.title}' linked with Root node '{root.title}'."
 
 
 def delete_idea(params: Dict[str, Any]) -> str:
@@ -1369,6 +1371,7 @@ def get_current_space(params: Dict[str, Any]) -> str:
     Returns:
         str: Current location description
     """
+    logger.debug("get_current_space: resolving current location")
     bubble_id = _get_current_bubble_id()
 
     if bubble_id is None:
@@ -1403,7 +1406,7 @@ def expand_ideas(params: Dict[str, Any]) -> str:
     # 1. Get current bubble
     bubble_id = _get_current_bubble_id()
     if bubble_id is None:
-        return "Bitte betrete zuerst einen Space."
+        return "Please enter a Space first."
 
     # 2. Get existing ideas
     repo = _get_canvas_repo()
@@ -1411,13 +1414,13 @@ def expand_ideas(params: Dict[str, Any]) -> str:
     nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
 
     if not nodes:
-        return "Keine Ideen zum Erweitern vorhanden."
+        return "No ideas available to expand."
 
     # Filter by source_idea if specified
     if source_idea:
         nodes = [n for n in nodes if source_idea.lower() in (n.title or "").lower()]
         if not nodes:
-            return f"Keine Idee mit Namen '{source_idea}' gefunden."
+            return f"No idea named '{source_idea}' found."
 
     # 3. Build context for LLM
     ideas_context = "\n".join([
@@ -1455,10 +1458,10 @@ def expand_ideas(params: Dict[str, Any]) -> str:
                 loop.close()
     except Exception as e:
         logger.error(f"LLM expansion failed: {e}")
-        return f"Fehler bei der Ideen-Generierung: {str(e)}"
+        return f"Error generating ideas: {str(e)}"
 
     if not expansions:
-        return "Konnte keine neuen Ideen generieren."
+        return "Could not generate new ideas."
 
     # 5. Create new ideas and links
     # Get all existing positions for collision detection (re-fetch to include any recent additions)
@@ -1527,9 +1530,9 @@ def expand_ideas(params: Dict[str, Any]) -> str:
             logger.error(f"Failed to create idea: {e}")
 
     if not created:
-        return "Konnte keine neuen Ideen erstellen."
+        return "Could not create new ideas."
 
-    return f"Ich habe {len(created)} neue Ideen generiert: {', '.join(created)}"
+    return f"I generated {len(created)} new ideas: {', '.join(created)}"
 
 
 async def _generate_expansions(ideas_context: str, count: int) -> List[Dict]:
@@ -1623,14 +1626,14 @@ def move_idea(params: Dict[str, Any]) -> str:
     target_space = params.get("target_space", "").strip().lower()
 
     if not idea_name:
-        return "Welche Idee soll ich verschieben?"
+        return "Which idea should I move?"
     if not target_space:
-        return "In welchen Space soll ich die Idee verschieben?"
+        return "Which Space should I move the idea to?"
 
     # 1. Get current bubble
     source_bubble_id = _get_current_bubble_id()
     if source_bubble_id is None:
-        return "Bitte betrete zuerst einen Space."
+        return "Please enter a Space first."
 
     # 2. Get repositories
     repo = _get_canvas_repo()
@@ -1647,7 +1650,7 @@ def move_idea(params: Dict[str, Any]) -> str:
             break
 
     if not match:
-        return f"Keine Idee mit Namen '{idea_name}' in diesem Space gefunden."
+        return f"No idea named '{idea_name}' found in this Space."
 
     # 4. Find target space by name
     all_ideas = ideas_repo.list()
@@ -1658,10 +1661,10 @@ def move_idea(params: Dict[str, Any]) -> str:
             break
 
     if not target_idea:
-        return f"Space '{target_space}' nicht gefunden."
+        return f"Space '{target_space}' not found."
 
     if target_idea.id == source_bubble_id:
-        return "Die Idee ist bereits in diesem Space."
+        return "The idea is already in this Space."
 
     # 5. Move: Update linked_idea_id
     old_bubble_id = match.linked_idea_id
@@ -1683,7 +1686,7 @@ def move_idea(params: Dict[str, Any]) -> str:
     })
 
     logger.info(f"Moved idea '{match.title}' from {old_bubble_id} to {target_idea.id}")
-    return f"Ich habe '{match.title}' nach '{target_idea.title}' verschoben."
+    return f"Moved '{match.title}' to '{target_idea.title}'."
 
 
 def _get_ideas_repo():
@@ -1725,7 +1728,7 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
     # 1. Get current bubble
     bubble_id = _get_current_bubble_id()
     if bubble_id is None:
-        return "Bitte betrete zuerst einen Space."
+        return "Please enter a Space first."
 
     # 2. Get all ideas/nodes in this bubble
     repo = _get_canvas_repo()
@@ -1733,7 +1736,7 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
     nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
 
     if len(nodes) < 2:
-        return "Zu wenige Ideen zum Verlinken. Erstelle mindestens 2 Ideen."
+        return "Too few ideas to link. Create at least 2 ideas."
 
     logger.info(f"[auto_link_ideas] Found {len(nodes)} nodes in bubble {bubble_id}")
 
@@ -1754,7 +1757,7 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
         embedding_service = get_embedding_service()
     except ImportError as e:
         logger.error(f"Could not import embedding service: {e}")
-        return "Embedding-Service nicht verfügbar. Installiere: pip install sentence-transformers"
+        return "Embedding service not available. Install with: pip install sentence-transformers"
 
     # Import monitoring
     try:
@@ -1764,7 +1767,7 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
         _monitor = None
 
     if not embedding_service.is_available:
-        return "Embedding-Service nicht verfügbar. Installiere: pip install sentence-transformers"
+        return "Embedding service not available. Install with: pip install sentence-transformers"
 
     # 5. Generate embeddings for all nodes
     node_texts = []
@@ -1790,7 +1793,7 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
         if _monitor and embed_op_id:
             _monitor.complete_operation(embed_op_id, success=False, error=str(e))
         logger.error(f"[auto_link_ideas] Embedding generation failed: {e}")
-        return f"Fehler bei der Embedding-Generierung: {e}"
+        return f"Error generating embeddings: {e}"
 
     logger.info(f"[auto_link_ideas] Generated {len([e for e in embeddings if e])} embeddings")
 
@@ -1846,14 +1849,14 @@ def auto_link_ideas(params: Dict[str, Any]) -> str:
 
     # 8. Return summary
     if not created_links:
-        return f"Keine passenden Verbindungen gefunden (Threshold: {threshold:.0%}). Die Ideen sind zu unterschiedlich oder bereits verbunden."
+        return f"No matching connections found (threshold: {threshold:.0%}). Ideas are too different or already connected."
 
-    summary = f"Ich habe {len(created_links)} Verbindungen erstellt:\n"
+    summary = f"I created {len(created_links)} connections:\n"
     for link in created_links[:5]:  # Show max 5 in response
         summary += f"  • {link}\n"
 
     if len(created_links) > 5:
-        summary += f"  ... und {len(created_links) - 5} weitere."
+        summary += f"  ... and {len(created_links) - 5} more."
 
     return summary.strip()
 
@@ -1881,12 +1884,12 @@ def analyze_and_suggest_links(params: Dict[str, Any]) -> str:
     # 1. Get current bubble
     bubble_id = _get_current_bubble_id()
     if bubble_id is None:
-        return "Bitte betrete zuerst einen Space."
+        return "Please enter a Space first."
 
     # Get bubble name for context
     ideas_repo = _get_ideas_repo()
     bubble = ideas_repo.get(bubble_id)
-    bubble_name = bubble.title if bubble else "Aktueller Space"
+    bubble_name = bubble.title if bubble else "Current Space"
 
     # 2. Get all ideas/nodes in this bubble
     repo = _get_canvas_repo()
@@ -1894,7 +1897,7 @@ def analyze_and_suggest_links(params: Dict[str, Any]) -> str:
     nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
 
     if len(nodes) < 2:
-        return f"Im Space '{bubble_name}' gibt es {len(nodes)} Ideen - mindestens 2 werden benötigt."
+        return f"Space '{bubble_name}' has {len(nodes)} ideas - at least 2 are needed."
 
     logger.info(f"[analyze_links] Found {len(nodes)} nodes in bubble {bubble_id}")
 
@@ -1962,19 +1965,19 @@ def analyze_and_suggest_links(params: Dict[str, Any]) -> str:
 
     # 7. Format suggestions
     if not similarity_pairs:
-        return f"Keine passenden Verlinkungen gefunden im Space '{bubble_name}'. Die Ideen sind zu unterschiedlich oder bereits verlinkt."
+        return f"No matching links found in Space '{bubble_name}'. Ideas are too different or already linked."
 
-    method_note = "" if use_embeddings else " (Wort-basiert)"
-    suggestions = [f"Im Space '{bubble_name}' schlage ich {len(similarity_pairs)} Verlinkungen vor{method_note}:\n"]
+    method_note = "" if use_embeddings else " (word-based)"
+    suggestions = [f"In Space '{bubble_name}' I suggest {len(similarity_pairs)} links{method_note}:\n"]
 
     for idx, (i, j, score) in enumerate(similarity_pairs, 1):
         node1 = nodes[i]
         node2 = nodes[j]
-        title1 = (node1.title or "Unbenannt")[:40]
-        title2 = (node2.title or "Unbenannt")[:40]
-        suggestions.append(f"{idx}. '{title1}' <-> '{title2}' ({score:.0%} Aehnlichkeit)")
+        title1 = (node1.title or "Untitled")[:40]
+        title2 = (node2.title or "Untitled")[:40]
+        suggestions.append(f"{idx}. '{title1}' <-> '{title2}' ({score:.0%} similarity)")
 
-    suggestions.append("\nSage 'Ja, verlinke sie' um die Verbindungen zu erstellen.")
+    suggestions.append("\nSay 'Yes, link them' to create the connections.")
 
     return "\n".join(suggestions)
 
@@ -1998,7 +2001,7 @@ def explain_idea(params: Dict[str, Any]) -> str:
     idea_name = params.get("idea_name", "").strip()
 
     if not idea_name:
-        return "Welche Idee soll ich erklären?"
+        return "Which idea should I explain?"
 
     bubble_id = _get_current_bubble_id()
     repo = _get_canvas_repo()
@@ -2011,14 +2014,14 @@ def explain_idea(params: Dict[str, Any]) -> str:
         nodes = all_nodes
 
     if not nodes:
-        return "Keine Ideen in diesem Space gefunden."
+        return "No ideas found in this Space."
 
     # Find the idea using fuzzy matching
     match = _fuzzy_find_idea(nodes, idea_name)
 
     if not match:
         available = _get_available_idea_names(nodes, limit=5)
-        return f"Idee '{idea_name}' nicht gefunden. Verfügbar: {available}"
+        return f"Idea '{idea_name}' not found. Available: {available}"
 
     # Build context from the idea
     title = match.title or "Unbenannt"
@@ -2038,7 +2041,7 @@ def explain_idea(params: Dict[str, Any]) -> str:
             # Fallback: return raw content
             if content:
                 return f"'{title}': {content[:500]}"
-            return f"Die Idee '{title}' hat noch keinen Inhalt."
+            return f"The idea '{title}' has no content yet."
 
         client = OpenAI(
             api_key=api_key,
@@ -2072,7 +2075,7 @@ def explain_idea(params: Dict[str, Any]) -> str:
         # Fallback: return raw content
         if content:
             return f"'{title}': {content[:500]}"
-        return f"Die Idee '{title}' hat noch keinen Inhalt."
+        return f"The idea '{title}' has no content yet."
 
 
 # =============================================================================
@@ -2092,9 +2095,10 @@ def format_idea_as_table(params: Dict[str, Any]) -> str:
         str: Formatted table representation
     """
     idea_name = params.get("idea_name", "").strip()
+    logger.debug("format_idea_as_table: idea_name=%s", idea_name)
 
     if not idea_name:
-        return "Welche Idee soll ich als Tabelle formatieren?"
+        return "Which idea should I format as a table?"
 
     bubble_id = _get_current_bubble_id()
     repo = _get_canvas_repo()
@@ -2108,25 +2112,25 @@ def format_idea_as_table(params: Dict[str, Any]) -> str:
 
     match = _fuzzy_find_idea(nodes, idea_name)
     if not match:
-        return f"Idee '{idea_name}' nicht gefunden."
+        return f"Idea '{idea_name}' not found."
 
     # Get content and format as table
     content = match.content or ""
     if not content:
-        return f"Die Idee '{match.title}' hat keinen Inhalt zum Formatieren."
+        return f"The idea '{match.title}' has no content to format."
 
     # Simple table formatting - split by lines
     lines = content.strip().split("\n")
     if len(lines) < 2:
-        return f"Nicht genug Inhalt für Tabellenformat. Inhalt: {content[:200]}"
+        return f"Not enough content for table format. Content: {content[:200]}"
 
     # Format as markdown table
-    table = "| Eintrag | Details |\n|---------|----------|\n"
+    table = "| Entry | Details |\n|---------|----------|\n"
     for i, line in enumerate(lines[:10]):
         clean_line = line.strip().replace("|", "-")
         table += f"| {i+1} | {clean_line} |\n"
 
-    return f"Tabelle für '{match.title}':\n\n{table}"
+    return f"Table for '{match.title}':\n\n{table}"
 
 
 # =============================================================================

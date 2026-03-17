@@ -488,6 +488,7 @@ def register_task_tools(tools_manager) -> None:
     """
     Registriert Task Tools im ClientToolsManager.
     """
+    logger.debug("register_task_tools called")
     print("Registering task tools...")
     
     def create_task_wrapper(params):

@@ -20,7 +20,6 @@ API Reference:
 
 import logging
 import os
-import sys
 from typing import Dict, Any, Optional, List
 
 try:
@@ -29,12 +28,12 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    """Print debug message to stderr."""
-    print(f"[Python DEBUG] [MinibookClient] {msg}", file=sys.stderr, flush=True)
+    """Log debug message."""
+    _logger.debug("[MinibookClient] %s", msg)
 
 
 class MinibookClient:
@@ -49,7 +48,7 @@ class MinibookClient:
         self._url = (url or os.getenv("MINIBOOK_URL", "http://localhost:3480")).rstrip("/")
         self._agents: Dict[str, Dict[str, str]] = {}  # name -> {api_key, id}
         self._project_id: Optional[str] = None
-        logger.info(f"MinibookClient: target={self._url}")
+        _logger.info(f"MinibookClient: target={self._url}")
 
     # =========================================================================
     # Agent Management
@@ -65,6 +64,7 @@ class MinibookClient:
 
         The api_key is only returned once — we store it in memory.
         """
+        _logger.debug("register_agent called: name=%s", name)
         resp = requests.post(
             f"{self._url}/api/v1/agents",
             json={"name": name},
@@ -103,6 +103,7 @@ class MinibookClient:
         POST /api/v1/projects
         Body: {"name": "<name>", "description": "<desc>"}
         """
+        _logger.debug("create_project called: name=%s, agent=%s", name, agent_name)
         resp = requests.post(
             f"{self._url}/api/v1/projects",
             json={"name": name, "description": description},
@@ -169,6 +170,7 @@ class MinibookClient:
 
         Supports @mentions: "@vibemind_ideas bitte erstelle..."
         """
+        _logger.debug("create_post called: project_id=%s, agent=%s, type=%s", project_id, agent_name, post_type)
         if not title:
             # Auto-generate title from content (first 80 chars, first line)
             first_line = content.split("\n")[0].strip()
@@ -222,6 +224,7 @@ class MinibookClient:
         POST /api/v1/posts/:id/comments
         Body: {"content": "<content>"}
         """
+        _logger.debug("create_comment called: post_id=%s, agent=%s", post_id, agent_name)
         resp = requests.post(
             f"{self._url}/api/v1/posts/{post_id}/comments",
             json={"content": content},

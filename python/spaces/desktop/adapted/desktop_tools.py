@@ -30,23 +30,23 @@ def execute_desktop_task(task_description: str = None) -> str:
         Task result or error message
     """
     if not task_description:
-        return "Fehler: Keine Aufgabenbeschreibung angegeben. Bitte sag mir was du tun moechtest."
+        return "Error: No task description. Please tell me what you want to do."
 
     from spaces.desktop.automation_ui_client import get_automation_client
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop-Automation nicht verfuegbar. Automation_ui Backend laeuft nicht auf Port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
 
     try:
         result = client.llm_intent(task_description)
         if result.get("success"):
-            return result.get("summary", "Aufgabe ausgefuehrt.")
+            return result.get("summary", "Task executed.")
         else:
-            return f"Aufgabe fehlgeschlagen: {result.get('error', result.get('summary', 'Unbekannter Fehler'))}"
+            return f"Task failed: {result.get('error', result.get('summary', 'Unknown error'))}"
     except Exception as e:
         logger.error("execute_desktop_task error: %s", e)
-        return f"Desktop-Automation Fehler: {e}"
+        return f"Desktop automation error: {e}"
 
 
 def click_element(element_description: str = None) -> str:
@@ -60,23 +60,23 @@ def click_element(element_description: str = None) -> str:
         Click result
     """
     if not element_description:
-        return "Fehler: Keine Element-Beschreibung angegeben. Bitte sag mir worauf ich klicken soll."
+        return "Error: No element description. Please tell me what to click."
 
     from spaces.desktop.automation_ui_client import get_automation_client
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop-Automation nicht verfuegbar. Automation_ui Backend laeuft nicht auf Port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
 
     try:
         result = client.llm_intent(f"Klicke auf: {element_description}")
         if result.get("success"):
-            return result.get("summary", f"Klick auf '{element_description}' ausgefuehrt.")
+            return result.get("summary", f"Click on '{element_description}' executed.")
         else:
-            return f"Klick fehlgeschlagen: {result.get('error', result.get('summary', 'Unbekannter Fehler'))}"
+            return f"Click failed: {result.get('error', result.get('summary', 'Unknown error'))}"
     except Exception as e:
         logger.error("click_element error: %s", e)
-        return f"Desktop-Automation Fehler: {e}"
+        return f"Desktop automation error: {e}"
 
 
 def take_screenshot() -> str:
@@ -90,17 +90,17 @@ def take_screenshot() -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop-Automation nicht verfuegbar. Automation_ui Backend laeuft nicht auf Port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
 
     try:
         result = client.llm_intent("Beschreibe was aktuell auf dem Bildschirm zu sehen ist.")
         if result.get("success"):
-            return result.get("summary", "Screenshot analysiert.")
+            return result.get("summary", "Screenshot analyzed.")
         else:
-            return f"Screenshot fehlgeschlagen: {result.get('error', 'Unbekannter Fehler')}"
+            return f"Screenshot failed: {result.get('error', 'Unknown error')}"
     except Exception as e:
         logger.error("take_screenshot error: %s", e)
-        return f"Screenshot Fehler: {e}"
+        return f"Screenshot error: {e}"
 
 
 def moire_scan() -> str:
@@ -114,17 +114,17 @@ def moire_scan() -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop-Automation nicht verfuegbar. Automation_ui Backend laeuft nicht auf Port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
 
     try:
         result = client.llm_intent("Lies den gesamten Bildschirminhalt mit OCR und liste alle sichtbaren UI-Elemente auf.")
         if result.get("success"):
-            return result.get("summary", "Bildschirm gescannt.")
+            return result.get("summary", "Screen scanned.")
         else:
-            return f"Scan fehlgeschlagen: {result.get('error', 'Unbekannter Fehler')}"
+            return f"Scan failed: {result.get('error', 'Unknown error')}"
     except Exception as e:
         logger.error("moire_scan error: %s", e)
-        return f"Scan Fehler: {e}"
+        return f"Scan error: {e}"
 
 
 def moire_find_element(element_description: str = None) -> str:
@@ -138,23 +138,23 @@ def moire_find_element(element_description: str = None) -> str:
         Element location or 'not found'
     """
     if not element_description:
-        return "Fehler: Keine Element-Beschreibung angegeben. Bitte sag mir welches UI-Element ich finden soll."
+        return "Error: No element description. Please tell me which UI element to find."
 
     from spaces.desktop.automation_ui_client import get_automation_client
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop-Automation nicht verfuegbar. Automation_ui Backend laeuft nicht auf Port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
 
     try:
         result = client.llm_intent(f"Finde das UI-Element: {element_description}")
         if result.get("success"):
-            return result.get("summary", f"Element '{element_description}' gefunden.")
+            return result.get("summary", f"Element '{element_description}' found.")
         else:
-            return f"Element nicht gefunden: {result.get('error', result.get('summary', 'Unbekannter Fehler'))}"
+            return f"Element not found: {result.get('error', result.get('summary', 'Unknown error'))}"
     except Exception as e:
         logger.error("moire_find_element error: %s", e)
-        return f"Element-Suche Fehler: {e}"
+        return f"Element search error: {e}"
 
 
 # ------------------------------------------------------------------
@@ -173,7 +173,7 @@ def type_text(text: str = None) -> str:
         Confirmation
     """
     if not text:
-        return "Fehler: Kein Text angegeben. Bitte sag mir was ich tippen soll."
+        return "Error: No text provided. Please tell me what to type."
 
     from spaces.desktop.automation_ui_client import get_automation_client
 
@@ -183,7 +183,7 @@ def type_text(text: str = None) -> str:
             result = client.type_text(text)
             if result.get("success"):
                 preview = text[:50] + "..." if len(text) > 50 else text
-                return f"Text eingegeben: '{preview}'"
+                return f"Text typed: '{preview}'"
         except Exception as e:
             logger.warning("Automation_ui type_text failed, trying local: %s", e)
 
@@ -192,11 +192,11 @@ def type_text(text: str = None) -> str:
         import pyautogui
         pyautogui.write(text, interval=0.02)
         preview = text[:50] + "..." if len(text) > 50 else text
-        return f"Text eingegeben (lokal): '{preview}'"
+        return f"Text typed (local): '{preview}'"
     except ImportError:
-        return "Desktop-Automation nicht verfuegbar. Weder Automation_ui noch pyautogui vorhanden."
+        return "Desktop automation not available. Neither Automation_ui nor pyautogui found."
     except Exception as e:
-        return f"Texteingabe Fehler: {e}"
+        return f"Text input error: {e}"
 
 
 def press_key(key: str = None) -> str:
@@ -210,7 +210,7 @@ def press_key(key: str = None) -> str:
         Confirmation
     """
     if not key:
-        return "Fehler: Keine Taste angegeben. Bitte sag mir welche Taste ich druecken soll (z.B. enter, tab, escape)."
+        return "Error: No key specified. Please tell me which key to press (e.g. enter, tab, escape)."
 
     from spaces.desktop.automation_ui_client import get_automation_client
 
@@ -219,7 +219,7 @@ def press_key(key: str = None) -> str:
         try:
             result = client.press_key(key)
             if result.get("success"):
-                return f"Taste gedrueckt: {key}"
+                return f"Key pressed: {key}"
         except Exception as e:
             logger.warning("Automation_ui press_key failed, trying local: %s", e)
 
@@ -231,11 +231,11 @@ def press_key(key: str = None) -> str:
             pyautogui.hotkey(*keys)
         else:
             pyautogui.press(key)
-        return f"Taste gedrueckt (lokal): {key}"
+        return f"Key pressed (local): {key}"
     except ImportError:
-        return "Desktop-Automation nicht verfuegbar. Weder Automation_ui noch pyautogui vorhanden."
+        return "Desktop automation not available. Neither Automation_ui nor pyautogui found."
     except Exception as e:
-        return f"Tastendruck Fehler: {e}"
+        return f"Key press error: {e}"
 
 
 def scroll_screen(direction: str = "down", amount: int = 3) -> str:
@@ -256,7 +256,7 @@ def scroll_screen(direction: str = "down", amount: int = 3) -> str:
         try:
             result = client.scroll(direction, amount)
             if result.get("success"):
-                return f"Gescrollt: {amount}x {direction}"
+                return f"Scrolled: {amount}x {direction}"
         except Exception as e:
             logger.warning("Automation_ui scroll failed, trying local: %s", e)
 
@@ -265,11 +265,11 @@ def scroll_screen(direction: str = "down", amount: int = 3) -> str:
         import pyautogui
         scroll_amount = amount if direction == "up" else -amount
         pyautogui.scroll(scroll_amount)
-        return f"Gescrollt (lokal): {amount}x {direction}"
+        return f"Scrolled (local): {amount}x {direction}"
     except ImportError:
-        return "Desktop-Automation nicht verfuegbar. Weder Automation_ui noch pyautogui vorhanden."
+        return "Desktop automation not available. Neither Automation_ui nor pyautogui found."
     except Exception as e:
-        return f"Scroll Fehler: {e}"
+        return f"Scroll error: {e}"
 
 
 # ------------------------------------------------------------------
@@ -288,7 +288,7 @@ def open_app(app_name: str = None) -> str:
         Confirmation
     """
     if not app_name:
-        return "Fehler: Kein App-Name angegeben. Bitte sag mir welche App ich oeffnen soll (z.B. chrome, word, vscode, notepad)."
+        return "Error: No app name provided. Please tell me which app to open (e.g. chrome, word, vscode, notepad)."
     import asyncio
     try:
         from spaces.desktop.tools.quickaction_tools import open_app as _open_async
@@ -327,7 +327,7 @@ def create_task_node(title: str = None, description: str = "") -> str:
         Confirmation
     """
     if not title:
-        return "Fehler: Kein Task-Titel angegeben. Bitte sag mir wie der Task heissen soll."
+        return "Error: No task title provided. Please tell me what the task should be called."
     try:
         from spaces.desktop.tools.task_tools import create_task_node as _create
         return _create({"title": title, "description": description})
@@ -347,9 +347,9 @@ def update_task_status(task_name: str = None, status: str = None) -> str:
         Confirmation
     """
     if not task_name:
-        return "Fehler: Kein Task-Name angegeben. Bitte sag mir welchen Task ich aktualisieren soll."
+        return "Error: No task name provided. Please tell me which task to update."
     if not status:
-        return "Fehler: Kein Status angegeben. Bitte sag mir auf welchen Status ich den Task setzen soll (pending, in_progress, completed)."
+        return "Error: No status provided. Please tell me which status to set the task to (pending, in_progress, completed)."
     try:
         from spaces.desktop.tools.task_tools import update_task_status as _update
         return _update({"task_name": task_name, "status": status})

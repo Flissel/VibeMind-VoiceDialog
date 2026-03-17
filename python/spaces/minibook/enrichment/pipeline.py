@@ -11,7 +11,6 @@ The pipeline sits between intent reception and Minibook posting.
 """
 
 import logging
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
@@ -19,11 +18,11 @@ from .context_gather import ContextGather, EnrichmentContext
 from .space_router import SpaceRouter, RoutingDecision
 from .task_enricher import TaskEnricher, EnrichedTask
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [EnrichmentPipeline] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[EnrichmentPipeline] %s", msg)
 
 
 @dataclass
@@ -161,7 +160,7 @@ class EnrichmentPipeline:
             return result
 
         except Exception as e:
-            logger.error(f"EnrichmentPipeline error: {e}")
+            _logger.error(f"EnrichmentPipeline error: {e}")
             result.error = str(e)
             return result
 
@@ -190,7 +189,7 @@ class EnrichmentPipeline:
             return None
 
         except Exception as e:
-            logger.error(f"Classification failed: {e}")
+            _logger.error(f"Classification failed: {e}")
             return None
 
 
@@ -216,6 +215,7 @@ def create_enrichment_pipeline(
     Returns:
         Configured EnrichmentPipeline instance
     """
+    _logger.debug("create_enrichment_pipeline called: model=%s, llm_routing=%s", enrichment_model, use_llm_routing)
     context_gather = ContextGather(rachel_interface=rachel_interface)
     space_router = SpaceRouter(
         enrichment_model=enrichment_model,

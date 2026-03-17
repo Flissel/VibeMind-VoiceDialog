@@ -86,6 +86,8 @@ class IdeasAgent(BaseBackendAgent):
         "idea.explore.respond": "respond_to_exploration_question",
         "idea.explore.direction": "set_exploration_direction",
         "idea.explore.continue": "continue_exploration",
+        # Project documentation export
+        "idea.generate_doc": "generate_project_doc",
     }
 
     # Parameter normalization: map classifier output to tool expected params
@@ -273,6 +275,14 @@ class IdeasAgent(BaseBackendAgent):
             "idea": "idea_name",
             "_inject": {"target_format": "flowchart"},
         },
+        # Project documentation parameter mappings
+        "idea.generate_doc": {
+            "name": "bubble_name",
+            "title": "bubble_name",
+            "bubble": "bubble_name",
+            "space": "bubble_name",
+            "space_name": "bubble_name",
+        },
         # Exploration parameter mappings
         "idea.explore.start": {
             "id": "bubble_id",
@@ -375,6 +385,11 @@ class IdeasAgent(BaseBackendAgent):
                 "explain_idea": explain_idea,
             })
             logger.info(f"{self.name}: Loaded {len(tools)} idea tools")
+
+            # Load project doc generation tool
+            from spaces.ideas.tools.summary_tools import generate_project_doc
+            tools["generate_project_doc"] = generate_project_doc
+            logger.info(f"{self.name}: Loaded generate_project_doc tool")
 
         except ImportError as e:
             logger.warning(f"{self.name}: Could not load idea tools: {e}")
