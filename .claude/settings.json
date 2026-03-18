@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(2)",
+      "Read(//c/Users/User/AppData/Local/Temp/claude/c--Users-User-Desktop-Voice-dialog-vibemind-VibeMind-VoiceDialog/e58754d0-40c0-4809-8785-41fb9261a3f9/tasks/**)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "vibemind-local": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "vibemind-tools@vibemind-local": true
+  }
+}
