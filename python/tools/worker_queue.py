@@ -321,6 +321,7 @@ def seed_task(description: str, priority: str = "normal") -> Dict[str, Any]:
     Returns:
         {"task_id": "xxx", "status": "queued", "message": "..."}
     """
+    logger.debug("seed_task called with description=%s priority=%s", description[:50], priority)
     queue = get_task_queue()
     task = queue.seed_task(description, priority)
 
@@ -343,6 +344,7 @@ def get_task_status(task_id: str) -> Dict[str, Any]:
     Returns:
         Task status and progress info
     """
+    logger.debug("get_task_status called with task_id=%s", task_id)
     queue = get_task_queue()
     task = queue.get_task(task_id)
 
@@ -390,6 +392,7 @@ def get_last_result() -> Dict[str, Any]:
     Returns:
         Last task result or status
     """
+    logger.debug("get_last_result called")
     queue = get_task_queue()
     task = queue.get_last_completed()
 
@@ -426,6 +429,7 @@ def cancel_task(task_id: str) -> Dict[str, Any]:
     Returns:
         Success/failure status
     """
+    logger.debug("cancel_task called with task_id=%s", task_id)
     queue = get_task_queue()
 
     if queue.cancel_task(task_id):
@@ -472,6 +476,7 @@ def get_worker_report() -> Dict[str, Any]:
     Returns:
         Latest report with summary of last 3 steps completed
     """
+    logger.debug("get_worker_report called")
     report_queue = get_report_queue()
     return report_queue.get_latest_report()
 

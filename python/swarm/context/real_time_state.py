@@ -72,6 +72,7 @@ class RealTimeStateStore:
             space: Name of the current space
             bubble: Name of the current bubble within space (optional)
         """
+        logger.debug("update_location: space=%s bubble=%s", space, bubble)
         self._state.current_space = space
         self._state.current_bubble = bubble
         logger.debug(f"[RealTimeState] Location: {space}" +
@@ -99,6 +100,7 @@ class RealTimeStateStore:
             confidence: Confidence score (0.0 - 1.0)
             original_text: The original user input
         """
+        logger.debug("update_intent_result: intent_type=%s confidence=%s", intent_type, confidence)
         self._state.last_intent_type = intent_type
         self._state.last_intent_confidence = confidence
         self._state.last_intent_text = original_text
@@ -115,6 +117,7 @@ class RealTimeStateStore:
             intent_type: The intent being executed
             params: Task parameters (optional)
         """
+        logger.debug("add_active_task: task_id=%s intent_type=%s", task_id, intent_type)
         task = {
             "id": task_id,
             "intent": intent_type,
@@ -140,6 +143,7 @@ class RealTimeStateStore:
             result: Result message (truncated for storage)
             success: Whether the task succeeded
         """
+        logger.debug("complete_task: task_id=%s success=%s", task_id, success)
         # Remove from active
         intent_type = "unknown"
         for task in self._state.active_tasks:
@@ -182,6 +186,7 @@ class RealTimeStateStore:
         Returns:
             Formatted context string
         """
+        logger.debug("get_rachel_context called")
         lines = ["[SYSTEM STATE]"]
 
         # Location

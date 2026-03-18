@@ -241,6 +241,7 @@ class IntentEnhancer:
         Returns:
             EnhancedInput with normalized text and metadata
         """
+        logger.debug("enhance: user_input=%s", user_input[:50])
         result = EnhancedInput(
             original=user_input,
             normalized_text=user_input
@@ -374,6 +375,7 @@ class IntentEnhancer:
 
     def update_rules_batch(self, rule_ids: List[str], was_successful: bool):
         """Update multiple rules at once."""
+        logger.debug("update_rules_batch: count=%s success=%s", len(rule_ids), was_successful)
         for rule_id in rule_ids:
             self.update_rule(rule_id, was_successful)
         self.rules.save()
@@ -390,6 +392,7 @@ class IntentEnhancer:
         Called when user corrects the system:
         "nein ich meinte [corrected]" after system misunderstood [original]
         """
+        logger.debug("add_rule_from_correction: original=%s", original[:50])
         # Extract pattern from original
         pattern = self._extract_pattern(original)
         if not pattern:
@@ -454,6 +457,7 @@ class IntentEnhancer:
 
     def prune_bad_rules(self, threshold: float = 0.3, min_applications: int = 10):
         """Deactivate rules with poor success rates."""
+        logger.debug("prune_bad_rules: threshold=%s min_applications=%s", threshold, min_applications)
         pruned = 0
         for rule in self.rules.all():
             if rule.times_applied >= min_applications and rule.success_rate() < threshold:
@@ -472,6 +476,7 @@ class IntentEnhancer:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about rules."""
+        logger.debug("get_stats called")
         all_rules = self.rules.all()
         active = [r for r in all_rules if r.active]
 

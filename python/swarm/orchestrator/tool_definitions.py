@@ -6,7 +6,10 @@ These definitions are used by the ToolOrchestrator to enable Sonnet to
 select and call the appropriate tools based on user intent.
 """
 
+import logging
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # BUBBLE/SPACE TOOLS

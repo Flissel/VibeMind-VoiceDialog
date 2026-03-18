@@ -125,6 +125,7 @@ class ConversionAI:
         Returns:
             Loaded or newly created AIPersonality
         """
+        logger.debug("initialize called with user_id=%s", user_id)
         # Try to load existing personality
         if self.db_repo:
             try:
@@ -174,6 +175,7 @@ class ConversionAI:
         Returns:
             Enriched prompt for LLM
         """
+        logger.debug("build_prompt called with intent=%s", intent.event_type)
         p = self.personality
 
         # Build personality section
@@ -234,6 +236,7 @@ Sei natuerlich und verwende keine uebertriebene Foermlichkeit.
         Returns:
             Formatted response suitable for voice output
         """
+        logger.debug("format_response called with intent=%s", intent.event_type)
         prompt = f"""{self.build_prompt(intent, context, task_result)}
 
 Formatiere das Ergebnis fuer eine natuerliche Sprachausgabe.
@@ -271,6 +274,7 @@ Antworte NUR mit dem formatierten Text, keine Erklaerungen."""
         Returns:
             Introduction text for the AI
         """
+        logger.debug("introduce called")
         p = self.personality
 
         prompt = f"""Du bist {p.name}, eine VibeMind AI-Assistentin.
@@ -302,6 +306,7 @@ Stelle dich kurz (1-2 Saetze) vor. Sei freundlich aber nicht uebertrieben enthus
             preference: What preference to adapt
             value: New value for the preference
         """
+        logger.debug("adapt_to_user called with feedback=%s, preference=%s, value=%s", feedback, preference, value)
         if self._personality is None:
             return
 

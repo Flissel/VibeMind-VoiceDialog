@@ -153,7 +153,7 @@ def format_available_ideas() -> str:
     """Format available ideas for voice output."""
     m = get_index_mapping()
     if not m.idea_titles:
-        return "Keine Ideen verfuegbar."
+        return "No ideas available."
     items = [f"{i}. {title}" for i, title in sorted(m.idea_titles.items())]
     return ", ".join(items)
 
@@ -162,6 +162,6 @@ def format_available_bubbles() -> str:
     """Format available bubbles for voice output."""
     m = get_index_mapping()
     if not m.bubble_titles:
-        return "Keine Bubbles verfuegbar."
+        return "No Spaces available."
     items = [f"{i}. {title}" for i, title in sorted(m.bubble_titles.items())]
     return ", ".join(items)

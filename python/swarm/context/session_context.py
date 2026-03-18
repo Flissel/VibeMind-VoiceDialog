@@ -124,6 +124,7 @@ def get_session_context() -> SessionContext:
 
     Returns a default empty context if none is set.
     """
+    logger.debug("get_session_context called")
     ctx = _session_context.get()
     if ctx is None:
         ctx = SessionContext()
@@ -156,6 +157,7 @@ def set_session_context(
     Returns:
         The created SessionContext
     """
+    logger.debug("set_session_context: session_id=%s user_id=%s", session_id, user_id)
     ctx = SessionContext(
         session_id=session_id,
         user_id=user_id,
@@ -184,6 +186,7 @@ def clear_session_context():
 
 def update_session_context(**kwargs):
     """Update fields in the current session context."""
+    logger.debug("update_session_context: keys=%s", list(kwargs.keys()))
     ctx = get_session_context()
     for key, value in kwargs.items():
         if hasattr(ctx, key):
@@ -207,6 +210,7 @@ def resolve_context_reference(text: str, target_type: str = "bubble") -> Optiona
     Returns:
         List of resolved item names, or None if no resolution
     """
+    logger.debug("resolve_context_reference: target_type=%s", target_type)
     ctx = get_session_context()
 
     if not ctx.has_context_reference(text):

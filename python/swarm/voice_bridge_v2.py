@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    """Print debug message to stderr for visibility in Electron."""
-    print(f"[Python DEBUG] [VoiceBridgeV2] {msg}", file=sys.stderr)
+    """Log debug message for visibility in Electron."""
+    logger.debug(f"[VoiceBridgeV2] {msg}")
 
 # Environment variable to enable/disable auto-debugging
 ENABLE_AUTO_DEBUG = os.getenv("ENABLE_AUTO_DEBUG", "true").lower() == "true"
@@ -250,27 +250,30 @@ class VoiceBridgeV2:
 
             _debug_print(f"[BackendAgents] Agents created ({time.time() - t0:.2f}s)")
 
-            # Step 1: Subscribe all agents to their streams (no listeners yet)
-            _debug_print("[BackendAgents] Starting BubblesAgent...")
-            await self._bubbles_agent.start()
-            _debug_print(f"[BackendAgents] BubblesAgent started ({time.time() - t0:.2f}s)")
-
-            _debug_print("[BackendAgents] Starting IdeasAgent...")
-            await self._ideas_agent.start()
-            _debug_print(f"[BackendAgents] IdeasAgent started ({time.time() - t0:.2f}s)")
-
-            _debug_print("[BackendAgents] Starting DesktopAgent...")
-            await self._desktop_agent.start()
-            _debug_print(f"[BackendAgents] DesktopAgent started ({time.time() - t0:.2f}s)")
-
-            _debug_print("[BackendAgents] Starting CodingAgent...")
-            await self._coding_agent.start()
-            _debug_print(f"[BackendAgents] CodingAgent started ({time.time() - t0:.2f}s)")
-
+            # Step 1: Start all agents in parallel (no listeners yet)
+            _debug_print("[BackendAgents] Starting all agents in parallel...")
+            agent_starts = [
+                self._bubbles_agent.start(),
+                self._ideas_agent.start(),
+                self._desktop_agent.start(),
+                self._coding_agent.start(),
+            ]
             if self._roarboot_agent:
-                _debug_print("[BackendAgents] Starting RoarbootAgent...")
-                await self._roarboot_agent.start()
-                _debug_print(f"[BackendAgents] RoarbootAgent started ({time.time() - t0:.2f}s)")
+                agent_starts.append(self._roarboot_agent.start())
+
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*agent_starts, return_exceptions=True),
+                    timeout=10.0,
+                )
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        _debug_print(f"[BackendAgents] Agent {i} start error: {result}")
+            except asyncio.TimeoutError:
+                _debug_print("[BackendAgents] Agent startup timed out (10s) — continuing anyway")
+                logger.warning("Backend agent startup timed out (10s)")
+
+            _debug_print(f"[BackendAgents] All agents started ({time.time() - t0:.2f}s)")
 
             # ZeroClaw Research Agent (optional - requires USE_ZEROCLAW=true)
             use_zeroclaw = os.getenv("USE_ZEROCLAW", "false").lower() == "true"
@@ -460,47 +463,75 @@ class VoiceBridgeV2:
             return result.response
 
     async def shutdown(self) -> None:
-        """Shutdown all components gracefully."""
+        """Shutdown all components gracefully with timeouts to prevent hangs."""
         self._running = False
 
-        # Run post-session analysis if enabled
-        if ENABLE_AUTO_DEBUG and self._message_count >= AUTO_DEBUG_MIN_MESSAGES:
-            await self._run_post_session_analysis()
+        # Skip post-session analysis during shutdown (not time-critical)
+        # Post-session analysis can be done offline if needed.
 
-        # Stop TTS queue
-        await self.tts_queue.stop_processing()
+        # 1. Stop TTS queue (2s timeout)
+        try:
+            await asyncio.wait_for(self.tts_queue.stop_processing(), timeout=2.0)
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"TTS queue stop issue: {e}")
 
-        # Stop backend agents
-        if hasattr(self, '_bubbles_agent') and self._bubbles_agent:
-            await self._bubbles_agent.stop()
-        if self._ideas_agent:
-            await self._ideas_agent.stop()
-        if self._desktop_agent:
-            await self._desktop_agent.stop()
-        if self._coding_agent:
-            await self._coding_agent.stop()
-        if self._roarboot_agent:
-            await self._roarboot_agent.stop()
-        if self._zeroclaw_agent:
-            await self._zeroclaw_agent.stop()
+        # 2. Stop all backend agents concurrently (5s total, 3s per agent)
+        agents = [
+            ('bubbles', getattr(self, '_bubbles_agent', None)),
+            ('ideas', self._ideas_agent),
+            ('desktop', self._desktop_agent),
+            ('coding', self._coding_agent),
+            ('roarboot', self._roarboot_agent),
+            ('zeroclaw', self._zeroclaw_agent),
+        ]
+        agent_stops = [
+            self._stop_agent_safe(name, agent)
+            for name, agent in agents if agent
+        ]
+        if agent_stops:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*agent_stops, return_exceptions=True),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Agent shutdown timed out (5s)")
 
-        # Stop ZeroClaw subprocess
+        # 3. Stop ZeroClaw subprocess (has its own internal timeout)
         if self._zeroclaw_manager:
-            await self._zeroclaw_manager.stop()
+            try:
+                await asyncio.wait_for(self._zeroclaw_manager.stop(), timeout=8.0)
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"ZeroClaw manager stop issue: {e}")
 
-        # Stop status listener
-        if self._status_listener:
-            await self._status_listener.stop()
+        # 4. Stop listeners (2s each)
+        for listener_name, listener in [
+            ('status', self._status_listener),
+            ('question', getattr(self, '_question_listener', None)),
+        ]:
+            if listener:
+                try:
+                    await asyncio.wait_for(listener.stop(), timeout=2.0)
+                except (asyncio.TimeoutError, Exception) as e:
+                    logger.warning(f"{listener_name} listener stop issue: {e}")
 
-        # Stop question listener
-        if hasattr(self, '_question_listener') and self._question_listener:
-            await self._question_listener.stop()
-
-        # Close event bus
+        # 5. Close event bus + Redis connection (2s timeout)
         if self._event_bus:
-            await self._event_bus.close()
+            try:
+                await asyncio.wait_for(self._event_bus.close(), timeout=2.0)
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"EventBus close issue: {e}")
 
         logger.info("VoiceBridgeV2 shutdown complete")
+
+    async def _stop_agent_safe(self, name: str, agent) -> None:
+        """Stop a single agent with 3s timeout. Errors are logged, not raised."""
+        try:
+            await asyncio.wait_for(agent.stop(), timeout=3.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"Agent '{name}' stop timed out (3s)")
+        except Exception as e:
+            logger.warning(f"Agent '{name}' stop error: {e}")
 
     async def _run_post_session_analysis(self) -> None:
         """Run post-session analysis to identify issues."""

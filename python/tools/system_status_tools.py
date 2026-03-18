@@ -29,23 +29,23 @@ def get_system_status(params: Dict[str, Any] = None) -> str:
         status = monitor.get_status()
 
         lines = []
-        lines.append(f"System läuft seit {status['uptime_s']:.0f} Sekunden.")
-        lines.append(f"Gesamt: {status['total_operations']} Operationen, {status['total_errors']} Fehler.")
+        lines.append(f"System running for {status['uptime_s']:.0f} seconds.")
+        lines.append(f"Total: {status['total_operations']} operations, {status['total_errors']} errors.")
 
         if status['active_operations']:
-            lines.append(f"\nAktiv ({status['active_count']}):")
+            lines.append(f"\nActive ({status['active_count']}):")
             for op in status['active_operations']:
                 lines.append(f"  [{op['elapsed_s']:.1f}s] {op['type']}: {op['description'][:40]}")
         else:
-            lines.append("Keine aktiven Operationen.")
+            lines.append("No active operations.")
 
         return "\n".join(lines)
 
     except ImportError:
-        return "Status-Monitor nicht verfuegbar."
+        return "Status monitor not available."
     except Exception as e:
         logger.error(f"get_system_status failed: {e}")
-        return f"Fehler beim Abrufen des Status: {str(e)}"
+        return f"Error fetching status: {str(e)}"
 
 
 def check_stuck_operations(params: Dict[str, Any] = None) -> str:
@@ -68,18 +68,18 @@ def check_stuck_operations(params: Dict[str, Any] = None) -> str:
         stuck = monitor.check_stuck_operations(threshold)
 
         if stuck:
-            lines = [f"{len(stuck)} möglicherweise hängende Operationen (>{threshold}s):"]
+            lines = [f"{len(stuck)} possibly stuck operations (>{threshold}s):"]
             for op in stuck:
                 lines.append(f"  [{op['elapsed_s']:.0f}s] {op['type']}: {op['description'][:40]}")
             return "\n".join(lines)
         else:
-            return f"Alle Operationen laufen normal (keine länger als {threshold}s)."
+            return f"All operations running normally (none longer than {threshold}s)."
 
     except ImportError:
-        return "Status-Monitor nicht verfuegbar."
+        return "Status monitor not available."
     except Exception as e:
         logger.error(f"check_stuck_operations failed: {e}")
-        return f"Fehler: {str(e)}"
+        return f"Error: {str(e)}"
 
 
 def print_status_summary(params: Dict[str, Any] = None) -> str:
@@ -93,12 +93,12 @@ def print_status_summary(params: Dict[str, Any] = None) -> str:
         from swarm.monitoring.system_status import get_status_monitor
         monitor = get_status_monitor()
         monitor.print_status_summary()
-        return "Status-Zusammenfassung wurde in der Konsole ausgegeben."
+        return "Status summary printed to console."
     except ImportError:
-        return "Status-Monitor nicht verfuegbar."
+        return "Status monitor not available."
     except Exception as e:
         logger.error(f"print_status_summary failed: {e}")
-        return f"Fehler: {str(e)}"
+        return f"Error: {str(e)}"
 
 
 # Tool definitions for registration

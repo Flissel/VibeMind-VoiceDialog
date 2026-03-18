@@ -14,15 +14,11 @@ Architecture:
 """
 
 import logging
-import sys
 from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
-
-def _debug_print(msg: str):
-    """Print debug message to stderr for visibility in Electron."""
-    print(f"[Python DEBUG] [QuestionListener] {msg}", file=sys.stderr)
+_logger = logging.getLogger(__name__)
 
 
 class QuestionListener:
@@ -69,19 +65,19 @@ class QuestionListener:
     async def start(self) -> None:
         """Start listening for questions."""
         if self._running:
-            _debug_print("Already running, skipping start")
+            _logger.debug("[QuestionListener] Already running, skipping start")
             return
 
         await self.event_bus.subscribe(self.STREAM, self._handle_question)
         self._running = True
 
-        _debug_print(f"Subscribed to {self.STREAM}")
+        _logger.debug(f"[QuestionListener] Subscribed to {self.STREAM}")
         logger.info(f"[QuestionListener] Subscribed to {self.STREAM}")
 
     async def stop(self) -> None:
         """Stop listening."""
         self._running = False
-        _debug_print("Stopped")
+        _logger.debug("[QuestionListener] Stopped")
         logger.info("[QuestionListener] Stopped")
 
     async def _handle_question(self, event) -> None:
@@ -110,11 +106,11 @@ class QuestionListener:
                 priority=payload.get("priority", 0)
             )
 
-            _debug_print(f"Queued question: {question[:50]}... (job={job_id})")
+            _logger.debug(f"[QuestionListener] Queued question: {question[:50]}... (job={job_id})")
             logger.debug(f"[QuestionListener] Queued: {event.event_type} (job={job_id})")
 
         except Exception as e:
-            _debug_print(f"Error handling question: {e}")
+            _logger.debug(f"[QuestionListener] Error handling question: {e}")
             logger.error(f"[QuestionListener] Error: {e}")
 
     @property

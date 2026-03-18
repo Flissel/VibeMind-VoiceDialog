@@ -256,36 +256,36 @@ class ToolOrchestrator:
             def _format_desktop_result(result):
                 if isinstance(result, dict):
                     if result.get("success"):
-                        return result.get("message", "Erledigt.")
+                        return result.get("message", "Done.")
                     else:
-                        return f"Fehler: {result.get('error', 'Unbekannt')}"
+                        return f"Error: {result.get('error', 'Unknown')}"
                 return str(result)
 
             def desktop_task_sync(params):
                 goal = params.get("goal", "") or params.get("description", "")
                 if not goal:
-                    return "Was soll ich auf dem Desktop machen?"
+                    return "What should I do on the desktop?"
                 result = _run_async(execute_desktop_task(goal))
                 return _format_desktop_result(result)
 
             def click_sync(params):
                 desc = params.get("element_description", "") or params.get("description", "")
                 if not desc:
-                    return "Welches Element?"
+                    return "Which element?"
                 result = _run_async(click_element(desc))
                 return _format_desktop_result(result)
 
             def type_sync(params):
                 text = params.get("text", "")
                 if not text:
-                    return "Was tippen?"
+                    return "What to type?"
                 result = _run_async(type_text(text))
                 return _format_desktop_result(result)
 
             def press_key_sync(params):
                 key = params.get("key", "")
                 if not key:
-                    return "Welche Taste?"
+                    return "Which key?"
                 result = _run_async(press_key(key))
                 return _format_desktop_result(result)
 
@@ -314,7 +314,7 @@ class ToolOrchestrator:
 
         # === CONVERSATION TOOL ===
         def clarify(params):
-            question = params.get("question", "Kannst du das genauer erklaeren?")
+            question = params.get("question", "Can you explain that in more detail?")
             return question
 
         self._executors["conversation_clarify"] = clarify
@@ -335,7 +335,7 @@ class ToolOrchestrator:
             return OrchestrationResult(
                 tool_calls=[],
                 results=[],
-                summary="ToolOrchestrator ist deaktiviert.",
+                summary="ToolOrchestrator is disabled.",
                 error="Orchestrator disabled"
             )
 
@@ -389,7 +389,7 @@ class ToolOrchestrator:
             return OrchestrationResult(
                 tool_calls=[],
                 results=[],
-                summary=f"Es gab ein Problem: {str(e)}",
+                summary=f"There was a problem: {str(e)}",
                 error=str(e)
             )
 
@@ -414,7 +414,7 @@ class ToolOrchestrator:
                     tool_name=tc.name,
                     success=False,
                     result=None,
-                    error=f"Tool {tc.name} nicht verfuegbar"
+                    error=f"Tool {tc.name} not available"
                 ))
                 continue
 
@@ -430,7 +430,7 @@ class ToolOrchestrator:
                 # Phase 8B: Push successful results to context stores
                 # This enables Rachel to remember what just happened
                 event_type = tc.name.replace("_", ".")
-                result_str = str(result) if result else "Erledigt"
+                result_str = str(result) if result else "Done"
 
                 # 1. Push to SystemContextStore (for relevance-based queries)
                 context_store.store(
@@ -464,7 +464,7 @@ class ToolOrchestrator:
         """Generate natural language summary of results."""
         if not results:
             # No tools called - might be a greeting or unclear request
-            return "Wie kann ich dir helfen?"
+            return "How can I help you?"
 
         # Collect successful results
         success_messages = []
@@ -478,7 +478,7 @@ class ToolOrchestrator:
                 elif isinstance(r.result, dict) and "message" in r.result:
                     success_messages.append(r.result["message"])
                 else:
-                    success_messages.append(f"{r.tool_name} erfolgreich")
+                    success_messages.append(f"{r.tool_name} successful")
             elif r.error:
                 error_messages.append(r.error)
 
@@ -489,12 +489,12 @@ class ToolOrchestrator:
             return " ".join(success_messages)
 
         if error_messages and not success_messages:
-            return f"Fehler: {'; '.join(error_messages)}"
+            return f"Error: {'; '.join(error_messages)}"
 
         if success_messages and error_messages:
-            return f"{' '.join(success_messages)} (Aber: {'; '.join(error_messages)})"
+            return f"{' '.join(success_messages)} (But: {'; '.join(error_messages)})"
 
-        return "Erledigt."
+        return "Done."
 
 
 # Singleton

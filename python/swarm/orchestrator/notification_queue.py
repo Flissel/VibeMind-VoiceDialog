@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _debug_print(msg: str):
     """Print debug message to stderr for visibility in Electron."""
-    print(f"[Python DEBUG] [NotificationQueue] {msg}", file=sys.stderr)
+    logger.debug(f"[NotificationQueue] {msg}")
 
 
 @dataclass
