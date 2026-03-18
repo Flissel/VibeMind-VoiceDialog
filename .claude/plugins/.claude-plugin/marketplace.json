@@ -1,0 +1,12 @@
+{
+  "name": "vibemind-local",
+  "description": "VibeMind local project plugins",
+  "plugins": [
+    {
+      "name": "vibemind-tools",
+      "description": "VibeMind project-specific tools, skills, and commands for documentation, LLM scanning, and env syncing",
+      "source": "./vibemind-tools",
+      "category": "development"
+    }
+  ]
+}
