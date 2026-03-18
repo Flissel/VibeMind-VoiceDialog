@@ -432,13 +432,18 @@ class EventBus:
             return {"length": 0, "first_entry": None, "last_entry": None}
 
     async def close(self):
-        """Close Redis connection."""
+        """Close Redis connection properly."""
         await self.stop_listeners()
         if self._redis:
-            # Just discard the reference and let Python garbage collect it
-            # Don't call disconnect() - it's async and causes RuntimeWarning
-            self._redis = None
-            self._redis_loop = None
+            try:
+                await asyncio.wait_for(self._redis.close(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning("[EventBus] Redis close timed out (2s)")
+            except Exception as e:
+                logger.debug(f"[EventBus] Redis close error (ignored): {e}")
+            finally:
+                self._redis = None
+                self._redis_loop = None
             logger.info("EventBus closed")
 
 

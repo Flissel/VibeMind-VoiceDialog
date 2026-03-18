@@ -59,6 +59,7 @@ class BrowserWorker:
 
     async def start(self):
         """Initialize browser."""
+        logger.debug("BrowserWorker.start called, headless=%s", self.headless)
         if not HAS_PLAYWRIGHT:
             raise RuntimeError("Playwright not installed. Run: pip install playwright && playwright install chromium")
 
@@ -72,6 +73,7 @@ class BrowserWorker:
 
     async def close(self):
         """Close browser and cleanup."""
+        logger.debug("BrowserWorker.close called")
         if self.browser:
             await self.browser.close()
         if self.playwright:
@@ -96,6 +98,7 @@ class BrowserWorker:
         Returns:
             List of ImageResult objects
         """
+        logger.debug("search_images called with query=%s count=%s", query, count)
         if not self._started:
             await self.start()
 
@@ -155,6 +158,7 @@ class BrowserWorker:
         Returns:
             List of ImageResult objects (all free to use)
         """
+        logger.debug("search_images_unsplash called with query=%s count=%s", query, count)
         if not self._started:
             await self.start()
 
@@ -222,6 +226,7 @@ class BrowserWorker:
         Returns:
             Local file path, or None if failed
         """
+        logger.debug("download_image called with url=%s", url)
         if not self._started:
             await self.start()
 
@@ -323,6 +328,7 @@ def search_images_tool(params: Dict[str, Any]) -> str:
     query = params.get("query", "").strip()
     count = int(params.get("count", 5))
     source = params.get("source", "unsplash")
+    logger.debug("search_images_tool called with query=%s source=%s", query, source)
 
     if not query:
         return "What should I search for? Please describe the images you want."

@@ -5,6 +5,10 @@ MIGRATED TO: spaces/ideas/tools/summary_tools.py
 This file re-exports for backward compatibility.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Re-export everything from new location
 from spaces.ideas.tools.summary_tools import (
     # Client tools

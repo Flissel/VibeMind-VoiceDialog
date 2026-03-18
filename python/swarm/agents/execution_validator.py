@@ -167,6 +167,7 @@ class ExecutionValidator:
             rules_applied: List of enhancement rule IDs applied
             timeout: Custom timeout in seconds
         """
+        logger.debug("expect_execution: job_id=%s event_type=%s", job_id, event_type)
         self.pending_validations[job_id] = PendingValidation(
             job_id=job_id,
             event_type=event_type,
@@ -189,6 +190,7 @@ class ExecutionValidator:
         Returns:
             ValidationResult with status and details
         """
+        logger.debug("check_execution: job_id=%s", job_id)
         if job_id not in self.pending_validations:
             return ValidationResult(
                 valid=False,
@@ -294,6 +296,7 @@ class ExecutionValidator:
         Returns:
             ExecutionFeedback with all learning data
         """
+        logger.debug("validate_and_learn: job_id=%s", job_id)
         if job_id not in self.pending_validations:
             raise ValueError(f"Unknown job: {job_id}")
 
@@ -373,6 +376,7 @@ class ExecutionValidator:
 
     def detect_correction(self, text: str) -> bool:
         """Detect if user input is a correction."""
+        logger.debug("detect_correction: text=%s", text[:50])
         text_lower = text.lower()
         return any(marker in text_lower for marker in self.correction_markers)
 
@@ -427,6 +431,7 @@ class ExecutionValidator:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get validation statistics."""
+        logger.debug("get_stats called")
         if not self.completed_feedback:
             return {
                 "total": 0,

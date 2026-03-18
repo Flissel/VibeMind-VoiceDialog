@@ -180,6 +180,7 @@ class JobManager:
         Returns:
             List of JobInfo
         """
+        logger.debug("list_jobs called: status_filter=%s, limit=%s", status_filter, limit)
         jobs = list(self.jobs.values())
 
         if status_filter:
@@ -200,6 +201,7 @@ class JobManager:
         Returns:
             True if cancelled, False if not found or already finished
         """
+        logger.debug("cancel_job called: job_id=%s", job_id)
         job = self.jobs.get(job_id)
         if not job:
             return False

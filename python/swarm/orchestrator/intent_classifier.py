@@ -108,6 +108,13 @@ Der Bereich fuer Ideen-Management. Bubbles sind Themen-Container fuer Ideen.
 - idea.explain: Idee erklaeren lassen (KI-Erklaerung)
   → "Erklaere die Idee [NAME]", "Was bedeutet [NAME]?", "Was ist [NAME]?"
   → Payload: {"idea_name": "[NAME]"}
+- idea.generate_doc: Projektdokumentation generieren (exportiert ALLES als Markdown-Datei)
+  → "Erstelle Projektdoku", "Generiere Dokumentation", "Exportiere als Dokument"
+  → "Erstelle Projektdokumentation fuer [NAME]", "Erstelle Doku"
+  → "Dokumentation generieren", "Exportiere Projekt", "Mach eine Doku"
+  → Payload: {"bubble_name": "[NAME]"}
+  WICHTIG: idea.generate_doc EXPORTIERT alle vorhandenen Inhalte als zusammenhaengendes
+  Dokument (LLM-synthesiert). idea.whitepaper GENERIERT neuen Text aus verknuepften Ideen.
 
 **Idee Exploration Event-Types (AI-Scientist Tree Search):**
 - idea.explore.start: Starte tiefe Verbindungssuche zwischen Ideen
@@ -354,6 +361,65 @@ Der Bereich fuer zeitgesteuerte Aufgaben: Erinnerungen, wiederkehrende Aktionen,
 - Sofortige Aktion: Kein Zeitausdruck, sofort ausfuehren
   → "Erstelle eine Idee fuer Marketing" → idea.create (NICHT schedule!)
 Nur wenn ein Zeitausdruck erkennbar ist, wird schedule.create verwendet.
+
+### 8. N8N WORKFLOW BUILDER SPACE (Workflow-Automatisierung)
+Der Bereich fuer n8n Workflow-Erstellung und -Verwaltung. Generiert Workflows aus Beschreibungen und pusht sie zu n8n.
+
+**Schluesselwoerter:** workflow, n8n, automatisierung, automation, webhook, trigger, agent workflow, pipeline
+
+**Event-Types:**
+- n8n.generate: Workflow aus natuerlichsprachlicher Beschreibung generieren und in n8n speichern
+  → "Erstelle einen Workflow fuer...", "Baue einen n8n Workflow der..."
+  → "Ich brauche einen Workflow mit Webhook und DB..."
+  → "Erstelle eine Automatisierung fuer..."
+  → payload: {"description": "..."}
+- n8n.list: Alle Workflows in n8n auflisten
+  → "Zeig meine Workflows", "Welche Workflows gibt es?", "n8n Workflows"
+- n8n.status: n8n Instanz Status pruefen
+  → "Ist n8n online?", "n8n Status", "Workflow-System Status"
+- n8n.activate: Workflow aktivieren
+  → "Aktiviere Workflow X", "Starte Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.deactivate: Workflow deaktivieren
+  → "Deaktiviere Workflow X", "Stoppe Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.delete: Workflow loeschen
+  → "Loesche Workflow X", "Entferne Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.execute: Workflow manuell ausfuehren
+  → "Fuehre Workflow X aus", "Trigger Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.describe: Workflow-Details anzeigen
+  → "Beschreibe Workflow X", "Was macht Workflow X?", "Zeig Details von Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+
+### 9. AGENTFARM SPACE (Multi-Agent Teams via Autogen)
+Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Teams aus mehreren KI-Agenten.
+
+**Schluesselwoerter:** agent team, agentfarm, autogen, multi-agent, team erstellen, team starten, zusammenarbeit, collaboration, agenten
+
+**Event-Types:**
+- agentfarm.create_team: Neues Agent-Team erstellen
+  → "Erstelle ein Agent-Team fuer Customer Support", "Neues Team mit 3 Agenten"
+  → payload: {"template_id": "...", "team_name": "..."}
+- agentfarm.run: Team-Run starten mit einer Aufgabe
+  → "Starte das Team mit der Aufgabe FAQ erstellen", "Lass das Team X arbeiten an Y"
+  → payload: {"team_id": "...", "task": "..."}
+- agentfarm.status: AgentFarm Uebersicht aller Teams und Runs
+  → "Wie ist der Status der Agent Farm?", "AgentFarm Status", "Zeig die Teams"
+- agentfarm.list_teams: Alle Teams auflisten
+  → "Welche Teams gibt es?", "Zeig mir alle Agent-Teams"
+- agentfarm.stop: Laufenden Run stoppen
+  → "Stopp den laufenden Run", "Agent-Team anhalten"
+  → payload: {"run_id": "..."}
+- agentfarm.results: Ergebnisse eines Runs abrufen
+  → "Was sind die Ergebnisse?", "Zeig mir die Run-Ergebnisse"
+  → payload: {"run_id": "..."}
+- agentfarm.list_templates: Verfuegbare Team-Templates auflisten
+  → "Welche Team-Templates gibt es?", "Zeig Team-Vorlagen"
+- agentfarm.collaborate: Multi-Space Zusammenarbeit starten
+  → "Starte eine Zusammenarbeit aller Agents fuer X"
+  → payload: {"task": "...", "goal": "..."}
 
 ### WICHTIGE UNTERSCHEIDUNG - MINIBOOK vs DIRECT
 - minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
@@ -1045,6 +1111,18 @@ class IntentClassifier:
                 logger.debug(f"Post-process: -> idea.format ({format_type})")
 
         # =====================================================================
+        # Rule 25b: Format Revert -> idea.format_revert
+        # "Mach das rueckgaengig", "Revert", "Undo format"
+        # =====================================================================
+        revert_keywords = ["rueckgaengig", "rückgängig", "revert", "undo", "zurueck zum",
+                           "vorheriges format", "previous format", "undo format"]
+        if any(kw in text_lower for kw in revert_keywords):
+            result["event_type"] = "idea.format_revert"
+            result["payload"] = {}
+            self._applied_rules.append("rule_25b_format_revert")
+            logger.debug("Post-process: -> idea.format_revert")
+
+        # =====================================================================
         # Rule 26: Komplexe Strukturierungen -> idea.structure
         # Fixes: "Organisiere die Ideen hierarchisch" -> idea.structure
         # For complex multi-step structuring operations
@@ -1291,6 +1369,15 @@ class IntentClassifier:
         try:
             prompt = CLASSIFIER_PROMPT_TEMPLATE.replace("$INTENT$", intent_text)
 
+            # Append plugin classifier hints (dynamic event types)
+            try:
+                from plugins.plugin_manager import get_plugin_manager
+                plugin_context = get_plugin_manager().get_classifier_context()
+                if plugin_context:
+                    prompt += "\n\n## Zusaetzliche Spaces (Plugins)\n\n" + plugin_context
+            except Exception:
+                pass  # Plugin system not available
+
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[
@@ -1303,8 +1390,7 @@ class IntentClassifier:
             content = response.choices[0].message.content.strip()
 
             # Phase 12: Debug logging - show raw LLM response
-            import sys
-            print(f"[Python DEBUG] [LLM RESPONSE] {content[:300]}", file=sys.stderr)
+            logger.debug(f"[LLM RESPONSE] {content[:300]}")
 
             # Extract JSON from response (handle markdown code blocks and explanatory text)
             if "```json" in content:

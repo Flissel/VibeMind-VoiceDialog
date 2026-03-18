@@ -62,6 +62,7 @@ def start_session(agent_id: Optional[str] = None) -> str:
         Session ID
     """
     global _conversation_buffer, _conversation_started, _current_session_id
+    logger.debug("start_session called with agent_id=%s", agent_id)
 
     # Clear in-memory buffer
     _conversation_buffer = []
@@ -239,6 +240,7 @@ def save_conversation(params: Dict[str, Any]) -> str:
     bubble_id = params.get("bubble_id")
     title = params.get("title", "").strip()
     save_full = params.get("save_full", False)
+    logger.debug("save_conversation called with bubble_name=%s save_full=%s", bubble_name, save_full)
 
     if not _conversation_buffer:
         return "There's no conversation to save yet. Let's chat first!"
@@ -326,6 +328,7 @@ def extract_key_points(params: Dict[str, Any]) -> str:
     Returns:
         List of key points, optionally saved to canvas
     """
+    logger.debug("extract_key_points called with bubble_name=%s", params.get("bubble_name", ""))
     if not _conversation_buffer:
         return "We haven't discussed anything yet."
 
@@ -399,6 +402,7 @@ def create_idea_from_discussion(params: Dict[str, Any]) -> str:
         Confirmation with idea details
     """
     title = params.get("title", "").strip()
+    logger.debug("create_idea_from_discussion called with title=%s", title)
 
     if not title:
         return "What should I call this idea? Give me a title."

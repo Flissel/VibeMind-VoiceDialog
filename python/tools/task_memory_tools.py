@@ -40,7 +40,7 @@ def get_tasks_today(params: Dict[str, Any]) -> str:
         service = get_task_memory_service()
 
         if not service or not service.is_available:
-            return "Task-Gedaechtnis ist nicht verfuegbar."
+            return "Task memory is not available."
 
         async def _fetch():
             return await service.get_tasks_today()
@@ -48,29 +48,29 @@ def get_tasks_today(params: Dict[str, Any]) -> str:
         tasks = _run_async(_fetch())
 
         if not tasks:
-            return "Heute wurden noch keine Tasks ausgefuehrt."
+            return "No tasks executed today."
 
         # Format for voice output
-        lines = [f"Heute {len(tasks)} Tasks ausgefuehrt:"]
+        lines = [f"Today {len(tasks)} tasks executed:"]
         for i, t in enumerate(tasks[:10], 1):
             meta = t.get("metadata", {})
-            intent = meta.get("intent_type", "unbekannt")
+            intent = meta.get("intent_type", "unknown")
             event = meta.get("event_type", "")
             if event == "task_completed":
-                lines.append(f"{i}. {intent} - erledigt")
+                lines.append(f"{i}. {intent} - completed")
             elif event == "task_failed":
-                lines.append(f"{i}. {intent} - fehlgeschlagen")
+                lines.append(f"{i}. {intent} - failed")
             else:
                 lines.append(f"{i}. {intent}")
 
         if len(tasks) > 10:
-            lines.append(f"... und {len(tasks) - 10} weitere.")
+            lines.append(f"... and {len(tasks) - 10} more.")
 
         return "\n".join(lines)
 
     except Exception as e:
         logger.error(f"get_tasks_today failed: {e}")
-        return f"Fehler beim Abrufen der Tasks: {e}"
+        return f"Error fetching tasks: {e}"
 
 
 def get_recent_tasks(params: Dict[str, Any]) -> str:
@@ -86,7 +86,7 @@ def get_recent_tasks(params: Dict[str, Any]) -> str:
         service = get_task_memory_service()
 
         if not service or not service.is_available:
-            return "Task-Gedaechtnis ist nicht verfuegbar."
+            return "Task memory is not available."
 
         async def _fetch():
             return await service.get_recent_tasks(limit=limit)
@@ -94,25 +94,25 @@ def get_recent_tasks(params: Dict[str, Any]) -> str:
         tasks = _run_async(_fetch())
 
         if not tasks:
-            return "Keine kuerzlichen Tasks gefunden."
+            return "No recent tasks found."
 
         if len(tasks) == 1:
             meta = tasks[0].get("metadata", {})
-            intent = meta.get("intent_type", "unbekannt")
+            intent = meta.get("intent_type", "unknown")
             result = meta.get("result", "")[:50]
-            return f"Letzter Task: {intent}" + (f" - {result}" if result else "")
+            return f"Last task: {intent}" + (f" - {result}" if result else "")
 
-        lines = [f"Die letzten {len(tasks)} Tasks:"]
+        lines = [f"The last {len(tasks)} tasks:"]
         for i, t in enumerate(tasks[:limit], 1):
             meta = t.get("metadata", {})
-            intent = meta.get("intent_type", "unbekannt")
+            intent = meta.get("intent_type", "unknown")
             lines.append(f"{i}. {intent}")
 
         return "\n".join(lines)
 
     except Exception as e:
         logger.error(f"get_recent_tasks failed: {e}")
-        return f"Fehler beim Abrufen der Tasks: {e}"
+        return f"Error fetching tasks: {e}"
 
 
 def search_task_history(params: Dict[str, Any]) -> str:
@@ -125,14 +125,14 @@ def search_task_history(params: Dict[str, Any]) -> str:
     query = params.get("query", "")
 
     if not query:
-        return "Bitte gib einen Suchbegriff an."
+        return "Please provide a search term."
 
     try:
         from memory import get_task_memory_service
         service = get_task_memory_service()
 
         if not service or not service.is_available:
-            return "Task-Gedaechtnis ist nicht verfuegbar."
+            return "Task memory is not available."
 
         async def _fetch():
             return await service.search_tasks(query, limit=10)
@@ -140,12 +140,12 @@ def search_task_history(params: Dict[str, Any]) -> str:
         tasks = _run_async(_fetch())
 
         if not tasks:
-            return f"Keine Tasks gefunden fuer: {query}"
+            return f"No tasks found for: {query}"
 
-        lines = [f"Gefundene Tasks fuer '{query}':"]
+        lines = [f"Tasks found for '{query}':"]
         for i, t in enumerate(tasks[:10], 1):
             meta = t.get("metadata", {})
-            intent = meta.get("intent_type", "unbekannt")
+            intent = meta.get("intent_type", "unknown")
             timestamp = meta.get("timestamp", "")
             if timestamp:
                 try:
@@ -161,7 +161,7 @@ def search_task_history(params: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.error(f"search_task_history failed: {e}")
-        return f"Fehler bei der Suche: {e}"
+        return f"Search error: {e}"
 
 
 def get_task_stats(params: Dict[str, Any]) -> str:
@@ -175,7 +175,7 @@ def get_task_stats(params: Dict[str, Any]) -> str:
         task_service = get_task_memory_service()
         profile_service = get_user_profile_service()
 
-        lines = ["Task-Statistiken:"]
+        lines = ["Task statistics:"]
 
         # Get today's tasks
         if task_service and task_service.is_available:
@@ -186,9 +186,9 @@ def get_task_stats(params: Dict[str, Any]) -> str:
             completed = sum(1 for t in tasks_today if t.get("metadata", {}).get("event_type") == "task_completed")
             failed = sum(1 for t in tasks_today if t.get("metadata", {}).get("event_type") == "task_failed")
 
-            lines.append(f"Heute: {completed} erledigt, {failed} fehlgeschlagen")
+            lines.append(f"Today: {completed} completed, {failed} failed")
         else:
-            lines.append("Task-Gedaechtnis nicht verfuegbar")
+            lines.append("Task memory not available")
 
         # Get top intents from user profile
         if profile_service and profile_service.is_available:
@@ -197,13 +197,13 @@ def get_task_stats(params: Dict[str, Any]) -> str:
 
             top_intents = _run_async(_fetch_top())
             if top_intents:
-                lines.append("Meistgenutzte Befehle: " + ", ".join(top_intents))
+                lines.append("Most used commands: " + ", ".join(top_intents))
 
         return "\n".join(lines)
 
     except Exception as e:
         logger.error(f"get_task_stats failed: {e}")
-        return f"Fehler beim Abrufen der Statistiken: {e}"
+        return f"Error fetching statistics: {e}"
 
 
 # Tool definitions for registration

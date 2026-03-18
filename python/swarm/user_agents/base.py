@@ -178,6 +178,7 @@ class BaseUserAgent(ABC):
         Returns:
             Clarification question to ask, or None if max attempts reached
         """
+        logger.debug("clarify called with original_input=%s, reason=%s", original_input[:80], reason)
         self._clarification_count += 1
 
         if self._clarification_count > self.config.max_clarification_attempts:
@@ -212,6 +213,7 @@ class BaseUserAgent(ABC):
         Returns:
             TaskInfo if worker found, None otherwise
         """
+        logger.debug("delegate_to_worker called with worker_name=%s", worker_name)
         worker = self._workers.get(worker_name)
         if not worker:
             logger.warning(f"Worker not found: {worker_name}")
@@ -241,6 +243,7 @@ class BaseUserAgent(ABC):
         Args:
             text: Text to speak
         """
+        logger.debug("speak called with text=%s", text[:80] if text else None)
         if self.tts_callback:
             try:
                 result = self.tts_callback(text)
@@ -271,6 +274,7 @@ class BaseUserAgent(ABC):
         Returns:
             Configured AssistantAgent
         """
+        logger.debug("create_autogen_agent called for %s", self.name)
         from autogen_agentchat.agents import AssistantAgent
         from autogen_core.tools import FunctionTool
 
@@ -318,6 +322,7 @@ class BaseUserAgent(ABC):
         Returns:
             Response text from LLM (after tool execution)
         """
+        logger.debug("process_input_with_llm called with event.text=%s", event.text[:80] if event.text else None)
         if self.model_client is None:
             logger.warning(f"{self.name}: No model_client, falling back to clarification")
             return await self.clarify(event.text, "Ich kann das gerade nicht verarbeiten.")

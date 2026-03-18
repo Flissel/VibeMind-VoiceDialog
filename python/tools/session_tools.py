@@ -146,9 +146,10 @@ def check_session_status(params: Dict[str, Any]) -> str:
     Returns:
         str: Session status information
     """
+    logger.debug("check_session_status called")
     if not _session_active:
         return "No active voice session."
-    
+
     elapsed = get_session_elapsed_seconds()
     inactivity = get_inactivity_seconds()
     
@@ -181,12 +182,13 @@ def extend_session(params: Dict[str, Any]) -> str:
     Returns:
         str: Confirmation message
     """
+    logger.debug("extend_session called")
     mark_interaction()
-    
+
     elapsed = get_session_elapsed_seconds()
     remaining = max(0, SESSION_TIMEOUT_SECONDS - elapsed)
     remaining_min = int(remaining // 60)
-    
+
     return f"Great! Session extended. About {remaining_min} minutes remaining."
 
 
@@ -206,7 +208,8 @@ def request_session_restart(params: Dict[str, Any]) -> str:
         str: Instruction to user that session will restart
     """
     reason = params.get("reason", "session timeout approaching")
-    
+    logger.debug("request_session_restart called with reason=%s", reason)
+
     # Broadcast restart request to Electron
     _broadcast_to_electron({
         "type": "voice_restart_requested",
@@ -232,7 +235,8 @@ def end_session_gracefully(params: Dict[str, Any]) -> str:
         str: Farewell message
     """
     summary = params.get("summary", "")
-    
+    logger.debug("end_session_gracefully called")
+
     # Broadcast end request to Electron
     _broadcast_to_electron({
         "type": "voice_end_requested",
