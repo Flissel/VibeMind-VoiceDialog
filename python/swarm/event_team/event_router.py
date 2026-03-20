@@ -43,6 +43,7 @@ class EventRouter:
     STREAM_TASKS_N8N = "events:tasks:n8n"
     STREAM_TASKS_VIDEO = "events:tasks:video"
     STREAM_TASKS_AGENTFARM = "events:tasks:agentfarm"
+    STREAM_TASKS_FLOWZEN = "events:tasks:flowzen"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -210,6 +211,10 @@ class EventRouter:
         "video.voice_clone": STREAM_TASKS_VIDEO,
         "video.voice_tts": STREAM_TASKS_VIDEO,
 
+        # Flowzen (Blaue Rose) — only explicit user queries
+        "rose.recommend": STREAM_TASKS_FLOWZEN,
+        "rose.status": STREAM_TASKS_FLOWZEN,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -319,6 +324,8 @@ class EventRouter:
             return "video"
         elif stream == self.STREAM_TASKS_AGENTFARM:
             return "agentfarm"
+        elif stream == self.STREAM_TASKS_FLOWZEN:
+            return "flowzen"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -340,6 +347,7 @@ class EventRouter:
             cls.STREAM_TASKS_N8N,
             cls.STREAM_TASKS_VIDEO,
             cls.STREAM_TASKS_AGENTFARM,
+            cls.STREAM_TASKS_FLOWZEN,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]

@@ -11,6 +11,8 @@ import os
 import time
 from typing import Dict, Any, Optional
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Lazy import for structured logging (avoid circular imports)
@@ -87,10 +89,23 @@ Der Bereich fuer Ideen-Management. Bubbles sind Themen-Container fuer Ideen.
   → "Fuege neue Ideen hinzu", "Generiere ergaenzende Ideen"
 - idea.move: Idee verschieben
   → "Verschiebe [IDEE] nach [SPACE]"
-- idea.format: Ideen in strukturierte Formate konvertieren (LLM-powered)
-  → "Formatiere die Ideen in Aktionslisten", "Erstelle Tabelle mit Vorteilen/Nachteilen"
-  → "Konvertiere in [action_list|pros_cons_table|technical_specs|hierarchy|comparison_table]"
-  → Payload: {"format_type": "action_list", "original_request": "..."}
+- idea.format_note: Als Notiz formatieren
+  → "Formatiere als Notiz", "Mach eine Notiz daraus"
+- idea.format_action_list: Als Aktionsliste formatieren
+  → "Formatiere als Aktionsliste", "Mach Aktionspunkte daraus", "To-Do Liste"
+- idea.format_pros_cons: Als Pro/Contra formatieren
+  → "Formatiere als Pro und Contra", "Vorteile und Nachteile", "Pros and Cons"
+- idea.format_hierarchy: Als Hierarchie formatieren
+  → "Formatiere als Hierarchie", "Hierarchisch strukturieren", "Baumstruktur"
+- idea.format_specs: Als technische Spezifikation formatieren
+  → "Formatiere als Spezifikation", "Technische Specs", "Requirements"
+- idea.convert_format: Format konvertieren
+  → "Konvertiere das Format", "Aendere das Format", "Wandle um in"
+  → Payload: {"target_format": "action_list|pros_cons|hierarchy|specs|note"}
+- idea.list_formats: Verfuegbare Formate anzeigen
+  → "Welche Formate gibt es?", "Zeig mir die Formatoptionen"
+- idea.format_revert: Format zuruecksetzen
+  → "Format zuruecksetzen", "Format rueckgaengig", "Revert Format", "Undo"
 - idea.structure: Komplexe Strukturierungen und Organisation
   → "Organisiere die Ideen hierarchisch", "Erstelle Übersicht aller Konzepte"
   → "Strukturiere alle Ideen systematisch"
@@ -248,6 +263,20 @@ Der Bereich fuer Wissensmanagement. Durchsucht Knowledge Graph aus Emails, Meeti
   → "Oeffne Roarboot", "Zeig mir Rowboat", "Knowledge Graph anzeigen"
 - roarboot.reset: Neues Gespraech mit Roarboot starten (Kontext zuruecksetzen)
   → "Neues Gespraech mit Roarboot", "Roarboot Reset", "Roarboot Kontext loeschen"
+- roarboot.chat: Freier Chat mit Rowboat (Multi-Turn Konversation mit Knowledge Graph Kontext)
+  → "Frag Rowboat ...", "Rowboat, was denkst du ueber ...", "Chat mit Rowboat", "Sprich mit Rowboat"
+  Payload: {{"message": "...", "context": "general"}}
+- roarboot.rag.search: Semantische Suche im Knowledge Graph (Vektorsuche, aehnliche Konzepte finden)
+  → "Finde aehnliche Konzepte zu X", "Semantische Suche nach X", "RAG Suche X"
+  Payload: {{"query": "..."}}
+- roarboot.upload: Dokument in Knowledge Graph aufnehmen (PDF, DOCX, MD, TXT oder Text)
+  → "Verarbeite dieses Dokument", "Lade Datei in Knowledge Graph", "Upload in Rowboat"
+  Payload: {{"file_path": "...", "text": "...", "title": "..."}}
+- roarboot.graph.explore: Knowledge Graph Verbindungen eines Themas erkunden
+  → "Zeig mir die Verbindungen von X", "Graph fuer X", "Wie haengt X zusammen?"
+  Payload: {{"subject": "..."}}
+- roarboot.tools.list: Verfuegbare Rowboat-Tools und Integrationen auflisten
+  → "Welche Tools hat Rowboat?", "Rowboat Integrationen", "Was kann Rowboat?"
 - roarboot.docker.start: Rowboat Docker-Container starten
   → "Starte Roarboot", "Starte Rowboat Docker", "Roarboot hochfahren"
 - roarboot.docker.stop: Rowboat Docker-Container stoppen
@@ -425,6 +454,28 @@ Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Team
 - minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
 - Einzelne Actions (research.web, idea.create, etc.): Aufgabe passt in EINEN Space → "Recherchiere X" oder "Erstelle eine Idee"
 Nur wenn der User explizit 2+ verschiedene Domains in EINER Anfrage kombiniert, wird minibook.collaborate verwendet.
+
+### 10. BLAUE ROSE (Aufgaben-Empfehlung)
+NUR fuer explizite Empfehlungs-Anfragen. Die Blaue Rose beobachtet passiv — der User muss aktiv fragen.
+
+**Schluesselwoerter:** was soll ich, empfiehl, vorschlag, blaue rose, flowzen
+
+**Event-Types:**
+- rose.recommend: Aufgabe basierend auf Tageszeit empfehlen (NUR wenn User EXPLIZIT fragt!)
+  → "Was soll ich jetzt machen?", "Empfiehl mir eine Aufgabe"
+  → "Was passt gerade am besten?", "Blaue Rose"
+  → "Gib mir einen Vorschlag", "Was waere jetzt sinnvoll?"
+  → payload: {"mood": "..."} (optional)
+- rose.status: Blaue Rose Status
+  → "Blaue Rose Status", "Flowzen Status"
+
+### WICHTIGE UNTERSCHEIDUNG - BLAUE ROSE vs ANDERE
+- rose.recommend: User fragt EXPLIZIT nach Empfehlung → "Was soll ich machen?"
+- schedule.list: Zeigt geplante Termine → "Was steht an?" (NICHT rose!)
+- idea.list: Zeigt vorhandene Ideen → "Zeig meine Ideen" (NICHT rose!)
+- conversation.greeting: Begruessung → "Hallo" (NICHT rose!)
+- conversation.help: Hilfe → "Was kannst du?" (NICHT rose!)
+NUR wenn der User eine EMPFEHLUNG oder VORSCHLAG will → rose.recommend
 
 ### KONVERSATION
 
@@ -612,7 +663,7 @@ class IntentClassifier:
             model: Model override (default: Claude Haiku for speed)
         """
         self._client = model_client
-        self._model = model or os.getenv("CLASSIFIER_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("classifier")
         self._own_client = None
 
     def _post_process_classification(self, result: Dict[str, Any], user_input: str) -> Dict[str, Any]:
@@ -691,8 +742,9 @@ class IntentClassifier:
                 logger.debug(f"Post-process: idea.create -> desktop.type for '{user_input[:30]}...'")
 
         # Rule 4: "druecke enter/escape/tab" -> desktop.press_key
-        if intent == "conversation.unknown" and "drück" in text_lower or "drueck" in text_lower:
-            key_names = ["enter", "escape", "tab", "strg", "ctrl", "alt", "shift", "space", "leertaste"]
+        if ("drück" in text_lower or "drueck" in text_lower or "press" in text_lower):
+            key_names = ["enter", "escape", "tab", "strg", "ctrl", "alt", "shift", "space", "leertaste",
+                         "backspace", "delete", "entfernen", "f1", "f2", "f3", "f4", "f5"]
             for key in key_names:
                 if key in text_lower:
                     result["event_type"] = "desktop.press_key"
@@ -723,6 +775,45 @@ class IntentClassifier:
                 result["event_type"] = "openclaw.status"
                 result["payload"] = {}
                 logger.debug(f"Post-process: -> openclaw.status")
+
+        # Rule 6c: Space-specific status commands -> space.status
+        # Fixes: "N8n Status", "Rowboat Status", "Schedule Status" misclassified as conversation.listening
+        if intent in ["conversation.listening", "conversation.unknown"]:
+            status_map = {
+                "n8n": "n8n.status", "n8n-status": "n8n.status",
+                "rowboat": "roarboot.status", "roarboot": "roarboot.status",
+                "schedule": "schedule.status", "zeitplan": "schedule.status",
+                "minibook": "minibook.status",
+                "agentfarm": "agentfarm.status", "agent farm": "agentfarm.status",
+                "code": "code.status", "coding": "code.status",
+            }
+            if "status" in text_lower:
+                for keyword, event in status_map.items():
+                    if keyword in text_lower:
+                        result["event_type"] = event
+                        result["payload"] = {}
+                        self._applied_rules.append(f"rule_6c_status_{keyword}")
+                        logger.debug(f"Post-process: -> {event} (status keyword)")
+                        break
+
+            # "Was steht heute an?" / "Was steht an?" -> schedule.status
+            schedule_phrases = ["was steht an", "was steht heute", "heutige termine", "today's schedule"]
+            if any(p in text_lower for p in schedule_phrases):
+                result["event_type"] = "schedule.status"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6c_schedule_today")
+                logger.debug("Post-process: -> schedule.status (today query)")
+
+        # Rule 6d: N8n-specific commands missed by LLM
+        if intent in ["conversation.unknown", "conversation.listening"] and "workflow" in text_lower:
+            if any(kw in text_lower for kw in ["ausführ", "ausfuehr", "fuehr", "execute", "run", "starte"]):
+                result["event_type"] = "n8n.execute"
+                result["payload"] = {"description": user_input}
+                self._applied_rules.append("rule_6d_n8n_execute")
+            elif any(kw in text_lower for kw in ["beschreib", "describe", "detail", "zeig details"]):
+                result["event_type"] = "n8n.describe"
+                result["payload"] = {"description": user_input}
+                self._applied_rules.append("rule_6d_n8n_describe")
 
         # Rule 7: evaluation.clarify - "ich meinte" / "eigentlich wollte" - MUST NOT execute action
         clarify_keywords = ["meinte", "eigentlich wollte", "ich wollte eigentlich", "nicht das"]
@@ -1078,44 +1169,48 @@ class IntentClassifier:
                     logger.debug(f"Post-process: {intent} -> idea.expand (expand word detected)")
 
         # =====================================================================
-        # Rule 25: Strukturierte Formatierung -> idea.format
-        # Fixes: "Formatiere die Ideen in Aktionslisten" -> idea.format
-        # Enables LLM-driven structured content conversion
+        # Rule 25: Strukturierte Formatierung -> idea.format_* Sub-Types
+        # Maps format requests to specific event types for the format dispatcher
         # =====================================================================
-        if intent in ["conversation.unknown", "idea.list", "idea.expand"]:
-            format_keywords = ["formatiere", "formatiert", "konvertiere", "wandele", "ueberfuehre", "ueberführen"]
-            structure_keywords = ["aktionsliste", "action list", "tabelle", "table", "hierarchie", "hierarchy",
-                                  "vor/nachteile", "pros/cons", "technische specs", "technical specs"]
+        format_intents = {"idea.format", "idea.format_note", "idea.format_action_list",
+                         "idea.format_pros_cons", "idea.format_hierarchy", "idea.format_specs",
+                         "idea.convert_format", "idea.list_formats"}
+        if intent in ["conversation.unknown", "idea.list", "idea.expand", "idea.format"] or intent in format_intents:
+            format_keywords = ["formatiere", "formatiert", "konvertiere", "wandele", "format"]
+            has_format = any(kw in text_lower for kw in format_keywords)
 
-            has_format_keyword = any(kw in text_lower for kw in format_keywords)
-            has_structure_keyword = any(kw in text_lower for kw in structure_keywords)
+            if has_format or intent in format_intents:
+                # Determine specific format sub-type from text
+                if "notiz" in text_lower or "note" in text_lower:
+                    result["event_type"] = "idea.format_note"
+                elif "aktionsliste" in text_lower or "action" in text_lower or "to-do" in text_lower or "todo" in text_lower:
+                    result["event_type"] = "idea.format_action_list"
+                elif "pro" in text_lower and ("contra" in text_lower or "con" in text_lower) or "vor" in text_lower and "nachteil" in text_lower:
+                    result["event_type"] = "idea.format_pros_cons"
+                elif "hierarchie" in text_lower or "hierarchy" in text_lower or "baum" in text_lower:
+                    result["event_type"] = "idea.format_hierarchy"
+                elif "spec" in text_lower or "spezifikation" in text_lower or "requirement" in text_lower:
+                    result["event_type"] = "idea.format_specs"
+                elif "konvertiere" in text_lower or "wandle" in text_lower or "convert" in text_lower or "aendere" in text_lower:
+                    result["event_type"] = "idea.convert_format"
+                elif "welche formate" in text_lower or "formatoptionen" in text_lower or "list format" in text_lower:
+                    result["event_type"] = "idea.list_formats"
+                elif intent not in format_intents:
+                    # Generic format — keep idea.format_action_list as default
+                    result["event_type"] = "idea.format_action_list"
 
-            if has_format_keyword or has_structure_keyword:
-                result["event_type"] = "idea.format"
-                # Extract target format from text
-                format_type = "action_list"  # default
-                if "aktionsliste" in text_lower or "action list" in text_lower:
-                    format_type = "action_list"
-                elif "tabelle" in text_lower or "table" in text_lower:
-                    if "vor" in text_lower and "nachteil" in text_lower:
-                        format_type = "pros_cons_table"
-                    else:
-                        format_type = "comparison_table"
-                elif "hierarchie" in text_lower or "hierarchy" in text_lower:
-                    format_type = "hierarchy"
-                elif "technische" in text_lower and "specs" in text_lower:
-                    format_type = "technical_specs"
-
-                result["payload"] = {"format_type": format_type, "original_request": user_input}
-                self._applied_rules.append("rule_25_structured_formatting")
-                logger.debug(f"Post-process: -> idea.format ({format_type})")
+                result["payload"] = result.get("payload", {})
+                result["payload"]["original_request"] = user_input
+                self._applied_rules.append("rule_25_format_subtype")
+                logger.debug(f"Post-process: -> {result['event_type']}")
 
         # =====================================================================
         # Rule 25b: Format Revert -> idea.format_revert
         # "Mach das rueckgaengig", "Revert", "Undo format"
         # =====================================================================
         revert_keywords = ["rueckgaengig", "rückgängig", "revert", "undo", "zurueck zum",
-                           "vorheriges format", "previous format", "undo format"]
+                           "vorheriges format", "previous format", "undo format",
+                           "format zurück", "format zurueck", "zurücksetzen", "zuruecksetzen"]
         if any(kw in text_lower for kw in revert_keywords):
             result["event_type"] = "idea.format_revert"
             result["payload"] = {}
@@ -1337,15 +1432,8 @@ class IntentClassifier:
         """
         if self._own_client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._own_client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                from llm_config import get_client
+                self._own_client = get_client("classifier")
                 logger.info(f"IntentClassifier using {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create classifier client: {e}")
@@ -1378,13 +1466,15 @@ class IntentClassifier:
             except Exception:
                 pass  # Plugin system not available
 
+            # GPT-5+ uses max_completion_tokens, older models use max_tokens
+            token_param = "max_completion_tokens" if "gpt-5" in self._model or "o1" in self._model else "max_tokens"
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,  # Low temperature for consistent classification
-                max_tokens=500,
+                temperature=0.1,
+                **{token_param: 500},
             )
 
             content = response.choices[0].message.content.strip()
