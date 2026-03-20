@@ -871,3 +871,88 @@ class ScheduledTask:
             updated_at=parse_dt(data.get("updated_at")),
             metadata=metadata,
         )
+
+
+# --- Flowzen (Blaue Rose) --- Passive Circadian Intelligence Layer --------
+
+
+@dataclass
+class FlowzenCheckin:
+    """
+    A mood/energy state inferred by the Flowzen activity tracker.
+
+    Mood values: 'energized', 'focused', 'calm', 'tired', 'anxious'
+    Time windows: 'early_morning', 'morning', 'midday', 'afternoon', 'evening', 'night'
+    """
+    id: str
+    mood: str
+    energy: int                                            # 1-10 (inferred)
+    time_window: str = ""
+    hour: int = 0
+    source: str = "inferred"                               # 'inferred' or 'explicit'
+    notes: str = ""
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "mood": self.mood,
+            "energy": self.energy,
+            "time_window": self.time_window,
+            "hour": self.hour,
+            "source": self.source,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenCheckin":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+        return cls(
+            id=data["id"],
+            mood=data["mood"],
+            energy=data.get("energy", 5),
+            time_window=data.get("time_window", ""),
+            hour=data.get("hour", 0),
+            source=data.get("source", "inferred"),
+            notes=data.get("notes", ""),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+        )
+
+
+@dataclass
+class FlowzenActivity:
+    """
+    A logged intent event observed by the Blaue Rose activity tracker.
+
+    Used to detect inactivity gaps and infer mood from usage patterns.
+    """
+    id: str
+    event_type: str                                        # e.g. "idea.create"
+    time_window: str = ""
+    hour: int = 0
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "event_type": self.event_type,
+            "time_window": self.time_window,
+            "hour": self.hour,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenActivity":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+        return cls(
+            id=data["id"],
+            event_type=data.get("event_type", ""),
+            time_window=data.get("time_window", ""),
+            hour=data.get("hour", 0),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+        )
