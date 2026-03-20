@@ -138,6 +138,15 @@ def get_agentfarm_agent():
     return _get()
 
 
+def get_flowzen_agent():
+    """Get FlowzenAgent singleton (lazy import)."""
+    agent = get_agent("flowzen")
+    if agent:
+        return agent
+    from spaces.flowzen.agents.flowzen_agent import get_flowzen_agent as _get
+    return _get()
+
+
 # For backward compatibility, also provide the classes via __getattr__
 def __getattr__(name):
     """Lazy load agent classes to avoid circular imports."""
@@ -174,6 +183,9 @@ def __getattr__(name):
     elif name == "AgentFarmBackendAgent":
         from spaces.autogen.agents.agentfarm_agent import AgentFarmBackendAgent
         return AgentFarmBackendAgent
+    elif name == "FlowzenAgent":
+        from spaces.flowzen.agents.flowzen_agent import FlowzenAgent
+        return FlowzenAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -202,4 +214,6 @@ __all__ = [
     "get_video_agent",
     "AgentFarmBackendAgent",
     "get_agentfarm_agent",
+    "FlowzenAgent",
+    "get_flowzen_agent",
 ]
