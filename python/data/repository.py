@@ -22,6 +22,7 @@ from .conversation_repository import ConversationRepository
 from .shuttles_repository import ShuttlesRepository
 from .mermaid_repository import MermaidDiagramsRepository
 from .schedule_repository import ScheduledTaskRepository
+from .flowzen_repository import FlowzenRepository
 
 __all__ = [
     "generate_id",
@@ -34,5 +35,6 @@ __all__ = [
     "ShuttlesRepository",
     "MermaidDiagramsRepository",
     "ScheduledTaskRepository",
+    "FlowzenRepository",
     "promote_idea_to_project",
 ]
