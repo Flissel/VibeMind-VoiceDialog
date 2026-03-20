@@ -27,7 +27,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 17
+    SCHEMA_VERSION = 18
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -282,6 +282,30 @@ class Database:
     CREATE INDEX IF NOT EXISTS idx_sched_status ON scheduled_tasks(status);
     CREATE INDEX IF NOT EXISTS idx_sched_next_run ON scheduled_tasks(next_run_at);
     CREATE INDEX IF NOT EXISTS idx_sched_created ON scheduled_tasks(created_at DESC);
+
+    -- Flowzen: mood/energy state (inferred by activity tracker)
+    CREATE TABLE IF NOT EXISTS flowzen_checkins (
+        id           TEXT PRIMARY KEY,
+        mood         TEXT NOT NULL,
+        energy       INTEGER NOT NULL DEFAULT 5,
+        time_window  TEXT DEFAULT '',
+        hour         INTEGER DEFAULT 0,
+        source       TEXT DEFAULT 'inferred',
+        notes        TEXT DEFAULT '',
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Flowzen: observed intent activity log
+    CREATE TABLE IF NOT EXISTS flowzen_activity (
+        id           TEXT PRIMARY KEY,
+        event_type   TEXT NOT NULL,
+        time_window  TEXT DEFAULT '',
+        hour         INTEGER DEFAULT 0,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_flowzen_checkins_created ON flowzen_checkins(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -291,7 +315,7 @@ class Database:
         Args:
             db_path: Path to SQLite database file. Defaults to vibemind.db in python/ dir.
         """
-        self.db_path = db_path or DEFAULT_DB_PATH
+        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self._connection: Optional[sqlite3.Connection] = None
         self._ensure_database()
 
@@ -685,6 +709,42 @@ class Database:
             except Exception:
                 pass  # Tables may already exist
 
+        # Migration 17 -> 18: Flowzen circadian tables
+        if from_version < 18:
+            logger.info("Migration v18: Flowzen circadian tables")
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS flowzen_checkins (
+                        id           TEXT PRIMARY KEY,
+                        mood         TEXT NOT NULL,
+                        energy       INTEGER NOT NULL DEFAULT 5,
+                        time_window  TEXT DEFAULT '',
+                        hour         INTEGER DEFAULT 0,
+                        source       TEXT DEFAULT 'inferred',
+                        notes        TEXT DEFAULT '',
+                        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS flowzen_activity (
+                        id           TEXT PRIMARY KEY,
+                        event_type   TEXT NOT NULL,
+                        time_window  TEXT DEFAULT '',
+                        hour         INTEGER DEFAULT 0,
+                        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_checkins_created ON flowzen_checkins(created_at DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC)")
+            except Exception:
+                pass
+
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))
 
@@ -734,6 +794,12 @@ class Database:
         """Get current schema version"""
         row = self.fetch_one("SELECT version FROM schema_version LIMIT 1")
         return row[0] if row else 0
+
+    def initialize(self):
+        """Explicit initialisation hook (schema already applied in __init__)."""
+        # _ensure_database() is called from __init__; this is a no-op alias
+        # kept for callers that want an explicit init step (e.g. tests).
+        pass
 
     def close(self):
         """Close database connection if open"""
