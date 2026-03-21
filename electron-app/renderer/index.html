@@ -1794,6 +1794,17 @@
                     window._rowboatUpdateInfo = message;
                     break;
 
+                // ============================================
+                // FLOWZEN (BLAUE ROSE) MESSAGES
+                // ============================================
+
+                case 'flowzen_rose_state':
+                    if (window.multiverseApp && window.multiverseApp.spaces.flowzen) {
+                        window.multiverseApp.spaces.flowzen.roseState = message.state || 'idle';
+                        console.log('[Flowzen] Rose state:', message.state);
+                    }
+                    break;
+
                 // Rowboat update auto-applied
                 case 'rowboat_update_applied':
                     console.log(`[UI] Rowboat auto-updated: ${message.old_version} -> ${message.new_version}`);
