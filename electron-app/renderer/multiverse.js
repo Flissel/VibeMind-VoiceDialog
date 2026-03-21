@@ -113,6 +113,14 @@ class MultiverseApp {
                 name: 'Video Studio',
                 agent: { name: 'Director', slug: 'video', role: 'Video Producer' },
                 color: 0xee4466
+            },
+            flowzen: {
+                objects: [],
+                position: new THREE.Vector3(0, 4, -8),
+                icon: '\u{1F339}',
+                name: 'Blaue Rose',
+                agent: { name: 'Flowzen', slug: 'flowzen', role: 'Circadian Intelligence' },
+                color: 0x3366cc
             }
         };
         
@@ -332,6 +340,7 @@ class MultiverseApp {
         this.createAgentFarmSpace();
         this.createVideoSpace();
         this.createBrainSpace();
+        this.createFlowzenSpace();
         this.createEnvironment();
         this.createConnectionPaths();
 
@@ -1724,6 +1733,138 @@ class MultiverseApp {
         console.log('[Multiverse] Brain Space (Gehirn) created');
     }
 
+    createFlowzenSpace() {
+        const group = new THREE.Group();
+        const pos = this.spaces.flowzen.position;
+        group.position.copy(pos);
+
+        // --- Glass Dome ---
+        const domeGeo = new THREE.SphereGeometry(1.8, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeMat = new THREE.MeshPhysicalMaterial({
+            color: 0xaaccff,
+            metalness: 0.0,
+            roughness: 0.05,
+            transmission: 0.92,
+            transparent: true,
+            opacity: 0.25,
+            thickness: 0.3,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.1,
+            side: THREE.DoubleSide,
+        });
+        const dome = new THREE.Mesh(domeGeo, domeMat);
+        dome.position.set(0, 0, 0);
+        group.add(dome);
+
+        // --- Base Plate ---
+        const baseGeo = new THREE.CylinderGeometry(1.8, 1.9, 0.15, 32);
+        const baseMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            metalness: 0.8,
+            roughness: 0.3,
+        });
+        const basePlate = new THREE.Mesh(baseGeo, baseMat);
+        basePlate.position.set(0, -0.075, 0);
+        group.add(basePlate);
+
+        // --- Rose Stem ---
+        const stemCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0.1, 0),
+            new THREE.Vector3(0.05, 0.5, 0.02),
+            new THREE.Vector3(-0.03, 0.9, -0.01),
+            new THREE.Vector3(0, 1.2, 0),
+        ]);
+        const stemGeo = new THREE.TubeGeometry(stemCurve, 12, 0.03, 6, false);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.7 });
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        group.add(stem);
+
+        // --- Rose Bloom (layered petals) ---
+        const petalColor = 0x2255bb;
+        const bloomGroup = new THREE.Group();
+        bloomGroup.position.set(0, 1.25, 0);
+
+        // Center bud
+        const budGeo = new THREE.SphereGeometry(0.08, 12, 12);
+        const budMat = new THREE.MeshStandardMaterial({
+            color: 0x1144aa,
+            emissive: 0x0033aa,
+            emissiveIntensity: 0.3,
+        });
+        bloomGroup.add(new THREE.Mesh(budGeo, budMat));
+
+        // 3 layers of petals (inner, mid, outer)
+        const petalLayers = [
+            { count: 5, radius: 0.12, size: 0.1, tilt: 0.4 },
+            { count: 7, radius: 0.22, size: 0.14, tilt: 0.7 },
+            { count: 9, radius: 0.32, size: 0.16, tilt: 1.0 },
+        ];
+
+        petalLayers.forEach((layer) => {
+            for (let i = 0; i < layer.count; i++) {
+                const angle = (i / layer.count) * Math.PI * 2;
+                const petalGeo = new THREE.SphereGeometry(layer.size, 8, 6);
+                petalGeo.scale(1, 0.3, 1.5);
+                const petalMat = new THREE.MeshStandardMaterial({
+                    color: petalColor,
+                    emissive: 0x1133aa,
+                    emissiveIntensity: 0.2,
+                    roughness: 0.4,
+                    side: THREE.DoubleSide,
+                });
+                const petal = new THREE.Mesh(petalGeo, petalMat);
+                petal.position.set(
+                    Math.cos(angle) * layer.radius,
+                    -layer.tilt * 0.1,
+                    Math.sin(angle) * layer.radius
+                );
+                petal.rotation.set(layer.tilt, angle, 0);
+                petal.userData.isPetal = true;
+                bloomGroup.add(petal);
+            }
+        });
+
+        group.add(bloomGroup);
+
+        // --- Petal Particles (falling petals effect, initially hidden) ---
+        const particleCount = 15;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+            particlePositions[i * 3] = (Math.random() - 0.5) * 2;
+            particlePositions[i * 3 + 1] = Math.random() * 2;
+            particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+        }
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        const particleMat = new THREE.PointsMaterial({
+            color: 0x4477cc,
+            size: 0.04,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+        });
+        const particles = new THREE.Points(particleGeo, particleMat);
+        group.add(particles);
+
+        // --- Soft Glow Light ---
+        const glowLight = new THREE.PointLight(0x3366cc, 0.5, 4);
+        glowLight.position.set(0, 1.2, 0);
+        group.add(glowLight);
+
+        // Store references for animation
+        this.spaces.flowzen.group = group;
+        this.spaces.flowzen.objects = [dome, bloomGroup, particles, glowLight, basePlate];
+        this.spaces.flowzen.dome = dome;
+        this.spaces.flowzen.bloom = bloomGroup;
+        this.spaces.flowzen.particles = particles;
+        this.spaces.flowzen.glowLight = glowLight;
+        this.spaces.flowzen.roseState = 'idle';
+
+        this.scene.add(group);
+
+        console.log('[Multiverse] Flowzen Space (Blaue Rose) created');
+    }
+
     // ========================================================================
     // ENVIRONMENT
     // ========================================================================
@@ -2572,6 +2713,48 @@ class MultiverseApp {
             this.spaces.roarboot.ripple.material.opacity = 0.1 + Math.sin(elapsed * 0.6) * 0.05;
         }
 
+        // Animate Flowzen Rose (glow pulse + state-dependent effects)
+        if (this.spaces.flowzen && this.spaces.flowzen.bloom) {
+            const fz = this.spaces.flowzen;
+            const roseState = fz.roseState || 'idle';
+
+            // Bloom gentle rotation
+            fz.bloom.rotation.y += 0.003;
+
+            // State-dependent effects
+            if (roseState === 'idle') {
+                // Soft blue glow pulse
+                fz.glowLight.intensity = 0.4 + Math.sin(elapsed * 0.8) * 0.15;
+                fz.dome.material.opacity = 0.2 + Math.sin(elapsed * 0.5) * 0.05;
+            } else if (roseState === 'active') {
+                // Brighter pulse when receiving intents
+                fz.glowLight.intensity = 0.7 + Math.sin(elapsed * 2) * 0.2;
+            } else if (roseState === 'recommending') {
+                // Bright glow, particles rise
+                fz.glowLight.intensity = 1.2 + Math.sin(elapsed * 3) * 0.3;
+                fz.glowLight.color.setHex(0x55aaff);
+                fz.particles.material.opacity = 0.6;
+                const positions = fz.particles.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 1] += 0.005;
+                    if (positions[i + 1] > 2.5) positions[i + 1] = 0;
+                }
+                fz.particles.geometry.attributes.position.needsUpdate = true;
+            } else if (roseState === 'rest') {
+                // Dim, petals fall slowly
+                fz.glowLight.intensity = 0.15 + Math.sin(elapsed * 0.3) * 0.05;
+                fz.dome.material.opacity = 0.35;
+                fz.particles.material.opacity = 0.4;
+                const positions = fz.particles.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 1] -= 0.003;
+                    positions[i] += Math.sin(elapsed + i) * 0.001;
+                    if (positions[i + 1] < 0) positions[i + 1] = 2;
+                }
+                fz.particles.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+
         // Update requirement shuttles
         if (this.shuttleManager) {
             this.shuttleManager.update(delta, elapsed);
@@ -2793,16 +2976,74 @@ class MultiverseApp {
             return;
         }
 
-        // Create fullscreen dashboard (no custom header - VibeMind's nav tabs handle navigation)
+        // Create fullscreen dashboard: eyeTerm top + desktop streams below
         panel = document.createElement('div');
         panel.id = 'vapi-panel';
-        panel.innerHTML = `
-            <div id="vapi-loading">
-                <div class="spinner"></div>
-                <span>Connecting to Automation backend...</span>
-            </div>
-            <iframe id="vapi-frame" style="display:none;" allow="microphone; autoplay" allowfullscreen></iframe>
-        `;
+
+        // --- eyeTerm camera strip (top, fixed 25% height) ---
+        const eyetermStrip = document.createElement('div');
+        eyetermStrip.id = 'eyeterm-strip';
+
+        // Placeholder shown when MJPEG stream is offline
+        const eyetermPlaceholder = document.createElement('div');
+        eyetermPlaceholder.id = 'eyeterm-placeholder';
+        eyetermPlaceholder.textContent = 'eyeTerm — waiting for camera...';
+        eyetermStrip.appendChild(eyetermPlaceholder);
+
+        // MJPEG stream image (hidden until connected)
+        const eyetermImg = document.createElement('img');
+        eyetermImg.id = 'eyeterm-feed';
+        eyetermImg.alt = 'eyeTerm';
+        eyetermImg.style.display = 'none';
+        eyetermImg.addEventListener('load', () => {
+            eyetermImg.style.display = '';
+            eyetermPlaceholder.style.display = 'none';
+        });
+        eyetermImg.addEventListener('error', () => {
+            eyetermImg.style.display = 'none';
+            eyetermPlaceholder.style.display = '';
+            // Retry every 3s with cache-buster
+            setTimeout(() => {
+                eyetermImg.src = 'http://127.0.0.1:8099/stream?t=' + Date.now();
+            }, 3000);
+        });
+        // Start trying to connect
+        eyetermImg.src = 'http://127.0.0.1:8099/stream';
+        eyetermStrip.appendChild(eyetermImg);
+
+        const eyetermLabel = document.createElement('div');
+        eyetermLabel.id = 'eyeterm-strip-label';
+        eyetermLabel.textContent = 'eyeTerm';
+        eyetermStrip.appendChild(eyetermLabel);
+        panel.appendChild(eyetermStrip);
+
+        // --- Desktop streams area (fills remaining space) ---
+        const streamsArea = document.createElement('div');
+        streamsArea.id = 'desktop-streams-area';
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'vapi-loading';
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+        loadingDiv.appendChild(spinner);
+        const loadingText = document.createElement('span');
+        loadingText.textContent = 'Connecting to Automation backend...';
+        loadingDiv.appendChild(loadingText);
+        streamsArea.appendChild(loadingDiv);
+
+        // Desktop stream via host-frame polling (no iframe needed)
+        const desktopImg = document.createElement('img');
+        desktopImg.id = 'desktop-stream-img';
+        desktopImg.alt = 'Desktop Stream';
+        desktopImg.style.display = 'none';
+        streamsArea.appendChild(desktopImg);
+
+        const clickCanvas = document.createElement('canvas');
+        clickCanvas.id = 'click-overlay';
+        clickCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10';
+        streamsArea.appendChild(clickCanvas);
+        panel.appendChild(streamsArea);
+
         document.body.appendChild(panel);
 
         // Show with fade-in
@@ -2811,37 +3052,99 @@ class MultiverseApp {
             requestAnimationFrame(() => panel.classList.add('fade-in'));
         });
 
-        // Poll backend health, then load iframe
-        let attempts = 0;
-        const maxAttempts = 20;
-        const pollHealth = () => {
-            attempts++;
-            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
-                .then(r => {
+        // Desktop stream: poll host-frame endpoint for screenshots
+        let _desktopStreamActive = false;
+        let _desktopFps = 0;
+        const startDesktopStream = () => {
+            _desktopStreamActive = true;
+            const imgEl = document.getElementById('desktop-stream-img');
+            const loadEl = document.getElementById('vapi-loading');
+            let lastFrameTime = 0;
+
+            const fetchFrame = async () => {
+                if (!_desktopStreamActive) return;
+                try {
+                    const r = await fetch('http://localhost:8007/api/desktop/screenshot', {
+                        signal: AbortSignal.timeout(3000),
+                    });
                     if (r.ok) {
-                        const loadingEl = document.getElementById('vapi-loading');
-                        const frameEl = document.getElementById('vapi-frame');
-                        if (loadingEl) loadingEl.style.display = 'none';
-                        if (frameEl) {
-                            frameEl.src = 'http://localhost:8007/voice/dashboard';
-                            frameEl.style.display = 'block';
+                        const data = await r.json();
+                        const frameData = data.screenshot?.data || data.frame;
+                        if (frameData && imgEl) {
+                            imgEl.src = 'data:image/jpeg;base64,' + frameData;
+                            imgEl.style.display = '';
+                            if (loadEl) loadEl.style.display = 'none';
+                            // FPS counter
+                            const now = performance.now();
+                            if (lastFrameTime) _desktopFps = Math.round(1000 / (now - lastFrameTime));
+                            lastFrameTime = now;
                         }
-                    } else if (attempts < maxAttempts) {
-                        setTimeout(pollHealth, 3000);
                     }
-                })
+                } catch (e) {
+                    // Backend not reachable — retry silently
+                }
+                // Next frame: target ~7 fps
+                if (_desktopStreamActive) setTimeout(fetchFrame, 140);
+            };
+            // Start after health check
+            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                .then(r => { if (r.ok || r.status === 503) fetchFrame(); })
                 .catch(() => {
-                    if (attempts < maxAttempts) {
-                        setTimeout(pollHealth, 3000);
-                    } else {
-                        const loadingEl = document.getElementById('vapi-loading');
-                        if (loadingEl) {
-                            loadingEl.innerHTML = '<span>Backend not reachable. Check Automation_ui.</span>';
-                        }
-                    }
+                    // Retry health check every 3s
+                    const retryHealth = setInterval(() => {
+                        fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                            .then(r => { if (r.ok || r.status === 503) { clearInterval(retryHealth); fetchFrame(); } })
+                            .catch(() => {});
+                    }, 3000);
                 });
         };
-        setTimeout(pollHealth, 2000);
+        setTimeout(startDesktopStream, 1000);
+
+        // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on canvas
+        if (window.vibemind && window.vibemind.onPythonMessage) {
+            window.vibemind.onPythonMessage((msg) => {
+                if (msg.type !== 'eyeterm_click_dots') return;
+                const canvas = document.getElementById('click-overlay');
+                if (!canvas) return;
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const sw = msg.screen_w || 1920;
+                const sh = msg.screen_h || 1080;
+                for (const d of msg.dots) {
+                    const alpha = Math.max(0.15, 1.0 - d.age / 10.0);
+                    const cx = (d.cx / sw) * canvas.width;
+                    const cy = (d.cy / sh) * canvas.height;
+                    const px = (d.px / sw) * canvas.width;
+                    const py = (d.py / sh) * canvas.height;
+                    // Error line (yellow)
+                    ctx.strokeStyle = `rgba(255,200,0,${alpha})`;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(cx, cy);
+                    ctx.stroke();
+                    // Predicted (red)
+                    ctx.fillStyle = `rgba(255,60,60,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Actual click (green)
+                    ctx.fillStyle = `rgba(0,255,100,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Residual label on recent dots
+                    if (d.age < 5) {
+                        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+                        ctx.font = '11px monospace';
+                        ctx.fillText(d.r + 'px', cx + 9, cy - 3);
+                    }
+                }
+            });
+        }
     }
 
     /**
