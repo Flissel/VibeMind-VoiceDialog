@@ -1859,13 +1859,22 @@ class MultiverseApp {
         glowLight.position.set(0, 1.2, 0);
         group.add(glowLight);
 
+        // Invisible click target (larger sphere so the rose is easy to click)
+        const clickTargetGeo = new THREE.SphereGeometry(2.5, 16, 16);
+        const clickTargetMat = new THREE.MeshBasicMaterial({ visible: false });
+        const clickTarget = new THREE.Mesh(clickTargetGeo, clickTargetMat);
+        clickTarget.position.set(0, 0.8, 0);
+        clickTarget.userData = { type: 'flowzen', title: 'Blaue Rose', clickTarget: true };
+        group.add(clickTarget);
+
         // Store references for animation
         this.spaces.flowzen.group = group;
-        this.spaces.flowzen.objects = [dome, bloomGroup, particles, glowLight, basePlate];
+        this.spaces.flowzen.objects = [dome, bloomGroup, particles, glowLight, basePlate, clickTarget];
         this.spaces.flowzen.dome = dome;
         this.spaces.flowzen.bloom = bloomGroup;
         this.spaces.flowzen.particles = particles;
         this.spaces.flowzen.glowLight = glowLight;
+        this.spaces.flowzen.clickTarget = clickTarget;
         this.spaces.flowzen.roseState = 'idle';
 
         this.scene.add(group);
@@ -2327,6 +2336,15 @@ class MultiverseApp {
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
 
+        // Failsafe: reset isNavigating after 3s if animation callback never fires
+        setTimeout(() => {
+            if (this.isNavigating) {
+                console.warn('[Multiverse] Navigation failsafe triggered for:', targetSpace);
+                this.isNavigating = false;
+                this.currentSpace = targetSpace;
+            }
+        }, 3000);
+
         // Apply space theme to CSS custom properties
         const SPACE_ACCENT_RGB = {
             ideas:     '68,136,255',
@@ -2394,6 +2412,14 @@ class MultiverseApp {
             this._exitFlowzenRose();
         }
 
+        // Hide Flowzen Diary BrowserView when leaving flowzen space
+        if (this.currentSpace === 'flowzen' && targetSpace !== 'flowzen') {
+            if (window.vibemind && window.vibemind.hideFlowzen) {
+                window.vibemind.hideFlowzen();
+                console.log('[Multiverse] Hiding Flowzen Diary');
+            }
+        }
+
         // Hide Brain Dashboard BrowserView when leaving thebrain space
         if (this.currentSpace === 'thebrain' && targetSpace !== 'thebrain') {
             if (window.vibemind && window.vibemind.hideBrain) {
@@ -2445,8 +2471,9 @@ class MultiverseApp {
         // Animate camera
         this.animateCameraTo(targetPos, space.position, () => {
             this.currentSpace = targetSpace;
-            this.currentAgent = space.agent.slug;
+            this.currentAgent = space.agent ? space.agent.slug : targetSpace;
             this.isNavigating = false;
+            console.log('[Multiverse] Arrived at:', targetSpace);
 
             // Show dashboard when entering projects space
             if (targetSpace === 'projects') {
@@ -2512,18 +2539,18 @@ class MultiverseApp {
                 }
             }
 
-            // Show/hide Flowzen panel + load diary on enter
+            // Show Flowzen Diary BrowserView when entering flowzen space
+            if (targetSpace === 'flowzen') {
+                if (window.vibemind && window.vibemind.showFlowzen) {
+                    window.vibemind.showFlowzen();
+                    console.log('[Multiverse] Showing Flowzen Diary');
+                }
+            }
+
+            // Hide old DOM flowzen panel (superseded by BrowserView)
             const fzPanel = document.getElementById('flowzen-panel');
             if (fzPanel) {
-                if (targetSpace === 'flowzen') {
-                    fzPanel.classList.remove('hidden');
-                    if (window.vibemind && window.vibemind.sendToPython) {
-                        window.vibemind.sendToPython({ type: 'flowzen_status' });
-                        window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
-                    }
-                } else {
-                    fzPanel.classList.add('hidden');
-                }
+                fzPanel.classList.add('hidden');
             }
 
             // Notify IPC
@@ -3239,11 +3266,9 @@ class MultiverseApp {
 
         // Check Flowzen (Blaue Rose) click — navigate into Flowzen space
         if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
-            const roseObjects = this.spaces.flowzen.group.children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const roseHit = raycaster.intersectObjects(roseObjects);
+            const roseHit = raycaster.intersectObjects(this.spaces.flowzen.group.children, true);
             if (roseHit.length > 0) {
+                console.log('[Multiverse] Rose clicked! Navigating to flowzen');
                 this.navigateToSpace('flowzen');
                 return;
             }
@@ -3439,16 +3464,103 @@ class MultiverseApp {
         loadingDiv.appendChild(loadingText);
         streamsArea.appendChild(loadingDiv);
 
-        // Desktop stream via host-frame polling (no iframe needed)
-        const desktopImg = document.createElement('img');
-        desktopImg.id = 'desktop-stream-img';
-        desktopImg.alt = 'Desktop Stream';
-        desktopImg.style.display = 'none';
-        streamsArea.appendChild(desktopImg);
+        // Dual-monitor stream container (side by side)
+        const monitorGrid = document.createElement('div');
+        monitorGrid.id = 'monitor-grid';
+        monitorGrid.style.cssText = 'display:flex;position:absolute;inset:0;gap:4px;padding:4px';
 
+        // Create monitor panels (will be populated after /monitors query)
+        const createMonitorPanel = (monitorIdx) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'monitor-panel';
+            wrapper.dataset.monitor = monitorIdx;
+            wrapper.style.cssText = 'flex:1;position:relative;min-width:0;background:#060510;border-radius:6px;overflow:hidden';
+
+            const img = document.createElement('img');
+            img.className = 'desktop-stream-img';
+            img.dataset.monitor = monitorIdx;
+            img.alt = `Monitor ${monitorIdx}`;
+            img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:none';
+            wrapper.appendChild(img);
+
+            const label = document.createElement('div');
+            label.style.cssText = 'position:absolute;top:6px;left:10px;font-size:11px;font-weight:600;color:#67e8f9;text-transform:uppercase;letter-spacing:1px;opacity:0.7;z-index:12';
+            label.textContent = `Monitor ${monitorIdx}`;
+            wrapper.appendChild(label);
+
+            // Clickable interaction overlay per monitor
+            const overlay = document.createElement('div');
+            overlay.className = 'desktop-interact-overlay';
+            overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:9;cursor:crosshair';
+            const handleClick = async (e, button) => {
+                if (button === 'right') e.preventDefault();
+                if (!img.naturalWidth || !img.naturalHeight) return;
+
+                // Account for object-fit:contain letterboxing
+                const rect = img.getBoundingClientRect();
+                const imgAspect = img.naturalWidth / img.naturalHeight;
+                const elemAspect = rect.width / rect.height;
+                let renderW, renderH, padX, padY;
+                if (imgAspect > elemAspect) {
+                    // Image wider → bars top/bottom
+                    renderW = rect.width;
+                    renderH = rect.width / imgAspect;
+                    padX = 0;
+                    padY = (rect.height - renderH) / 2;
+                } else {
+                    // Image taller → bars left/right
+                    renderH = rect.height;
+                    renderW = rect.height * imgAspect;
+                    padX = (rect.width - renderW) / 2;
+                    padY = 0;
+                }
+
+                // Position relative to the actual rendered image (not the letterbox)
+                const relX = e.clientX - rect.left - padX;
+                const relY = e.clientY - rect.top - padY;
+
+                // Ignore clicks on letterbox bars
+                if (relX < 0 || relX > renderW || relY < 0 || relY > renderH) return;
+
+                // Scale to real monitor pixel coordinates
+                const pixelX = Math.round((relX / renderW) * img.naturalWidth);
+                const pixelY = Math.round((relY / renderH) * img.naturalHeight);
+
+                // Add monitor screen offset (stored in dataset by /monitors response)
+                const monOffsetX = parseInt(wrapper.dataset.offsetX || '0', 10);
+                const monOffsetY = parseInt(wrapper.dataset.offsetY || '0', 10);
+                const realX = pixelX + monOffsetX;
+                const realY = pixelY + monOffsetY;
+
+                // Ripple feedback
+                const ripple = document.createElement('div');
+                ripple.style.cssText = `position:fixed;left:${e.clientX - 15}px;top:${e.clientY - 15}px;width:30px;height:30px;border-radius:50%;border:2px solid #0ff;pointer-events:none;z-index:999;animation:clickRipple .5s ease-out forwards`;
+                document.body.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 600);
+                try {
+                    await fetch('http://localhost:8009/api/automation/click', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ x: realX, y: realY, button }),
+                        signal: AbortSignal.timeout(5000),
+                    });
+                } catch (err) {
+                    console.warn('[Desktop] Click relay failed:', err.message);
+                }
+            };
+            overlay.addEventListener('click', (e) => handleClick(e, 'left'));
+            overlay.addEventListener('contextmenu', (e) => handleClick(e, 'right'));
+            wrapper.appendChild(overlay);
+
+            return wrapper;
+        };
+
+        streamsArea.appendChild(monitorGrid);
+
+        // Click-dot visualization canvas (eyeTerm dots — rendered above interaction layer)
         const clickCanvas = document.createElement('canvas');
         clickCanvas.id = 'click-overlay';
-        clickCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10';
+        clickCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11';
         streamsArea.appendChild(clickCanvas);
         panel.appendChild(streamsArea);
 
@@ -3460,51 +3572,81 @@ class MultiverseApp {
             requestAnimationFrame(() => panel.classList.add('fade-in'));
         });
 
-        // Desktop stream: poll host-frame endpoint for screenshots
+        // Desktop stream: query monitor count, then poll per-monitor screenshots
         let _desktopStreamActive = false;
-        let _desktopFps = 0;
-        const startDesktopStream = () => {
+        const startDesktopStream = async () => {
             _desktopStreamActive = true;
-            const imgEl = document.getElementById('desktop-stream-img');
             const loadEl = document.getElementById('vapi-loading');
-            let lastFrameTime = 0;
+            const grid = document.getElementById('monitor-grid');
 
-            const fetchFrame = async () => {
-                if (!_desktopStreamActive) return;
-                try {
-                    const r = await fetch('http://localhost:8009/api/desktop/screenshot', {
-                        signal: AbortSignal.timeout(3000),
-                    });
-                    if (r.ok) {
-                        const data = await r.json();
-                        const frameData = data.screenshot?.data || data.frame;
-                        if (frameData && imgEl) {
-                            imgEl.src = 'data:image/jpeg;base64,' + frameData;
-                            imgEl.style.display = '';
-                            if (loadEl) loadEl.style.display = 'none';
-                            // FPS counter
-                            const now = performance.now();
-                            if (lastFrameTime) _desktopFps = Math.round(1000 / (now - lastFrameTime));
-                            lastFrameTime = now;
-                        }
+            // Wait for backend health
+            const waitForHealth = () => new Promise((resolve) => {
+                const check = () => {
+                    fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
+                        .then(r => { if (r.ok || r.status === 503) resolve(); else setTimeout(check, 3000); })
+                        .catch(() => setTimeout(check, 3000));
+                };
+                check();
+            });
+            await waitForHealth();
+
+            // Query monitors (count + geometry for click offset)
+            let monitorCount = 1;
+            let monitorGeometries = {};
+            try {
+                const mr = await fetch('http://localhost:8009/api/desktop/monitors', { signal: AbortSignal.timeout(3000) });
+                if (mr.ok) {
+                    const mdata = await mr.json();
+                    monitorCount = mdata.count || 1;
+                    // Store geometry per monitor: {index, geometry: {left, top, width, height}}
+                    for (const m of (mdata.monitors || [])) {
+                        monitorGeometries[m.index] = m.geometry;
                     }
-                } catch (e) {
-                    // Backend not reachable — retry silently
                 }
-                // Next frame: target ~7 fps
-                if (_desktopStreamActive) setTimeout(fetchFrame, 140);
-            };
-            // Start after health check
-            fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
-                .then(r => { if (r.ok || r.status === 503) fetchFrame(); })
-                .catch(() => {
-                    // Retry health check every 3s
-                    const retryHealth = setInterval(() => {
-                        fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
-                            .then(r => { if (r.ok || r.status === 503) { clearInterval(retryHealth); fetchFrame(); } })
-                            .catch(() => {});
-                    }, 3000);
-                });
+            } catch (e) { /* fallback to 1 */ }
+
+            console.log(`[Desktop] Detected ${monitorCount} monitor(s)`, monitorGeometries);
+
+            // Create monitor panels with screen offsets
+            for (let i = 1; i <= monitorCount; i++) {
+                const panel = createMonitorPanel(i);
+                const geo = monitorGeometries[i];
+                if (geo) {
+                    panel.dataset.offsetX = geo.left || 0;
+                    panel.dataset.offsetY = geo.top || 0;
+                }
+                grid.appendChild(panel);
+            }
+
+            // Hide loading
+            if (loadEl) loadEl.style.display = 'none';
+
+            // Start polling per monitor
+            for (let i = 1; i <= monitorCount; i++) {
+                const imgEl = grid.querySelector(`.desktop-stream-img[data-monitor="${i}"]`);
+                if (!imgEl) continue;
+
+                const pollMonitor = async () => {
+                    if (!_desktopStreamActive) return;
+                    try {
+                        const r = await fetch(`http://localhost:8009/api/desktop/screenshot?monitor=${i}`, {
+                            signal: AbortSignal.timeout(3000),
+                        });
+                        if (r.ok) {
+                            const data = await r.json();
+                            const frameData = data.screenshot?.data || data.frame;
+                            if (frameData) {
+                                imgEl.src = 'data:image/jpeg;base64,' + frameData;
+                                imgEl.style.display = '';
+                            }
+                        }
+                    } catch (e) { /* retry silently */ }
+                    // Stagger frames: ~5 fps per monitor
+                    if (_desktopStreamActive) setTimeout(pollMonitor, 200);
+                };
+                // Stagger start so monitors don't all fire at once
+                setTimeout(pollMonitor, i * 50);
+            }
         };
         setTimeout(startDesktopStream, 1000);
 

@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('vibemind', {
     // Send generic message to Python
     sendToPython: (message) => ipcRenderer.send('to-python', message),
 
+    // Write renderer log to file (for autonomous debugging)
+    writeLog: (level, ...args) => ipcRenderer.send('renderer-log', { level, args }),
+
     // Inline game console chat (renderer → main → Python → process_intent)
     sendChatMessage: (text) =>
         ipcRenderer.invoke('renderer:chat-text-input', { text }),
@@ -321,6 +324,11 @@ contextBridge.exposeInMainWorld('vibemind', {
     showMiroFish: () => ipcRenderer.send('show-mirofish'),
     hideMiroFish: () => ipcRenderer.send('hide-mirofish'),
     isMiroFishVisible: () => ipcRenderer.invoke('is-mirofish-visible'),
+
+    // Flowzen Diary (Blue Rose Journal) BrowserView Control
+    showFlowzen: () => ipcRenderer.send('show-flowzen'),
+    hideFlowzen: () => ipcRenderer.send('hide-flowzen'),
+    isFlowzenVisible: () => ipcRenderer.invoke('is-flowzen-visible'),
 
     // Video Space BrowserView Control
     showVideo: () => ipcRenderer.send('show-video'),

@@ -40,6 +40,9 @@ const AgentFarmManager = require('./agentfarm-manager');
 // MiroFish Integration
 const MiroFishManager = require('./mirofish-manager');
 
+// Flowzen Diary (Blue Rose Journal) Integration
+const FlowzenManager = require('./flowzen-manager');
+
 // Video Space Integration
 const VideoManager = require('./video-manager');
 
@@ -82,6 +85,9 @@ let agentfarmManager = null;
 
 // MiroFish manager
 let mirofishManager = null;
+
+// Flowzen Diary (Blue Rose Journal) manager
+let flowzenManager = null;
 
 // Video Space manager
 let videoManager = null;
@@ -244,7 +250,7 @@ function createWindow() {
 // ============================================================================
 
 function killZombiePythonProcesses() {
-    // Kill stale Python processes on ports we need (8099=eyeTerm, 8007=AutomationUI)
+    // Kill stale Python processes on ports we need (8099=eyeTerm, 8009=AutomationUI)
     if (process.platform !== 'win32') return;
     const { execFileSync } = require('child_process');
     for (const port of [8099]) {
@@ -359,6 +365,22 @@ function startPythonBackend() {
                     const clawportTypes = ['chat_response', 'agent_status_list', 'scheduled_tasks_list', 'memory_overview', 'memory_search_results'];
                     if (clawportTypes.includes(message.type)) {
                         clawportManager.relayEvent('clawport-message', message);
+                    }
+                }
+
+                // Forward Flowzen-relevant messages to diary BrowserView
+                if (flowzenManager) {
+                    if (message.type === 'flowzen_diary_entries_result') {
+                        flowzenManager.send('flowzen-diary-data', { entries: message.entries });
+                    }
+                    if (message.type === 'flowzen_status_result') {
+                        flowzenManager.send('flowzen-status', message);
+                    }
+                    if (message.type === 'flowzen_recommend_result') {
+                        flowzenManager.send('flowzen-recommend-result', message);
+                    }
+                    if (message.type === 'flowzen_rose_state' && message.state === 'diary_new' && message.diary_entry) {
+                        flowzenManager.send('flowzen-diary-entry', message.diary_entry);
                     }
                 }
 
@@ -881,6 +903,17 @@ function setupIpcHandlers() {
     // Forward messages from renderer to Python
     ipcMain.on('to-python', (event, message) => {
         sendToPython(message);
+    });
+
+    // Renderer log → file (for autonomous debugging)
+    const fs = require('fs');
+    const rendererLogPath = require('path').join(__dirname, '..', 'logs', 'renderer.log');
+    // Ensure logs dir exists
+    try { fs.mkdirSync(require('path').dirname(rendererLogPath), { recursive: true }); } catch(e) {}
+    ipcMain.on('renderer-log', (event, { level, args }) => {
+        const ts = new Date().toISOString();
+        const line = `[${ts}] [${level}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`;
+        fs.appendFileSync(rendererLogPath, line);
     });
 
     // Handle specific actions
@@ -1600,6 +1633,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             dashboardManager.show();
             console.log('[Main] Dashboard shown');
         }
@@ -1629,6 +1663,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             rowboatManager.show();
             console.log('[Main] Rowboat shown');
         }
@@ -1672,6 +1707,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             await sweDesignManager.show();
             console.log('[Main] SWE Design shown');
         }
@@ -1701,6 +1737,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             clawportManager.show();
             console.log('[Main] ClawPort shown');
         }
@@ -1730,6 +1767,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             await brainManager.show();
             console.log('[Main] Brain Dashboard shown');
         }
@@ -1759,6 +1797,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (videoManager && videoManager.getIsVisible()) videoManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             agentfarmManager.show();
             console.log('[Main] Agent Farm shown');
         }
@@ -1785,6 +1824,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
             if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             videoManager.show();
             console.log('[Main] Video shown');
         }
@@ -1808,7 +1848,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
-            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             mirofishManager.show();
             console.log('[Main] MiroFish shown');
         }
@@ -1825,6 +1865,37 @@ function setupIpcHandlers() {
         return mirofishManager ? mirofishManager.getIsVisible() : false;
     });
 
+    // ========================================
+    // FLOWZEN DIARY (BLUE ROSE JOURNAL) VIEW CONTROL
+    // ========================================
+
+    ipcMain.on('show-flowzen', () => {
+        if (flowzenManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            if (videoManager && videoManager.getIsVisible()) videoManager.hide();
+            flowzenManager.show();
+            console.log('[Main] Flowzen Diary shown');
+        }
+    });
+
+    ipcMain.on('hide-flowzen', () => {
+        if (flowzenManager) {
+            flowzenManager.hide();
+            console.log('[Main] Flowzen Diary hidden');
+        }
+    });
+
+    ipcMain.handle('is-flowzen-visible', () => {
+        return flowzenManager ? flowzenManager.getIsVisible() : false;
+    });
+
     ipcMain.on('show-agentfarm-tab', (_event, tab) => {
         if (agentfarmManager) {
             // Mutual exclusion
@@ -1833,6 +1904,7 @@ function setupIpcHandlers() {
             if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
             agentfarmManager.show();
             // Send tab switch to the AgentFarm BrowserView
             const view = agentfarmManager.agentfarmView;
@@ -2521,6 +2593,9 @@ app.whenReady().then(async () => {
 
     // Initialize MiroFish Manager
     mirofishManager = new MiroFishManager(mainWindow);
+
+    // Initialize Flowzen Diary (Blue Rose Journal) Manager
+    flowzenManager = new FlowzenManager(mainWindow, sendToPython);
 
     // Initialize Video Space Manager
     videoManager = new VideoManager(mainWindow);

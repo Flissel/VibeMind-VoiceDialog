@@ -116,18 +116,21 @@
             if (projectInfo) projectInfo.classList.add('hidden');
         }
 
-        // Show/hide Flowzen panel
+        // Show/hide Flowzen diary BrowserView
+        if (spaceId === 'flowzen') {
+            if (window.vibemind && window.vibemind.showFlowzen) {
+                window.vibemind.showFlowzen();
+            }
+        } else {
+            if (window.vibemind && window.vibemind.hideFlowzen) {
+                window.vibemind.hideFlowzen();
+            }
+        }
+
+        // Also hide old DOM panel if it exists
         var fzPanel = document.getElementById('flowzen-panel');
         if (fzPanel) {
-            if (spaceId === 'flowzen') {
-                fzPanel.classList.remove('hidden');
-                if (window.flowzenPanel) {
-                    window.flowzenPanel.requestFlowzenStatus();
-                    window.flowzenPanel.requestFlowzenDiaryEntries();
-                }
-            } else {
-                fzPanel.classList.add('hidden');
-            }
+            fzPanel.classList.add('hidden');
         }
     }
 

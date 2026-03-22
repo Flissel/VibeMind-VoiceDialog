@@ -34,3 +34,6 @@
 [submodule "python/spaces/autogen/farm"]
 	path = python/spaces/autogen/farm
 	url = https://github.com/Flissel/Autogen_AgentFarm.git
+[submodule "external/openclaw"]
+	path = external/openclaw
+	url = https://github.com/Flissel/openclaw.git
