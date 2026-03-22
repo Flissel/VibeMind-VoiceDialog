@@ -97,3 +97,8 @@ electron-app/test-results/
 
 # Generated images
 n8n-workflow-generated.png
+
+# AgentFarm state/credentials (contain API keys)
+python/spaces/autogen/config/swarm_agents.json
+python/spaces/autogen/config/domino_agents.json
+python/spaces/autogen/config/forge_state.json
