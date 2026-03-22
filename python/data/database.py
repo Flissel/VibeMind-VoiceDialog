@@ -27,7 +27,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 18
+    SCHEMA_VERSION = 19
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -306,6 +306,24 @@ class Database:
 
     CREATE INDEX IF NOT EXISTS idx_flowzen_checkins_created ON flowzen_checkins(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC);
+
+    -- Flowzen: warm diary entries generated every 30 min
+    CREATE TABLE IF NOT EXISTS flowzen_diary (
+        id              TEXT PRIMARY KEY,
+        entry_text      TEXT NOT NULL,
+        mood            TEXT DEFAULT 'calm',
+        energy          INTEGER DEFAULT 5,
+        time_window     TEXT DEFAULT '',
+        hour            INTEGER DEFAULT 0,
+        intent_count    INTEGER DEFAULT 0,
+        category        TEXT DEFAULT '',
+        brain_action    TEXT DEFAULT '',
+        brain_reasoning TEXT DEFAULT '',
+        raw_data        TEXT DEFAULT '{}',
+        source          TEXT DEFAULT 'periodic',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -744,6 +762,28 @@ class Database:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC)")
             except Exception:
                 pass
+
+        if from_version < 19:
+            logger.info("Migration v19: Flowzen diary table")
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flowzen_diary (
+                    id              TEXT PRIMARY KEY,
+                    entry_text      TEXT NOT NULL,
+                    mood            TEXT DEFAULT 'calm',
+                    energy          INTEGER DEFAULT 5,
+                    time_window     TEXT DEFAULT '',
+                    hour            INTEGER DEFAULT 0,
+                    intent_count    INTEGER DEFAULT 0,
+                    category        TEXT DEFAULT '',
+                    brain_action    TEXT DEFAULT '',
+                    brain_reasoning TEXT DEFAULT '',
+                    raw_data        TEXT DEFAULT '{}',
+                    source          TEXT DEFAULT 'periodic',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC)")
 
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))

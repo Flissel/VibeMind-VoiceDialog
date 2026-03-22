@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from .database import Database, get_database
-from .models import FlowzenCheckin, FlowzenActivity
+from .models import FlowzenCheckin, FlowzenActivity, FlowzenDiaryEntry
 from .repository_utils import generate_id
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,34 @@ class FlowzenRepository:
             val = row["created_at"]
             return datetime.fromisoformat(val) if isinstance(val, str) else val
         return None
+
+    def create_diary_entry(self, entry_text: str, mood: str = "calm", energy: int = 5,
+                           time_window: str = "", hour: int = 0, intent_count: int = 0,
+                           category: str = "", brain_action: str = "", brain_reasoning: str = "",
+                           raw_data: str = "{}", source: str = "periodic") -> FlowzenDiaryEntry:
+        entry = FlowzenDiaryEntry(
+            id=generate_id(), entry_text=entry_text, mood=mood, energy=energy,
+            time_window=time_window, hour=hour, intent_count=intent_count,
+            category=category, brain_action=brain_action, brain_reasoning=brain_reasoning,
+            raw_data=raw_data, source=source,
+        )
+        self.db.execute(
+            """INSERT INTO flowzen_diary
+               (id, entry_text, mood, energy, time_window, hour, intent_count,
+                category, brain_action, brain_reasoning, raw_data, source, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (entry.id, entry.entry_text, entry.mood, entry.energy,
+             entry.time_window, entry.hour, entry.intent_count,
+             entry.category, entry.brain_action, entry.brain_reasoning,
+             entry.raw_data, entry.source, entry.created_at.isoformat()),
+        )
+        return entry
+
+    def get_recent_diary_entries(self, limit: int = 10) -> list:
+        rows = self.db.fetch_all(
+            "SELECT * FROM flowzen_diary ORDER BY created_at DESC LIMIT ?", (limit,)
+        )
+        return [FlowzenDiaryEntry.from_dict(dict(r)) for r in rows]
 
     @staticmethod
     def _hour_to_window(hour: int) -> str:

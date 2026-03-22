@@ -956,3 +956,46 @@ class FlowzenActivity:
             hour=data.get("hour", 0),
             created_at=parse_dt(data.get("created_at")) or datetime.now(),
         )
+
+
+@dataclass
+class FlowzenDiaryEntry:
+    """A warm, personal diary entry generated every 30 minutes by the Blaue Rose."""
+    id: str
+    entry_text: str
+    mood: str = "calm"
+    energy: int = 5
+    time_window: str = ""
+    hour: int = 0
+    intent_count: int = 0
+    category: str = ""
+    brain_action: str = ""
+    brain_reasoning: str = ""
+    raw_data: str = "{}"           # JSON string of full summary
+    source: str = "periodic"       # "periodic" or "manual"
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id, "entry_text": self.entry_text,
+            "mood": self.mood, "energy": self.energy,
+            "time_window": self.time_window, "hour": self.hour,
+            "intent_count": self.intent_count, "category": self.category,
+            "brain_action": self.brain_action, "brain_reasoning": self.brain_reasoning,
+            "raw_data": self.raw_data, "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenDiaryEntry":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+        return cls(
+            id=data["id"], entry_text=data.get("entry_text", ""),
+            mood=data.get("mood", "calm"), energy=data.get("energy", 5),
+            time_window=data.get("time_window", ""), hour=data.get("hour", 0),
+            intent_count=data.get("intent_count", 0), category=data.get("category", ""),
+            brain_action=data.get("brain_action", ""), brain_reasoning=data.get("brain_reasoning", ""),
+            raw_data=data.get("raw_data", "{}"), source=data.get("source", "periodic"),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+        )

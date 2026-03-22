@@ -11,7 +11,7 @@ from .models import (
     ConversationSession, Shuttle, ShuttleStatus, ShuttleStage,
     STAGE_PROGRESS, GenerationStatus, Task, TaskStatus,
     ScheduledTask, ScheduleStatus, TriggerType, ExecutionMode,
-    FlowzenCheckin, FlowzenActivity,
+    FlowzenCheckin, FlowzenActivity, FlowzenDiaryEntry,
 )
 from .repository import (
     IdeasRepository,
@@ -61,6 +61,7 @@ __all__ = [
     "ScheduledTaskRepository",
     "FlowzenCheckin",
     "FlowzenActivity",
+    "FlowzenDiaryEntry",
     "FlowzenRepository",
     "TaskMemoryRepository",
     "get_task_memory_repository",
