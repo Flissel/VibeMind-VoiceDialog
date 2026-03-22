@@ -123,7 +123,7 @@ async def generate_reasoning(
                 {"role": "system", "content": REASONING_SYSTEM_PROMPT},
                 {"role": "user", "content": user_msg},
             ],
-            max_tokens=200,
+            max_completion_tokens=200,
             temperature=0.7,
         )
         return response.choices[0].message.content.strip()

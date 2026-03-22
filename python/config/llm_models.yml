@@ -1,0 +1,169 @@
+# config/llm_models.yml — SINGLE SOURCE OF TRUTH for all VibeMind LLM models
+# Edit THIS file to change any model globally across the entire system.
+#
+# Override any role via environment variable:
+#   LLM_MODEL_CLASSIFIER=gpt-4o
+#   LLM_MODEL_VOICE=gpt-4o-realtime-preview-2025-06
+#
+# Legacy env vars (CLASSIFIER_MODEL, OPENAI_MODEL, etc.) also work as fallbacks.
+
+providers:
+  openai:
+    base_url: null
+    api_key_env: "OPENAI_API_KEY"
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+  ollama:
+    base_url: "http://localhost:11434"
+    api_key_env: null
+
+models:
+  # --- Core Orchestrator ---
+  classifier:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "Intent classification (IntentClassifier, RAGIntentClassifier)"
+
+  rag_classifier:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "RAG-based semantic classification (Supermemory)"
+
+  response:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "Response generation for voice output"
+
+  orchestrator:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Cloud client default (swarm/cloud_client.py)"
+
+  analysis:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "IntentAnalysisTeam multi-hypothesis"
+
+  # --- Agents & Routing ---
+  space_agent:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Per-space LLM tool orchestration"
+
+  stream_listener:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "StreamListener parallel intent routing"
+
+  space_router:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "MinibookHub SpaceRouter + enrichment"
+
+  # --- Content Generation ---
+  summary:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Idea summarization, white papers"
+
+  rewrite:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Content rewriting, formatting"
+
+  exploration:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "AI-Scientist tree search exploration"
+
+  n8n_generator:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 8192
+    description: "N8n workflow generation"
+
+  # --- Personality & Conversion ---
+  conversion:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "ConversionAI personality responses"
+
+  personality:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "PersonalityGenerator"
+
+  # --- Broadcast/Profiling ---
+  profiling:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "Memory sub-agent profiling"
+
+  context:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 2048
+    description: "Context sub-agent"
+
+  # --- Vision & Media ---
+  vision:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Vision analysis (desktop, video)"
+
+  # --- Voice (FIXED — Realtime API) ---
+  voice:
+    provider: "openai"
+    model: "gpt-4o-realtime-preview"
+    max_tokens: null
+    description: "OpenAI Realtime API voice (cannot change to non-realtime model)"
+
+  # --- Local Fallback ---
+  local:
+    provider: "ollama"
+    model: "llama3.1:8b"
+    max_tokens: 4096
+    description: "Offline Ollama fallback"
+
+  # --- Workers ---
+  summarization_worker:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Background summarization worker"
+
+  rewrite_worker:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "Background rewrite worker"
+
+  # --- AgentFarm ---
+  agentfarm:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "AgentFarm SwarmPipeline + ForgeOrchestrator"
+
+  # --- Flowzen (Blaue Rose) ---
+  flowzen_reasoning:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 200
+    description: "Neuroscience-based circadian reasoning for task recommendations"
