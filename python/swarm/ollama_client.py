@@ -9,6 +9,8 @@ import os
 import logging
 from typing import Optional
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Default configuration
@@ -44,7 +46,7 @@ class OllamaModelClient:
             model: Model name (default: llama3.1 or OLLAMA_MODEL env var)
             host: Ollama server URL (default: localhost:11434 or OLLAMA_HOST env var)
         """
-        self.model = (model or os.getenv("OLLAMA_MODEL", DEFAULT_MODEL)).strip()
+        self.model = (model or get_model("local")).strip()
         self.host = (host or os.getenv("OLLAMA_HOST", DEFAULT_HOST)).strip()
         self._client = None
         self._is_connected = False

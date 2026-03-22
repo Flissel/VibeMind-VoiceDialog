@@ -8,9 +8,10 @@ based on user context and preferences.
 """
 
 import logging
-import os
 import random
 from typing import List, Optional
+
+from llm_config import get_model, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class PersonalityGenerator:
         Args:
             model: LLM model to use for generation
         """
-        self._model = model or os.getenv("PERSONALITY_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("personality")
         self._client = None
         self._used_names: List[str] = []
 
@@ -64,13 +65,7 @@ class PersonalityGenerator:
         """Lazy-load OpenAI-compatible client."""
         if self._client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if api_key:
-                    self._client = OpenAI(
-                        api_key=api_key,
-                        base_url="https://openrouter.ai/api/v1"
-                    )
+                self._client = get_client("personality")
             except Exception as e:
                 logger.debug(f"LLM client not available for personality generation: {e}")
         return self._client

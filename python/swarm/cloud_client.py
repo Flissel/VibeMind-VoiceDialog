@@ -10,6 +10,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from llm_config import get_model, get_api_key, get_base_url
+
 # Load .env file if present
 try:
     from dotenv import load_dotenv
@@ -41,13 +43,13 @@ class CloudModelClient:
             model: OpenRouter model ID (default: anthropic/claude-sonnet-4)
             api_key: OpenRouter API key (default: from OPENROUTER_API_KEY env var)
         """
-        self.model = model or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self.base_url = "https://openrouter.ai/api/v1"
+        self.model = model or get_model("orchestrator")
+        self.api_key = api_key or get_api_key("orchestrator") or os.getenv("OPENROUTER_API_KEY")
+        self.base_url = get_base_url("orchestrator") or "https://openrouter.ai/api/v1"
         self._client = None
 
         if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY environment variable not set")
+            raise ValueError("No API key configured for orchestrator role (check llm_models.yml or OPENROUTER_API_KEY)")
 
         logger.info(f"CloudModelClient configured: model={self.model}")
 

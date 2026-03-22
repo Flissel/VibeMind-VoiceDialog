@@ -536,20 +536,12 @@ Stelle sicher, dass die Ausgabe dem erwarteten Schema entspricht.
 async def _call_llm_for_formatting(prompt: str, format_type: str) -> Dict[str, Any]:
     """Call LLM to generate formatted content."""
     try:
-        from openai import OpenAI
-        import os
+        from llm_config import get_client, get_model
 
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            raise ValueError("OPENROUTER_API_KEY not set")
-
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
+        client = get_client("rewrite")
 
         response = client.chat.completions.create(
-            model="anthropic/claude-sonnet-4-6",
+            model=get_model("rewrite"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,  # Balanced creativity and consistency
             max_tokens=2000,

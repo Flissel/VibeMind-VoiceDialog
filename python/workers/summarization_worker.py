@@ -21,6 +21,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
+from llm_config import get_model
+
 from autogen_core import MessageContext, RoutedAgent, default_subscription, message_handler
 from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime
 
@@ -78,7 +80,7 @@ class SummarizationWorker(RoutedAgent):
     def __init__(self):
         super().__init__("Summarization Worker Agent")
         self.openai_client = None
-        self.model = os.getenv("OPENAI_SUMMARIZATION_MODEL", "gpt-4o-mini")
+        self.model = get_model("summarization_worker")
         
         if HAS_OPENAI:
             api_key = os.getenv("OPENAI_API_KEY")

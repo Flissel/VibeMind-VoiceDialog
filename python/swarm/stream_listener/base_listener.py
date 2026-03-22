@@ -101,19 +101,12 @@ class BaseStreamListener(ABC):
         self._client = client
 
     def _create_client(self):
-        """Create OpenRouter client as fallback."""
-        import os
+        """Create client as fallback via llm_config."""
         try:
-            from openai import OpenAI
-            api_key = os.getenv("OPENROUTER_API_KEY")
-            if api_key:
-                return OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1",
-                    timeout=10.0,
-                )
-        except ImportError:
-            logger.error(f"[{self.name}] OpenAI library not installed")
+            from llm_config import get_client
+            return get_client("stream_listener")
+        except Exception as e:
+            logger.error(f"[{self.name}] Failed to create LLM client: {e}")
         return None
 
     async def evaluate(

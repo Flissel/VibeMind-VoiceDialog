@@ -52,6 +52,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+from llm_config import get_model
 from voice.audio_manager import AudioManager
 from voice.session_config import (
     create_session_config,
@@ -126,7 +127,7 @@ class OpenAIRealtimeVoiceSession:
         if not self._api_key:
             raise ValueError("OPENAI_API_KEY not found")
 
-        self._model = model or os.getenv("OPENAI_REALTIME_MODEL", DEFAULT_MODEL)
+        self._model = model or get_model("voice")
         self._voice = voice or os.getenv("OPENAI_REALTIME_VOICE", DEFAULT_VOICE)
         self._system_prompt = system_prompt
         self._tools = tools or [SEND_INTENT_TOOL]

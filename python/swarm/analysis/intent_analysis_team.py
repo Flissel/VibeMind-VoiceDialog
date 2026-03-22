@@ -17,6 +17,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
+from llm_config import get_model, get_client
+
 # Load .env file if present
 try:
     from dotenv import load_dotenv
@@ -76,7 +78,7 @@ class IntentAnalysisTeam:
         Args:
             model: LLM model to use (default: from env or Claude Haiku)
         """
-        self._model = model or os.getenv("ANALYSIS_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("analysis")
         self._client = None
         self._reasoning_agent = None
         self._context_agent = None
@@ -86,16 +88,8 @@ class IntentAnalysisTeam:
         """Lazy-load OpenAI client (AutoGen clients are not compatible with direct API calls)."""
         if self._client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
-                logger.info(f"IntentAnalysisTeam using OpenRouter: {self._model}")
+                self._client = get_client("analysis")
+                logger.info(f"IntentAnalysisTeam using model: {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create analysis client: {e}")
                 raise
