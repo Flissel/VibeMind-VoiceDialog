@@ -244,11 +244,11 @@
             </div>
         </div>
 
-        <!-- Flowzen (Blaue Rose) Recommendation Panel -->
+        <!-- Flowzen (Blaue Rose) Diary Journal Panel -->
         <div id="flowzen-panel" class="flowzen-panel hidden">
             <div class="flowzen-header">
                 <span class="flowzen-icon">🌹</span>
-                <span class="flowzen-title">Blaue Rose</span>
+                <span class="flowzen-title">Blaue Rose — Tagebuch</span>
                 <span class="flowzen-state" id="flowzen-state-badge">idle</span>
             </div>
             <div class="flowzen-status" id="flowzen-status">
@@ -268,8 +268,11 @@
             <button class="flowzen-recommend-btn" id="fz-recommend-btn">
                 Was soll ich machen?
             </button>
-            <div class="flowzen-recommendations" id="fz-recommendations">
-                <div class="flowzen-empty">Noch keine Empfehlungen</div>
+            <div class="flowzen-diary-journal" id="fz-diary-journal">
+                <div class="flowzen-diary-empty" id="fz-diary-empty">
+                    <span class="diary-empty-icon">📖</span>
+                    <span>Noch keine Eintraege...</span>
+                </div>
             </div>
         </div>
 
@@ -1841,6 +1844,10 @@
                         console.log('[Flowzen] Rose state:', message.state);
                     }
                     updateFlowzenPanel({ state: message.state });
+                    // Handle live diary push
+                    if (message.state === 'diary_new' && message.diary_entry) {
+                        addSingleDiaryEntry(message.diary_entry);
+                    }
                     break;
 
                 case 'flowzen_status_result':
@@ -1849,19 +1856,23 @@
 
                 case 'flowzen_recommend_result':
                     if (message.recommendation) {
-                        addFlowzenRecommendation({
-                            category: message.recommendation.category,
-                            reasoning: message.recommendation.reasoning,
-                            idea_title: message.recommendation.idea_title,
-                            mood: message.recommendation.mood,
-                            time: new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}),
-                        });
                         updateFlowzenPanel({
                             mood: message.recommendation.mood,
                             category: message.recommendation.category,
                             current_time_window: message.recommendation.time_window,
                         });
                     }
+                    // Add diary entry if included
+                    if (message.diary_entry) {
+                        addSingleDiaryEntry(message.diary_entry);
+                    }
+                    // Reset button
+                    var fzBtn = document.getElementById('fz-recommend-btn');
+                    if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich machen?'; }
+                    break;
+
+                case 'flowzen_diary_entries_result':
+                    renderDiaryEntries(message.entries || []);
                     break;
 
                 // Rowboat update auto-applied
@@ -3352,6 +3363,13 @@
             };
         }
 
+        const tabMirofish = document.getElementById('tab-mirofish');
+        if (tabMirofish) {
+            tabMirofish.onclick = () => {
+                switchSpace('mirofish');
+            };
+        }
+
         async function switchSpace(spaceId) {
             if (spaceId === currentSpace) return;
             
@@ -3408,6 +3426,9 @@
             } else if (spaceId === 'thebrain') {
                 if (spaceIcon) spaceIcon.textContent = '\u{1F9E0}';
                 if (spaceName) spaceName.textContent = 'The Brain';
+            } else if (spaceId === 'mirofish') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F41F}';
+                if (spaceName) spaceName.textContent = 'MiroFish';
             }
             // Show the indicator when space changes
             if (spaceIndicator) spaceIndicator.classList.remove('hidden');
@@ -3434,6 +3455,7 @@
                 if (spaceId === 'flowzen') {
                     fzPanel.classList.remove('hidden');
                     requestFlowzenStatus();
+                    requestFlowzenDiaryEntries();
                 } else {
                     fzPanel.classList.add('hidden');
                 }
@@ -3456,11 +3478,15 @@
         // FLOWZEN (BLAUE ROSE) PANEL
         // ============================================
 
-        const fzRecommendations = [];
-
         function requestFlowzenStatus() {
             if (window.vibemind && window.vibemind.sendToPython) {
                 window.vibemind.sendToPython({ type: 'flowzen_status' });
+            }
+        }
+
+        function requestFlowzenDiaryEntries() {
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
             }
         }
 
@@ -3497,49 +3523,85 @@
             }
         }
 
-        function _buildRecCard(r) {
-            const card = document.createElement('div');
-            card.className = 'flowzen-rec-card';
-
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'rec-time';
-            timeDiv.textContent = r.time || new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
-            card.appendChild(timeDiv);
-
-            const catDiv = document.createElement('div');
-            catDiv.className = 'rec-category';
-            catDiv.textContent = r.category || '\u2014';
-            card.appendChild(catDiv);
-
-            const reasonDiv = document.createElement('div');
-            reasonDiv.className = 'rec-reasoning';
-            reasonDiv.textContent = r.reasoning || '';
-            card.appendChild(reasonDiv);
-
-            if (r.idea_title) {
-                const suggDiv = document.createElement('div');
-                suggDiv.className = 'rec-suggestion';
-                suggDiv.textContent = '\u2192 ' + r.idea_title;
-                card.appendChild(suggDiv);
-            }
-            return card;
-        }
-
-        function addFlowzenRecommendation(rec) {
-            const btn = document.getElementById('fz-recommend-btn');
-            if (btn) {
-                btn.classList.remove('loading');
-                btn.textContent = 'Was soll ich machen?';
-            }
-
-            fzRecommendations.unshift(rec);
-            if (fzRecommendations.length > 10) fzRecommendations.pop();
-
-            const container = document.getElementById('fz-recommendations');
+        function renderDiaryEntries(entries) {
+            const container = document.getElementById('fz-diary-journal');
+            const emptyEl = document.getElementById('fz-diary-empty');
             if (!container) return;
 
-            while (container.firstChild) { container.removeChild(container.firstChild); }
-            fzRecommendations.forEach(function(r) { container.appendChild(_buildRecCard(r)); });
+            // Remove existing entries (keep empty placeholder)
+            container.querySelectorAll('.diary-entry').forEach(function(el) { el.remove(); });
+
+            if (!entries || entries.length === 0) {
+                if (emptyEl) emptyEl.style.display = '';
+                return;
+            }
+            if (emptyEl) emptyEl.style.display = 'none';
+
+            entries.forEach(function(entry) {
+                container.appendChild(_buildDiaryCard(entry));
+            });
+        }
+
+        function addSingleDiaryEntry(entry) {
+            const container = document.getElementById('fz-diary-journal');
+            const emptyEl = document.getElementById('fz-diary-empty');
+            if (!container) return;
+            if (emptyEl) emptyEl.style.display = 'none';
+
+            const card = _buildDiaryCard(entry);
+            container.insertBefore(card, container.firstChild);
+
+            // Limit to 10 entries
+            const entries = container.querySelectorAll('.diary-entry');
+            if (entries.length > 10) {
+                entries[entries.length - 1].remove();
+            }
+        }
+
+        function _buildDiaryCard(entry) {
+            const card = document.createElement('div');
+            card.className = 'diary-entry';
+
+            const windowNames = {
+                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
+                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+            };
+
+            // Time header
+            const header = document.createElement('div');
+            header.className = 'diary-entry-time';
+            let timeStr = '';
+            try {
+                timeStr = new Date(entry.created_at).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+            } catch(e) {
+                timeStr = (entry.hour || 0) + ':00';
+            }
+            header.textContent = timeStr + ' \u2014 ' + (windowNames[entry.time_window] || entry.time_window || '');
+            card.appendChild(header);
+
+            // Meta line
+            const meta = document.createElement('div');
+            meta.className = 'diary-entry-meta';
+            const moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
+            const emoji = moodEmojis[entry.mood] || '';
+            meta.textContent = emoji + ' ' + (entry.mood || '') + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivit\u00E4ten';
+            card.appendChild(meta);
+
+            // Diary text (the warm LLM-generated text)
+            const text = document.createElement('div');
+            text.className = 'diary-entry-text';
+            text.textContent = entry.entry_text || '';
+            card.appendChild(text);
+
+            // Source badge (manual vs periodic)
+            if (entry.source === 'manual') {
+                const badge = document.createElement('div');
+                badge.className = 'diary-entry-source';
+                badge.textContent = '\uD83C\uDF39 Auf Anfrage';
+                card.appendChild(badge);
+            }
+
+            return card;
         }
 
         // Wire up Flowzen recommend button

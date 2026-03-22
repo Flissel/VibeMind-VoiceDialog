@@ -1,0 +1,643 @@
+/* ======================================================================== */
+/* SUMMARIES PANEL                                                          */
+/* ======================================================================== */
+
+#summaries-panel {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    width: 320px;
+    max-height: calc(100vh - 180px);
+    background: rgba(15, 15, 25, 0.95);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.25);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    z-index: 100;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#summaries-panel.hidden {
+    display: none;
+}
+
+.summaries-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(28, 24, 45, 0.80);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.summaries-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(200, 220, 255, 0.9);
+}
+
+.summaries-close {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.summaries-close:hover {
+    background: rgba(255, 100, 100, 0.3);
+    color: rgba(255, 150, 150, 1);
+}
+
+.summaries-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.summary-card {
+    background: rgba(30, 40, 60, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.summary-card:last-child {
+    margin-bottom: 0;
+}
+
+.summary-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(150, 200, 255, 0.95);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-title-icon {
+    font-size: 14px;
+}
+
+.summary-text {
+    font-size: 12px;
+    color: rgba(200, 210, 230, 0.85);
+    line-height: 1.5;
+}
+
+.summary-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: rgba(150, 160, 180, 0.6);
+}
+
+.no-summaries {
+    text-align: center;
+    padding: 24px 16px;
+    color: rgba(150, 160, 180, 0.6);
+    font-size: 13px;
+}
+
+.no-summaries-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+/* ======================================================================== */
+/* DEBUG PANEL                                                              */
+/* ======================================================================== */
+
+#debug-panel {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 280px;
+    max-height: 300px;
+    padding: 12px;
+    background: rgba(10, 10, 15, 0.95);
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    border-radius: 8px;
+    font-size: 11px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: rgba(255, 200, 200, 0.9);
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+#debug-panel h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: rgba(255, 150, 150, 0.9);
+    border-bottom: 1px solid rgba(255, 100, 100, 0.2);
+    padding-bottom: 6px;
+}
+
+#debug-panel .debug-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#debug-panel .debug-key {
+    color: rgba(150, 200, 255, 0.8);
+}
+
+#debug-panel .debug-value {
+    color: rgba(150, 255, 150, 0.9);
+}
+
+/* ======================================================================== */
+/* WHITE PAPER PANEL - A4 Document Style                                    */
+/* ======================================================================== */
+
+#whitepaper-panel {
+    position: fixed;
+    top: 70px;
+    right: 350px;
+    width: 450px;
+    max-height: calc(100vh - 180px);
+    background: rgba(15, 15, 25, 0.95);
+    border: 1px solid rgba(100, 200, 150, 0.3);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    z-index: 100;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#whitepaper-panel.hidden {
+    display: none;
+}
+
+.whitepaper-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(30, 50, 40, 0.8);
+    border-bottom: 1px solid rgba(100, 200, 150, 0.2);
+}
+
+.whitepaper-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(150, 255, 200, 0.9);
+}
+
+.whitepaper-close {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.whitepaper-close:hover {
+    background: rgba(255, 100, 100, 0.3);
+    color: rgba(255, 150, 150, 1);
+}
+
+/* Paper content - A4 styling */
+.whitepaper-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background: rgba(10, 10, 15, 0.5);
+}
+
+.whitepaper-a4 {
+    background: #fefefe;
+    color: #1a1a1a;
+    padding: 40px 35px;
+    min-height: 500px;
+    border-radius: 2px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+/* Typography within A4 */
+.whitepaper-a4 h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 16px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #2a5a40;
+}
+
+.whitepaper-a4 h2 {
+    font-size: 17px;
+    font-weight: 600;
+    color: #2a3a2a;
+    margin: 24px 0 12px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #d0d0d0;
+}
+
+.whitepaper-a4 h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #3a4a3a;
+    margin: 18px 0 8px 0;
+}
+
+.whitepaper-a4 p {
+    margin: 0 0 12px 0;
+    text-align: justify;
+}
+
+.whitepaper-a4 ul, .whitepaper-a4 ol {
+    margin: 0 0 12px 0;
+    padding-left: 24px;
+}
+
+.whitepaper-a4 li {
+    margin-bottom: 6px;
+}
+
+.whitepaper-a4 strong {
+    font-weight: 600;
+    color: #1a2a1a;
+}
+
+.whitepaper-a4 code {
+    background: #f0f4f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+}
+
+.whitepaper-a4 blockquote {
+    margin: 12px 0;
+    padding: 12px 16px;
+    background: #f5f8f5;
+    border-left: 4px solid #4a8a60;
+    font-style: italic;
+    color: #4a5a4a;
+}
+
+/* Placeholder */
+.whitepaper-placeholder {
+    text-align: center;
+    padding: 60px 20px;
+    color: rgba(100, 100, 100, 0.6);
+}
+
+.whitepaper-placeholder-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+/* Footer with buttons */
+.whitepaper-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(30, 50, 40, 0.6);
+    border-top: 1px solid rgba(100, 200, 150, 0.2);
+}
+
+.whitepaper-footer button {
+    padding: 6px 12px;
+    background: rgba(100, 200, 150, 0.2);
+    border: 1px solid rgba(100, 200, 150, 0.3);
+    border-radius: 4px;
+    color: rgba(200, 255, 220, 0.9);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.whitepaper-footer button:hover {
+    background: rgba(100, 200, 150, 0.4);
+    border-color: rgba(100, 200, 150, 0.6);
+}
+
+.whitepaper-meta {
+    flex: 1;
+    text-align: right;
+    font-size: 11px;
+    color: rgba(150, 180, 160, 0.6);
+}
+
+/* ======================================================================== */
+/* PRINT STYLES - Clean A4 output                                          */
+/* ======================================================================== */
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #whitepaper-panel,
+    #whitepaper-panel * {
+        visibility: visible;
+    }
+
+    #whitepaper-panel {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-height: none;
+        background: white;
+        border: none;
+        border-radius: 0;
+    }
+
+    .whitepaper-header,
+    .whitepaper-footer,
+    .whitepaper-close {
+        display: none !important;
+    }
+
+    .whitepaper-content {
+        padding: 0;
+        background: white;
+        overflow: visible;
+    }
+
+    .whitepaper-a4 {
+        box-shadow: none;
+        padding: 20mm 25mm;
+        min-height: auto;
+    }
+
+    @page {
+        margin: 0;
+        size: A4;
+    }
+}
+
+/* ============================================
+   ORCHESTRATOR PANEL (iframe)
+   ============================================ */
+
+#orchestrator-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 600px;
+    height: calc(100vh - 120px);
+    background: rgba(14, 12, 26, 0.98);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.15);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    z-index: 2500;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#orchestrator-panel.hidden {
+    display: none;
+}
+
+.orchestrator-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(var(--space-accent-rgb), 0.10);
+    border-bottom: 1px solid rgba(var(--space-accent-rgb), 0.15);
+}
+
+.orchestrator-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #d8ccf0;
+}
+
+.orchestrator-close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255, 100, 100, 0.2);
+    color: #ff8888;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+}
+
+.orchestrator-close:hover {
+    background: rgba(255, 100, 100, 0.4);
+    color: #ffffff;
+}
+
+.orchestrator-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+#orchestrator-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #0a0812;
+}
+
+/* ======================================================================== */
+/* FLOWZEN (BLAUE ROSE) — DIARY JOURNAL PANEL                               */
+/* ======================================================================== */
+
+.flowzen-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 320px;
+    max-height: calc(100vh - 120px);
+    background: rgba(14, 12, 26, 0.97);
+    border: 1px solid rgba(51, 102, 204, 0.2);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0, 0, 20, 0.6);
+    backdrop-filter: blur(16px);
+    z-index: 800;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.flowzen-panel.hidden {
+    display: none;
+}
+
+.flowzen-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(20, 18, 40, 0.85);
+    border-bottom: 1px solid rgba(51, 102, 204, 0.15);
+    flex-shrink: 0;
+}
+
+.flowzen-icon {
+    font-size: 16px;
+}
+
+.flowzen-title {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(180, 200, 255, 0.9);
+    letter-spacing: 0.3px;
+}
+
+.flowzen-state {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(51, 102, 204, 0.15);
+    color: rgba(120, 160, 255, 0.7);
+    border: 1px solid rgba(51, 102, 204, 0.2);
+}
+
+.flowzen-state.observing { background: rgba(80, 180, 120, 0.15); color: rgba(120, 220, 160, 0.8); }
+.flowzen-state.analyzing { background: rgba(200, 150, 50, 0.15); color: rgba(240, 190, 80, 0.8); }
+.flowzen-state.diary_new { background: rgba(51, 102, 204, 0.25); color: rgba(140, 180, 255, 0.9); }
+
+.flowzen-status {
+    display: flex;
+    gap: 0;
+    padding: 8px 16px;
+    background: rgba(18, 16, 34, 0.6);
+    border-bottom: 1px solid rgba(51, 102, 204, 0.08);
+    flex-shrink: 0;
+}
+
+.flowzen-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.flowzen-stat-label {
+    font-size: 9px;
+    color: rgba(120, 130, 160, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.flowzen-stat-value {
+    font-size: 11px;
+    color: rgba(180, 200, 240, 0.85);
+    font-weight: 500;
+}
+
+.flowzen-recommend-btn {
+    margin: 10px 16px;
+    padding: 8px 14px;
+    background: rgba(51, 102, 204, 0.18);
+    border: 1px solid rgba(51, 102, 204, 0.3);
+    border-radius: 8px;
+    color: rgba(160, 190, 255, 0.9);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.flowzen-recommend-btn:hover {
+    background: rgba(51, 102, 204, 0.32);
+    border-color: rgba(80, 140, 255, 0.5);
+    color: rgba(200, 220, 255, 1);
+}
+
+.flowzen-recommend-btn.loading {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+/* Diary Journal Scroll Area */
+.flowzen-diary-journal {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(51, 102, 204, 0.3) transparent;
+}
+
+.flowzen-diary-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: rgba(150, 160, 180, 0.5);
+    font-size: 13px;
+}
+
+.diary-empty-icon {
+    display: block;
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+/* Individual Diary Entry — Pocket Diary Style */
+.diary-entry {
+    background: rgba(25, 22, 40, 0.7);
+    border: 1px solid rgba(51, 102, 204, 0.12);
+    border-left: 3px solid rgba(51, 102, 204, 0.4);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+
+.diary-entry:first-child {
+    border-left-color: rgba(100, 180, 255, 0.6);
+    background: rgba(30, 28, 50, 0.8);
+}
+
+.diary-entry-time {
+    font-size: 11px;
+    color: rgba(100, 160, 255, 0.7);
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+}
+
+.diary-entry-meta {
+    font-size: 10px;
+    color: rgba(150, 160, 180, 0.5);
+    margin-bottom: 8px;
+}
+
+.diary-entry-text {
+    font-family: 'Georgia', 'Palatino', 'Times New Roman', serif;
+    font-size: 13px;
+    line-height: 1.65;
+    color: rgba(210, 220, 240, 0.88);
+    font-style: italic;
+}
+
+.diary-entry-source {
+    font-size: 10px;
+    color: rgba(100, 160, 255, 0.5);
+    margin-top: 6px;
+    text-align: right;
+}
