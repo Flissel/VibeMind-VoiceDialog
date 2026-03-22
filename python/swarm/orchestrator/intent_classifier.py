@@ -449,6 +449,18 @@ Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Team
 - agentfarm.collaborate: Multi-Space Zusammenarbeit starten
   → "Starte eine Zusammenarbeit aller Agents fuer X"
   → payload: {"task": "...", "goal": "..."}
+- agentfarm.pipeline.start: Starte Code-Generierung-Pipeline
+  → "Starte die Pipeline fuer einen Chat-Bot"
+  → payload: {"task_description": "..."}
+- agentfarm.pipeline.status: Pipeline-Fortschritt abfragen
+  → "Wie ist der Pipeline-Status?"
+- agentfarm.forge.start: Starte kontinuierliche Verbesserung (Forge)
+  → "Starte den Forge-Prozess fuer Projekt X"
+  → payload: {"project_id": "..."}
+- agentfarm.forge.status: Forge-Status abfragen
+  → "Wie laeuft der Forge?"
+- agentfarm.open: AgentFarm Dashboard oeffnen
+  → "Oeffne AgentFarm"
 
 ### WICHTIGE UNTERSCHEIDUNG - MINIBOOK vs DIRECT
 - minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
@@ -468,6 +480,39 @@ NUR fuer explizite Empfehlungs-Anfragen. Die Blaue Rose beobachtet passiv — de
   → payload: {"mood": "..."} (optional)
 - rose.status: Blaue Rose Status
   → "Blaue Rose Status", "Flowzen Status"
+
+### 11. MIROFISH SPACE (Swarm Intelligence Prediction Engine)
+Multi-Agent Simulation und Vorhersage-Engine. Nimmt Seed-Daten, baut einen Knowledge Graph, simuliert Agenten-Interaktionen und generiert Vorhersage-Reports.
+
+**Schluesselwoerter:** mirofish, vorhersage, prediction, simulation, simulieren, agenten-simulation, predict, swarm intelligence
+
+**Event-Types:**
+- mirofish.simulate: Vorhersage-Simulation starten (End-to-End Pipeline)
+  → "Simuliere die Reaktion auf unser neues Produkt", "Starte eine MiroFish Vorhersage"
+  → "Sage vorher wie der Markt auf X reagiert", "Prediction fuer Y"
+  → payload: {"requirement": "...", "text": "...", "agent_count": 100, "rounds": 10}
+- mirofish.graph.build: Knowledge Graph aus Seed-Daten aufbauen (ohne Simulation)
+  → "Erstelle einen MiroFish Graph aus diesem Text"
+  → payload: {"requirement": "...", "text": "..."}
+- mirofish.graph.search: MiroFish Knowledge Graph durchsuchen
+  → "Suche im MiroFish Graph nach X"
+  → payload: {"graph_id": "...", "query": "..."}
+- mirofish.list_projects: Alle MiroFish Projekte auflisten
+  → "Welche MiroFish Projekte gibt es?", "MiroFish Projekte"
+- mirofish.report.chat: Mit MiroFish Report-Agent chatten
+  → "Frag den MiroFish Report ueber X"
+  → payload: {"report_id": "...", "question": "..."}
+- mirofish.interview: Simulierten Agenten interviewen
+  → "Interview den Agenten Max aus der Simulation"
+  → payload: {"simulation_id": "...", "agent_name": "...", "question": "..."}
+- mirofish.status: MiroFish Verbindungsstatus pruefen
+  → "MiroFish Status", "Ist MiroFish verbunden?"
+- mirofish.docker.start: MiroFish Docker starten
+  → "Starte MiroFish Docker"
+- mirofish.docker.stop: MiroFish Docker stoppen
+  → "Stopp MiroFish Docker"
+- mirofish.docker.status: MiroFish Docker Status
+  → "MiroFish Docker Status"
 
 ### WICHTIGE UNTERSCHEIDUNG - BLAUE ROSE vs ANDERE
 - rose.recommend: User fragt EXPLIZIT nach Empfehlung → "Was soll ich machen?"
@@ -785,6 +830,7 @@ class IntentClassifier:
                 "schedule": "schedule.status", "zeitplan": "schedule.status",
                 "minibook": "minibook.status",
                 "agentfarm": "agentfarm.status", "agent farm": "agentfarm.status",
+                "mirofish": "mirofish.status", "miro fish": "mirofish.status",
                 "code": "code.status", "coding": "code.status",
             }
             if "status" in text_lower:

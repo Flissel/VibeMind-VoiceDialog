@@ -9,6 +9,7 @@ import logging
 import os
 from typing import Any, Optional, List
 
+from llm_config import get_model, get_client
 from swarm.orchestrator.notification_queue import Notification
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class ResponseGenerator:
             model: Model override (default: Claude Haiku for speed)
         """
         self._client = model_client
-        self._model = model or os.getenv("RESPONSE_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("response")
         self._own_client = None
 
     @property
@@ -83,16 +84,7 @@ class ResponseGenerator:
 
         if self._own_client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    logger.warning("OPENROUTER_API_KEY not set, using fallback templates")
-                    return None
-
-                self._own_client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                self._own_client = get_client("response")
                 logger.info(f"ResponseGenerator using {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create response generator client: {e}")
