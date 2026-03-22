@@ -103,13 +103,33 @@ def recommend_task(mood: str = "", **kwargs) -> Dict[str, Any]:
         from spaces.flowzen.activity_tracker import generate_diary_entry
         import asyncio as _asyncio
 
-        diary_text = _asyncio.run(generate_diary_entry(
-            mood=mood, energy=5, time_window=time_window, hour=hour,
-            category=category, intent_count=status["intents_buffered"],
-            activity_summary=activity_summary,
-            brain_action="manual_request",
-            brain_reasoning=f"User fragte explizit nach Empfehlung",
-        ))
+        try:
+            _loop = _asyncio.get_event_loop()
+            if _loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as _pool:
+                    diary_text = _pool.submit(
+                        _asyncio.run,
+                        generate_diary_entry(
+                            mood=mood, energy=5, time_window=time_window, hour=hour,
+                            category=category, intent_count=status["intents_buffered"],
+                            activity_summary=activity_summary,
+                            brain_action="manual_request",
+                            brain_reasoning="User fragte explizit nach Empfehlung",
+                        )
+                    ).result(timeout=15)
+            else:
+                diary_text = _asyncio.run(generate_diary_entry(
+                    mood=mood, energy=5, time_window=time_window, hour=hour,
+                    category=category, intent_count=status["intents_buffered"],
+                    activity_summary=activity_summary,
+                    brain_action="manual_request",
+                    brain_reasoning="User fragte explizit nach Empfehlung",
+                ))
+        except Exception:
+            diary_text = None
+        if not diary_text:
+            diary_text = f"Empfehlung: {CATEGORY_DESCRIPTIONS.get(category, category)}. {reasoning[:80]}"
         _repo = _FzRepo()
         diary_entry = _repo.create_diary_entry(
             entry_text=diary_text, mood=mood, energy=5,

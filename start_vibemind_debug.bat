@@ -137,9 +137,9 @@ echo Logs will be saved to: logs\electron_debug\
 echo Press Ctrl+C to stop
 echo.
 
-REM Start Debug Agent
+REM Start Debug Agent (use venv Python)
 cd python\debug
-python electron_debug_agent.py
+"%PROJECT_ROOT%\.venv312\Scripts\python.exe" electron_debug_agent.py
 
 echo.
 echo Debug session ended.

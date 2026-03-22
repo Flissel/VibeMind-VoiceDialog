@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Electron Debug Agent - AutoGen 0.4
+Electron Debug Agent - AutoGen 0.7.x
 Verbindet sich mit Electron via CDP und erstellt kontinuierliche Debug-Logs.
 
 Usage:
@@ -20,18 +20,20 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-# AutoGen 0.4 imports
+# AutoGen 0.7.x imports
 try:
     from autogen_agentchat.agents import AssistantAgent
     from autogen_agentchat.messages import TextMessage
-    from autogen_agentchat.task import Console, TextMentionTermination
+    from autogen_agentchat.conditions import TextMentionTermination
+    from autogen_agentchat.ui import Console
     from autogen_agentchat.teams import RoundRobinGroupChat
-    from autogen_core.components.tools import FunctionTool
-    from autogen_ext.models import OpenAIChatCompletionClient
+    from autogen_core import CancellationToken
+    from autogen_core.tools import FunctionTool
+    from autogen_ext.models.openai import OpenAIChatCompletionClient
     HAS_AUTOGEN = True
 except ImportError:
     HAS_AUTOGEN = False
-    print("WARNING: AutoGen 0.4 not installed. Install with: pip install autogen-agentchat")
+    print("WARNING: AutoGen 0.7.x not installed. Install with: pip install autogen-agentchat~=0.7")
 
 # CDP via websockets
 try:
@@ -433,21 +435,22 @@ class DebugLogger:
 
 
 # ========================================================================
-# DEBUG AGENT (AutoGen 0.4)
+# DEBUG AGENT (AutoGen 0.7.x)
 # ========================================================================
 
 class ElectronDebugAgent:
     """
-    AutoGen 0.4 Agent that monitors Electron app via CDP.
-    Creates continuous debug logs and can analyze issues.
+    AutoGen 0.7.x Agent that monitors Electron app via CDP.
+    Creates continuous debug logs, auto-analyzes issues,
+    and pushes toast notifications into the Electron renderer.
     """
-    
+
     def __init__(self, config: DebugConfig = None):
         self.config = config or DebugConfig()
         self.cdp = CDPClient(self.config)
         self.logger = DebugLogger(self.config)
         self.running = False
-        
+
         # Stats
         self.stats = {
             "console_logs": 0,
@@ -456,7 +459,14 @@ class ElectronDebugAgent:
             "network_requests": 0,
             "start_time": None
         }
-        
+
+        # Auto-analysis: buffer issues, debounce, then analyze
+        self._issue_buffer: List[Dict] = []
+        self._debounce_task: Optional[asyncio.Task] = None
+        self._debounce_seconds: float = 3.0
+        self._analyzing: bool = False
+        self._toast_id: int = 0
+
         # AutoGen agent (optional, for analysis)
         self.autogen_agent = None
         if HAS_AUTOGEN:
@@ -527,6 +537,191 @@ When errors occur, analyze them and suggest fixes."""
         )
 
     
+    # ------------------------------------------------------------------
+    # Auto-analysis: buffer → debounce → analyze → toast
+    # ------------------------------------------------------------------
+
+    def _buffer_issue(self, level: str, message: str, source: str = ""):
+        """Buffer an error/warning for batched analysis."""
+        self._issue_buffer.append({
+            "level": level,
+            "message": message[:300],
+            "source": source,
+            "time": datetime.now().strftime("%H:%M:%S"),
+        })
+        # (Re-)start debounce timer
+        if self._debounce_task and not self._debounce_task.done():
+            self._debounce_task.cancel()
+        self._debounce_task = asyncio.create_task(self._debounce_analysis())
+
+    async def _debounce_analysis(self):
+        """Wait for quiet period, then trigger analysis."""
+        try:
+            await asyncio.sleep(self._debounce_seconds)
+        except asyncio.CancelledError:
+            return
+        if self._issue_buffer and not self._analyzing:
+            await self._auto_analyze()
+
+    async def _auto_analyze(self):
+        """Analyze buffered issues and push a toast into Electron."""
+        self._analyzing = True
+        batch = self._issue_buffer.copy()
+        self._issue_buffer.clear()
+
+        errors = [i for i in batch if i["level"] == "error"]
+        warnings = [i for i in batch if i["level"] == "warning"]
+
+        # Build summary lines for the toast
+        summary_lines = []
+        if errors:
+            summary_lines.append(f"{len(errors)} Error{'s' if len(errors)>1 else ''}")
+            for e in errors[:5]:
+                summary_lines.append(f"  [{e['time']}] {e['message'][:120]}")
+        if warnings:
+            summary_lines.append(f"{len(warnings)} Warning{'s' if len(warnings)>1 else ''}")
+            for w in warnings[:3]:
+                summary_lines.append(f"  [{w['time']}] {w['message'][:120]}")
+
+        # Optional: let AutoGen produce a smarter diagnosis
+        ai_summary = ""
+        if self.autogen_agent:
+            try:
+                prompt = (
+                    "Analyze these Electron errors/warnings. "
+                    "Give a short diagnosis (max 3 sentences) and a concrete fix suggestion.\n\n"
+                    + json.dumps(batch, indent=2)
+                )
+                result = await self.autogen_agent.on_messages(
+                    [TextMessage(content=prompt, source="user")],
+                    cancellation_token=CancellationToken(),
+                )
+                ai_summary = result.chat_message.content
+            except Exception as e:
+                ai_summary = f"AutoGen analysis failed: {e}"
+
+        severity = "error" if errors else "warning"
+        await self._show_toast_via_cdp(severity, summary_lines, ai_summary)
+        self._analyzing = False
+
+    async def _show_toast_via_cdp(
+        self, severity: str, summary_lines: List[str], ai_analysis: str = ""
+    ):
+        """Inject a toast notification into Electron renderer via CDP (safe DOM API)."""
+        if not self.cdp.ws:
+            return
+
+        self._toast_id += 1
+        tid = self._toast_id
+
+        border_color = "#ff4444" if severity == "error" else "#ffbb33"
+        icon = "\u26d4" if severity == "error" else "\u26a0"
+        title = "Error Detected" if severity == "error" else "Warning Detected"
+
+        # JSON-encode strings so they're safe to embed in JS
+        lines_json = json.dumps(summary_lines)
+        ai_json = json.dumps(ai_analysis)
+
+        js = f"""
+        (function() {{
+            // Container (reused across toasts)
+            var container = document.getElementById('debug-toast-container');
+            if (!container) {{
+                container = document.createElement('div');
+                container.id = 'debug-toast-container';
+                container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99999;'
+                    + 'display:flex;flex-direction:column;gap:8px;pointer-events:none;'
+                    + 'max-height:80vh;overflow-y:auto;max-width:420px;';
+                document.body.appendChild(container);
+            }}
+
+            // Toast card
+            var toast = document.createElement('div');
+            toast.id = 'debug-toast-{tid}';
+            toast.style.cssText = 'pointer-events:auto;background:#1e1e2e;color:#e0e0e0;'
+                + 'border:1px solid {border_color};border-left:4px solid {border_color};'
+                + 'border-radius:8px;padding:12px 16px;font-family:monospace;font-size:13px;'
+                + 'box-shadow:0 4px 24px rgba(0,0,0,0.6);opacity:0;'
+                + 'transform:translateX(40px);transition:all 0.3s ease;max-width:420px;';
+
+            // Header row
+            var header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+            var titleEl = document.createElement('span');
+            titleEl.style.cssText = 'font-size:15px;font-weight:bold;';
+            titleEl.textContent = {json.dumps(icon + ' ' + title)};
+            var closeBtn = document.createElement('span');
+            closeBtn.style.cssText = 'cursor:pointer;font-size:18px;opacity:0.6;padding:0 4px;';
+            closeBtn.textContent = '\\u00d7';
+            closeBtn.title = 'Dismiss';
+            closeBtn.onclick = function() {{
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(40px)';
+                setTimeout(function() {{ toast.remove(); }}, 300);
+            }};
+            header.appendChild(titleEl);
+            header.appendChild(closeBtn);
+            toast.appendChild(header);
+
+            // Summary lines
+            var body = document.createElement('div');
+            body.style.cssText = 'margin-top:8px;line-height:1.6;font-size:12px;';
+            var lines = {lines_json};
+            lines.forEach(function(line) {{
+                var p = document.createElement('div');
+                if (line.indexOf('Error') !== -1 || line.indexOf('Warning') !== -1) {{
+                    p.style.fontWeight = 'bold';
+                    p.style.marginTop = '4px';
+                }}
+                p.textContent = line;
+                body.appendChild(p);
+            }});
+            toast.appendChild(body);
+
+            // AI diagnosis block (optional)
+            var aiText = {ai_json};
+            if (aiText) {{
+                var aiBox = document.createElement('div');
+                aiBox.style.cssText = 'margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);'
+                    + 'border-radius:4px;font-size:12px;color:#ccc;'
+                    + 'border-left:3px solid {border_color};white-space:pre-wrap;';
+                var aiLabel = document.createElement('b');
+                aiLabel.textContent = 'AI Diagnosis:';
+                aiBox.appendChild(aiLabel);
+                aiBox.appendChild(document.createElement('br'));
+                var aiContent = document.createElement('span');
+                aiContent.textContent = aiText;
+                aiBox.appendChild(aiContent);
+                toast.appendChild(aiBox);
+            }}
+
+            container.appendChild(toast);
+            requestAnimationFrame(function() {{
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(0)';
+            }});
+
+            // Auto-dismiss after 20s
+            setTimeout(function() {{
+                var el = document.getElementById('debug-toast-{tid}');
+                if (el) {{
+                    el.style.opacity = '0';
+                    el.style.transform = 'translateX(40px)';
+                    setTimeout(function() {{ el.remove(); }}, 300);
+                }}
+            }}, 20000);
+        }})();
+        """
+
+        try:
+            await self.cdp.send("Runtime.evaluate", {
+                "expression": js,
+                "silent": True,
+                "returnByValue": False,
+            })
+        except Exception as e:
+            print(f"{LEVEL_ANSI['ERROR']}[TOAST] Failed to inject: {e}{RST}")
+
     async def _on_console_api(self, params: Dict):
         """Handle console API calls."""
         msg_type = params.get("type", "log")
@@ -564,8 +759,10 @@ When errors occur, analyze them and suggest fixes."""
                     )
                     if obj.get("l") in ("ERROR", "CRITICAL"):
                         self.stats["errors"] += 1
+                        self._buffer_issue("error", obj.get("m", ""), f"space:{obj.get('s','')}")
                     elif obj.get("l") == "WARNING":
                         self.stats["warnings"] += 1
+                        self._buffer_issue("warning", obj.get("m", ""), f"space:{obj.get('s','')}")
                     return
 
                 # IPC trace (__ipc_log)
@@ -590,6 +787,7 @@ When errors occur, analyze them and suggest fixes."""
             self.logger.log(f"node:{node_space}", level_str.lower(), message, silent=True)
             if msg_type == "error":
                 self.stats["errors"] += 1
+                self._buffer_issue("error", message, f"node:{node_space}")
             return
 
         # ── Fallback: everything else gets [SYSTEM] space coloring ──
@@ -604,9 +802,11 @@ When errors occur, analyze them and suggest fixes."""
 
         if level_str == "ERROR":
             self.stats["errors"] += 1
+            self._buffer_issue("error", message, "console")
         elif level_str == "WARNING":
             self.stats["warnings"] += 1
-    
+            self._buffer_issue("warning", message, "console")
+
     async def _on_exception_thrown(self, params: Dict):
         """Handle runtime exceptions."""
         exception = params.get("exceptionDetails", {})
@@ -621,6 +821,7 @@ When errors occur, analyze them and suggest fixes."""
             "url": exception.get("url")
         })
         self.stats["errors"] += 1
+        self._buffer_issue("error", f"{text}\n{stack[:200]}" if stack else text, "exception")
     
     async def _on_log_entry(self, params: Dict):
         """Handle log entries."""
@@ -728,7 +929,7 @@ When errors occur, analyze them and suggest fixes."""
         # Create a simple chat
         result = await self.autogen_agent.on_messages(
             [TextMessage(content=query, source="user")],
-            cancellation_token=None
+            cancellation_token=CancellationToken(),
         )
         return result.chat_message.content
 

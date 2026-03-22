@@ -116,7 +116,7 @@ class MultiverseApp {
             },
             flowzen: {
                 objects: [],
-                position: new THREE.Vector3(0, 4, -8),
+                position: new THREE.Vector3(-10, 0, -16),
                 icon: '\u{1F339}',
                 name: 'Blaue Rose',
                 agent: { name: 'Flowzen', slug: 'flowzen', role: 'Circadian Intelligence' },

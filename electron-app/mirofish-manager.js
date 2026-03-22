@@ -20,7 +20,7 @@ class MiroFishManager {
     this.topOffset = 32 + 43;
 
     // MiroFish Flask+Vue app URL
-    this.mirofishUrl = process.env.MIROFISH_URL || 'http://localhost:5001';
+    this.mirofishUrl = process.env.MIROFISH_URL || 'http://localhost:3001';
 
     // Retry state for connection-refused errors
     this.retryCount = 0;
