@@ -83,3 +83,17 @@ electron-app/rowboat-services.cjs
 
 # Diagnostic reports
 diagnostic_reports/
+
+# MongoDB data (large binary files)
+**/mongo/journal/
+**/mongo/*.wt
+**/mongo/WiredTiger*
+**/mongo/mongod.lock
+**/mongo/diagnostic.data/
+
+# Playwright artifacts
+electron-app/playwright-report/
+electron-app/test-results/
+
+# Generated images
+n8n-workflow-generated.png
