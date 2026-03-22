@@ -5,10 +5,10 @@ Provides tool functions for the VideoBackendAgent to call via event routing.
 Each tool delegates to the underlying CLI scripts in the submodules.
 """
 
-import json
 import logging
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -145,4 +145,78 @@ def video_status(**kwargs) -> Dict[str, Any]:
         "vibevideo_installed": vibevideo_ok,
         "deepfake_installed": deepfake_ok,
         "available_tools": tools,
+    }
+
+
+# ── Video Gallery (scan outputs) ────────────────────────────
+
+def _categorize_root(filepath: Path) -> str:
+    """Categorize root-level vibevideo mp4 files by name."""
+    name = filepath.stem.lower()
+    if "team" in name:
+        return "Team"
+    if "product" in name:
+        return "Product"
+    if "final" in name:
+        return "Final"
+    if "application" in name:
+        return "Application"
+    if "vision" in name:
+        return "Vision"
+    return "Other"
+
+
+def _human_size(size_bytes: int) -> str:
+    """Format bytes as human-readable string."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
+
+
+def scan_video_outputs(**kwargs) -> Dict[str, Any]:
+    """Scan vibevideo + vibevideo_deepfake output directories for .mp4 files."""
+    videos: List[Dict[str, Any]] = []
+
+    scan_dirs: List[tuple] = []
+
+    if VIBEVIDEO_DIR.exists():
+        scan_dirs.extend([
+            (VIBEVIDEO_DIR, _categorize_root),
+            (VIBEVIDEO_DIR / "lip_sync", lambda _f: "Lipsync"),
+            (VIBEVIDEO_DIR / "composited", lambda _f: "Composited"),
+            (VIBEVIDEO_DIR / "backgrounds", lambda _f: "Background"),
+            (VIBEVIDEO_DIR / "vision", lambda _f: "Vision"),
+            (VIBEVIDEO_DIR / "output", lambda _f: "Output"),
+        ])
+
+    if DEEPFAKE_DIR.exists():
+        scan_dirs.extend([
+            (DEEPFAKE_DIR / "lip_sync", lambda _f: "Deepfake Lipsync"),
+        ])
+
+    for directory, categorizer in scan_dirs:
+        if not directory.exists():
+            continue
+        for mp4 in directory.glob("*.mp4"):
+            if not mp4.is_file():
+                continue
+            stat = mp4.stat()
+            videos.append({
+                "path": str(mp4.resolve()),
+                "filename": mp4.name,
+                "size_bytes": stat.st_size,
+                "size_human": _human_size(stat.st_size),
+                "category": categorizer(mp4),
+                "modified": stat.st_mtime,
+                "modified_iso": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            })
+
+    videos.sort(key=lambda v: v["modified"], reverse=True)
+
+    return {
+        "success": True,
+        "message": f"Found {len(videos)} video(s)",
+        "videos": videos,
     }

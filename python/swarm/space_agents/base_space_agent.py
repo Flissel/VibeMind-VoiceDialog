@@ -18,6 +18,8 @@ import os
 import time
 import uuid
 from abc import ABC, abstractmethod
+
+from llm_config import get_model
 from typing import Dict, Any, List, Optional, Callable
 
 from .models import (
@@ -34,7 +36,7 @@ class BaseSpaceAgent(ABC):
     """LLM agent with native tool calling for a specific Space."""
 
     def __init__(self, model: str = None, max_turns: int = 5):
-        self.model = model or os.getenv("SPACE_AGENT_MODEL", "openai/gpt-4o-mini")
+        self.model = model or get_model("space_agent")
         self._max_turns = max_turns
         self._client = None
         self._tools: List[Dict[str, Any]] = []

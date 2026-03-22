@@ -21,6 +21,8 @@ from typing import Optional, Dict, Any, List, Callable
 from functools import wraps
 from pathlib import Path
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Database path - resolve from spaces/ideas/tools/ to python/vibemind.db
@@ -869,7 +871,7 @@ Formatiere als JSON:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=1500,
@@ -925,7 +927,7 @@ Formatiere als JSON-Array von optimierten Abschnitten:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=3000,
@@ -1002,7 +1004,7 @@ Formatiere als JSON:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=6000,
@@ -1059,7 +1061,7 @@ Formatiere als JSON:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=1000,
@@ -1737,7 +1739,7 @@ WICHTIG:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=3000,
@@ -1821,7 +1823,7 @@ WICHTIG:
 """
 
         response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku",
+            model=get_model("exploration"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=4000,

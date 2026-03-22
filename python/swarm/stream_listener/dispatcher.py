@@ -5,7 +5,6 @@ Evaluates ALL listeners in parallel via asyncio.gather and returns
 a ConfidenceDistribution with the winner.
 """
 
-import os
 import time
 import asyncio
 import logging
@@ -17,6 +16,7 @@ from .models import (
     EvalContext,
     StreamListenerConfig,
 )
+from llm_config import get_model, get_client
 from .base_listener import BaseStreamListener
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class StreamListenerDispatcher:
 
     def __init__(self, config: Optional[StreamListenerConfig] = None):
         self._config = config or StreamListenerConfig(
-            model=os.getenv("STREAM_LISTENER_MODEL", "openai/gpt-4o-mini"),
+            model=get_model("stream_listener"),
         )
         self._listeners: List[BaseStreamListener] = []
         self._shared_client = None
@@ -46,27 +46,18 @@ class StreamListenerDispatcher:
         logger.info(f"[StreamDispatcher] Registered listener: {listener.name}")
 
     def _ensure_shared_client(self) -> None:
-        """Create shared OpenRouter client for all listeners."""
+        """Create shared client for all listeners via llm_config."""
         if self._shared_client is not None:
             return
 
         try:
-            from openai import OpenAI
-            api_key = os.getenv("OPENROUTER_API_KEY")
-            if api_key:
-                self._shared_client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1",
-                    timeout=10.0,
-                )
-                # Inject into all registered listeners
-                for listener in self._listeners:
-                    listener.set_client(self._shared_client)
-                logger.info("[StreamDispatcher] Shared OpenRouter client created")
-            else:
-                logger.error("[StreamDispatcher] OPENROUTER_API_KEY not set!")
-        except ImportError:
-            logger.error("[StreamDispatcher] OpenAI library not installed")
+            self._shared_client = get_client("stream_listener")
+            # Inject into all registered listeners
+            for listener in self._listeners:
+                listener.set_client(self._shared_client)
+            logger.info("[StreamDispatcher] Shared LLM client created via llm_config")
+        except Exception as e:
+            logger.error(f"[StreamDispatcher] Failed to create shared client: {e}")
 
     async def evaluate_all(
         self, text: str, context: EvalContext

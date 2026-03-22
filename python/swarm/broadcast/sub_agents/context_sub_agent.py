@@ -20,9 +20,11 @@ from typing import Any, Optional, Dict, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from swarm.broadcast.dispatcher import IntentPayload
 
+from llm_config import get_model, get_async_client
+
 logger = logging.getLogger(__name__)
 
-CONTEXT_MODEL = os.getenv("CONTEXT_MODEL", "openai/gpt-4o-mini")
+CONTEXT_MODEL = get_model("context")
 COMPRESS_EVERY_N = int(os.getenv("CONTEXT_COMPRESS_INTERVAL", "5"))
 
 
@@ -138,8 +140,7 @@ class ContextSubAgent:
     async def _compress_summary(self, new_entry: str):
         """Use LLM to compress the running summary + new entry."""
         try:
-            from swarm.cloud_client import get_openrouter_client
-            client = get_openrouter_client()
+            client = get_async_client("context")
 
             prompt = (
                 "Compress this conversation transcript into a concise summary.\n"

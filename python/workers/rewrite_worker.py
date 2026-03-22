@@ -27,6 +27,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional, List
 
+from llm_config import get_model
+
 from autogen_core import MessageContext, RoutedAgent, default_subscription, message_handler
 from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime
 
@@ -84,7 +86,7 @@ class RewriteWorker(RoutedAgent):
     def __init__(self):
         super().__init__("Rewrite Worker Agent")
         self.model = None
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.model_name = get_model("rewrite_worker")
         
         if HAS_GEMINI:
             api_key = os.getenv("GOOGLE_API_KEY")

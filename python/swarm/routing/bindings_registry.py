@@ -19,6 +19,9 @@ KEYWORD_BINDINGS: Dict[str, SpaceBinding] = {
     r"termin|erinnerung|wecker|timer|schedule|reminder": SpaceBinding(
         space="schedule", agent="ScheduleBackendAgent", pattern="keyword:schedule"
     ),
+    r"agent.?farm|pipeline|forge|swarm.?team|agent.?team": SpaceBinding(
+        space="autogen", agent="AgentFarmBackendAgent", pattern="keyword:agentfarm"
+    ),
 }
 
 # Compiled keyword regexes (built once)
@@ -56,6 +59,7 @@ def build_prefix_bindings() -> Dict[str, SpaceBinding]:
         "minibook": ("minibook", "MinibookBackendAgent", "events:tasks:minibook"),
         "zeroclaw_research": ("research", "ZeroClawResearchAgent", "events:tasks:zeroclaw"),
         "video": ("video", "VideoBackendAgent", "events:tasks:video"),
+        "agentfarm": ("autogen", "AgentFarmBackendAgent", "events:tasks:agentfarm"),
     }
 
     for agent_key, (space, agent_name, stream) in agent_registry.items():

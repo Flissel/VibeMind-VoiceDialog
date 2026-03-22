@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 from swarm.analysis.user_context import UserContext
+from llm_config import get_model, get_client
 from swarm.analysis.intent_analysis_team import IntentHypothesis
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class ConversionAI:
         Args:
             model: LLM model to use (default: from env)
         """
-        self._model = model or os.getenv("CONVERSION_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("conversion")
         self._client = None
         self._personality: Optional[AIPersonality] = None
         self._db_repo = None
@@ -83,15 +84,7 @@ class ConversionAI:
         """Lazy-load OpenAI-compatible client."""
         if self._client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                self._client = get_client("conversion")
             except Exception as e:
                 logger.error(f"Failed to create conversion client: {e}")
                 raise

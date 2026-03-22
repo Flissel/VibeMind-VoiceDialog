@@ -19,12 +19,14 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
+from llm_config import get_model, get_client
+
 # Add python/ root to path (4 levels up from spaces/ideas/tools/)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from data import CanvasRepository, IdeasRepository, ProjectsRepository, ShuttlesRepository, ShuttleStage, STAGE_PROGRESS
 
-# Try to import OpenAI (used for OpenRouter's compatible endpoint)
+# OpenAI import check (still needed for type reference in legacy code)
 HAS_OPENAI = False
 try:
     from openai import OpenAI
@@ -49,7 +51,7 @@ _canvas_repo: Optional[CanvasRepository] = None
 _shuttles_repo: Optional[ShuttlesRepository] = None
 _projects_repo: Optional[ProjectsRepository] = None
 
-# OpenRouter Client (OpenAI-compatible) - use Any for type since OpenAI might not be imported
+# LLM Client (provider-agnostic via llm_config) - use Any for type since OpenAI might not be imported
 _openrouter_client: Any = None
 
 
@@ -111,16 +113,14 @@ def _broadcast_stage_update(shuttle_id: str, stage: str, shuttle_db_id: str = No
 
 
 def _get_openrouter_client() -> Optional[Any]:
-    """Get or create OpenRouter client (OpenAI-compatible endpoint)."""
+    """Get or create LLM client (provider-agnostic via llm_config)."""
     global _openrouter_client
-    if _openrouter_client is None and HAS_OPENAI:
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if api_key:
-            _openrouter_client = OpenAI(
-                api_key=api_key,
-                base_url="https://openrouter.ai/api/v1"
-            )
-            logger.info("OpenRouter client initialized")
+    if _openrouter_client is None:
+        try:
+            _openrouter_client = get_client("summary")
+            logger.info("LLM client initialized via llm_config")
+        except Exception as e:
+            logger.warning(f"Failed to create LLM client: {e}")
     return _openrouter_client
 
 
@@ -166,7 +166,7 @@ def _call_summarization(title: str, content: str, max_tokens: int = 500) -> Opti
         return None
 
     # Use GPT-4o-mini for cost-efficient summarization
-    model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+    model = get_model("summary")
 
     system_prompt = """You are a concise summarization assistant.
 Your task is to create clear, informative summaries of ideas and notes.
@@ -218,7 +218,7 @@ def _call_rewrite(
         return initial_summary
 
     # Use Gemini for rewrite (larger context, good at following style instructions)
-    model = os.getenv("OPENROUTER_REWRITE_MODEL", "google/gemini-2.0-flash-001")
+    model = get_model("rewrite")
 
     style_instructions = {
         "concise": "Make it more concise and punchy. Remove any fluff.",
@@ -284,8 +284,8 @@ def summarize_idea(params: Dict[str, Any]) -> str:
     if not HAS_OPENAI:
         return "Summarization requires OpenAI package. Install with: pip install openai"
 
-    if not os.getenv("OPENROUTER_API_KEY"):
-        return "Please set OPENROUTER_API_KEY in your .env file to enable summarization."
+    if not _get_openrouter_client():
+        return "LLM client not available. Check your API key configuration."
 
     # Get current bubble context - use local import from spaces
     current_bubble_id = None
@@ -350,7 +350,7 @@ def summarize_idea(params: Dict[str, Any]) -> str:
         # Generate summary for single note
         initial_summary = _call_summarization(title, content)
         if not initial_summary:
-            return "Failed to generate summary. Check your OPENROUTER_API_KEY."
+            return "Failed to generate summary. Check your API key configuration."
 
         final_summary = _call_rewrite(initial_summary, title, style)
 
@@ -382,7 +382,7 @@ def summarize_idea(params: Dict[str, Any]) -> str:
         # Step 1: Initial summarization with GPT-4o-mini via OpenRouter
         initial_summary = _call_summarization(title, content)
         if not initial_summary:
-            return "Failed to generate summary. Check your OPENROUTER_API_KEY."
+            return "Failed to generate summary. Check your API key configuration."
 
         # Step 2: Rewrite with Gemini via OpenRouter
         final_summary = _call_rewrite(initial_summary, title, style)
@@ -515,8 +515,8 @@ def generate_white_paper(params: Dict[str, Any]) -> str:
     if not HAS_OPENAI:
         return "White Paper generation requires OpenAI package. Install with: pip install openai"
 
-    if not os.getenv("OPENROUTER_API_KEY"):
-        return "Please set OPENROUTER_API_KEY in your .env file to enable White Paper generation."
+    if not _get_openrouter_client():
+        return "LLM client not available. Check your API key configuration."
 
     if not start_node_name:
         return "Please specify which idea to start from. Say 'generate white paper from [idea name]'."
@@ -560,7 +560,7 @@ def generate_white_paper(params: Dict[str, Any]) -> str:
     )
 
     if not white_paper_md:
-        return "Failed to generate White Paper. Check your OPENROUTER_API_KEY."
+        return "Failed to generate White Paper. Check your API key configuration."
 
     # Create a canvas node for the whitepaper (appears as draggable node on canvas)
     wp_title = f"White Paper: {start_node.title or start_node_name}"
@@ -731,8 +731,8 @@ def generate_project_structure(params: Dict[str, Any]) -> str:
     if not HAS_OPENAI:
         return "Project structure generation requires OpenAI package. Install with: pip install openai"
 
-    if not os.getenv("OPENROUTER_API_KEY"):
-        return "Please set OPENROUTER_API_KEY in your .env file to enable project structure generation."
+    if not _get_openrouter_client():
+        return "LLM client not available. Check your API key configuration."
 
     # Get current bubble if no name specified - use local import from spaces
     current_bubble_id = None
@@ -938,8 +938,8 @@ def generate_feature_docs(params: Dict[str, Any]) -> str:
     if not HAS_OPENAI:
         return "Feature docs generation requires OpenAI package. Install with: pip install openai"
 
-    if not os.getenv("OPENROUTER_API_KEY"):
-        return "Please set OPENROUTER_API_KEY in your .env file to enable feature docs generation."
+    if not _get_openrouter_client():
+        return "LLM client not available. Check your API key configuration."
 
     # Get current bubble if no name specified - use local import from spaces
     current_bubble_id = None

@@ -769,6 +769,30 @@ class EyeTermHeadless:
                         except Exception:
                             pass
 
+            # Broadcast click data to Electron for desktop-stream overlay
+            if self._broadcast_fn and recent_clicks:
+                now_t = time.time()
+                dots = []
+                for s in recent_clicks:
+                    age = now_t - s.timestamp
+                    if age <= 10.0:
+                        dots.append({
+                            "cx": s.click_x, "cy": s.click_y,
+                            "px": s.predicted_x, "py": s.predicted_y,
+                            "r": round(s.residual_px, 1),
+                            "age": round(age, 1),
+                        })
+                if dots:
+                    try:
+                        self._broadcast_fn({
+                            "type": "eyeterm_click_dots",
+                            "dots": dots,
+                            "screen_w": self._screen_width or 1920,
+                            "screen_h": self._screen_height or 1080,
+                        })
+                    except Exception:
+                        pass
+
             if recent_clicks:
                 self._last_processed_click_ts = max(
                     s.timestamp for s in recent_clicks

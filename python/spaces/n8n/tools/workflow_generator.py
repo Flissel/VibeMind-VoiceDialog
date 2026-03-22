@@ -15,72 +15,42 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from llm_config import get_model as _get_llm_model, get_client
+
 logger = logging.getLogger(__name__)
 
 # Template directory
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
-# LLM client (lazy init) — tries OpenAI direct first, falls back to OpenRouter
+# LLM client (lazy init) — provider-agnostic via llm_config
 _llm_client: Any = None
 _llm_model: Optional[str] = None
-HAS_OPENAI = False
-try:
-    from openai import OpenAI
-    HAS_OPENAI = True
-except ImportError:
-    OpenAI = None
-
-# Default model
-DEFAULT_MODEL = "gpt-4o"
 
 
 def _get_llm_client():
-    """Get or create LLM client. Prefers OpenAI direct, falls back to OpenRouter."""
+    """Get or create LLM client via llm_config."""
     global _llm_client, _llm_model
     if _llm_client is not None:
         return _llm_client
-    if not HAS_OPENAI:
+
+    try:
+        _llm_client = get_client("n8n_generator")
+        _llm_model = _get_llm_model("n8n_generator")
+        logger.info(f"n8n generator using model: {_llm_model}")
+        return _llm_client
+    except Exception as e:
+        logger.error(f"Failed to create n8n generator client: {e}")
         return None
-
-    # Priority 1: Direct OpenAI API
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
-        _llm_client = OpenAI(api_key=openai_key)
-        _llm_model = os.getenv("N8N_GENERATOR_MODEL", DEFAULT_MODEL)
-        if _llm_model.startswith("openai/"):
-            _llm_model = _llm_model[len("openai/"):]
-        logger.info(f"n8n generator using OpenAI direct: {_llm_model}")
-        return _llm_client
-
-    # Priority 2: OpenRouter
-    return _get_openrouter_client()
-
-
-def _get_openrouter_client():
-    """Get OpenRouter client as fallback."""
-    global _llm_client, _llm_model
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    if openrouter_key:
-        _llm_client = OpenAI(
-            api_key=openrouter_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
-        _llm_model = os.getenv("N8N_GENERATOR_MODEL", f"openai/{DEFAULT_MODEL}")
-        logger.info(f"n8n generator using OpenRouter: {_llm_model}")
-        return _llm_client
-    return None
 
 
 def _fallback_to_openrouter():
-    """Switch from OpenAI to OpenRouter after a quota/auth error."""
+    """Reset client and retry (provider fallback handled by llm_config)."""
     global _llm_client, _llm_model
     _llm_client = None
     _llm_model = None
-    # Remove OpenAI so we skip it on retry
-    os.environ.pop("OPENAI_API_KEY", None)
-    client = _get_openrouter_client()
+    client = _get_llm_client()
     if client:
-        logger.info("Switched to OpenRouter after OpenAI quota error")
+        logger.info("Recreated n8n generator client after error")
     return client
 
 
@@ -88,7 +58,7 @@ def _get_model() -> str:
     """Get the resolved model name."""
     if _llm_model:
         return _llm_model
-    return os.getenv("N8N_GENERATOR_MODEL", DEFAULT_MODEL)
+    return _get_llm_model("n8n_generator")
 
 
 def _load_template(template_name: str) -> Dict[str, Any]:
