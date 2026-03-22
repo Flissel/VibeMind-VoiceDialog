@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react'
 import type { AgentFarmTab } from './types'
 import { ProjectProgress } from './features/ProjectProgress'
 import { WorkflowBuilder } from './features/WorkflowBuilder'
-import { VideoProduction } from './features/VideoProduction'
 
 const SUB_TABS: { key: AgentFarmTab; label: string }[] = [
   { key: 'autogen', label: 'Autogen' },
   { key: 'n8n', label: 'n8n' },
-  { key: 'video', label: 'Video' },
 ]
 
 export default function App() {
@@ -116,7 +114,6 @@ export default function App() {
         >
           {activeTab === 'autogen' && <ProjectProgress />}
           {activeTab === 'n8n' && <WorkflowBuilder />}
-          {activeTab === 'video' && <VideoProduction />}
         </div>
       </div>
     </div>

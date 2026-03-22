@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import type { VideoStatusResponse, VideoToolResult } from '../types'
+import { useState, useEffect, useCallback } from 'react'
+import type { VideoStatusResponse, VideoToolResult, VideoFileInfo, VideoListResponse } from '../types'
 
 const api = () => (window as any).vibemindAgentFarm
 
@@ -99,6 +99,9 @@ export function VideoProduction() {
         <div style={{ flex: 1 }} />
         <button onClick={loadStatus} style={linkBtnStyle}>Refresh</button>
       </div>
+
+      {/* ── VIDEO GALLERY ─────────────────────────── */}
+      <VideoGallery />
 
       {/* ── TEAM VIDEO PIPELINE ─────────────────────── */}
       <Section
@@ -388,6 +391,255 @@ function ActionButton({ label, running, onClick, disabled }: {
     >
       {running ? 'Running...' : label}
     </button>
+  )
+}
+
+// ── Video Gallery Components ──────────────────────────────────
+
+function VideoGallery() {
+  const [videos, setVideos] = useState<VideoFileInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [selectedVideo, setSelectedVideo] = useState<VideoFileInfo | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const res: VideoListResponse = await api()?.videoList?.()
+      setVideos(res?.videos ?? [])
+    } catch {
+      setVideos([])
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  // Auto-refresh every 30s
+  useEffect(() => {
+    const iv = setInterval(refresh, 30000)
+    return () => clearInterval(iv)
+  }, [refresh])
+
+  const categories = ['all', ...Array.from(new Set(videos.map(v => v.category)))]
+  const filtered = filter === 'all' ? videos : videos.filter(v => v.category === filter)
+
+  if (loading && videos.length === 0) {
+    return <div style={{ color: 'var(--text-tertiary)', padding: 'var(--space-4)' }}>Scanning videos...</div>
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div style={{
+        background: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius-lg)',
+        padding: 'var(--space-6)',
+        textAlign: 'center',
+        color: 'var(--text-tertiary)',
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 'var(--space-2)' }}>&#127909;</div>
+        <div style={{ fontSize: 'var(--text-footnote)' }}>No videos found</div>
+        <div style={{ fontSize: 'var(--text-caption2)', marginTop: 4 }}>
+          Run a pipeline above to generate videos
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {selectedVideo && (
+        <VideoPlayerModal video={selectedVideo} onClose={() => setSelectedVideo(null)} />
+      )}
+
+      <div style={{
+        background: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius-lg)',
+        padding: 'var(--space-4)',
+      }}>
+        {/* Header */}
+        <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-3)' }}>
+          <div>
+            <div style={{ fontSize: 'var(--text-body)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)' }}>
+              My Videos
+            </div>
+            <div style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)', marginTop: 2 }}>
+              {videos.length} video{videos.length !== 1 ? 's' : ''} found
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={filter} onChange={e => setFilter(e.target.value)} style={selectStyle}>
+              {categories.map(c => (
+                <option key={c} value={c}>{c === 'all' ? 'All' : c}</option>
+              ))}
+            </select>
+            <button onClick={refresh} style={linkBtnStyle}>Refresh</button>
+          </div>
+        </div>
+
+        {/* Card Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 'var(--space-3)',
+        }}>
+          {filtered.map(video => (
+            <VideoCard key={video.path} video={video} onClick={() => setSelectedVideo(video)} />
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function VideoCard({ video, onClick }: { video: VideoFileInfo; onClick: () => void }) {
+  const videoSrc = `vibemind-video://video/${video.path.replace(/\\/g, '/')}`
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--fill-quaternary)',
+        border: '1px solid var(--separator)',
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'border-color 150ms ease, transform 150ms ease',
+        padding: 0,
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--separator)' }}
+    >
+      {/* Thumbnail */}
+      <div style={{
+        width: '100%',
+        aspectRatio: '16/9',
+        background: 'var(--fill-tertiary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <video
+          src={videoSrc}
+          preload="metadata"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onLoadedMetadata={e => {
+            const v = e.target as HTMLVideoElement
+            v.currentTime = 1
+          }}
+          muted
+        />
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.3)',
+        }}>
+          <span style={{ fontSize: 28, color: '#fff', opacity: 0.9 }}>&#9654;</span>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{
+          fontSize: 'var(--text-footnote)',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {video.filename.replace('.mp4', '')}
+        </div>
+        <div className="flex items-center gap-2">
+          <span style={{
+            fontSize: 'var(--text-caption2)',
+            padding: '1px 6px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'rgba(100,140,255,0.15)',
+            color: 'var(--accent)',
+          }}>
+            {video.category}
+          </span>
+          <span style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
+            {video.size_human}
+          </span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function VideoPlayerModal({ video, onClose }: { video: VideoFileInfo; onClose: () => void }) {
+  const videoSrc = `vibemind-video://video/${video.path.replace(/\\/g, '/')}`
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'var(--space-6)',
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{
+        maxWidth: '90%',
+        maxHeight: '90%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+      }}>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <span style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: '#fff' }}>
+            {video.filename}
+          </span>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: '#fff',
+            fontSize: 20, cursor: 'pointer', padding: '4px 8px',
+          }}>
+            &#x2715;
+          </button>
+        </div>
+        {/* Player */}
+        <video
+          src={videoSrc}
+          controls
+          autoPlay
+          style={{
+            maxWidth: '100%',
+            maxHeight: 'calc(85vh - 60px)',
+            borderRadius: 'var(--radius-md)',
+            background: '#000',
+          }}
+        />
+        {/* Meta */}
+        <div className="flex gap-3" style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--text-caption1)' }}>
+          <span>{video.category}</span>
+          <span>{video.size_human}</span>
+          <span>{new Date(video.modified_iso).toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 

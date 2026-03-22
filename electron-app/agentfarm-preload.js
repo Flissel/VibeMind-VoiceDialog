@@ -62,6 +62,10 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
   videoVoiceTts: (person) =>
     ipcRenderer.invoke('agentfarm:video-voice-tts', { person }),
 
+  // ── Video Gallery ──
+  videoList: () =>
+    ipcRenderer.invoke('agentfarm:video-list'),
+
   // ── Autogen team management ──
   createTeam: (templateId, config) => ipcRenderer.invoke('agentfarm:create-team', templateId, config),
   runTeam: (teamId, task) => ipcRenderer.invoke('agentfarm:run-team', teamId, task),
