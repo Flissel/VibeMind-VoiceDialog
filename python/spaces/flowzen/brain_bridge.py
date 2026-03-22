@@ -152,7 +152,7 @@ class FlowzenBrainBridge:
                     {"role": "system", "content": BRAIN_DECISION_PROMPT},
                     {"role": "user", "content": summary_text},
                 ],
-                max_tokens=150,
+                max_completion_tokens=150,
                 temperature=0.3,
             )
 

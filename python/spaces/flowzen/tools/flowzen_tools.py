@@ -77,12 +77,12 @@ def recommend_task(mood: str = "", **kwargs) -> Dict[str, Any]:
         logger.warning(f"Flowzen: reasoning generation failed: {e}")
         reasoning = f"Empfohlene Kategorie: {CATEGORY_DESCRIPTIONS.get(category, category)}."
 
-    # Find a matching idea
-    all_ideas = ideas_repo.get_all()
-    idea = _pick_best_idea(all_ideas, category)
+    # Find a matching idea (top scored from DB)
+    top_ideas = ideas_repo.list_top_scored(limit=10)
+    idea = _pick_best_idea(top_ideas, category)
 
     if idea:
-        title = idea.get("title", "")
+        title = getattr(idea, "title", "")
         hint = f"{reasoning} Ich empfehle dir: '{title}'."
     elif category == "rest":
         title = ""
@@ -106,19 +106,20 @@ def recommend_task(mood: str = "", **kwargs) -> Dict[str, Any]:
             "time_window": time_window,
             "reasoning": reasoning,
             "idea_title": title,
-            "idea_id": idea.get("id", "") if idea else "",
+            "idea_id": getattr(idea, "id", "") if idea else "",
         },
     }
 
 
-def _pick_best_idea(ideas: list, category: str) -> Optional[Dict[str, Any]]:
-    """Pick highest-scored child idea."""
+def _pick_best_idea(ideas: list, category: str):
+    """Pick highest-scored child idea. Accepts Idea dataclass objects."""
     if not ideas:
         return None
-    candidates = [i for i in ideas if i.get("parent_id")]
+    # Prefer child ideas (inside a bubble)
+    candidates = [i for i in ideas if getattr(i, "parent_id", None)]
     if not candidates:
         candidates = ideas
-    candidates.sort(key=lambda i: i.get("score", 0), reverse=True)
+    candidates.sort(key=lambda i: getattr(i, "score", 0), reverse=True)
     return candidates[0] if candidates else None
 
 
