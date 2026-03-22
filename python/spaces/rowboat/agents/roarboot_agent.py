@@ -52,6 +52,15 @@ class RoarbootBackendAgent(BaseBackendAgent):
         "roarboot.status": "get_status",
         "roarboot.open": "open_webview",
         "roarboot.reset": "reset_conversation",
+
+        # High-value: Chat, RAG, Upload
+        "roarboot.chat": "chat",
+        "roarboot.rag.search": "rag_search",
+        "roarboot.upload": "upload_document",
+
+        # Medium-value: Graph, Tools
+        "roarboot.graph.explore": "explore_graph",
+        "roarboot.tools.list": "list_tools",
     }
 
     # Parameter normalization (classifier output → tool params)

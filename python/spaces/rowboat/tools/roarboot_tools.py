@@ -330,6 +330,171 @@ def reset_conversation(context: str = None) -> Dict[str, Any]:
     }
 
 
+# =========================================================================
+# High-Value Tools (roarboot.chat, roarboot.rag.search, roarboot.upload)
+# =========================================================================
+
+def chat(message: str, context: str = "general", **kwargs) -> Dict[str, Any]:
+    """
+    Free multi-turn chat with Rowboat — the core conversation interface.
+    Rowboat responds with full knowledge graph context.
+
+    Args:
+        message: User message text
+        context: Conversation context (default: "general")
+    """
+    from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+    client = get_roarboot_client()
+    if not client:
+        return {"success": False, "message": "Rowboat not configured", "response_hint": "Rowboat ist nicht konfiguriert."}
+
+    result = client.chat(message, context=context)
+    _broadcast_to_electron({
+        "type": "roarboot_result",
+        "action": "chat",
+        "result": result,
+    })
+    _broadcast_conversation_update(client, context)
+    return {
+        **result,
+        "response_hint": result.get("response", "Keine Antwort von Rowboat."),
+    }
+
+
+def rag_search(query: str, threshold: float = 0.7, limit: int = 5, **kwargs) -> Dict[str, Any]:
+    """
+    Semantic RAG search via Qdrant vector DB — finds conceptually similar content.
+
+    Args:
+        query: Semantic search query
+        threshold: Minimum similarity score (0-1)
+        limit: Max results to return
+    """
+    from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+    client = get_roarboot_client()
+    if not client:
+        return {"success": False, "message": "Rowboat not configured", "response_hint": "Rowboat ist nicht konfiguriert."}
+
+    # Use chat with RAG-specific context to trigger vector search
+    rag_prompt = f"Search the knowledge graph semantically for: {query}. Show the top {limit} most relevant results with similarity scores."
+    result = client.chat(rag_prompt, context="rag_search")
+    _broadcast_to_electron({
+        "type": "roarboot_result",
+        "action": "rag_search",
+        "query": query,
+        "result": result,
+    })
+    return {
+        **result,
+        "response_hint": result.get("response", f"Keine semantischen Treffer fuer '{query}'."),
+    }
+
+
+def upload_document(file_path: str = None, text: str = None, title: str = None, **kwargs) -> Dict[str, Any]:
+    """
+    Upload a document to Rowboat's knowledge graph for RAG indexing.
+    Supports file path (PDF, DOCX, MD, TXT) or raw text.
+
+    Args:
+        file_path: Path to document file
+        text: Raw text content (alternative to file_path)
+        title: Optional title for the document
+    """
+    from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+    client = get_roarboot_client()
+    if not client:
+        return {"success": False, "message": "Rowboat not configured", "response_hint": "Rowboat ist nicht konfiguriert."}
+
+    if not file_path and not text:
+        return {"success": False, "message": "file_path or text required", "response_hint": "Bitte gib eine Datei oder Text an."}
+
+    # If text provided, use chat to inject into knowledge graph
+    if text:
+        inject_prompt = f"Add this to the knowledge graph{f' (title: {title})' if title else ''}: {text}"
+        result = client.chat(inject_prompt, context="upload")
+        return {
+            **result,
+            "response_hint": result.get("response", "Dokument in Knowledge Graph aufgenommen."),
+        }
+
+    # If file path, attempt upload via Rowboat API
+    try:
+        import requests
+        url = f"{client._url}/api/v1/{client._project_id}/upload"
+        headers = {"Authorization": f"Bearer {client._api_key}"}
+        with open(file_path, "rb") as f:
+            files = {"file": (file_path.split("/")[-1].split("\\")[-1], f)}
+            data = {}
+            if title:
+                data["title"] = title
+            resp = requests.post(url, files=files, data=data, headers=headers, timeout=60)
+
+        if resp.status_code == 200:
+            result = resp.json()
+            _broadcast_to_electron({
+                "type": "roarboot_result",
+                "action": "upload",
+                "file_path": file_path,
+                "result": result,
+            })
+            return {
+                "success": True,
+                "message": f"Document uploaded: {file_path}",
+                "response_hint": f"Dokument '{file_path.split('/')[-1].split(chr(92))[-1]}' wurde in den Knowledge Graph aufgenommen.",
+                **result,
+            }
+        else:
+            return {"success": False, "message": f"Upload failed: HTTP {resp.status_code}", "response_hint": f"Upload fehlgeschlagen: HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return {"success": False, "message": str(e), "response_hint": f"Upload-Fehler: {e}"}
+
+
+# =========================================================================
+# Medium-Value Tools (roarboot.graph.explore, roarboot.tools.list)
+# =========================================================================
+
+def explore_graph(subject: str = None, **kwargs) -> Dict[str, Any]:
+    """
+    Explore knowledge graph connections for a subject.
+    Shows relationships, linked notes, and context.
+
+    Args:
+        subject: Person, project, or topic to explore connections for
+    """
+    from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+    client = get_roarboot_client()
+    if not client:
+        return {"success": False, "message": "Rowboat not configured", "response_hint": "Rowboat ist nicht konfiguriert."}
+
+    explore_prompt = f"Show me all connections and relationships for '{subject}' in the knowledge graph. Include linked notes, people, projects, and topics."
+    result = client.chat(explore_prompt, context="graph_explore")
+    _broadcast_to_electron({
+        "type": "roarboot_result",
+        "action": "graph_explore",
+        "subject": subject,
+        "result": result,
+    })
+    return {
+        **result,
+        "response_hint": result.get("response", f"Keine Verbindungen fuer '{subject}' gefunden."),
+    }
+
+
+def list_tools(**kwargs) -> Dict[str, Any]:
+    """List all available Rowboat tools and integrations."""
+    from spaces.rowboat.tools.roarboot_client import get_roarboot_client
+    client = get_roarboot_client()
+    if not client:
+        return {"success": False, "message": "Rowboat not configured", "response_hint": "Rowboat ist nicht konfiguriert."}
+
+    result = client.chat("List all available tools and integrations that I can use.", context="tools")
+    return {
+        **result,
+        "response_hint": result.get("response", "Konnte Rowboat-Tools nicht abrufen."),
+    }
+
+
 __all__ = [
     "search_knowledge",
     "query_knowledge",
@@ -340,4 +505,9 @@ __all__ = [
     "get_status",
     "open_webview",
     "reset_conversation",
+    "chat",
+    "rag_search",
+    "upload_document",
+    "explore_graph",
+    "list_tools",
 ]
