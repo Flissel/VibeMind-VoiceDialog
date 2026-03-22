@@ -1,0 +1,46 @@
+{
+  "id": "bubbles",
+  "version": "1.0.0",
+  "name": "Bubbles",
+  "description": "Space- und Bubble-Verwaltung: erstellen, navigieren, bewerten und promoten",
+  "author": "VibeMind Team",
+  "category": "core",
+  "changelog": "Initial release",
+
+  "agent_module": "spaces.ideas.agents.bubbles_agent",
+  "agent_class": "BubblesAgent",
+  "agent_factory": "get_bubbles_agent",
+
+  "stream": "events:tasks:bubbles",
+  "event_routes": {
+    "bubble.list": "events:tasks:bubbles",
+    "bubble.create": "events:tasks:bubbles",
+    "bubble.enter": "events:tasks:bubbles",
+    "bubble.exit": "events:tasks:bubbles",
+    "bubble.back": "events:tasks:bubbles",
+    "bubble.delete": "events:tasks:bubbles",
+    "bubble.delete_all_except": "events:tasks:bubbles",
+    "bubble.update": "events:tasks:bubbles",
+    "bubble.find": "events:tasks:bubbles",
+    "bubble.stats": "events:tasks:bubbles",
+    "bubble.score": "events:tasks:bubbles",
+    "bubble.evaluate": "events:tasks:bubbles",
+    "bubble.promote": "events:tasks:bubbles",
+    "bubble.current": "events:tasks:bubbles"
+  },
+
+  "classifier_hints": {
+    "keywords_de": ["bubble", "space", "bereich", "raum"],
+    "keywords_en": ["bubble", "space", "area"],
+    "example_utterances": [
+      {"text": "Zeig mir meine Bubbles", "event_type": "bubble.list"},
+      {"text": "Erstelle Bubble Marketing", "event_type": "bubble.create"},
+      {"text": "Geh in Marketing", "event_type": "bubble.enter"},
+      {"text": "Zurueck", "event_type": "bubble.exit"}
+    ]
+  },
+
+  "builtin": true,
+  "env_flag": null,
+  "dependencies": []
+}

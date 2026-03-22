@@ -9,15 +9,14 @@ All data sources are EXISTING — this module only aggregates.
 """
 
 import logging
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [ContextGather] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[ContextGather] %s", msg)
 
 
 @dataclass
@@ -30,6 +29,9 @@ class EnrichmentContext:
     # Current bubble/workspace state
     current_bubble_id: Optional[str] = None
     current_bubble_name: Optional[str] = None
+
+    # Idea count in current bubble (for SpaceAgent context)
+    idea_count: int = 0
 
     # Recent task results (for continuity)
     recent_results: List[Dict[str, Any]] = field(default_factory=list)
@@ -45,6 +47,7 @@ class EnrichmentContext:
 
     def to_summary(self) -> str:
         """Build a compact summary string for LLM prompts."""
+        _logger.debug("to_summary called: bubble=%s, history_len=%s", self.current_bubble_name, len(self.conversation_history))
         parts = []
 
         if self.current_bubble_name:
@@ -104,11 +107,20 @@ class ContextGather:
         Returns:
             EnrichmentContext with all available metadata
         """
+        _logger.debug("gather called: context=%s", type(context).__name__ if context else "None")
         ctx = EnrichmentContext()
 
-        # Pre-existing context from orchestrator
+        # Pre-existing context from orchestrator (may be dict or TaskContext)
         if context:
-            ctx.metadata = dict(context)
+            if isinstance(context, dict):
+                ctx.metadata = context
+            elif hasattr(context, '__dict__'):
+                ctx.metadata = {
+                    k: v for k, v in context.__dict__.items()
+                    if not k.startswith('_')
+                }
+            else:
+                ctx.metadata = {"raw": str(context)}
 
         # Source 1: Conversation history
         self._gather_conversation(ctx)
@@ -143,10 +155,10 @@ class ContextGather:
                         for m in messages
                     ]
         except Exception as e:
-            logger.debug(f"Could not gather conversation: {e}")
+            _logger.debug(f"Could not gather conversation: {e}")
 
     def _gather_bubble_state(self, ctx: EnrichmentContext) -> None:
-        """Get current bubble/workspace context."""
+        """Get current bubble/workspace context and idea count."""
         try:
             from electron_backend import get_current_bubble_id, _bubbles
             bubble_id = get_current_bubble_id()
@@ -155,8 +167,20 @@ class ContextGather:
                 bubble = _bubbles.get(bubble_id)
                 if bubble and hasattr(bubble, "name"):
                     ctx.current_bubble_name = bubble.name
+
+                # Get idea count for the current bubble
+                try:
+                    from data.database import get_db
+                    db = get_db()
+                    row = db.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM ideas WHERE parent_id = ?",
+                        (bubble_id,)
+                    )
+                    ctx.idea_count = row["cnt"] if row else 0
+                except Exception:
+                    pass
         except Exception as e:
-            logger.debug(f"Could not gather bubble state: {e}")
+            _logger.debug(f"Could not gather bubble state: {e}")
 
     def _gather_recent_results(self, ctx: EnrichmentContext) -> None:
         """Get recent task results from system context or Rachel."""
@@ -182,7 +206,7 @@ class ContextGather:
             if monitor and hasattr(monitor, "recent_results"):
                 ctx.recent_results = monitor.recent_results[:self._max_results]
         except Exception as e:
-            logger.debug(f"Could not gather recent results: {e}")
+            _logger.debug(f"Could not gather recent results: {e}")
 
     def _gather_user_preferences(self, ctx: EnrichmentContext) -> None:
         """Get user preferences from Supermemory profile."""
@@ -197,7 +221,7 @@ class ContextGather:
                         "verbosity": getattr(profile, "verbosity", "normal"),
                     }
         except Exception as e:
-            logger.debug(f"Could not gather user preferences: {e}")
+            _logger.debug(f"Could not gather user preferences: {e}")
 
     def _gather_agent_status(self, ctx: EnrichmentContext) -> None:
         """Get agent online/offline status from Rachel Interface."""
@@ -209,7 +233,7 @@ class ContextGather:
                         "online" if agent.is_online else agent.status
                     )
             except Exception as e:
-                logger.debug(f"Could not gather agent status: {e}")
+                _logger.debug(f"Could not gather agent status: {e}")
 
 
 __all__ = ["ContextGather", "EnrichmentContext"]

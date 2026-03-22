@@ -1,5 +1,5 @@
 """
-SemanticAgent - Enhanced NLP analysis with ElevenLabs metadata integration
+SemanticAgent - Enhanced NLP analysis with audio metadata integration
 
 Phase 15: Enhanced Reasoning with Semantic Analysis
 - Multi-modal confidence calculation (text + audio metadata)
@@ -17,8 +17,8 @@ import math
 
 from swarm.analysis.intent_analysis_team import IntentHypothesis
 from swarm.analysis.user_context import UserContext
-# ElevenLabsInput removed (legacy module); using dict-based input instead
-ElevenLabsInput = dict  # type alias for backward compat
+# Audio metadata input type (dict-based)
+AudioMetadataInput = dict
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class SemanticAgent:
 
     # Pattern weights for confidence calculation
     PATTERN_WEIGHTS = {
-        "elevenlabs_intent": 0.4,    # Highest weight for direct intent detection
+        "audio_intent": 0.4,    # Highest weight for direct intent detection
         "transcript_confidence": 0.25, # Audio quality affects confidence
         "language_patterns": 0.15,    # Language-specific patterns
         "context_history": 0.1,       # User behavior patterns
@@ -68,7 +68,7 @@ class SemanticAgent:
         self,
         user_input: str,
         context: UserContext,
-        elevenlabs_input: Optional[ElevenLabsInput] = None
+        audio_input: Optional[AudioMetadataInput] = None
     ) -> List[IntentHypothesis]:
         """
         Enhanced semantic analysis with multi-modal reasoning.
@@ -82,7 +82,7 @@ class SemanticAgent:
         Args:
             user_input: Raw user input text
             context: User context for analysis
-            elevenlabs_input: ElevenLabs metadata (optional)
+            audio_input: Audio metadata (optional)
 
         Returns:
             List of IntentHypothesis with enhanced semantic analysis
@@ -92,7 +92,7 @@ class SemanticAgent:
         # =================================================================
         # PHASE 1: MULTI-MODAL CONFIDENCE ASSESSMENT
         # =================================================================
-        base_confidence = self._calculate_multi_modal_confidence(user_input, context, elevenlabs_input)
+        base_confidence = self._calculate_multi_modal_confidence(user_input, context, audio_input)
 
         # =================================================================
         # PHASE 2: CONTEXT-AWARE PATTERN MATCHING
@@ -101,11 +101,11 @@ class SemanticAgent:
         hypotheses.extend(context_hypotheses)
 
         # =================================================================
-        # PHASE 3: ELEVENLABS ENHANCED ANALYSIS (if available)
+        # PHASE 3: AUDIO ENHANCED ANALYSIS (if available)
         # =================================================================
-        if elevenlabs_input:
-            elevenlabs_hypotheses = self._enhanced_elevenlabs_analysis(user_input, elevenlabs_input, base_confidence)
-            hypotheses.extend(elevenlabs_hypotheses)
+        if audio_input:
+            audio_hypotheses = self._enhanced_audio_analysis(user_input, audio_input, base_confidence)
+            hypotheses.extend(audio_hypotheses)
 
         # =================================================================
         # PHASE 4: PATTERN-BASED REASONING
@@ -150,14 +150,14 @@ class SemanticAgent:
         self,
         user_input: str,
         context: UserContext,
-        elevenlabs_input: Optional[ElevenLabsInput]
+        audio_input: Optional[AudioMetadataInput]
     ) -> float:
         """
         Calculate base confidence using multi-modal factors.
 
         Combines:
         - Text clarity and length
-        - ElevenLabs audio metadata (if available)
+        - Audio metadata (if available)
         - User context reliability
         - Historical pattern matching
         """
@@ -167,9 +167,9 @@ class SemanticAgent:
         text_confidence = self._calculate_text_confidence(user_input)
         confidence_factors["text"] = text_confidence * 0.3
 
-        # ElevenLabs confidence (if available)
-        if elevenlabs_input:
-            audio_confidence = self._calculate_audio_confidence(elevenlabs_input)
+        # Audio confidence (if available)
+        if audio_input:
+            audio_confidence = self._calculate_audio_confidence(audio_input)
             confidence_factors["audio"] = audio_confidence * 0.4
         else:
             confidence_factors["audio"] = 0.2  # Neutral fallback
@@ -200,23 +200,23 @@ class SemanticAgent:
         else:
             return 0.8  # Optimal length
 
-    def _calculate_audio_confidence(self, elevenlabs_input: ElevenLabsInput) -> float:
-        """Calculate confidence based on ElevenLabs audio metadata."""
-        if not elevenlabs_input:
+    def _calculate_audio_confidence(self, audio_input: AudioMetadataInput) -> float:
+        """Calculate confidence based on Audio metadata."""
+        if not audio_input:
             return 0.5
 
         confidence = 0.5  # Base
 
         # Transcript confidence
-        if elevenlabs_input.transcript_confidence:
-            confidence += elevenlabs_input.transcript_confidence * 0.3
+        if audio_input.transcript_confidence:
+            confidence += audio_input.transcript_confidence * 0.3
 
         # Intent confidence (if detected)
-        if elevenlabs_input.intent_confidence:
-            confidence += elevenlabs_input.intent_confidence * 0.4
+        if audio_input.intent_confidence:
+            confidence += audio_input.intent_confidence * 0.4
 
         # Language detection confidence
-        if elevenlabs_input.detected_language and elevenlabs_input.detected_language != "unknown":
+        if audio_input.detected_language and audio_input.detected_language != "unknown":
             confidence += 0.1
 
         return min(confidence, 1.0)
@@ -387,51 +387,51 @@ class SemanticAgent:
         keywords = ["zeig", "zeige", "show", "liste", "list", "gib", "give", "finde", "find"]
         return any(keyword in text.lower() for keyword in keywords)
 
-    def _enhanced_elevenlabs_analysis(
+    def _enhanced_audio_analysis(
         self,
         user_input: str,
-        elevenlabs_input: ElevenLabsInput,
+        audio_input: AudioMetadataInput,
         base_confidence: float
     ) -> List[IntentHypothesis]:
-        """Enhanced ElevenLabs analysis with multi-modal reasoning."""
+        """Enhanced audio analysis with multi-modal reasoning."""
         hypotheses = []
 
-        # Original ElevenLabs intent detection
-        if elevenlabs_input.has_detected_intent():
-            hypothesis = self._create_enhanced_elevenlabs_hypothesis(elevenlabs_input, base_confidence)
+        # Original Audio intent detection
+        if audio_input.has_detected_intent():
+            hypothesis = self._create_enhanced_audio_hypothesis(audio_input, base_confidence)
             if hypothesis:
                 hypotheses.append(hypothesis)
 
         # Language-enhanced analysis
-        if elevenlabs_input.detected_language and elevenlabs_input.detected_language != "unknown":
-            lang_hypotheses = self._enhanced_language_analysis(user_input, elevenlabs_input, base_confidence)
+        if audio_input.detected_language and audio_input.detected_language != "unknown":
+            lang_hypotheses = self._enhanced_language_analysis(user_input, audio_input, base_confidence)
             hypotheses.extend(lang_hypotheses)
 
         # Audio quality-based analysis
-        if elevenlabs_input.has_confident_transcript():
-            audio_hypotheses = self._audio_quality_analysis(user_input, elevenlabs_input, base_confidence)
+        if audio_input.has_confident_transcript():
+            audio_hypotheses = self._audio_quality_analysis(user_input, audio_input, base_confidence)
             hypotheses.extend(audio_hypotheses)
 
         return hypotheses
 
-    def _create_enhanced_elevenlabs_hypothesis(
+    def _create_enhanced_audio_hypothesis(
         self,
-        elevenlabs_input: ElevenLabsInput,
+        audio_input: AudioMetadataInput,
         base_confidence: float
     ) -> Optional[IntentHypothesis]:
-        """Create enhanced hypothesis from ElevenLabs with confidence boosting."""
-        if not elevenlabs_input.intent_detected or not elevenlabs_input.intent_confidence:
+        """Create enhanced hypothesis from audio metadata with confidence boosting."""
+        if not audio_input.intent_detected or not audio_input.intent_confidence:
             return None
 
-        event_type = self._map_elevenlabs_intent(elevenlabs_input.intent_detected)
+        event_type = self._map_audio_intent(audio_input.intent_detected)
 
         # Enhanced confidence calculation
-        elevenlabs_conf = elevenlabs_input.intent_confidence
-        transcript_conf = elevenlabs_input.transcript_confidence or 0.5
+        audio_conf = audio_input.intent_confidence
+        transcript_conf = audio_input.transcript_confidence or 0.5
 
         # Boost confidence based on multiple factors
         enhanced_confidence = (
-            elevenlabs_conf * 0.6 +      # Direct intent confidence
+            audio_conf * 0.6 +      # Direct intent confidence
             transcript_conf * 0.3 +      # Audio quality
             base_confidence * 0.1        # Base context confidence
         )
@@ -442,20 +442,20 @@ class SemanticAgent:
             event_type=event_type,
             payload={},
             confidence=enhanced_confidence,
-            reasoning=f"Enhanced ElevenLabs analysis: intent={elevenlabs_input.intent_detected} "
-                     f"(confidence: {elevenlabs_conf:.2f}, audio: {transcript_conf:.2f})",
-            source="enhanced_elevenlabs"
+            reasoning=f"Enhanced audio analysis: intent={audio_input.intent_detected} "
+                     f"(confidence: {audio_conf:.2f}, audio: {transcript_conf:.2f})",
+            source="enhanced_audio"
         )
 
     def _enhanced_language_analysis(
         self,
         user_input: str,
-        elevenlabs_input: ElevenLabsInput,
+        audio_input: AudioMetadataInput,
         base_confidence: float
     ) -> List[IntentHypothesis]:
         """Enhanced language-based analysis with confidence weighting."""
         hypotheses = []
-        language = elevenlabs_input.detected_language
+        language = audio_input.detected_language
 
         # Language-specific enhanced patterns
         if language == "de":
@@ -506,13 +506,13 @@ class SemanticAgent:
     def _audio_quality_analysis(
         self,
         user_input: str,
-        elevenlabs_input: ElevenLabsInput,
+        audio_input: AudioMetadataInput,
         base_confidence: float
     ) -> List[IntentHypothesis]:
         """Analyze intent based on audio quality indicators."""
         hypotheses = []
 
-        transcript_conf = elevenlabs_input.transcript_confidence or 0.5
+        transcript_conf = audio_input.transcript_confidence or 0.5
 
         if transcript_conf > 0.9:
             # Very clear audio - high confidence for direct actions
@@ -670,37 +670,37 @@ class SemanticAgent:
             source=f"enhanced_{cluster_name}_merge"
         )
 
-    def _create_elevenlabs_hypothesis(self, elevenlabs_input: ElevenLabsInput) -> Optional[IntentHypothesis]:
+    def _create_audio_hypothesis(self, audio_input: AudioMetadataInput) -> Optional[IntentHypothesis]:
         """
-        Create hypothesis from ElevenLabs intent detection.
+        Create hypothesis from Audio intent detection.
 
         Args:
-            elevenlabs_input: ElevenLabs metadata
+            audio_input: Audio metadata
 
         Returns:
             IntentHypothesis or None if invalid
         """
-        if not elevenlabs_input.intent_detected or not elevenlabs_input.intent_confidence:
+        if not audio_input.intent_detected or not audio_input.intent_confidence:
             return None
 
-        # Map ElevenLabs intent to VibeMind event type
-        event_type = self._map_elevenlabs_intent(elevenlabs_input.intent_detected)
+        # Map Audio intent to VibeMind event type
+        event_type = self._map_audio_intent(audio_input.intent_detected)
 
-        # Create hypothesis with ElevenLabs confidence
+        # Create hypothesis with Audio confidence
         return IntentHypothesis(
             event_type=event_type,
             payload={},  # Will be filled by other agents
-            confidence=min(elevenlabs_input.intent_confidence, 0.95),  # Cap at 95%
-            reasoning=f"ElevenLabs detected intent '{elevenlabs_input.intent_detected}' with confidence {elevenlabs_input.intent_confidence}",
-            source="elevenlabs_semantic"
+            confidence=min(audio_input.intent_confidence, 0.95),  # Cap at 95%
+            reasoning=f"Audio detected intent '{audio_input.intent_detected}' with confidence {audio_input.intent_confidence}",
+            source="audio_semantic"
         )
 
-    def _map_elevenlabs_intent(self, elevenlabs_intent: str) -> str:
+    def _map_audio_intent(self, audio_intent: str) -> str:
         """
-        Map ElevenLabs intent to VibeMind event type.
+        Map Audio intent to VibeMind event type.
 
         Args:
-            elevenlabs_intent: Intent string from ElevenLabs
+            audio_intent: Intent string from audio provider
 
         Returns:
             VibeMind event type
@@ -719,7 +719,7 @@ class SemanticAgent:
             "open_app": "desktop.open_app",
         }
 
-        return intent_mapping.get(elevenlabs_intent, f"conversation.{elevenlabs_intent}")
+        return intent_mapping.get(audio_intent, f"conversation.{audio_intent}")
 
     def _analyze_by_language(self, user_input: str, language: str) -> List[IntentHypothesis]:
         """
@@ -775,7 +775,7 @@ class SemanticAgent:
 
         return hypotheses
 
-    def _analyze_transcript_confidence(self, user_input: str, elevenlabs_input: ElevenLabsInput) -> List[IntentHypothesis]:
+    def _analyze_transcript_confidence(self, user_input: str, audio_input: AudioMetadataInput) -> List[IntentHypothesis]:
         """
         Generate hypotheses based on transcript confidence.
 
@@ -783,14 +783,14 @@ class SemanticAgent:
 
         Args:
             user_input: User input text
-            elevenlabs_input: ElevenLabs metadata
+            audio_input: Audio metadata
 
         Returns:
             List of confidence-based hypotheses
         """
         hypotheses = []
 
-        confidence = elevenlabs_input.transcript_confidence
+        confidence = audio_input.transcript_confidence
 
         if confidence > 0.9:
             # Very high confidence - boost direct action hypotheses
@@ -815,7 +815,7 @@ class SemanticAgent:
 
     def _semantic_fallback_analysis(self, user_input: str, context: UserContext) -> List[IntentHypothesis]:
         """
-        Fallback semantic analysis without ElevenLabs metadata.
+        Fallback semantic analysis without Audio metadata.
 
         Args:
             user_input: User input text

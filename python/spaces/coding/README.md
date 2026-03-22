@@ -20,7 +20,7 @@ coding.space ist der **Code-Generierungs-Space** innerhalb der VibeMind-Plattfor
 ### Voice → Code Pipeline
 
 ```
-User Voice ──► ElevenLabs SDK ──► Antoni (Coding Agent)
+User Voice ──► OpenAI Realtime ──► Antoni (Coding Agent)
                                        │
                                        ▼
                               ClientToolsManager
@@ -137,7 +137,7 @@ spaces/coding/
 └── __init__.py
 
 Verlinkte Dateien:
-├── ../../tools/coding_tools.py         # ElevenLabs Tool Definitionen
+├── ../../tools/coding_tools.py         # Tool Definitionen
 ├── ../../coding_engine_runner.py       # Bridge zur externen Engine
 ```
 

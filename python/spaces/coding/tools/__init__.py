@@ -2,7 +2,7 @@
 VibeMind Coding Space Tools
 
 Tools for code generation and project management.
-Includes ElevenLabs client tools, adapted swarm tools, and voice coding tools.
+Includes client tools, adapted swarm tools, and voice coding tools.
 """
 
 from .coding_tools import (

@@ -1,9 +1,8 @@
 /**
  * SWE Design Manager for VibeMind
  *
- * Delegates to the RE Dashboard embed module from swe_desgine to manage
- * the Requirements Wizard BrowserView. The wizard (6 steps) maps to
- * shuttle checkpoints in the factory pipeline.
+ * Self-contained manager for the SWE Design (Requirements Engineer) dashboard.
+ * Spawns the Python aiohttp server and creates a BrowserView overlay.
  *
  * Server lifecycle:
  *   show()    → start server (if needed) + create BrowserView
@@ -11,15 +10,10 @@
  *   destroy() → stop server + kill Python process
  */
 
+const { BrowserView } = require('electron');
 const path = require('path');
-const {
-  startREServer,
-  stopREServer,
-  createREDashboardView,
-  removeREDashboardView,
-  isServerRunning,
-  getServerPort,
-} = require('../python/spaces/shuttles/swe_desgine/requirements_engineer/electron/embed');
+const fs = require('fs');
+const { spawn } = require('child_process');
 
 class SweDesignManager {
   constructor(mainWindow) {
@@ -27,6 +21,8 @@ class SweDesignManager {
     this.view = null;
     this.isVisible = false;
     this._starting = false;
+    this._serverProcess = null;
+    this._serverReady = false;
 
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
@@ -34,15 +30,14 @@ class SweDesignManager {
     // Python path: prefer .venv312 from project root
     const projectRoot = path.resolve(__dirname, '..');
     const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
-    const fs = require('fs');
     this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
 
-    // RE project root (where `requirements_engineer` package lives)
+    // RE project root (where start_dashboard.py lives)
     this.reProjectRoot = path.join(
       projectRoot, 'python', 'spaces', 'shuttles', 'swe_desgine'
     );
 
-    this.port = 8085;
+    this.port = 8086; // 8085 often held by zombie; use 8086 as default
 
     // Resize handler
     if (this.mainWindow) {
@@ -52,6 +47,117 @@ class SweDesignManager {
         }
       });
     }
+  }
+
+  /**
+   * Start the Python dashboard server with port retry.
+   * Tries up to 3 consecutive ports if the default is in use.
+   * Returns a promise that resolves with the actual port when the server is ready.
+   */
+  async _startServer() {
+    if (this._serverReady) return this.port;
+
+    const scriptPath = path.join(this.reProjectRoot, 'start_dashboard.py');
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`SWE Design dashboard script not found: ${scriptPath}`);
+    }
+
+    // Try up to 3 ports
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const tryPort = this.port + attempt;
+      try {
+        await this._tryStartOnPort(scriptPath, tryPort);
+        this.port = tryPort;
+        return this.port;
+      } catch (err) {
+        const isPortConflict = err.message.includes('10048') ||
+                               err.message.includes('address already in use') ||
+                               err.message.includes('EADDRINUSE');
+        if (isPortConflict && attempt < maxRetries - 1) {
+          console.log(`[SweDesignManager] Port ${tryPort} busy, trying ${tryPort + 1}...`);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Try to start the server on a specific port.
+   */
+  _tryStartOnPort(scriptPath, port) {
+    return new Promise((resolve, reject) => {
+      console.log(`[SweDesignManager] Starting server on port ${port}...`);
+
+      const proc = spawn(this.pythonPath, [
+        scriptPath,
+        '--port', String(port),
+        '--no-browser',
+      ], {
+        cwd: this.reProjectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env },
+      });
+
+      this._serverProcess = proc;
+
+      let resolved = false;
+      let stderrBuf = '';
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this._serverReady = true;
+          console.log('[SweDesignManager] Server start timeout — assuming ready on port', port);
+          resolve(port);
+        }
+      }, 10000);
+
+      proc.stdout.on('data', (data) => {
+        const line = data.toString();
+        process.stdout.write(`[SWE-Server] ${line}`);
+        if (!resolved && (line.includes('Dashboard running') || line.includes('localhost'))) {
+          resolved = true;
+          clearTimeout(timeout);
+          this._serverReady = true;
+          console.log('[SweDesignManager] Server ready on port', port);
+          resolve(port);
+        }
+      });
+
+      proc.stderr.on('data', (data) => {
+        const line = data.toString();
+        stderrBuf += line;
+        process.stderr.write(`[SWE-Server] ${line}`);
+        if (!resolved && (line.includes('Running on') || line.includes('localhost'))) {
+          resolved = true;
+          clearTimeout(timeout);
+          this._serverReady = true;
+          resolve(port);
+        }
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`Failed to start server: ${err.message}`));
+        }
+      });
+
+      proc.on('exit', (code) => {
+        console.log(`[SweDesignManager] Server exited with code ${code}`);
+        this._serverProcess = null;
+        this._serverReady = false;
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          // Include stderr in error for port-conflict detection
+          reject(new Error(`Server exited with code ${code}: ${stderrBuf.slice(-300)}`));
+        }
+      });
+    });
   }
 
   /**
@@ -72,24 +178,31 @@ class SweDesignManager {
 
     try {
       // Start server if not running
-      if (!isServerRunning()) {
+      if (!this._serverReady) {
         this._starting = true;
         console.log('[SweDesignManager] Starting RE dashboard server...');
-        this.port = await startREServer({
-          pythonPath: this.pythonPath,
-          projectRoot: this.reProjectRoot,
-          port: this.port,
-        });
+        this.port = await this._startServer();
         this._starting = false;
       }
 
       // Create BrowserView if needed
       if (!this.view) {
-        const bounds = this._getBounds();
-        this.view = createREDashboardView(this.mainWindow, this.port, {
-          bounds,
-          autoResize: true,
+        this.view = new BrowserView({
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: false,
+          },
         });
+
+        // Position and attach
+        this.mainWindow.setBrowserView(this.view);
+        this._updateBounds();
+
+        // Load the server URL
+        const url = `http://localhost:${this.port}`;
+        console.log('[SweDesignManager] Loading:', url);
+        this.view.webContents.loadURL(url);
 
         // Handle external links
         this.view.webContents.setWindowOpenHandler(({ url }) => {
@@ -105,7 +218,7 @@ class SweDesignManager {
               status: 'ready',
             });
           }
-          console.log('[SweDesignManager] Wizard loaded');
+          console.log('[SweDesignManager] Dashboard loaded');
         });
 
         this.view.webContents.on('did-fail-load', (_ev, code, desc) => {
@@ -144,7 +257,7 @@ class SweDesignManager {
    */
   hide() {
     if (!this.mainWindow || !this.view) return;
-    removeREDashboardView(this.mainWindow, this.view);
+    this.mainWindow.setBrowserView(null);
     this.isVisible = false;
     console.log('[SweDesignManager] Hidden');
   }
@@ -182,7 +295,16 @@ class SweDesignManager {
       this.hide();
       this.view = null;
     }
-    stopREServer();
+    // Kill Python server process
+    if (this._serverProcess) {
+      try {
+        this._serverProcess.kill();
+      } catch (e) {
+        // ignore
+      }
+      this._serverProcess = null;
+    }
+    this._serverReady = false;
     console.log('[SweDesignManager] Destroyed');
   }
 

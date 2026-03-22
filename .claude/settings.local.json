@@ -134,9 +134,46 @@
       "Bash(bash scripts/build-rowboat.sh)",
       "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
       "mcp__plugin_context7_context7__resolve-library-id",
-      "WebFetch(domain:developers.openai.com)"
+      "WebFetch(domain:developers.openai.com)",
+      "Bash(AUTH_COOKIE=\"n8n-auth=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjFiM2M1NDY0LTdjYzctNGIyZC04NzQyLTZmYTNhOWMwYzM1NSIsImhhc2giOiJ3Q0JkczZqNXVqIiwidXNlZE1mYSI6ZmFsc2UsImlhdCI6MTc3MzE0OTUwMywiZXhwIjoxNzczNzU0MzAzfQ.HnsHQNNG4RoYhg6U7Iwfh1ECHi6BKIpfTtNofzOJ-hA\")",
+      "Bash(__NEW_LINE_1834eccdf170c321__ curl:*)",
+      "mcp__plugin_playwright_playwright__browser_fill_form",
+      "Bash(npm run:*)",
+      "Bash(\"c:/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog/.venv312/Scripts/python.exe\" -c \"import aiosqlite; print\\(''aiosqlite OK''\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(PYTHONPATH=. PYTHONIOENCODING=utf-8 DATABASE_URL=\"sqlite:///automation_ui.db\" DEBUG=False REDIS_URL=\"redis://localhost:6379/0\" \"c:/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog/.venv312/Scripts/python.exe\" -c \"from app.main import create_app; print\\(''''OK''''\\)\")",
+      "Bash(wmic process:*)",
+      "Bash(tasklist //FI 'IMAGENAME eq python.exe' //FO CSV //NH)",
+      "Bash(find /c/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog -type f \\\\\\(-name *.py -o -name *.js -o -name *.ts -o -name *.json -o -name *.yml -o -name *.yaml -o -name *.md -o -name *.bat -o -name *.sh \\\\\\))",
+      "Read(//c/Users/User/.claude/plugins/**)",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(docker compose:*)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/User/AppData/Local/Temp/claude/c--Users-User-Desktop-Voice-dialog-vibemind-VibeMind-VoiceDialog/e0c74eee-0112-4be5-a78c-3bbf65c4e5b7/tasks/**)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:support.claude.com)",
+      "Read(//def _load_direct_tools/,/^    def /**)",
+      "Bash(sed 's/.*def //')",
+      "Bash(sed 's/\\(.*\\)//')",
+      "Bash(npx playwright:*)",
+      "Bash(npx electron:*)",
+      "Read(//c/Users/User/AppData/Local/electron/Cache/**)",
+      "Bash(node -e \"console.log\\(require\\(''electron''\\)\\)\")",
+      "Bash(node_modules/.bin/electron --version)",
+      "Bash(gh api:*)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Skill(claude-md-management:revise-claude-md:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "c:\\Users\\User\\Desktop\\Voice_dialog_vibemind\\VibeMind-VoiceDialog\\.claude\\plugins",
+      "c:\\Users\\User\\Desktop\\Voice_dialog_vibemind\\VibeMind-VoiceDialog\\.claude\\plugins\\vibemind-tools\\skills\\inject-debug-logs",
+      "\\tmp",
+      "c:\\Users\\User\\Desktop\\Voice_dialog_vibemind\\VibeMind-VoiceDialog\\.claude\\plugins\\vibemind-tools\\skills\\apply-theme",
+      "c:\\Users\\User\\Desktop\\Voice_dialog_vibemind\\VibeMind-VoiceDialog\\.claude\\plugins\\vibemind-tools\\skills\\multi-language"
+    ]
   }
 }

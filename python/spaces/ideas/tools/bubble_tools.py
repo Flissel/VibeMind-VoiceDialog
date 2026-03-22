@@ -8,7 +8,7 @@ Bubbles can be scored based on how many notes they contain.
 Architecture:
 - Bubbles = Idea objects (IdeasRepository) - scored, promotable
 - Canvas content = CanvasNode objects (CanvasRepository) - linked via linked_idea_id
-- Each bubble can have its own ElevenLabs agent for voice interaction
+- Each bubble can have its own agent for voice interaction
 
 MIGRATED FROM: tools/bubble_tools.py
 """
@@ -22,11 +22,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ElevenLabs configuration
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-RACHEL_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
-
-# Agent switch signaling (checked by voice_dialog_main)
+# Agent switch signaling
 _pending_agent_switch: Optional[Dict[str, Any]] = None
 
 # Current bubble DB ID (UUID string) for tool functions
@@ -57,6 +53,7 @@ def get_current_bubble() -> Optional[Dict[str, Any]]:
     Returns:
         Dict with bubble data including 'id', 'title', etc., or None if not in a bubble
     """
+    logger.debug("get_current_bubble: checking current bubble")
     bubble_id = get_current_bubble_db_id()
     if not bubble_id:
         return None
@@ -135,72 +132,12 @@ def _get_current_bubble_id() -> Optional[str]:
         return None
 
 
-def _create_elevenlabs_agent(bubble_title: str, bubble_id: str) -> Optional[str]:
-    """
-    Create an ElevenLabs agent for a bubble.
-
-    Args:
-        bubble_title: Title of the bubble (used in agent name and prompt)
-        bubble_id: ID of the bubble
-
-    Returns:
-        str: Agent ID if successful, None otherwise
-    """
-    if not ELEVENLABS_API_KEY:
-        logger.warning("ELEVENLABS_API_KEY not set, skipping agent creation")
-        return None
-
-    url = "https://api.elevenlabs.io/v1/convai/agents/create"
-
-    headers = {
-        "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json"
-    }
-
-    # System prompt for bubble-specific agent
-    system_prompt = f"""You are Rachel, a helpful assistant inside the "{bubble_title}" space.
-
-Your role is to help the user develop ideas and notes within this specific space.
-You have tools to create, list, find, update, and connect ideas.
-
-When the user wants to leave this space and return to the multiverse, use the exit_bubble tool."""
-
-    payload = {
-        "name": f"Rachel - {bubble_title}",
-        "conversation_config": {
-            "tts": {
-                "voice_id": RACHEL_VOICE_ID,
-                "model_id": "eleven_flash_v2"
-            },
-            "agent": {
-                "prompt": {
-                    "prompt": system_prompt
-                },
-                "first_message": f"Welcome to {bubble_title}! What would you like to work on?"
-            }
-        }
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            agent_id = response.json().get("agent_id")
-            logger.info(f"Created ElevenLabs agent '{bubble_title}': {agent_id}")
-            return agent_id
-        else:
-            logger.error(f"Failed to create agent: {response.status_code} - {response.text}")
-            return None
-    except Exception as e:
-        logger.error(f"Error creating ElevenLabs agent: {e}")
-        return None
-
-
 def _signal_agent_switch(agent_id: str, bubble_id: Optional[str], bubble_title: str):
     """
-    Signal to voice_dialog_main that an agent switch is needed.
+    Signal that an agent switch is needed.
 
     Args:
-        agent_id: Target ElevenLabs agent ID
+        agent_id: Target agent ID
         bubble_id: Target bubble ID (None for multiverse)
         bubble_title: Human-readable name of the target
     """
@@ -231,6 +168,7 @@ def get_pending_agent_switch() -> Optional[Dict[str, Any]]:
     Returns:
         dict: Switch info if pending, None otherwise. Clears pending state.
     """
+    logger.debug("get_pending_agent_switch: checking pending switch")
     global _pending_agent_switch
     result = _pending_agent_switch
     _pending_agent_switch = None
@@ -268,7 +206,7 @@ def list_bubbles(params: Dict[str, Any]) -> str:
 
     if not ideas:
         logger.info("    Result: No bubbles exist yet")
-        return "Du hast noch keine Bubbles. Moechtest du eine erstellen? Sag 'Erstelle eine Bubble fuer...'."
+        return "You don't have any Spaces yet. Would you like to create one? Say 'Create a Space for...'."
 
     # Store mapping for index-based voice referencing
     from tools.index_mapping import set_bubble_mapping
@@ -294,7 +232,7 @@ def list_bubbles(params: Dict[str, Any]) -> str:
         "total": len(ideas)
     })
 
-    return f"Du hast {len(ideas)} Bubbles: {', '.join(titles)}. Betrete eine mit 'Geh in [Name]' oder 'Geh in [Nummer]'."
+    return f"You have {len(ideas)} Spaces: {', '.join(titles)}. Enter one with 'Go to [Name]' or 'Go to [Number]'."
 
 
 def find_bubble(params: Dict[str, Any]) -> str:
@@ -334,7 +272,7 @@ def find_bubble(params: Dict[str, Any]) -> str:
         return list_bubbles(params)
 
     if not query:
-        return "Nach welcher Bubble soll ich suchen?"
+        return "Which Space should I search for?"
 
     repo = _get_ideas_repo()
 
@@ -364,23 +302,23 @@ def find_bubble(params: Dict[str, Any]) -> str:
     if not bubble:
         all_bubbles = repo.list(limit=20)
         if not all_bubbles:
-            return f"Keine Bubble mit '{query}' gefunden. Du hast noch keine Bubbles."
+            return f"No Space with '{query}' found. You don't have any Spaces yet."
 
         # Simple substring search as last resort
         candidates = [b for b in all_bubbles if query.lower() in b.title.lower()]
         if candidates:
             names = ", ".join([c.title for c in candidates[:3]])
-            return f"Keine exakte Uebereinstimmung fuer '{query}'. Meintest du: {names}?"
+            return f"No exact match for '{query}'. Did you mean: {names}?"
 
         # No match at all
         all_names = ", ".join([b.title for b in all_bubbles[:5]])
-        return f"Keine Bubble mit '{query}' gefunden. Deine Bubbles: {all_names}"
+        return f"No Space with '{query}' found. Your Spaces: {all_names}"
 
     # Found! Now auto-enter if enabled
     if auto_enter:
         # Check idempotency: already in this bubble?
         if _current_bubble_db_id == bubble.id:
-            return f"Du bist bereits in der Bubble '{bubble.title}'."
+            return f"You are already in the Space '{bubble.title}'."
 
         # Enter the bubble (reuse logic from enter_bubble)
         _current_bubble_db_id = bubble.id
@@ -425,23 +363,21 @@ def find_bubble(params: Dict[str, Any]) -> str:
             match_info = " (fuzzy match)"
         elif match_type == "semantic":
             match_info = " (semantic match)"
-        return f"Ich habe '{bubble.title}' gefunden{match_info} und bin reingewechselt. Was moechtest du hier tun?"
+        return f"Found '{bubble.title}'{match_info} and entered it. What would you like to do here?"
 
     # Just report found, don't enter
-    return f"Gefunden: '{bubble.title}' mit Score {bubble.score:.0f}. Sag 'Geh rein' zum Betreten."
+    return f"Found: '{bubble.title}' with score {bubble.score:.0f}. Say 'Enter' to go in."
 
 
 def create_bubble(params: Dict[str, Any]) -> str:
     """
-    Create a new bubble/idea space with its own ElevenLabs agent.
+    Create a new bubble/idea space.
 
     Voice triggers: "Create a new space for cooking", "Make a bubble for project ideas"
 
     Args (via params):
         title: Name for the new space (required)
         description: Optional description
-        skip_agent_creation: If True, skip ElevenLabs agent creation (for simulation)
-                            Phase 7 Fix: Agent creation takes 15s which spikes latency
 
     Returns:
         str: Confirmation message
@@ -466,18 +402,7 @@ def create_bubble(params: Dict[str, Any]) -> str:
         source="voice"
     )
 
-    # Create ElevenLabs agent for this bubble (optional)
-    # Phase 7: Skip during simulation to avoid 15s latency spike
-    agent_id = None
-    if not skip_agent_creation:
-        agent_id = _create_elevenlabs_agent(title, idea.id)
-
-    if agent_id:
-        idea.agent_id = agent_id
-        repo.update(idea)
-        logger.info(f"Created bubble '{title}' with agent {agent_id}")
-    else:
-        logger.info(f"Created bubble '{title}' without agent (skipped or API error)")
+    logger.info(f"Created bubble '{title}'")
 
     # Broadcast to Electron
     _broadcast_to_electron({
@@ -513,9 +438,10 @@ def update_bubble(params: Dict[str, Any]) -> str:
     bubble_name = params.get("bubble_name", "").strip()
     new_title = params.get("new_title", params.get("title", "")).strip()
     new_description = params.get("new_description", params.get("description", "")).strip()
+    logger.debug("update_bubble: bubble_name=%s, new_title=%s", bubble_name, new_title)
 
     if not new_title and not new_description:
-        return "Was soll ich aendern? Bitte sag mir den neuen Namen oder die neue Beschreibung."
+        return "What should I change? Please tell me the new name or the new description."
 
     repo = _get_ideas_repo()
 
@@ -531,9 +457,9 @@ def update_bubble(params: Dict[str, Any]) -> str:
 
     if not bubble:
         if bubble_name:
-            return f"Ich konnte den Space '{bubble_name}' nicht finden."
+            return f"I couldn't find the Space '{bubble_name}'."
         else:
-            return "Du bist nicht in einem Space. Bitte sag mir welchen Space ich updaten soll."
+            return "You are not in a Space. Please tell me which Space to update."
 
     old_title = bubble.title
 
@@ -542,7 +468,7 @@ def update_bubble(params: Dict[str, Any]) -> str:
         # Check for duplicate title
         existing = repo.get_by_title(new_title)
         if existing and existing.id != bubble.id:
-            return f"Ein Space mit dem Namen '{new_title}' existiert bereits."
+            return f"A Space called '{new_title}' already exists."
         bubble.title = new_title
 
     if new_description:
@@ -565,9 +491,9 @@ def update_bubble(params: Dict[str, Any]) -> str:
     _publish_bubble(bubble.id)
 
     if new_title:
-        return f"Space umbenannt von '{old_title}' zu '{new_title}'"
+        return f"Space renamed from '{old_title}' to '{new_title}'"
     else:
-        return f"Beschreibung von Space '{bubble.title}' aktualisiert"
+        return f"Description of Space '{bubble.title}' updated"
 
 
 def get_bubble_stats(params: Dict[str, Any]) -> str:
@@ -583,6 +509,7 @@ def get_bubble_stats(params: Dict[str, Any]) -> str:
         str: Statistics including note count, connections, and score
     """
     bubble_name = params.get("bubble_name", "").strip()
+    logger.debug("get_bubble_stats: bubble_name=%s", bubble_name)
 
     ideas_repo = _get_ideas_repo()
     canvas_repo = _get_canvas_repo()
@@ -968,7 +895,7 @@ def delete_all_bubbles_except(params: Dict[str, Any] = None) -> str:
                 exceptions.append(cleaned)
 
     if not exceptions:
-        return "Welche Spaces sollen behalten werden? Bitte sag z.B. 'Lösche alle außer VibeMind'."
+        return "Which Spaces should be kept? Please say e.g. 'Delete all except VibeMind'."
 
     logger.info(f"Keeping bubbles (lowercase): {exceptions}")
 
@@ -977,7 +904,7 @@ def delete_all_bubbles_except(params: Dict[str, Any] = None) -> str:
     all_ideas = ideas_repo.list(limit=1000)
 
     if not all_ideas:
-        return "Es gibt keine Bubbles zum Löschen."
+        return "There are no Spaces to delete."
 
     deleted = []
     skipped = []
@@ -1027,19 +954,19 @@ def delete_all_bubbles_except(params: Dict[str, Any] = None) -> str:
     parts = []
     if deleted:
         if len(deleted) <= 5:
-            parts.append(f"{len(deleted)} Spaces gelöscht: {', '.join(deleted)}")
+            parts.append(f"{len(deleted)} Spaces deleted: {', '.join(deleted)}")
         else:
-            parts.append(f"{len(deleted)} Spaces gelöscht: {', '.join(deleted[:5])} und {len(deleted) - 5} weitere")
-        parts.append(f"Insgesamt {total_nodes} Notizen und {total_edges} Verbindungen entfernt")
+            parts.append(f"{len(deleted)} Spaces deleted: {', '.join(deleted[:5])} and {len(deleted) - 5} more")
+        parts.append(f"Total {total_nodes} notes and {total_edges} connections removed")
 
     if skipped:
-        parts.append(f"Behalten: {', '.join(skipped)}")
+        parts.append(f"Kept: {', '.join(skipped)}")
 
     if errors:
-        parts.append(f"Fehler bei: {', '.join(errors[:3])}")
+        parts.append(f"Errors with: {', '.join(errors[:3])}")
 
     if not deleted and not errors:
-        return f"Keine Spaces gelöscht. Alle {len(skipped)} Spaces wurden behalten: {', '.join(skipped)}"
+        return f"No Spaces deleted. All {len(skipped)} Spaces were kept: {', '.join(skipped)}"
 
     logger.info(f"Delete all except: {len(deleted)} deleted, {len(skipped)} kept, {len(errors)} errors")
     return ". ".join(parts)
@@ -1061,7 +988,12 @@ def enter_bubble(params: Dict[str, Any]) -> str:
     global _current_bubble_db_id
     from tools.index_mapping import resolve_bubble_index, get_index_mapping
 
-    bubble_name = params.get("bubble_name", "").strip()
+    # Accept both 'bubble_name' (tool convention) and 'title' (classifier output)
+    bubble_name = (
+        params.get("bubble_name", "")
+        or params.get("title", "")
+        or params.get("name", "")
+    ).strip()
 
     if not bubble_name:
         return "Which space would you like to enter?"
@@ -1080,7 +1012,7 @@ def enter_bubble(params: Dict[str, Any]) -> str:
             mapping = get_index_mapping()
             max_idx = len(mapping.bubbles) if mapping.bubbles else 0
             if max_idx > 0:
-                return f"Keine Bubble mit Index {bubble_name}. Verfuegbar: 1-{max_idx}. Nutze 'Zeig mir meine Spaces' fuer die Liste."
+                return f"No Space at index {bubble_name}. Available: 1-{max_idx}. Use 'Show me my Spaces' for the list."
             # Fall through to try numeric as title
 
     # 1. Try exact match first
@@ -1104,9 +1036,6 @@ def enter_bubble(params: Dict[str, Any]) -> str:
     # CRITICAL: Set the DB UUID for tool functions (like create_idea)
     _current_bubble_db_id = idea.id
     logger.info(f"Set _current_bubble_db_id = '{idea.id}' for bubble '{idea.title}'")
-
-    # Get the Rachel/Multiverse agent - optional, only needed for voice switching
-    multiverse_agent_id = os.getenv("AGENT_MULTIVERSE") or os.getenv("AGENT_RACHEL")
 
     # Helper function to load nodes for this bubble from DB
     def load_bubble_nodes(bubble_db_id: str) -> tuple:
@@ -1220,12 +1149,6 @@ def exit_bubble(params: Dict[str, Any]) -> str:
     """
     global _current_bubble_db_id
 
-    # Get multiverse agent ID from config
-    multiverse_agent_id = os.getenv("AGENT_MULTIVERSE")
-
-    if not multiverse_agent_id:
-        return "Cannot find multiverse agent configuration. Please set AGENT_MULTIVERSE in .env"
-
     # CRITICAL: Clear the DB UUID
     _current_bubble_db_id = None
     logger.info("Cleared _current_bubble_db_id (exiting bubble)")
@@ -1237,79 +1160,13 @@ def exit_bubble(params: Dict[str, Any]) -> str:
     except (ImportError, AttributeError):
         pass
 
-    # BUG 2 FIX: Broadcast exited_bubble event to Electron UI
+    # Broadcast exited_bubble event to Electron UI
     _broadcast_to_electron({
         "type": "exited_bubble"
     })
     logger.info("Broadcast exited_bubble to Electron")
 
-    # Signal agent switch back to multiverse
-    _signal_agent_switch(multiverse_agent_id, None, "Multiverse")
-
     return "Returning to multiverse view..."
-
-
-# =============================================================================
-# AGENT TRANSFER TOOLS
-# =============================================================================
-
-def transfer_to_rachel(params: Dict[str, Any]) -> str:
-    """
-    Transfer conversation to Rachel for creative/multiverse tasks.
-
-    Rachel handles brainstorming, idea exploration, and multiverse navigation.
-
-    Args (via params):
-        reason: Why transferring (optional)
-
-    Returns:
-        str: Confirmation that transfer is initiated
-    """
-    rachel_agent_id = os.getenv("AGENT_RACHEL") or os.getenv("AGENT_CONVERSATIONAL_MEMORY")
-
-    if not rachel_agent_id:
-        return "Cannot find Rachel agent configuration. Please set AGENT_RACHEL in .env"
-
-    reason = params.get("reason", "Creative task")
-
-    # Signal the switch
-    _signal_agent_switch(rachel_agent_id, None, "Rachel")
-
-    logger.info(f"Transfer to Rachel initiated. Reason: {reason}")
-    return "Transferring to Rachel..."
-
-
-def transfer_to_multiverse(params: Dict[str, Any]) -> str:
-    """
-    Transfer conversation to Multiverse Navigator.
-
-    Multiverse handles navigation between bubbles/spaces and exploration.
-
-    Args (via params):
-        reason: Why transferring (optional)
-
-    Returns:
-        str: Confirmation that transfer is initiated
-    """
-    multiverse_agent_id = os.getenv("AGENT_MULTIVERSE")
-
-    if not multiverse_agent_id:
-        return "Cannot find Multiverse agent configuration. Please set AGENT_MULTIVERSE in .env"
-
-    reason = params.get("reason", "Space navigation")
-
-    # Clear current bubble since we're going to multiverse view
-    try:
-        import electron_backend
-        electron_backend._current_bubble_id = None
-    except (ImportError, AttributeError):
-        pass
-
-    # Signal the switch
-    _signal_agent_switch(multiverse_agent_id, None, "Multiverse")
-
-    logger.info(f"Transfer to Multiverse initiated. Reason: {reason}")
-    return "Transferring to Multiverse..."
 
 
 def generate_bubble_embeddings(params: Dict[str, Any]) -> str:
@@ -1333,16 +1190,16 @@ def generate_bubble_embeddings(params: Dict[str, Any]) -> str:
     result = repo.generate_embeddings_for_all_bubbles()
 
     if not result.get("success"):
-        return f"Fehler bei der Embedding-Generierung: {result.get('error', 'Unbekannter Fehler')}"
+        return f"Error generating embeddings: {result.get('error', 'Unknown error')}"
 
     total = result.get("total", 0)
     generated = result.get("generated", 0)
     skipped = result.get("skipped", 0)
     errors = result.get("errors", 0)
 
-    message = f"Embeddings generiert für {total} Bubbles: {generated} neu, {skipped} übersprungen"
+    message = f"Embeddings generated for {total} Spaces: {generated} new, {skipped} skipped"
     if errors > 0:
-        message += f", {errors} Fehler"
+        message += f", {errors} errors"
 
     logger.info(f"[generate_bubble_embeddings] {message}")
     return message
@@ -1598,9 +1455,6 @@ BUBBLE_TOOLS = {
     "delete_all_bubbles_except": delete_all_bubbles_except,  # Bulk delete with exceptions
     "enter_bubble": enter_bubble,
     "exit_bubble": exit_bubble,
-    # Agent transfer tools
-    "transfer_to_rachel": transfer_to_rachel,
-    "transfer_to_multiverse": transfer_to_multiverse,
     # Embedding generation tool
     "generate_bubble_embeddings": generate_bubble_embeddings,
 }
@@ -1627,8 +1481,6 @@ __all__ = [
     "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
-    "transfer_to_rachel",
-    "transfer_to_multiverse",
     "generate_bubble_embeddings",
     "get_pending_agent_switch",
     "get_current_bubble_db_id",

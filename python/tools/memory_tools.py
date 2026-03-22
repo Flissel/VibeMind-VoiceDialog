@@ -83,6 +83,7 @@ async def store_command_history(
     Returns:
         Dict mit Bestätigung
     """
+    logger.debug("store_command_history called with command=%s app_context=%s", command, app_context)
     try:
         record = CommandRecord(
             command=command,
@@ -165,10 +166,11 @@ async def get_frequent_commands(
     Returns:
         Dict mit Befehlsliste
     """
+    logger.debug("get_frequent_commands called with app_context=%s limit=%s", app_context, limit)
     try:
         frequent = []
         recent = []
-        
+
         # Versuche Supermemory
         client = _get_supermemory_client()
         if client:
@@ -263,6 +265,7 @@ async def get_command_suggestions(
     Returns:
         Dict mit Vorschlägen
     """
+    logger.debug("get_command_suggestions called with partial_command=%s", partial_command)
     try:
         partial_lower = partial_command.lower()
         suggestions = []
@@ -297,7 +300,7 @@ async def get_command_suggestions(
 
 
 # =============================================================================
-# TOOL DEFINITIONS for ElevenLabs
+# TOOL DEFINITIONS
 # =============================================================================
 
 MEMORY_TOOLS = [

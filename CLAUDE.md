@@ -8,26 +8,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current Architecture:**
 
-- **Dual Voice Provider** — `VOICE_PROVIDER` selects: `openai_realtime` (speech-to-speech, native function calling) or `elevenlabs` (4 agents: Rachel/Alice/Adam/Antoni with transfers). Also supports `VoiceBridgeV2` async mode.
+- **Voice Provider** — OpenAI Realtime API (speech-to-speech, native function calling) via VoiceBridgeV2 async architecture. Rachel is the single voice interface agent.
 - **Intent Classification** — LLM-based classification of natural language to event types
 - **Swarm Backend** — 8 backend agents across 8 domain spaces execute tools
 - **Electron UI** — 3D multiverse with bubbles (ideas) rendered via Three.js
 
 ## Quick Start
 
-### Voice Dialog Only
-
-```bash
-cd python
-python voice_dialog_main.py
-```
-
 ### Full System (Electron UI)
 
 ```bash
+# 1. Start Minibook (central message bus)
+docker compose -f docker-compose.minibook.yml up -d --build
+
+# 2. Start Electron app (spawns Python backend automatically)
 cd electron-app
 npm install  # first time only
-npm start    # spawns Python backend automatically
+npm start
 ```
 
 ### Configuration
@@ -35,65 +32,65 @@ npm start    # spawns Python backend automatically
 Copy `.env.example` to `.env`:
 
 ```bash
-# Voice provider selection (openai_realtime or elevenlabs)
-VOICE_PROVIDER=openai_realtime
+# Voice (OpenAI Realtime)
 OPENAI_API_KEY=sk-xxx
 
-# Alternative: ElevenLabs (legacy multi-agent)
-# VOICE_PROVIDER=elevenlabs
-# ELEVENLABS_API_KEY=xxx
-# AGENT_MULTIVERSE=agent_xxx
+# MinibookHub routing (PRIMARY — requires Docker)
+MINIBOOK_ENABLED=true
+USE_MINIBOOK_HUB=true
+MINIBOOK_URL=http://localhost:3480
 
-# Default: sync mode (no Redis required)
+# Sync mode (no Redis required for direct fallback)
 FORCE_SYNC_MODE=true
 ```
 
 ## Architecture
 
-### Main Flow
+### Main Flow (MinibookHub — Primary Mode)
 
 ```
-User Voice → Voice Provider (OpenAI Realtime or ElevenLabs)
-                    ↓
-            Intent Classification
-            (LLM classifies to event_type + payload)
-                    ↓
-            Event Routing (event_type → stream)
-                    ↓
-    ┌─────────┬─────────┬──────────┬──────────┬──────────┐
-    ↓         ↓         ↓          ↓          ↓          ↓
-Bubbles   Ideas    Coding    Desktop   Roarboot  ...3 more
-(bubble.*)(idea.*) (code.*)  (desktop.*)(roarboot.*)
-    ↓         ↓         ↓          ↓          ↓          ↓
-    └─────────┴─────────┴──────────┴──────────┴──────────┘
-                    ↓
-            Electron UI (3D Bubbles)
+User Voice / Game Console Chat
+            ↓
+    OpenAI Realtime API (voice) or process_intent (text)
+            ↓
+    ┌─── MinibookHub (USE_MINIBOOK_HUB=true) ───┐
+    │                                             │
+    │  1. EnrichmentPipeline                      │
+    │     ├── ContextGather (history, state)       │
+    │     ├── IntentClassifier → event_type        │
+    │     ├── SpaceRouter (LLM/deterministic)      │
+    │     └── TaskEnricher (payload + context)      │
+    │                                             │
+    │  2. POST to Minibook with @agent mentions   │
+    │                                             │
+    │  3. SpaceResponders execute tools            │
+    │     ├── Single-space: sync-wait (10s)        │
+    │     └── Multi-space: async-poll (120s)       │
+    └─────────────────────────────────────────────┘
+            ↓                        ↓
+    ┌───────────────┐    ┌───────────────────┐
+    │ Single Space   │    │ Multi Space        │
+    │ e.g. Ideas     │    │ e.g. Research +    │
+    │ → idea.create  │    │      Ideas         │
+    └───────────────┘    └───────────────────┘
+            ↓
+    Electron UI (3D Multiverse)
 ```
 
-### Multi-Agent System
-
-4 ElevenLabs voice agents with transfer capabilities:
-
+**Fallback (direct mode):** When `USE_MINIBOOK_HUB=false`, intents route directly:
 ```
-Rachel (Entry) ──transfer──► Alice (Hub)
-                               │
-                    ┌──────────┴──────────┐
-                    ▼                      ▼
-               Adam (Desktop)        Antoni (Coding)
+IntentClassifier → event_type → EventRouter → Backend Agent → Tool
 ```
 
-| Agent | Role | Transfers To |
-|-------|------|--------------|
-| Rachel | Multiverse Navigator (Entry) | Alice |
-| Alice | Coordinator Hub | Adam, Antoni, Rachel |
-| Adam | Desktop Worker | Alice |
-| Antoni | Coding/Writing | Alice |
+### Voice Agent
 
-Agent configs: `python/agents/{name}/config.py` + `prompts.py` + `tools.py`
+Rachel is the single voice interface agent (OpenAI Realtime). She receives user speech, calls `send_intent` to route through the swarm orchestrator, and speaks the response.
 
-### Eight Spaces (Domains)
+**Key File:** `python/spaces/ideas/agents/rachel_agent.py`
 
-VibeMind has 8 domain spaces, each with its own backend agent and Redis stream:
+### Eleven Spaces (Domains)
+
+VibeMind has 11 domain spaces, each with its own backend agent and Redis stream:
 
 | Space | Stream | Backend Agent | Event Prefix | File |
 | ----- | ------ | ------------- | ------------ | ---- |
@@ -105,8 +102,12 @@ VibeMind has 8 domain spaces, each with its own backend agent and Redis stream:
 | Research | `events:tasks:zeroclaw` | ZeroClawResearchAgent | `research.*` | `python/spaces/research/agents/zeroclaw_research_agent.py` |
 | Minibook | `events:tasks:minibook` | MinibookBackendAgent | `minibook.*` | `python/spaces/minibook/agents/minibook_agent.py` |
 | Schedule | `events:tasks:schedule` | ScheduleBackendAgent | `schedule.*` | `python/spaces/schedule/agents/schedule_agent.py` |
+| N8n | `events:tasks:n8n` | N8nBackendAgent | `n8n.*` | `python/spaces/n8n/agents/n8n_agent.py` |
+| AgentFarm | `events:tasks:agentfarm` | AgentFarmAgent | `agentfarm.*` | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| Brain | — (standalone microservices) | — | — | `python/spaces/brain/` (Tahlamus submodule) |
 
 > **Note:** Shuttles (`python/spaces/shuttles/`) contains only the SWE Design submodule and has no dedicated backend agent. Shuttle events (`bubble.evaluate`, `bubble.promote`) are handled by BubblesAgent.
+> **Note:** Brain is a standalone neuroscience-inspired cognitive system with its own microservices (ports 5000-5002), not a traditional backend agent.
 
 ### Intent Classification
 
@@ -143,6 +144,24 @@ User input is classified by `IntentClassifier` into structured event types:
 "Öffne Chrome"                 → desktop.open_app  {"app_name": "Chrome"}
 "Klick auf OK"                 → desktop.click     {"element": "OK"}
 "Screenshot"                   → desktop.screenshot
+```
+
+**N8n Events:**
+
+```
+"Erstelle einen Workflow für X" → n8n.generate   {"description": "X"}
+"Zeig alle Workflows"           → n8n.list
+"Aktiviere Workflow Y"          → n8n.activate   {"name": "Y"}
+"N8n Status"                    → n8n.status
+```
+
+**AgentFarm Events:**
+
+```
+"Erstelle ein Agent-Team"       → agentfarm.create_team {"team_name": "..."}
+"Starte das Team"               → agentfarm.run         {"team_id": "...", "task": "..."}
+"Agent Farm Status"             → agentfarm.status
+"Welche Teams gibt es?"         → agentfarm.list_teams
 ```
 
 **Key File:** [python/swarm/orchestrator/intent_classifier.py](python/swarm/orchestrator/intent_classifier.py) - Contains full `CLASSIFIER_PROMPT_TEMPLATE` with all event types.
@@ -182,30 +201,41 @@ class IdeasBackendAgent(BaseBackendAgent):
 | ZeroClaw Agent | `python/spaces/research/agents/zeroclaw_research_agent.py` |
 | Minibook Agent | `python/spaces/minibook/agents/minibook_agent.py` |
 | Schedule Agent | `python/spaces/schedule/agents/schedule_agent.py` |
+| N8n Agent | `python/spaces/n8n/agents/n8n_agent.py` |
+| AgentFarm Agent | `python/spaces/autogen/agents/agentfarm_agent.py` |
 
 ### Orchestration Flow (Detailed)
 
 ```
-1. User speaks → Voice Provider (OpenAI Realtime or ElevenLabs)
-2. Voice agent calls send_intent tool with user_request
+1. User speaks → OpenAI Realtime API (speech-to-speech)
+   OR: User types in Game Console → process_intent(text)
 
-3. IntentOrchestrator receives text:
+2. IntentOrchestrator receives text:
    ├── (Optional) CollectorAgent: Accumulate fragments
    ├── (Optional) IntentEnhancer: Fix ASR errors
    └── IntentClassifier: Classify to event_type + payload
 
-4. Event routing:
+3. MinibookHub routing (USE_MINIBOOK_HUB=true — PRIMARY MODE):
+   ├── EnrichmentPipeline:
+   │   ├── ContextGather: conversation history, bubble state, user prefs
+   │   ├── SpaceRouter: LLM or deterministic → which space(s)?
+   │   └── TaskEnricher: build per-agent payloads with context
+   ├── POST task to Minibook API with @agent mentions
+   ├── SpaceMinibookResponders receive @mentions:
+   │   ├── Parse enriched JSON (event_type + payload)
+   │   └── Execute via orchestrator with domain_hint
+   └── ResultAggregator:
+       ├── Single-space: sync-wait up to 10s
+       └── Multi-space: async-poll up to 120s
+
+4. Direct fallback (USE_MINIBOOK_HUB=false):
    ├── SYNC mode: Execute tool directly
    └── ASYNC mode: Publish to Redis stream
 
-5. Backend Agent:
-   ├── Map event_type → tool function (TOOL_MAP)
-   ├── Normalize params (PARAM_MAPPING)
-   └── Execute tool
-
-6. Result:
+5. Result:
    ├── Broadcast to Electron (node_added, etc.)
-   └── Return response_hint to Rachel
+   ├── inject_system_message() → Rachel speaks immediately
+   └── OR: NotificationQueue → Rachel picks up next turn
 ```
 
 **Key Files:**
@@ -224,6 +254,15 @@ class IdeasBackendAgent(BaseBackendAgent):
 | Tool Definitions | `python/swarm/orchestrator/tool_definitions.py` |
 | Event Router | `python/swarm/event_team/event_router.py` |
 | Event Bus | `python/swarm/event_bus.py` |
+| MinibookHub | `python/spaces/minibook/minibook_hub.py` |
+| Enrichment Pipeline | `python/spaces/minibook/enrichment/pipeline.py` |
+| Space Router | `python/spaces/minibook/enrichment/space_router.py` |
+| Context Gather | `python/spaces/minibook/enrichment/context_gather.py` |
+| Task Enricher | `python/spaces/minibook/enrichment/task_enricher.py` |
+| Rachel Interface | `python/spaces/minibook/rachel_interface.py` |
+| Result Aggregator | `python/spaces/minibook/result_aggregator.py` |
+| Minibook Workers | `python/spaces/minibook/workers/minibook_workers.py` |
+| Minibook Client | `python/spaces/minibook/tools/minibook_client.py` |
 
 ### Input Enhancement Pipeline (Optional)
 
@@ -239,12 +278,7 @@ Files in `python/swarm/agents/`
 
 Tools are Python functions that agents can call. Two types:
 
-**1. ElevenLabs Client Tools** (voice agent calls directly)
-
-- Registered via `ClientToolsManager`
-- Used for session control, transfers
-
-**2. Backend Tools** (executed via swarm)
+**Backend Tools** (executed via swarm)
 
 Tools live in two locations:
 - **Shared tools:** `python/tools/` (22 files — cross-space utilities)
@@ -263,9 +297,8 @@ Tools live in two locations:
 | `supermemory_tools.py` | Supermemory integration |
 | `system_status_tools.py` | System health |
 | `task_status_tools.py` | Task status monitoring |
-| `handoff_tools.py` | ElevenLabs agent transfers |
+| `handoff_tools.py` | Agent transfers |
 | `transfer_handler.py` | Agent transfer handling |
-| `client_tools_manager.py` | ElevenLabs client tools (18KB) |
 | `worker_queue.py` | Async work queue (29KB) |
 | `browser_worker.py` | Headless browser automation (13KB) |
 | `index_mapping.py` | Event type → tool mapping |
@@ -283,22 +316,31 @@ Tools live in two locations:
 
 SQLite: `python/vibemind.db`
 
-**Schema (v14, 12 data tables):**
+**Schema (v14, 21 tables):**
 
 | Table | Purpose | Key Columns |
 | ----- | ------- | ----------- |
-| `ideas` | Bubbles and ideas | `id`, `title`, `description`, `parent_id`, `score`, `status`, `embedding_vector` |
-| `projects` | Code generation | `id`, `name`, `generation_status`, `vnc_port`, `preview_url`, `tech_stack` |
-| `canvas_nodes` | Visual nodes | `id`, `node_type`, `linked_idea_id`, `x`, `y`, `format_schema`, `content_json` |
+| `ideas` | Bubbles and ideas | `id`, `title`, `description`, `parent_id`, `score`, `status`, `promoted_to_project_id`, `embedding_vector` |
+| `projects` | Code generation | `id`, `name`, `generation_status`, `vnc_port`, `preview_url`, `tech_stack`, `created_at`, `metadata` |
+| `canvas_nodes` | Visual nodes | `id`, `node_type`, `linked_idea_id`, `x`, `y`, `format_schema`, `content_json`, `summary`, `metadata` |
 | `canvas_edges` | Node connections | `from_node_id`, `to_node_id`, `edge_type` |
-| `conversation_sessions` | Chat sessions | `id`, `started_at`, `agent_id` |
+| `conversation_sessions` | Chat sessions | `id`, `started_at`, `agent_id`, `metadata` |
 | `conversation_history` | Chat history | `session_id`, `speaker`, `text`, `timestamp` |
-| `shuttles` | Requirements pipeline | `shuttle_id`, `bubble_id`, `current_stage`, `stage_type`, `stage_data` |
+| `shuttles` | Requirements pipeline | `shuttle_id`, `bubble_id`, `current_stage`, `stage_type`, `stage_data`, `passed_count`, `failed_count`, `total_count` |
 | `exploration_sessions` | AI-Scientist runs | `root_bubble_id`, `status`, `total_nodes_explored`, `best_score` |
 | `exploration_nodes` | Exploration tree nodes | `session_id`, `source_bubble_id`, `target_bubble_id`, `combined_score` |
 | `discovered_edges` | Permanent semantic links | `from_idea_id`, `to_idea_id`, `edge_label`, `confidence` |
 | `mermaid_diagrams` | Generated diagrams | `title`, `diagram_type`, `content`, `source_idea_id` |
 | `scheduled_tasks` | APScheduler tasks | `title`, `action_text`, `trigger_type`, `trigger_config`, `status` |
+| `schema_version` | Schema migration tracking | `version` |
+| `user_preferences` | User settings | `key`, `value` |
+| `intent_analysis_log` | Intent classification audit | `event_type`, `user_input`, `confidence` |
+| `intent_corrections` | Classification corrections | `original_event`, `corrected_event` |
+| `synthetic_utterances` | Training utterances | `utterance`, `event_type` |
+| `evaluation_runs` | Evaluation sessions | `id`, `status`, `total_cases` |
+| `evaluation_results` | Evaluation outcomes | `run_id`, `event_type`, `score` |
+| `persistent_tasks` | Long-running task state | `task_id`, `status`, `result` |
+| `conversion_ai_personalities` | AI personality configs | `name`, `config` |
 
 **Repository Pattern:**
 
@@ -362,6 +404,54 @@ _broadcast_to_electron({
 - [python/electron_backend.py](python/electron_backend.py) - Message handler
 - [electron-app/renderer/glass_bubbles.js](electron-app/renderer/glass_bubbles.js) - 3D rendering
 
+### ClawPort Dashboard
+
+A standalone Vite + React dashboard embedded as a BrowserView overlay via `ClawPortManager`. Provides system monitoring and text-based interaction as an alternative to voice.
+
+**4 Dashboard Tabs:**
+
+| Tab | Feature | Python Handler | IPC Messages |
+|-----|---------|---------------|-------------|
+| Schedule | APScheduler task list + pause/resume | `_handle_get_scheduled_tasks` | `get_scheduled_tasks`, `update_task_status` |
+| Agents | 8 backend agent status cards (live dots) | `_handle_get_agent_status_sync` | `get_agent_status` |
+| Chat | Text input → same `process_intent` as voice | `_handle_chat_text_input` | `chat_text_input`, `get_conversation_history` |
+| Memory | Supermemory service overview + search | `_handle_get_memory_overview` | `get_memory_overview`, `search_memory`, `get_recent_memory` |
+
+**Architecture:**
+
+```
+ClawPort React App (dashboard/dist/index.html)
+  → window.vibemindDashboard (clawport-preload.js)
+    → ipcRenderer.invoke('clawport:*')
+      → main.js sendToPythonAndWait()
+        → Python electron_backend.py handlers
+```
+
+**Key Files:**
+
+| Component | File |
+|-----------|------|
+| BrowserView Manager | `electron-app/clawport-manager.js` |
+| Preload (IPC API) | `electron-app/clawport-preload.js` |
+| React App | `electron-app/dashboard/src/App.tsx` |
+| IPC Hooks | `electron-app/dashboard/src/hooks/useIPC.ts` |
+| TypeScript Types | `electron-app/dashboard/src/types.ts` |
+| Schedule UI | `electron-app/dashboard/src/features/ScheduleMonitor.tsx` |
+| Agent Status UI | `electron-app/dashboard/src/features/AgentStatus.tsx` |
+| Chat UI | `electron-app/dashboard/src/features/ChatPanel.tsx` |
+| Memory UI | `electron-app/dashboard/src/features/MemoryBrowser.tsx` |
+| CSS Design System | `electron-app/dashboard/src/styles/globals.css` |
+
+**Build:**
+
+```bash
+cd electron-app
+npm run dashboard:build   # Build to dashboard/dist/
+npm run dashboard:dev     # Vite dev server with hot-reload
+```
+
+**BrowserView Mutual Exclusion:** All 4 managers (Dashboard, Rowboat, SweDesign, ClawPort) hide each other when any one is shown.
+
 ### Memory System (Optional)
 
 Supermemory integration for semantic memory:
@@ -386,10 +476,7 @@ SUPERMEMORY_API_KEY=xxx
 ## Common Commands
 
 ```bash
-# Voice dialog standalone
-cd python && python voice_dialog_main.py
-
-# Electron app
+# Electron app (starts Python backend + voice automatically)
 cd electron-app && npm start
 
 # Test agent registry
@@ -405,10 +492,6 @@ python -c "import sounddevice as sd; print(sd.query_devices())"
 cd electron-app && npm run build:win   # Windows installer
 cd electron-app && npm run build:mac   # macOS DMG
 cd electron-app && npm run build:linux # Linux AppImage
-
-# Deploy client tools to ElevenLabs
-cd python && python deploy_client_tools.py --show
-cd python && python deploy_client_tools.py --deploy
 
 # Debug startup
 start_vibemind_debug.bat               # With debug ports (CDP 9222)
@@ -433,11 +516,8 @@ python -m tests.test_agent_transfers   # Agent transfer tests
 See `.env.example` for all 60+ variables. Key groups:
 
 ```bash
-# Voice Provider (required — choose one)
-VOICE_PROVIDER=openai_realtime    # or "elevenlabs"
-OPENAI_API_KEY=sk-xxx             # for openai_realtime
-# ELEVENLABS_API_KEY=xxx          # for elevenlabs
-# AGENT_MULTIVERSE=agent_xxx      # Rachel agent ID (elevenlabs)
+# Voice Provider (OpenAI Realtime)
+OPENAI_API_KEY=sk-xxx
 
 # Execution Mode
 FORCE_SYNC_MODE=true         # false enables Redis-based async execution
@@ -463,9 +543,10 @@ FAST_STARTUP=true            # Skips Supermemory API calls at startup
 OPENROUTER_API_KEY=xxx
 RAG_CLASSIFIER_MODEL=openai/gpt-4o
 
-# Spaces (enable/disable)
-MINIBOOK_ENABLED=false       # Inter-space collaboration
-USE_MINIBOOK_HUB=false       # Route ALL intents through Minibook
+# Spaces & Routing
+MINIBOOK_ENABLED=true        # Minibook collaboration system (requires Docker)
+USE_MINIBOOK_HUB=true        # PRIMARY: Route ALL intents through MinibookHub
+MINIBOOK_URL=http://localhost:3480  # Minibook REST API (docker-compose.minibook.yml)
 SCHEDULE_ENABLED=false       # APScheduler-based scheduling
 USE_ZEROCLAW=false           # ZeroClaw web research
 ROWBOAT_PUBLISH_ENABLED=true # Publish metadata to knowledge graph
@@ -513,7 +594,7 @@ def my_tool(param1: str) -> Dict[str, Any]:
 5. Add stream constant and event mappings in `event_router.py`
 6. Register lazy import in `python/swarm/backend_agents/__init__.py`
 
-### Tool Definition Format (ElevenLabs)
+### Tool Definition Format
 
 ```python
 TOOL_DEFINITION = {

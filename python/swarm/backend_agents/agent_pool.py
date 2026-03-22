@@ -240,6 +240,7 @@ class AgentPool:
 
     async def start(self) -> None:
         """Start all workers in the pool."""
+        logger.debug("AgentPool.start: agent_class=%s num_workers=%s", self.agent_class.__name__, self.num_workers)
         if self._running:
             return
 
@@ -265,6 +266,7 @@ class AgentPool:
 
     async def stop(self) -> None:
         """Stop all workers in the pool."""
+        logger.debug("AgentPool.stop: agent_class=%s", self.agent_class.__name__)
         self._running = False
 
         for worker in self.workers:
@@ -275,6 +277,7 @@ class AgentPool:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics for all workers in the pool."""
+        logger.debug("AgentPool.get_stats: agent_class=%s", self.agent_class.__name__)
         return {
             "pool": {
                 "agent_class": self.agent_class.__name__,
@@ -346,6 +349,7 @@ class MultiAgentPool:
 
     async def start_all(self) -> None:
         """Start all pools."""
+        logger.debug("MultiAgentPool.start_all: pools=%s", len(self.pools))
         self._running = True
         for name, pool in self.pools.items():
             logger.info(f"[MultiAgentPool] Starting pool: {name}")
@@ -354,6 +358,7 @@ class MultiAgentPool:
 
     async def stop_all(self) -> None:
         """Stop all pools."""
+        logger.debug("MultiAgentPool.stop_all called")
         self._running = False
         for name, pool in self.pools.items():
             logger.info(f"[MultiAgentPool] Stopping pool: {name}")

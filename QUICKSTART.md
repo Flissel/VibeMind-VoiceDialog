@@ -77,10 +77,10 @@ A window with colorful particles that:
 
 ## Next Steps
 
-### Integrate with ElevenLabs
+### Integrate with OpenAI Realtime
 
 ```python
-from elevenlabs import Voice, generate
+from voice.openai_realtime import OpenAIRealtimeSession
 import visual_sim_core
 from audio_analyzer import AudioAnalyzer
 

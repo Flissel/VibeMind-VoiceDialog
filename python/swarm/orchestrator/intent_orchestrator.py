@@ -179,6 +179,14 @@ except ImportError:
     HAS_DROPE_RESOLVER = False
     get_reference_resolver = None
 
+# Extracted modules for sync execution and result formatting
+from swarm.orchestrator.result_formatter import (
+    OrchestrationResult,
+    format_result_for_voice, format_multi_step_result,
+    enrich_with_task_context, store_supermemory_task_completed, store_supermemory_task_failed
+)
+from swarm.orchestrator.sync_executor import SyncExecutor
+
 # Broadcast Dispatcher (Fan-Out architecture for parallel agent evaluation + profiling)
 try:
     from swarm.broadcast.dispatcher import BroadcastDispatcher, IntentPayload, BroadcastResult
@@ -190,16 +198,32 @@ except ImportError as e:
     HAS_BROADCAST = False
     logger.debug(f"Broadcast dispatcher not available: {e}")
 
+# StreamListener — LLM-based parallel intent routing (replaces keyword-based CollectorAgent)
+try:
+    from swarm.stream_listener import (
+        get_stream_listener_dispatcher,
+        EvalContext,
+        ConfidenceDistribution,
+    )
+    HAS_STREAM_LISTENER = True
+except ImportError as e:
+    HAS_STREAM_LISTENER = False
+    logger.debug(f"StreamListener not available: {e}")
 
-@dataclass
-class OrchestrationResult:
-    """Result of intent orchestration."""
-    job_id: str
-    event_type: str
-    stream: str
-    response_hint: str
-    is_conversational: bool = False
-    error: Optional[str] = None
+# SpaceAgents — per-space LLM tool orchestration (Phase 2: Ideas Agent)
+try:
+    from swarm.space_agents import (
+        get_ideas_space_agent,
+        SpaceAgentContext,
+        SpaceAgentResult,
+    )
+    HAS_SPACE_AGENTS = True
+except ImportError as e:
+    HAS_SPACE_AGENTS = False
+    logger.debug(f"SpaceAgents not available: {e}")
+
+
+# OrchestrationResult now lives in result_formatter.py (re-exported above)
 
 
 class IntentOrchestrator:
@@ -388,14 +412,60 @@ class IntentOrchestrator:
                 logger.warning(f"Failed to initialize Enhancement Pipeline: {e}")
                 self._use_enhancement_pipeline = False
 
+        # StreamListener — LLM-based parallel intent routing
+        # When enabled, replaces CollectorAgent + IntentClassifier with parallel LLM listeners
+        self._use_stream_listener = (
+            os.getenv("USE_STREAM_LISTENER", "false").lower() == "true"
+            and HAS_STREAM_LISTENER
+        )
+        self._stream_dispatcher = None
+        if self._use_stream_listener:
+            try:
+                self._stream_dispatcher = get_stream_listener_dispatcher()
+                logger.info("StreamListener initialized (LLM-based parallel routing)")
+                logger.debug("[STREAM LISTENER] Initialized with all domain listeners")
+            except Exception as e:
+                logger.warning(f"Failed to initialize StreamListener: {e}")
+                self._use_stream_listener = False
+
+        # SpaceAgents — per-space LLM tool orchestration
+        # When enabled, StreamListener routes to space-specific agents instead of flat _process_sync
+        self._use_space_agents = (
+            os.getenv("USE_SPACE_AGENTS", "false").lower() == "true"
+            and HAS_SPACE_AGENTS
+        )
+        self._space_agents: Dict[str, Any] = {}
+        if self._use_space_agents:
+            try:
+                self._space_agents["ideas"] = get_ideas_space_agent()
+                logger.info("SpaceAgents initialized (ideas)")
+                logger.debug("[SPACE AGENTS] Ideas agent initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SpaceAgents: {e}")
+                self._use_space_agents = False
+
         # MinibookHub — Central execution hub (Phase: Minibook als zentraler Hub)
         # When USE_MINIBOOK_HUB=true, all intents route through Minibook
         self._minibook_hub = None
 
+        # HybridRouter — Tier-based deterministic routing (Phase 0)
+        # Resolves 90% of intents without LLM. Falls through to MinibookHub for multi-space.
+        self._hybrid_router = None
+        if os.getenv("USE_HYBRID_ROUTER", "true").lower() == "true":
+            try:
+                from swarm.routing.hybrid_router import HybridRouter
+                self._hybrid_router = HybridRouter()
+                logger.info("HybridRouter enabled (Phase 0 routing)")
+            except Exception as e:
+                logger.warning(f"HybridRouter init failed, using MinibookHub only: {e}")
+
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
-        self._tool_executors: Dict[str, Callable] = {}
-        self._load_direct_tools()  # Always load - needed for multi-step execution
+        from swarm.orchestrator.tool_registry import ToolRegistry
+        _registry = ToolRegistry()
+        self._tool_executors: Dict[str, Callable] = _registry.load_all(
+            realtime_evaluator=self.realtime_evaluator,
+        )
 
         # Broadcast Dispatcher (Fan-Out architecture)
         # When enabled, every classified intent is broadcast to ALL domain agents.
@@ -424,6 +494,17 @@ class IntentOrchestrator:
             logger.info("IntentOrchestrator initialized (Redis mode)")
         else:
             logger.info("IntentOrchestrator initialized (Tool orchestrator mode + multi-step tools)")
+
+        # SyncExecutor for delegating sync and multi-step tool execution
+        self._sync_executor = SyncExecutor(
+            tool_executors=self._tool_executors,
+            task_memory=self.task_memory,
+            reasoning_logger=self.reasoning_logger,
+            broadcast_dispatcher=getattr(self, '_broadcast_dispatcher', None),
+            sm_task_memory=self.sm_task_memory,
+            sm_user_profile=self.sm_user_profile,
+            use_broadcast_mode=self._use_broadcast_mode,
+        )
 
     def _looks_like_multi_step(self, text: str) -> bool:
         """
@@ -485,603 +566,8 @@ class IntentOrchestrator:
         self._minibook_hub = hub
         logger.info("MinibookHub connected to IntentOrchestrator")
 
-    def _load_direct_tools(self):
-        """Load tool implementations for direct synchronous execution."""
-        # === BUBBLE TOOLS (all) ===
-        try:
-            from tools.bubble_tools import (
-                list_bubbles, create_bubble, enter_bubble,
-                exit_bubble, delete_bubble, delete_all_bubbles_except,
-                get_bubble_stats, score_bubble, promote_bubble,
-                update_bubble, find_bubble, evaluate_bubble_evolution
-            )
-            self._tool_executors.update({
-                "bubble.list": list_bubbles,
-                "bubble.create": create_bubble,
-                "bubble.enter": enter_bubble,
-                "bubble.exit": exit_bubble,
-                "bubble.back": exit_bubble,  # Alias for bubble.exit
-                "bubble.delete": delete_bubble,
-                "bubble.delete_all_except": delete_all_bubbles_except,
-                "bubble.stats": get_bubble_stats,
-                "bubble.score": score_bubble,
-                "bubble.promote": promote_bubble,
-                "bubble.update": update_bubble,
-                "bubble.find": find_bubble,
-                "bubble.evaluate": evaluate_bubble_evolution,
-            })
-            logger.info("Loaded bubble tools for sync fallback (12 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load bubble tools: {e}")
-
-        # === IDEA TOOLS (all) ===
-        try:
-            from tools.idea_tools import (
-                create_idea, list_ideas, find_idea, delete_idea,
-                update_idea, connect_ideas, add_image, get_current_space,
-                expand_ideas, move_idea, auto_link_ideas, analyze_and_suggest_links,
-                count_ideas, classify_idea, link_idea_to_root, connect_ideas_multi,
-                disconnect_ideas, explain_idea
-            )
-            from tools.structured_formatting_tools import format_idea_as_table
-            from tools.summary_tools import summarize_idea, generate_white_paper
-            self._tool_executors.update({
-                "idea.create": create_idea,
-                "idea.list": list_ideas,
-                "idea.find": find_idea,
-                "idea.delete": delete_idea,
-                "idea.update": update_idea,
-                "idea.connect": connect_ideas,
-                "idea.disconnect": disconnect_ideas,
-                "idea.connect_multi": connect_ideas_multi,
-                "idea.add_image": add_image,
-                "idea.expand": expand_ideas,
-                "idea.move": move_idea,
-                "idea.auto_link": auto_link_ideas,
-                "idea.analyze_links": analyze_and_suggest_links,
-                "idea.count": count_ideas,
-                "idea.classify": classify_idea,
-                "idea.link_to_root": link_idea_to_root,
-                "idea.format_table": format_idea_as_table,
-                "idea.summarize": summarize_idea,
-                "idea.whitepaper": generate_white_paper,
-                "idea.white_paper": generate_white_paper,  # Alias
-                "idea.explain": explain_idea,
-                "bubble.current": get_current_space,
-                "idea.current_space": get_current_space,  # Alias for intent rule
-            })
-            logger.info("Loaded idea tools for sync fallback (20 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load idea tools: {e}")
-
-        # === CODING TOOLS ===
-        try:
-            from spaces.coding.tools.coding_tools import (
-                generate_code, get_generation_status, start_preview,
-                stop_preview, list_generated_projects, cancel_generation,
-                exit_project
-            )
-            self._tool_executors.update({
-                "code.generate": generate_code,
-                "code.status": get_generation_status,
-                "code.preview.start": start_preview,
-                "code.preview.stop": stop_preview,
-                "code.list": list_generated_projects,
-                "code.cancel": cancel_generation,
-                "code.exit": exit_project,
-            })
-            logger.info("Loaded coding tools for sync fallback (7 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load coding tools: {e}")
-
-        # === DESKTOP TOOLS (with sync wrappers) ===
-        try:
-            from spaces.desktop.tools.desktop_tools import (
-                execute_desktop_task, click_element, type_text,
-                press_key, take_screenshot, scroll_screen
-            )
-            import asyncio
-            import concurrent.futures
-
-            def _run_async(coro):
-                """Run async function synchronously."""
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            future = pool.submit(asyncio.run, coro)
-                            return future.result()
-                    return loop.run_until_complete(coro)
-                except RuntimeError:
-                    return asyncio.run(coro)
-
-            def _format_desktop_result(result):
-                """Format desktop tool result for voice output."""
-                if isinstance(result, dict):
-                    if result.get("success"):
-                        return result.get("message", "Erledigt.")
-                    else:
-                        return f"Fehler: {result.get('error', result.get('message', 'Unbekannter Fehler'))}"
-                return str(result)
-
-            # Sync wrapper functions for desktop tools
-            def desktop_task_sync(params):
-                goal = params.get("goal", "") or params.get("description", "")
-                if not goal:
-                    return "Was soll ich auf dem Desktop machen?"
-                result = _run_async(execute_desktop_task(goal))
-                return _format_desktop_result(result)
-
-            def click_element_sync(params):
-                desc = params.get("element_description", "") or params.get("description", "")
-                if not desc:
-                    return "Welches Element soll ich anklicken?"
-                result = _run_async(click_element(desc))
-                return _format_desktop_result(result)
-
-            def type_text_sync(params):
-                text = params.get("text", "")
-                if not text:
-                    return "Was soll ich tippen?"
-                result = _run_async(type_text(text))
-                return _format_desktop_result(result)
-
-            def press_key_sync(params):
-                key = params.get("key", "")
-                if not key:
-                    return "Welche Taste soll ich druecken?"
-                result = _run_async(press_key(key))
-                return _format_desktop_result(result)
-
-            def take_screenshot_sync(params):
-                result = _run_async(take_screenshot())
-                return _format_desktop_result(result)
-
-            def scroll_screen_sync(params):
-                direction = params.get("direction", "down")
-                amount = params.get("amount", 3)
-                result = _run_async(scroll_screen(direction, amount))
-                return _format_desktop_result(result)
-
-            self._tool_executors.update({
-                "desktop.task": desktop_task_sync,
-                "desktop.open_app": desktop_task_sync,  # Alias - open_app uses task
-                "system.open_app": desktop_task_sync,   # Classifier sometimes emits system.open_app
-                "desktop.click": click_element_sync,
-                "desktop.type": type_text_sync,
-                "desktop.press_key": press_key_sync,
-                "desktop.screenshot": take_screenshot_sync,
-                "desktop.scroll": scroll_screen_sync,
-            })
-            logger.info("Loaded desktop tools for sync fallback (7 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load desktop tools: {e}")
-
-        # === EVALUATION TOOLS (Phase 17) ===
-        self._load_evaluation_tools()
-
-        # === SUMMARY TOOLS ===
-        try:
-            from tools.summary_tools import (
-                summarize_idea, generate_white_paper,
-                list_summaries, get_summary
-            )
-            self._tool_executors.update({
-                "idea.summarize": summarize_idea,
-                "idea.whitepaper": generate_white_paper,
-                "summary.list": list_summaries,
-                "summary.get": get_summary,
-            })
-            logger.info("Loaded summary tools for sync fallback (4 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load summary tools: {e}")
-
-        # === FORMAT TOOLS (structured formatting) ===
-        try:
-            from tools.format_dispatcher import FORMAT_EXECUTORS
-            self._tool_executors.update(FORMAT_EXECUTORS)
-            logger.info(f"Loaded format tools for sync fallback ({len(FORMAT_EXECUTORS)} tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load format tools: {e}")
-
-        # === TASK MEMORY TOOLS (Supermemory-based) ===
-        try:
-            from tools.task_memory_tools import (
-                get_tasks_today, get_recent_tasks,
-                search_task_history, get_task_stats
-            )
-            self._tool_executors.update({
-                "task.list_today": get_tasks_today,
-                "task.recent": get_recent_tasks,
-                "task.search": search_task_history,
-                "task.stats": get_task_stats,
-            })
-            logger.info("Loaded task memory tools for sync fallback (4 tools)")
-        except ImportError as e:
-            logger.debug(f"Could not load task memory tools: {e}")
-
-        # === SYSTEM TASK STATUS TOOLS (Real-time Redis monitoring) ===
-        try:
-            from tools.task_status_tools import (
-                list_active_tasks, get_queue_status,
-                get_recent_completions
-            )
-            self._tool_executors.update({
-                "system.active_tasks": list_active_tasks,
-                "system.queue_status": get_queue_status,
-                "system.recent_completions": get_recent_completions,
-            })
-            logger.info("Loaded task status tools for sync fallback (3 tools)")
-        except ImportError as e:
-            logger.debug(f"Could not load task status tools: {e}")
-
-        # === SYSTEM STATUS MONITORING TOOLS ===
-        try:
-            from tools.system_status_tools import SYSTEM_STATUS_TOOLS
-            self._tool_executors.update(SYSTEM_STATUS_TOOLS)
-            logger.info(f"Loaded system status tools ({len(SYSTEM_STATUS_TOOLS)} tools)")
-        except ImportError as e:
-            logger.debug(f"Could not load system status tools: {e}")
-
-        # === EXPLORATION TOOLS (AI-Scientist Tree Search) ===
-        try:
-            from spaces.ideas.tools.exploration_tools import (
-                start_exploration,
-                stop_exploration,
-                get_exploration_status,
-                accept_connection,
-                reject_connection,
-                explore_deeper,
-                visualize_exploration,
-                respond_to_exploration_question,
-                set_exploration_direction,
-            )
-            import asyncio
-            import concurrent.futures
-
-            def _run_async_exploration(coro):
-                """Run async exploration function synchronously."""
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            future = pool.submit(asyncio.run, coro)
-                            return future.result()
-                    return loop.run_until_complete(coro)
-                except RuntimeError:
-                    return asyncio.run(coro)
-
-            def _format_exploration_result(result):
-                """Format exploration result for voice output."""
-                if isinstance(result, dict):
-                    if result.get("success"):
-                        return result.get("message", "Exploration gestartet.")
-                    else:
-                        return result.get("message", "Exploration fehlgeschlagen.")
-                return str(result)
-
-            def explore_start_sync(params):
-                result = _run_async_exploration(start_exploration(
-                    bubble_id=params.get("bubble_id"),
-                    depth=params.get("depth", 4),
-                    context=params.get("context"),
-                    mode=params.get("mode", "auto"),
-                ))
-                return _format_exploration_result(result)
-
-            def explore_stop_sync(params):
-                result = _run_async_exploration(stop_exploration())
-                return _format_exploration_result(result)
-
-            def explore_status_sync(params):
-                result = _run_async_exploration(get_exploration_status())
-                return _format_exploration_result(result)
-
-            def explore_accept_sync(params):
-                result = _run_async_exploration(accept_connection(
-                    connection_id=params.get("connection_id")
-                ))
-                return _format_exploration_result(result)
-
-            def explore_reject_sync(params):
-                result = _run_async_exploration(reject_connection(
-                    connection_id=params.get("connection_id")
-                ))
-                return _format_exploration_result(result)
-
-            def explore_deeper_sync(params):
-                result = _run_async_exploration(explore_deeper())
-                return _format_exploration_result(result)
-
-            def explore_visualize_sync(params):
-                result = _run_async_exploration(visualize_exploration())
-                return _format_exploration_result(result)
-
-            def explore_respond_sync(params):
-                result = _run_async_exploration(respond_to_exploration_question(
-                    question_id=params.get("question_id"),
-                    response_type=params.get("response_type"),
-                    selected_option=params.get("selected_option"),
-                    custom_text=params.get("custom_text"),
-                ))
-                return _format_exploration_result(result)
-
-            def explore_direction_sync(params):
-                result = _run_async_exploration(set_exploration_direction(
-                    direction=params.get("direction"),
-                    bubble_id=params.get("bubble_id"),
-                ))
-                return _format_exploration_result(result)
-
-            self._tool_executors.update({
-                "idea.explore.start": explore_start_sync,
-                "idea.explore.stop": explore_stop_sync,
-                "idea.explore.status": explore_status_sync,
-                "idea.explore.accept": explore_accept_sync,
-                "idea.explore.reject": explore_reject_sync,
-                "idea.explore.depth": explore_deeper_sync,
-                "idea.explore.visualize": explore_visualize_sync,
-                "idea.explore.respond": explore_respond_sync,
-                "idea.explore.direction": explore_direction_sync,
-                "idea.explore.continue": explore_start_sync,  # Alias
-            })
-            logger.info("Loaded exploration tools for sync fallback (10 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load exploration tools: {e}")
-
-        # === BUBBLE REQUIREMENTS TOOLS ===
-        try:
-            from tools.bubble_requirements_tool import (
-                process_bubble_requirements,
-                get_bubble_requirements,
-                list_bubbles_with_requirements
-            )
-            import asyncio
-            import concurrent.futures
-
-            def _run_async_requirements(coro):
-                """Run async requirements function synchronously."""
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            future = pool.submit(asyncio.run, coro)
-                            return future.result()
-                    return loop.run_until_complete(coro)
-                except RuntimeError:
-                    return asyncio.run(coro)
-
-            def _format_requirements_result(result):
-                """Format requirements result for voice output."""
-                if isinstance(result, dict):
-                    if result.get("error"):
-                        return f"Fehler: {result.get('error', 'Unbekannter Fehler')}"
-                    elif "bubbles" in result:
-                        bubbles = result.get("bubbles", [])
-                        if not bubbles:
-                            return "Du hast noch keine Bubbles mit Requirements."
-                        count = len(bubbles)
-                        names = [b.get("bubble_title", b.get("title", "Unbenannt")) for b in bubbles[:5]]
-                        if count <= 5:
-                            return f"Du hast {count} Bubbles mit Requirements: {', '.join(names)}."
-                        return f"Du hast {count} Bubbles mit Requirements. Die ersten sind: {', '.join(names)}."
-                    elif "requirements" in result:
-                        requirements = result.get("requirements", [])
-                        if not requirements:
-                            return "Keine Requirements gefunden."
-                        count = len(requirements)
-                        return f"Ich habe {count} Requirements generiert."
-                    elif "metadata" in result:
-                        metadata = result.get("metadata", {})
-                        bubble_title = metadata.get("bubble_title", "Unbenannt")
-                        node_count = metadata.get("node_count", 0)
-                        total_words = metadata.get("total_words", 0)
-                        return f"Für Bubble '{bubble_title}': {node_count} Nodes mit {total_words} Wörtern."
-                    else:
-                        return str(result)
-                return str(result)
-
-            def shuttle_list_sync(params):
-                """Liste alle Bubbles mit ihren Requirements."""
-                result = _run_async_requirements(list_bubbles_with_requirements())
-                return _format_requirements_result(result)
-
-            def shuttle_get_sync(params):
-                """Hole die Requirements für eine spezifische Bubble."""
-                bubble_id = params.get("bubble_id")
-                if not bubble_id:
-                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
-                result = _run_async_requirements(get_bubble_requirements(bubble_id))
-                return _format_requirements_result(result)
-
-            def shuttle_process_sync(params):
-                """Verarbeite die Inhalte einer Bubble und generiere Requirements."""
-                bubble_id = params.get("bubble_id")
-                if not bubble_id:
-                    return "Welche Bubble soll ich analysieren? Bitte gib eine Bubble ID an."
-                result = _run_async_requirements(process_bubble_requirements(bubble_id))
-                return _format_requirements_result(result)
-
-            self._tool_executors.update({
-                "shuttle.list": shuttle_list_sync,
-                "shuttle.get": shuttle_get_sync,
-                "shuttle.process": shuttle_process_sync,
-            })
-            logger.info("Loaded bubble requirements tools for sync fallback (3 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load bubble requirements tools: {e}")
-
-        # === ROARBOOT TOOLS (Rowboat Knowledge Graph) ===
-        try:
-            from spaces.rowboat.tools.roarboot_tools import (
-                search_knowledge, query_knowledge, draft_email,
-                generate_meeting_brief, generate_deck, process_voice_note,
-                get_status as roarboot_get_status, open_webview, reset_conversation,
-            )
-            from spaces.rowboat.tools.docker_tools import (
-                start_docker, stop_docker, restart_docker, docker_status,
-            )
-
-            def _fmt_roarboot(result):
-                if isinstance(result, dict):
-                    return result.get("response_hint", result.get("message", "Erledigt."))
-                return str(result)
-
-            self._tool_executors.update({
-                "roarboot.search": lambda p: _fmt_roarboot(search_knowledge(p.get("query", ""))),
-                "roarboot.query": lambda p: _fmt_roarboot(query_knowledge(p.get("subject", ""), p.get("question"))),
-                "roarboot.email_draft": lambda p: _fmt_roarboot(draft_email(p.get("recipient", ""), p.get("topic", ""), p.get("context", ""))),
-                "roarboot.meeting_brief": lambda p: _fmt_roarboot(generate_meeting_brief(p.get("meeting", ""), p.get("participants", ""))),
-                "roarboot.deck": lambda p: _fmt_roarboot(generate_deck(p.get("topic", ""), p.get("context", ""))),
-                "roarboot.voice_note": lambda p: _fmt_roarboot(process_voice_note(p.get("text", ""))),
-                "roarboot.status": lambda p: _fmt_roarboot(roarboot_get_status()),
-                "roarboot.open": lambda p: _fmt_roarboot(open_webview(p.get("context", "default"))),
-                "roarboot.reset": lambda p: _fmt_roarboot(reset_conversation(p.get("context"))),
-                "roarboot.docker.start": lambda p: _fmt_roarboot(start_docker()),
-                "roarboot.docker.stop": lambda p: _fmt_roarboot(stop_docker()),
-                "roarboot.docker.restart": lambda p: _fmt_roarboot(restart_docker()),
-                "roarboot.docker.status": lambda p: _fmt_roarboot(docker_status()),
-            })
-            logger.info("Loaded roarboot tools for sync fallback (13 tools)")
-        except ImportError as e:
-            logger.warning(f"Could not load roarboot tools: {e}")
-
-        # === RESEARCH TOOLS (ZeroClaw Web Research) ===
-        if os.getenv("USE_ZEROCLAW", "false").lower() == "true":
-            try:
-                from spaces.research.tools.research_tools import (
-                    web_research, scrape_url, summarize_url,
-                    research_to_idea, research_to_rowboat,
-                )
-
-                def _fmt_research(result):
-                    if isinstance(result, dict):
-                        return result.get("response_hint", result.get("message", "Recherche abgeschlossen."))
-                    return str(result)
-
-                self._tool_executors.update({
-                    "research.web": lambda p: _fmt_research(web_research(p.get("query", ""))),
-                    "research.scrape": lambda p: _fmt_research(scrape_url(p.get("url", ""))),
-                    "research.summarize": lambda p: _fmt_research(summarize_url(p.get("url", ""))),
-                    "research.to_idea": lambda p: _fmt_research(research_to_idea(p.get("query", ""), p.get("title"))),
-                    "research.to_rowboat": lambda p: _fmt_research(research_to_rowboat(p.get("query", ""))),
-                })
-                logger.info("Loaded research tools for sync fallback (5 tools)")
-            except ImportError as e:
-                logger.warning(f"Could not load research tools: {e}")
-
-        # === MINIBOOK TOOLS (Inter-Space Collaboration) ===
-        if os.getenv("MINIBOOK_ENABLED", "false").lower() == "true":
-            try:
-                from spaces.minibook.tools.minibook_tools import (
-                    get_minibook_status,
-                    start_discussion,
-                    get_discussion_results,
-                    list_projects,
-                )
-                from spaces.minibook.tools.collaboration_tools import (
-                    start_collaboration,
-                    poll_responses,
-                )
-
-                def _fmt_minibook(result):
-                    if isinstance(result, dict):
-                        return result.get("response_hint", result.get("message", "Minibook-Aktion abgeschlossen."))
-                    return str(result)
-
-                self._tool_executors.update({
-                    "minibook.status": lambda p: _fmt_minibook(get_minibook_status()),
-                    "minibook.discuss": lambda p: _fmt_minibook(start_discussion(p.get("message", ""), p.get("topic", ""))),
-                    "minibook.results": lambda p: _fmt_minibook(get_discussion_results(p.get("discussion_id", ""))),
-                    "minibook.list_projects": lambda p: _fmt_minibook(list_projects()),
-                    "minibook.collaborate": lambda p: _fmt_minibook(start_collaboration(p.get("task", ""), p.get("goal", ""))),
-                    "minibook.poll": lambda p: _fmt_minibook(poll_responses()),
-                })
-                logger.info("Loaded minibook tools for sync fallback (6 tools)")
-            except ImportError as e:
-                logger.warning(f"Could not load minibook tools: {e}")
-
-            # === SCHEDULE TOOLS ===
-            try:
-                from spaces.schedule.tools.schedule_tools import (
-                    create_scheduled_task,
-                    list_scheduled_tasks,
-                    cancel_scheduled_task,
-                    modify_scheduled_task,
-                    get_schedule_status,
-                    snooze_scheduled_task,
-                )
-
-                def _fmt_schedule(result):
-                    if isinstance(result, dict):
-                        if result.get("success"):
-                            return result.get("response_hint", result.get("message", "Erledigt."))
-                        else:
-                            return result.get("response_hint", f"Fehler: {result.get('message', 'Unbekannter Fehler')}")
-                    return str(result)
-
-                self._tool_executors.update({
-                    "schedule.create": lambda p: _fmt_schedule(create_scheduled_task(
-                        user_text=p.get("user_text", p.get("text", "")),
-                        title=p.get("title", ""),
-                    )),
-                    "schedule.list": lambda p: _fmt_schedule(list_scheduled_tasks(
-                        status=p.get("status", ""),
-                    )),
-                    "schedule.cancel": lambda p: _fmt_schedule(cancel_scheduled_task(
-                        task_id=p.get("task_id", p.get("id", "")),
-                        title=p.get("title", p.get("name", "")),
-                    )),
-                    "schedule.modify": lambda p: _fmt_schedule(modify_scheduled_task(
-                        task_id=p.get("task_id", p.get("id", "")),
-                        title=p.get("title", p.get("name", "")),
-                        new_time=p.get("new_time", p.get("zeit", "")),
-                        new_action=p.get("new_action", ""),
-                    )),
-                    "schedule.status": lambda p: _fmt_schedule(get_schedule_status()),
-                    "schedule.snooze": lambda p: _fmt_schedule(snooze_scheduled_task(
-                        task_id=p.get("task_id", p.get("id", "")),
-                        title=p.get("title", p.get("name", "")),
-                        minutes=int(p.get("minutes", 5)),
-                        user_text=p.get("user_text", p.get("text", "")),
-                    )),
-                })
-                logger.info("Loaded schedule tools for sync fallback (6 tools)")
-            except ImportError as e:
-                logger.warning(f"Could not load schedule tools: {e}")
-
-        logger.info(f"Loaded {len(self._tool_executors)} tools for sync fallback")
-
-    def _load_evaluation_tools(self):
-        """Load evaluation feedback tools for Phase 17."""
-        def eval_correct(params):
-            if self.realtime_evaluator:
-                return self.realtime_evaluator.on_feedback("correct")
-            return "Danke fuer das Feedback!"
-
-        def eval_incorrect(params):
-            if self.realtime_evaluator:
-                return self.realtime_evaluator.on_feedback("incorrect")
-            return "Danke fuer die Korrektur! Was meintest du stattdessen?"
-
-        def eval_clarify(params):
-            if self.realtime_evaluator:
-                correction = params.get("correction", "") or params.get("intended_action", "")
-                return self.realtime_evaluator.on_clarification(correction)
-            return "Verstanden, danke!"
-
-        def eval_stats(params):
-            if self.realtime_evaluator:
-                return self.realtime_evaluator.format_stats_for_voice()
-            return "Statistiken sind momentan nicht verfuegbar."
-
-        self._tool_executors.update({
-            "evaluation.correct": eval_correct,
-            "evaluation.incorrect": eval_incorrect,
-            "evaluation.clarify": eval_clarify,
-            "evaluation.stats": eval_stats,
-        })
-        logger.info("Loaded evaluation tools for sync fallback (4 tools)")
+    # NOTE: _load_direct_tools() and _load_evaluation_tools() have been extracted
+    # to swarm.orchestrator.tool_registry.ToolRegistry. See __init__ for usage.
 
     async def process_intent(
         self,
@@ -1163,20 +649,92 @@ class IntentOrchestrator:
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
 
             # =================================================================
-            # PHASE 0.5: MINIBOOK HUB DISPATCH (if enabled)
+            # PHASE 0: HYBRID ROUTER (deterministic fast-path)
             # =================================================================
-            # When USE_MINIBOOK_HUB=true, ALL intents route through Minibook
-            # for centralized execution. Falls through to existing pipeline
-            # on failure/timeout.
+            # Tiers 1-4: Resolve deterministically without MinibookHub roundtrip.
+            # Tier 5 (multi-space): Delegates to MinibookHub.
+            if self._hybrid_router and not domain_hint:
+                try:
+                    # Classify first to get event_type for prefix matching
+                    _pre_event_type = ""
+                    try:
+                        from swarm.orchestrator.intent_classifier import IntentClassifier
+                        _classifier = IntentClassifier()
+                        _classification = await _classifier.classify(intent_text)
+                        _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                    except Exception:
+                        pass
+
+                    route_result = await self._hybrid_router.resolve(
+                        event_type=_pre_event_type,
+                        user_input=intent_text,
+                        current_space=getattr(self, '_current_space', None),
+                    )
+
+                    if route_result.tier >= 1 and route_result.tier <= 4 and route_result.multi_space is None:
+                        # Single-space deterministic match → direct execute
+                        logger.info(
+                            f"[HybridRouter] Tier {route_result.tier}: "
+                            f"{route_result.event_type} -> {route_result.space} "
+                            f"({route_result.matched_by})"
+                        )
+                        tool_name = route_result.event_type
+                        if tool_name in self._tool_executors:
+                            tool_fn = self._tool_executors[tool_name]
+                            try:
+                                tool_params = _classification.get("parameters", {}) if _classification else {}
+                                result = tool_fn(**tool_params) if tool_params else tool_fn()
+                                if asyncio.iscoroutine(result):
+                                    result = await result
+                                response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                return OrchestrationResult(
+                                    job_id="",
+                                    event_type=route_result.event_type,
+                                    stream=route_result.space,
+                                    response_hint=response,
+                                )
+                            except Exception as exec_err:
+                                logger.warning(f"[HybridRouter] Direct exec failed: {exec_err}, falling through")
+
+                    elif route_result.tier == 5 and route_result.multi_space:
+                        # Multi-space → delegate to MinibookHub
+                        logger.info(f"[HybridRouter] Tier 5 multi-space -> MinibookHub")
+                        if self._minibook_hub:
+                            hub_result = await self._minibook_hub.dispatch(intent_text, context)
+                            if hub_result and getattr(hub_result, 'success', False):
+                                return hub_result
+
+                except Exception as router_err:
+                    logger.warning(f"[HybridRouter] Phase 0 failed: {router_err}, falling through to MinibookHub")
+
+            # =================================================================
+            # PHASE 0.5: MINIBOOK HUB FALLBACK
+            # =================================================================
+            # When HybridRouter didn't resolve, try MinibookHub as fallback.
             if self._minibook_hub and not domain_hint:
                 try:
                     hub_result = await self._minibook_hub.dispatch(intent_text, context)
                     if hub_result and getattr(hub_result, 'success', False):
                         logger.info(f"[MinibookHub] Dispatched: {getattr(hub_result, 'event_type', '?')}")
                         return hub_result
-                    # hub_result is None or not successful — fall through
+                    logger.warning("[MinibookHub] Dispatch returned no result")
+                    return OrchestrationResult(
+                        job_id="",
+                        event_type="minibook.timeout",
+                        stream="minibook_hub",
+                        response_hint="The task was sent, but MinibookHub didn't respond. Please try again.",
+                        is_conversational=True,
+                    )
                 except Exception as hub_err:
-                    logger.warning(f"[MinibookHub] Dispatch failed, falling through: {hub_err}")
+                    logger.error(f"[MinibookHub] Dispatch failed: {hub_err}")
+                    return OrchestrationResult(
+                        job_id="",
+                        event_type="error.minibook",
+                        stream="minibook_hub",
+                        response_hint="MinibookHub ist nicht erreichbar. Stelle sicher, dass der Minibook Docker laeuft.",
+                        is_conversational=True,
+                        error=str(hub_err),
+                    )
 
             # =================================================================
             # PHASE 1: CORE ANALYSIS - IntentAnalysisTeam (Always runs first)
@@ -1279,7 +837,7 @@ class IntentOrchestrator:
                 payload["_user_input"] = intent_text
                 
                 # Execute via sync mode
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     event_type=event_type,
                     payload=payload,
                     response_hint=f"Ich verarbeite deine Shuttle-Anfrage... ({event_type})",
@@ -1328,7 +886,7 @@ class IntentOrchestrator:
                     payload["_user_input"] = intent_text
 
                     # Execute via sync mode
-                    return await self._process_sync(
+                    return await self._sync_executor.process_sync(
                         event_type=event_type,
                         payload=payload,
                         response_hint=response_hint,
@@ -1348,7 +906,7 @@ class IntentOrchestrator:
 
                 logger.info(f"[DomainRouter] Standard classified: {event_type}")
 
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     event_type=event_type,
                     payload=payload,
                     response_hint=response_hint,
@@ -1360,6 +918,160 @@ class IntentOrchestrator:
             logger.error(f"[DomainRouter] Error routing to {domain}: {e}")
 
         return None
+
+    async def _run_stream_listener(
+        self,
+        intent_text: str,
+        context: TaskContext
+    ) -> Optional[OrchestrationResult]:
+        """
+        LLM-based parallel intent routing via StreamListeners.
+
+        All domain listeners evaluate the input in parallel and return
+        a confidence distribution. The highest confidence listener wins.
+
+        Returns:
+            OrchestrationResult if a winner was found, None to fall through
+        """
+        import asyncio as _asyncio
+
+        logger.debug(f"[STREAM LISTENER] Evaluating: {intent_text[:80]}...")
+
+        # Step 1: Optional IntentEnhancer for ASR cleanup (keep this)
+        enhanced_text = intent_text
+        if self._use_enhancement_pipeline and self.intent_enhancer:
+            try:
+                from swarm.context import get_bubble_context_provider
+                bubble_ctx = get_bubble_context_provider().get_current_context()
+            except Exception:
+                bubble_ctx = {}
+            try:
+                enhanced = await self.intent_enhancer.enhance(intent_text, bubble_ctx)
+                if enhanced.was_enhanced:
+                    enhanced_text = enhanced.normalized_text
+                    logger.info(f"[StreamListener] Enhanced: '{intent_text[:60]}' -> '{enhanced_text[:60]}'")
+            except Exception as e:
+                logger.debug(f"[StreamListener] Enhancer failed (using original): {e}")
+
+        # Step 2: Build evaluation context
+        conversation_history = []
+        try:
+            from data import ConversationRepository
+            conv_repo = ConversationRepository()
+            session_id = context.session_id if context else None
+            if session_id:
+                messages = conv_repo.get_messages(session_id, limit=5)
+                conversation_history = [
+                    {"speaker": m.speaker, "text": m.text}
+                    for m in messages
+                ]
+        except Exception:
+            pass
+
+        current_bubble = None
+        current_bubble_id = None
+        idea_count = 0
+        try:
+            from swarm.context import get_bubble_context_provider
+            ctx = get_bubble_context_provider().get_current_context()
+            current_bubble = ctx.get("bubble_name")
+            current_bubble_id = ctx.get("bubble_id")
+            idea_count = ctx.get("idea_count", 0)
+        except Exception:
+            pass
+
+        eval_context = EvalContext(
+            conversation_history=conversation_history,
+            current_bubble=current_bubble,
+            current_bubble_id=current_bubble_id,
+            idea_count=idea_count,
+        )
+
+        # Step 3: Evaluate all listeners in parallel
+        distribution = await self._stream_dispatcher.evaluate_all(enhanced_text, eval_context)
+
+        # Step 4: Handle result
+        if not distribution.winner:
+            logger.debug("[STREAM LISTENER] No winner (all below threshold)")
+            return None  # Fall through to traditional pipeline
+
+        winner = distribution.winner
+        logger.debug(
+            f"[STREAM LISTENER] Winner: {winner.space} "
+            f"({winner.confidence:.2f}) -> {winner.event_type}"
+        )
+
+        # Handle ambiguity
+        if distribution.is_ambiguous:
+            logger.info(
+                f"[StreamListener] Ambiguous: top-2 too close. "
+                f"Falling through to RAG classifier for disambiguation."
+            )
+            logger.debug("[STREAM LISTENER] Ambiguous, falling through")
+            return None  # Fall through
+
+        # Check if conversational event
+        if winner.event_type in self.CONVERSATIONAL_EVENTS or winner.mode == "direct_answer":
+            response = winner.direct_answer if winner.mode == "direct_answer" else ""
+            if not response:
+                response = winner.payload.get("response", winner.reasoning)
+            return OrchestrationResult(
+                job_id="",
+                event_type=winner.event_type,
+                stream="",
+                response_hint=response,
+                is_conversational=True,
+            )
+
+        # Step 5a: SpaceAgent execution (intelligent multi-step, if enabled)
+        if (self._use_space_agents
+                and winner.space in self._space_agents
+                and winner.mode == "execute"):
+            try:
+                agent = self._space_agents[winner.space]
+                agent_context = SpaceAgentContext(
+                    user_input=intent_text,
+                    conversation_history=conversation_history,
+                    current_bubble=current_bubble,
+                    current_bubble_id=current_bubble_id,
+                    idea_count=idea_count,
+                )
+                agent_result = await agent.execute(intent_text, agent_context)
+
+                logger.debug(
+                    f"[SPACE AGENT:{winner.space}] "
+                    f"{agent_result.turns} turns, "
+                    f"tools={[tc.name for tc in agent_result.tool_calls]}, "
+                    f"{agent_result.total_latency_ms:.0f}ms"
+                )
+
+                return OrchestrationResult(
+                    job_id=f"agent-{uuid.uuid4().hex[:8]}",
+                    event_type=winner.event_type,
+                    stream="local",
+                    response_hint=agent_result.summary,
+                    is_conversational=False,
+                )
+            except Exception as e:
+                logger.warning(f"[SpaceAgent:{winner.space}] Error, falling through to _process_sync: {e}")
+                logger.debug(f"[SPACE AGENT] Error: {e}, falling through")
+
+        # Step 5b: Flat _process_sync execution (fallback)
+        payload = winner.payload or {}
+        # Enrich payload with user input and conversation history
+        payload["_user_input"] = intent_text
+        payload["_conversation_history"] = conversation_history
+
+        session_id = context.session_id if context else "default"
+        user_id = context.user_id if context else "default"
+
+        return await self._sync_executor.process_sync(
+            event_type=winner.event_type,
+            payload=payload,
+            response_hint=winner.reasoning,
+            user_id=user_id,
+            session_id=session_id,
+        )
 
     async def _run_core_analysis(
         self,
@@ -1387,6 +1099,20 @@ class IntentOrchestrator:
         Returns:
             OrchestrationResult if successful, None if failed
         """
+        # =====================================================================
+        # STREAM LISTENER: LLM-based parallel routing (if enabled)
+        # Short-circuits CollectorAgent + Classifier when active
+        # =====================================================================
+        if self._use_stream_listener and self._stream_dispatcher:
+            try:
+                result = await self._run_stream_listener(intent_text, context)
+                if result is not None:
+                    return result
+                # If StreamListener returned None, fall through to traditional pipeline
+                logger.info("[StreamListener] No winner, falling through to traditional pipeline")
+            except Exception as e:
+                logger.warning(f"[StreamListener] Error, falling through: {e}")
+
         # Store original input for learning feedback
         original_input = intent_text
         rules_applied = []
@@ -1399,8 +1125,15 @@ class IntentOrchestrator:
             try:
                 # Step 1: Collector - check if we should accumulate short inputs
                 # BUT skip collector for multi-step commands (they're already complete)
+                # Skip collector for multi-step commands and short space-specific commands
+                _space_keywords = {"n8n", "rowboat", "roarboot", "minibook", "agentfarm", "agent farm",
+                                   "schedule", "desktop", "screenshot", "coding", "bubble", "exploration"}
+                _has_space_keyword = any(kw in intent_text.lower() for kw in _space_keywords)
                 if self._looks_like_multi_step(intent_text):
                     logger.debug(f"[Enhancement] Multi-step detected, skipping collector: '{intent_text[:40]}...'")
+                    collected = intent_text  # Pass through directly
+                elif _has_space_keyword:
+                    logger.debug(f"[Enhancement] Space keyword detected, skipping collector: '{intent_text[:40]}...'")
                     collected = intent_text  # Pass through directly
                 else:
                     collected = await self.collector_agent.collect(intent_text)
@@ -1430,7 +1163,7 @@ class IntentOrchestrator:
                         f"[Enhancement] Enhanced: '{intent_text[:100]}' -> '{enhanced.normalized_text[:100]}' "
                         f"(rules: {enhanced.rules_applied})"
                     )
-                    print(f"[Python DEBUG] [ENHANCER] Applied rules: {enhanced.rules_applied}", file=sys.stderr)
+                    logger.debug(f"[ENHANCER] Applied rules: {enhanced.rules_applied}")
                     intent_text = enhanced.normalized_text
                     rules_applied = enhanced.rules_applied
                     enhanced_input = enhanced
@@ -1442,14 +1175,14 @@ class IntentOrchestrator:
         if self._use_rag_classifier and self.rag_classifier:
             try:
                 logger.info("Running RAG classification with Supermemory")
-                print(f"[Python DEBUG] [RAG CLASSIFIER] Processing: {intent_text[:100]}...", file=sys.stderr, flush=True)
+                logger.debug(f"[RAG CLASSIFIER] Processing: {intent_text[:100]}...")
 
                 # Get bubble context for classifier
                 try:
                     from swarm.context import get_bubble_context_provider
                     bubble_context = get_bubble_context_provider().get_current_context()
-                    print(f"[Python DEBUG] [CONTEXT] Current: {bubble_context.get('bubble_name')}, "
-                          f"Ideas: {bubble_context.get('idea_count', 0)}", file=sys.stderr, flush=True)
+                    logger.debug(f"[CONTEXT] Current: {bubble_context.get('bubble_name')}, "
+                          f"Ideas: {bubble_context.get('idea_count', 0)}")
                 except Exception as ctx_error:
                     logger.debug(f"[RAG] Could not get bubble context: {ctx_error}")
                     bubble_context = None
@@ -1460,48 +1193,48 @@ class IntentOrchestrator:
                     try:
                         routing_context = await self.conversation_router.get_routing_context(intent_text)
                         if routing_context:
-                            print(f"[Python DEBUG] [ROUTING CONTEXT] Found similar past intents", file=sys.stderr, flush=True)
+                            logger.debug("[ROUTING CONTEXT] Found similar past intents")
                             logger.debug(f"[ConversationRouter] Context: {routing_context[:100]}...")
                     except Exception as router_err:
                         logger.debug(f"[ConversationRouter] Could not get routing context: {router_err}")
 
                 # === DroPE Reference Resolution ===
                 # Resolve ambiguous references like "das", "nochmal", "es" using conversation history
-                print(f"[Python DEBUG] [DroPE] Checking... HAS_DROPE={HAS_DROPE_RESOLVER}", file=sys.stderr, flush=True)
+                logger.debug(f"[DroPE] Checking... HAS_DROPE={HAS_DROPE_RESOLVER}")
                 if HAS_DROPE_RESOLVER and get_reference_resolver:
-                    print(f"[Python DEBUG] [DroPE] Getting resolver...", file=sys.stderr, flush=True)
+                    logger.debug("[DroPE] Getting resolver...")
                     resolver = get_reference_resolver()
                     if resolver and resolver.is_available:
-                        print(f"[Python DEBUG] [DroPE] Resolver available, calling resolve()...", file=sys.stderr, flush=True)
+                        logger.debug("[DroPE] Resolver available, calling resolve()...")
                         try:
                             resolved_text = resolver.resolve(intent_text, routing_context)
                             if resolved_text != intent_text:
-                                print(f"[Python DEBUG] [DroPE] Resolved: '{intent_text}' → '{resolved_text}'", file=sys.stderr)
+                                logger.debug(f"[DroPE] Resolved: '{intent_text}' -> '{resolved_text}'")
                                 logger.info(f"[DroPE] Resolved reference: '{intent_text}' → '{resolved_text}'")
                                 intent_text = resolved_text
                             else:
-                                print(f"[Python DEBUG] [DroPE] No change needed", file=sys.stderr, flush=True)
+                                logger.debug("[DroPE] No change needed")
                         except Exception as drope_err:
-                            print(f"[Python DEBUG] [DroPE] ERROR: {drope_err}", file=sys.stderr, flush=True)
+                            logger.debug(f"[DroPE] ERROR: {drope_err}")
                             logger.debug(f"[DroPE] Resolution skipped: {drope_err}")
                     else:
-                        print(f"[Python DEBUG] [DroPE] Resolver not available", file=sys.stderr, flush=True)
+                        logger.debug("[DroPE] Resolver not available")
                 else:
-                    print(f"[Python DEBUG] [DroPE] Skipped (disabled)", file=sys.stderr, flush=True)
+                    logger.debug("[DroPE] Skipped (disabled)")
                 # === End DroPE ===
 
                 # Enrich intent with routing context if available
-                print(f"[Python DEBUG] [ORCHESTRATOR] Enriching intent...", file=sys.stderr, flush=True)
+                logger.debug("[ORCHESTRATOR] Enriching intent...")
                 enriched_for_rag = intent_text
                 if routing_context:
                     enriched_for_rag = f"{routing_context}\n\nAktueller Input: {intent_text}"
 
-                print(f"[Python DEBUG] [ORCHESTRATOR] Calling RAG classifier...", file=sys.stderr, flush=True)
+                logger.debug("[ORCHESTRATOR] Calling RAG classifier...")
                 try:
                     result = await self.rag_classifier.classify(enriched_for_rag, bubble_context=bubble_context)
-                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier returned: {result.event_type if result else 'None'}", file=sys.stderr, flush=True)
+                    logger.debug(f"[ORCHESTRATOR] RAG classifier returned: {result.event_type if result else 'None'}")
                 except Exception as rag_err:
-                    print(f"[Python DEBUG] [ORCHESTRATOR] RAG classifier EXCEPTION: {type(rag_err).__name__}: {rag_err}", file=sys.stderr, flush=True)
+                    logger.debug(f"[ORCHESTRATOR] RAG classifier EXCEPTION: {type(rag_err).__name__}: {rag_err}")
                     import traceback
                     traceback.print_exc(file=sys.stderr)
                     raise
@@ -1513,9 +1246,9 @@ class IntentOrchestrator:
                     logger.debug(f"[Enhancement] Confidence boosted: {original_conf:.2f} -> {result.confidence:.2f}")
 
                 if result and result.confidence >= 0.4:
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Result: {result.event_type} ({result.confidence:.0%})", file=sys.stderr)
-                    print(f"[Python DEBUG] [RAG REASONING] {result.reasoning}", file=sys.stderr)
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Used rules: {result.used_rules}", file=sys.stderr)
+                    logger.debug(f"[RAG CLASSIFIER] Result: {result.event_type} ({result.confidence:.0%})")
+                    logger.debug(f"[RAG REASONING] {result.reasoning}")
+                    logger.debug(f"[RAG CLASSIFIER] Used rules: {result.used_rules}")
 
                     # Update real-time state for Rachel's awareness
                     if HAS_REAL_TIME_STATE and get_real_time_state:
@@ -1573,12 +1306,12 @@ class IntentOrchestrator:
                             logger.debug(f"[ConversationRouter] Failed to store interaction: {store_err}")
 
                     if result.is_multi_step and result.steps:
-                        print(f"[Python DEBUG] [RAG MULTI-STEP] {len(result.steps)} steps detected", file=sys.stderr)
+                        logger.debug(f"[RAG MULTI-STEP] {len(result.steps)} steps detected")
                         for i, step in enumerate(result.steps):
-                            print(f"[Python DEBUG] [RAG MULTI-STEP] Step {i+1}: {step.get('event_type')}", file=sys.stderr)
+                            logger.debug(f"[RAG MULTI-STEP] Step {i+1}: {step.get('event_type')}")
 
                         # Use existing multi-step processor
-                        return await self._process_multi_step(
+                        return await self._sync_executor.process_multi_step(
                             result.steps,
                             f"Ich führe {len(result.steps)} Aktionen aus...",
                             context
@@ -1623,7 +1356,7 @@ class IntentOrchestrator:
 
                     # Execute via sync fallback or Redis
                     if not self._redis_available:
-                        sync_result = await self._process_sync(
+                        sync_result = await self._sync_executor.process_sync(
                             result.event_type,
                             enriched_payload,
                             f"Ich bearbeite deine Anfrage... ({result.event_type})",
@@ -1675,7 +1408,7 @@ class IntentOrchestrator:
                         # Redis connection failed - fall back to sync mode
                         logger.warning(f"[RAG] Redis seeding failed, falling back to SYNC mode: {ce}")
                         self._redis_available = False
-                        return await self._process_sync(
+                        return await self._sync_executor.process_sync(
                             result.event_type,
                             enriched_payload,
                             f"Ich bearbeite deine Anfrage... ({result.event_type})",
@@ -1704,11 +1437,11 @@ class IntentOrchestrator:
                         is_conversational=False
                     )
                 else:
-                    print(f"[Python DEBUG] [RAG CLASSIFIER] Low confidence: {result.confidence if result else 'None'}", file=sys.stderr)
+                    logger.debug(f"[RAG CLASSIFIER] Low confidence: {result.confidence if result else 'None'}")
 
             except Exception as e:
                 logger.warning(f"RAG classification failed: {e}")
-                print(f"[Python DEBUG] [RAG CLASSIFIER] Error: {e}", file=sys.stderr)
+                logger.debug(f"[RAG CLASSIFIER] Error: {e}")
 
         # Fallback to IntentAnalysisTeam
         if not self._use_intent_analysis or not self.analysis_team:
@@ -1724,24 +1457,24 @@ class IntentOrchestrator:
                 session_id=context.session_id if context else "default"
             )
 
-            print(f"[Python DEBUG] [CORE ANALYSIS] Context built: space={user_context.current_space}, "
-                  f"recent={len(user_context.recent_actions)}", file=sys.stderr)
+            logger.debug(f"[CORE ANALYSIS] Context built: space={user_context.current_space}, "
+                  f"recent={len(user_context.recent_actions)}")
 
             # Run parallel intent analysis
             hypotheses = await self.analysis_team.analyze(intent_text, user_context)
 
             if hypotheses:
                 hyp_summary = ", ".join([f"{h.event_type}({h.confidence:.0%})" for h in hypotheses[:3]])
-                print(f"[Python DEBUG] [CORE ANALYSIS] Hypotheses: [{hyp_summary}]", file=sys.stderr)
+                logger.debug(f"[CORE ANALYSIS] Hypotheses: [{hyp_summary}]")
 
             # Select best hypothesis with enhanced threshold
             best = self.analysis_team.select_best(hypotheses, threshold=0.3)  # Lower threshold for core
 
             if not best:
-                print(f"[Python DEBUG] [CORE ANALYSIS] No confident hypothesis found", file=sys.stderr)
+                logger.debug("[CORE ANALYSIS] No confident hypothesis found")
                 return None
 
-            print(f"[Python DEBUG] [CORE ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}", file=sys.stderr)
+            logger.debug(f"[CORE ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}")
 
             # Handle conversational events
             if best.event_type in self.CONVERSATIONAL_EVENTS:
@@ -1761,7 +1494,7 @@ class IntentOrchestrator:
 
             # Execute tool via sync fallback or Redis
             if not self._redis_available:
-                result = await self._process_sync(
+                result = await self._sync_executor.process_sync(
                     best.event_type,
                     best.payload,
                     f"Ich bearbeite deine Anfrage... ({best.event_type})",
@@ -1793,7 +1526,7 @@ class IntentOrchestrator:
                 # Redis connection failed - fall back to sync mode
                 logger.warning(f"[Core] Redis seeding failed, falling back to SYNC mode: {ce}")
                 self._redis_available = False
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     best.event_type,
                     best.payload,
                     f"Ich bearbeite deine Anfrage... ({best.event_type})",
@@ -1945,6 +1678,13 @@ class IntentOrchestrator:
         context: TaskContext
     ) -> None:
         """Log classification for real-time evaluation tracking."""
+        # Broadcast to Blaue Rose activity tracker (passive, fire-and-forget)
+        try:
+            from spaces.flowzen.activity_tracker import get_activity_tracker
+            get_activity_tracker().on_intent(result.event_type, {})
+        except Exception:
+            pass  # Never block intent processing for tracking
+
         if not self.realtime_evaluator:
             return
 
@@ -2094,8 +1834,8 @@ class IntentOrchestrator:
                 session_id=context.session_id if context else "default"
             )
 
-            print(f"[Python DEBUG] [ANALYSIS] Building context: space={user_context.current_space}, "
-                  f"recent={len(user_context.recent_actions)}", file=sys.stderr)
+            logger.debug(f"[ANALYSIS] Building context: space={user_context.current_space}, "
+                  f"recent={len(user_context.recent_actions)}")
 
             # 2. Run parallel intent analysis
             hypotheses = await self.analysis_team.analyze(intent_text, user_context)
@@ -2103,17 +1843,17 @@ class IntentOrchestrator:
             # Log hypotheses
             if hypotheses:
                 hyp_summary = ", ".join([f"{h.event_type}({h.confidence:.0%})" for h in hypotheses[:3]])
-                print(f"[Python DEBUG] [ANALYSIS] Hypotheses: [{hyp_summary}]", file=sys.stderr)
+                logger.debug(f"[ANALYSIS] Hypotheses: [{hyp_summary}]")
 
             # 3. Select best hypothesis
             best = self.analysis_team.select_best(hypotheses, threshold=0.5)
 
             if not best:
                 # No confident hypothesis - use fallback classifier
-                print(f"[Python DEBUG] [ANALYSIS] No confident hypothesis, falling back to classifier", file=sys.stderr)
+                logger.debug("[ANALYSIS] No confident hypothesis, falling back to classifier")
                 return await self._process_intent_legacy(intent_text, context)
 
-            print(f"[Python DEBUG] [ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}", file=sys.stderr)
+            logger.debug(f"[ANALYSIS] Selected: {best.event_type} ({best.confidence:.0%}) - {best.source}")
 
             # 4. Check if conversational
             if best.event_type in self.CONVERSATIONAL_EVENTS:
@@ -2134,7 +1874,7 @@ class IntentOrchestrator:
 
             # 5. Execute tool (sync fallback or Redis)
             if not self._redis_available:
-                result = await self._process_sync(
+                result = await self._sync_executor.process_sync(
                     best.event_type,
                     best.payload,
                     "Ich bearbeite deine Anfrage...",
@@ -2166,7 +1906,7 @@ class IntentOrchestrator:
                 # Redis connection failed - fall back to sync mode
                 logger.warning(f"[Analysis] Redis seeding failed, falling back to SYNC mode: {ce}")
                 self._redis_available = False
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     best.event_type,
                     best.payload,
                     "Ich bearbeite deine Anfrage...",
@@ -2207,20 +1947,18 @@ class IntentOrchestrator:
                 steps = classification.get("steps", [])
                 response_hint = classification.get("response_hint", "Ich fuehre mehrere Aktionen aus...")
 
-                import sys
-                print(f"[Python DEBUG] [MULTI-STEP] {len(steps)} steps detected", file=sys.stderr)
+                logger.debug(f"[MULTI-STEP] {len(steps)} steps detected")
                 for i, step in enumerate(steps):
-                    print(f"[Python DEBUG] [MULTI-STEP] Step {i+1}: {step.get('event_type')}", file=sys.stderr)
+                    logger.debug(f"[MULTI-STEP] Step {i+1}: {step.get('event_type')}")
 
-                return await self._process_multi_step(steps, response_hint, context)
+                return await self._sync_executor.process_multi_step(steps, response_hint, context)
 
             # Single-step processing (legacy)
             event_type = classification["event_type"]
             payload = classification["payload"]
             response_hint = classification.get("response_hint", "Ich bearbeite deine Anfrage...")
 
-            import sys
-            print(f"[Python DEBUG] [CLASSIFICATION] type={event_type}, payload={payload}", file=sys.stderr)
+            logger.debug(f"[CLASSIFICATION] type={event_type}, payload={payload}")
 
             if event_type in self.CONVERSATIONAL_EVENTS:
                 return OrchestrationResult(
@@ -2232,7 +1970,7 @@ class IntentOrchestrator:
                 )
 
             if not self._redis_available:
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     event_type, payload, response_hint,
                     user_id=context.user_id if context else "default",
                     session_id=context.session_id if context else None
@@ -2251,7 +1989,7 @@ class IntentOrchestrator:
                 # Redis connection failed - fall back to sync mode
                 logger.warning(f"[IntentOrchestrator] Redis seeding failed, falling back to SYNC mode: {ce}")
                 self._redis_available = False  # Mark Redis as unavailable for future calls
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     event_type, payload, response_hint,
                     user_id=context.user_id if context else "default",
                     session_id=context.session_id if context else None
@@ -2305,7 +2043,7 @@ class IntentOrchestrator:
         """
         if not self._broadcast_dispatcher:
             logger.warning("BroadcastDispatcher not available, falling back to sync")
-            return await self._process_sync(
+            return await self._sync_executor.process_sync(
                 event_type=event_type,
                 payload=payload,
                 response_hint=response_hint,
@@ -2328,7 +2066,7 @@ class IntentOrchestrator:
             if result.error:
                 logger.warning(f"[Broadcast] Execution error: {result.error}")
                 # Fall back to sync execution on broadcast error
-                return await self._process_sync(
+                return await self._sync_executor.process_sync(
                     event_type=event_type,
                     payload=payload,
                     response_hint=response_hint,
@@ -2354,763 +2092,16 @@ class IntentOrchestrator:
 
         except Exception as e:
             logger.error(f"[Broadcast] Error: {e}, falling back to sync")
-            return await self._process_sync(
+            return await self._sync_executor.process_sync(
                 event_type=event_type,
                 payload=payload,
                 response_hint=response_hint,
                 session_id=session_id,
             )
 
-    async def _process_sync(
-        self,
-        event_type: str,
-        payload: Dict[str, Any],
-        response_hint: str,
-        user_id: str = "default",
-        session_id: str = None
-    ) -> OrchestrationResult:
-        """
-        Execute tool directly without Redis (synchronous fallback).
 
-        If USE_BROADCAST_MODE is enabled, delegates to _process_via_broadcast
-        for fan-out execution with parallel user profiling.
-
-        Args:
-            event_type: Classified event type (e.g., "bubble.list")
-            payload: Tool parameters
-            response_hint: Default response hint from classifier
-            user_id: User ID for task tracking
-            session_id: Session ID for task tracking
-
-        Returns:
-            OrchestrationResult with actual tool result in response_hint
-        """
-        # Broadcast mode: delegate to fan-out dispatcher
-        if self._use_broadcast_mode and self._broadcast_dispatcher:
-            # Extract user_input and conversation_history from payload if available
-            user_input = ""
-            conversation_history = []
-            if payload:
-                user_input = payload.pop("_user_input", "")
-                conversation_history = payload.pop("_conversation_history", [])
-
-            return await self._process_via_broadcast(
-                event_type=event_type,
-                payload=payload,
-                response_hint=response_hint,
-                user_input=user_input,
-                conversation_history=conversation_history,
-                session_id=session_id,
-            )
-
-        executor = self._tool_executors.get(event_type)
-        task_id = None
-
-        # Create task in TaskMemory for tracking (non-trivial events only)
-        if self.task_memory and event_type not in self.CONVERSATIONAL_EVENTS:
-            try:
-                # Generate task title from event type and payload
-                title_parts = [event_type]
-                if payload:
-                    # Add key info from payload
-                    for key in ["title", "name", "query", "idea_name", "bubble_name"]:
-                        if key in payload and payload[key]:
-                            title_parts.append(str(payload[key])[:30])
-                            break
-                task_title = ": ".join(title_parts)
-
-                task = self.task_memory.create_task(
-                    title=task_title,
-                    intent_type=event_type,
-                    payload=payload or {},
-                    user_id=user_id,
-                    session_id=session_id
-                )
-                task_id = task.id
-                self.task_memory.start_task(task_id)
-                logger.debug(f"Created task {task_id} for {event_type}")
-            except Exception as e:
-                logger.warning(f"Could not create task in TaskMemory: {e}")
-
-        if executor:
-            try:
-                logger.info(f"SYNC fallback: Executing {event_type} directly")
-                print(f"[Python DEBUG] [TOOL EXEC] {event_type} with payload: {payload}", file=sys.stderr, flush=True)
-
-                # Track with status monitor
-                monitor_op_id = None
-                if _status_monitor:
-                    tool_desc = f"{event_type}"
-                    if payload:
-                        for key in ["title", "name", "bubble_name", "idea_name"]:
-                            if key in payload and payload[key]:
-                                tool_desc += f": {str(payload[key])[:30]}"
-                                break
-                    monitor_op_id = _status_monitor.start_operation("tool_exec", tool_desc, {"event_type": event_type})
-
-                # Mark tool execution start (prevents "Bist du noch da?" interrupts)
-                try:
-                    from tools.session_tools import mark_tool_start, mark_tool_end
-                    mark_tool_start()
-                except ImportError:
-                    mark_tool_end = None
-
-                # Tools expect a single params dict, not keyword arguments
-                start_time = time.perf_counter()
-                try:
-                    result = executor(payload) if payload else executor({})
-                finally:
-                    # Always mark tool end, even if execution fails
-    
-                    if 'mark_tool_end' in dir() and mark_tool_end:
-                        mark_tool_end()
-
-                latency_ms = (time.perf_counter() - start_time) * 1000
-                print(f"[Python DEBUG] [TOOL EXEC] {event_type} completed in {latency_ms:.1f}ms", file=sys.stderr, flush=True)
-
-                # Complete monitoring
-                if _status_monitor and monitor_op_id:
-                    _status_monitor.complete_operation(monitor_op_id, success=True)
-
-                # Format result for voice output
-                result_str = self._format_result_for_voice(event_type, result)
-
-                # Log tool execution
-                if HAS_TOOL_LOGGER and get_tool_logger:
-                    get_tool_logger().log_execution(
-                        tool_name=event_type,
-                        params=payload or {},
-                        result=result_str,
-                        latency_ms=latency_ms,
-                        success=True,
-                        source_event=event_type
-                    )
-
-                # Complete task in TaskMemory
-                if self.task_memory and task_id:
-                    try:
-                        self.task_memory.complete_task(task_id, result_str)
-                        logger.debug(f"Completed task {task_id}")
-                    except Exception as e:
-                        logger.warning(f"Could not complete task: {e}")
-
-                # Store to Supermemory (non-blocking)
-                job_id_final = task_id or f"sync-{str(uuid.uuid4())[:8]}"
-                import asyncio
-                asyncio.create_task(self._store_supermemory_task_completed(
-                    job_id=job_id_final,
-                    event_type=event_type,
-                    result=result_str,
-                    duration_ms=int(latency_ms),
-                    session_id=session_id
-                ))
-
-                return OrchestrationResult(
-                    job_id=job_id_final,
-                    event_type=event_type,
-                    stream="local",
-                    response_hint=result_str,
-                    is_conversational=False
-                )
-            except TypeError as e:
-                # Handle parameter mismatch - try with empty dict
-                logger.warning(f"Parameter mismatch for {event_type}: {e}, trying with empty params")
-                try:
-                    start_time = time.perf_counter()
-                    result = executor({})
-                    latency_ms = (time.perf_counter() - start_time) * 1000
-                    result_str = self._format_result_for_voice(event_type, result)
-
-                    # Log tool execution (fallback with empty params)
-                    if HAS_TOOL_LOGGER and get_tool_logger:
-                        get_tool_logger().log_execution(
-                            tool_name=event_type,
-                            params={},
-                            result=result_str,
-                            latency_ms=latency_ms,
-                            success=True,
-                            source_event=event_type
-                        )
-
-                    # Complete task even with empty params
-                    if self.task_memory and task_id:
-                        self.task_memory.complete_task(task_id, result_str)
-
-                    # Store to Supermemory (non-blocking)
-                    job_id_fallback = task_id or f"sync-{str(uuid.uuid4())[:8]}"
-                    import asyncio
-                    asyncio.create_task(self._store_supermemory_task_completed(
-                        job_id=job_id_fallback,
-                        event_type=event_type,
-                        result=result_str,
-                        duration_ms=int(latency_ms),
-                        session_id=session_id
-                    ))
-
-                    return OrchestrationResult(
-                        job_id=job_id_fallback,
-                        event_type=event_type,
-                        stream="local",
-                        response_hint=result_str,
-                        is_conversational=False
-                    )
-                except Exception as e2:
-                    logger.error(f"Sync execution failed: {e2}")
-                    # Emit tool_failed event to UI
-                    if HAS_BROADCAST and _broadcast_to_electron:
-                        _broadcast_to_electron({
-                            "type": "tool_failed",
-                            "event_type": event_type,
-                            "payload": {},
-                            "error": str(e2),
-                            "timestamp": time.time()
-                        })
-                    # Log failed execution
-                    if HAS_TOOL_LOGGER and get_tool_logger:
-                        get_tool_logger().log_error(
-                            tool_name=event_type,
-                            params={},
-                            error=str(e2),
-                            latency_ms=0
-                        )
-                    # Mark task as failed
-                    if self.task_memory and task_id:
-                        self.task_memory.update_task_status(task_id, "blocked", error=str(e2))
-                    # Store failure to Supermemory (non-blocking)
-                    if task_id:
-                        import asyncio
-                        asyncio.create_task(self._store_supermemory_task_failed(
-                            job_id=task_id,
-                            event_type=event_type,
-                            error=str(e2),
-                            session_id=session_id
-                        ))
-            except Exception as e:
-                logger.error(f"Sync execution failed for {event_type}: {e}")
-                print(f"[Python DEBUG] [TOOL EXEC] FAILED {event_type}: {e}", file=sys.stderr, flush=True)
-                # Complete monitoring with error
-                if _status_monitor and monitor_op_id:
-                    _status_monitor.complete_operation(monitor_op_id, success=False, error=str(e))
-                # Emit tool_failed event to UI
-                if HAS_BROADCAST and _broadcast_to_electron:
-                    _broadcast_to_electron({
-                        "type": "tool_failed",
-                        "event_type": event_type,
-                        "payload": payload or {},
-                        "error": str(e),
-                        "timestamp": time.time()
-                    })
-                # Log failed execution
-                if HAS_TOOL_LOGGER and get_tool_logger:
-                    get_tool_logger().log_error(
-                        tool_name=event_type,
-                        params=payload or {},
-                        error=str(e),
-                        latency_ms=0
-                    )
-                # Mark task as failed
-                if self.task_memory and task_id:
-                    self.task_memory.update_task_status(task_id, "blocked", error=str(e))
-                # Store failure to Supermemory (non-blocking)
-                if task_id:
-                    import asyncio
-                    asyncio.create_task(self._store_supermemory_task_failed(
-                        job_id=task_id,
-                        event_type=event_type,
-                        error=str(e),
-                        session_id=session_id
-                    ))
-
-        # Fallback response if tool not available
-        logger.warning(f"No sync executor for {event_type}")
-        print(f"[Python DEBUG] [TOOL EXEC] NO EXECUTOR for {event_type}!", file=sys.stderr, flush=True)
-        return OrchestrationResult(
-            job_id="",
-            event_type=event_type,
-            stream="",
-            response_hint=response_hint,  # Use classifier's hint
-            is_conversational=True,
-            error=f"Tool {event_type} nicht im Sync-Modus verfuegbar"
-        )
-
-    # =========================================================================
-    # Multi-Step Execution (Phase 12)
-    # Execute multiple tools in sequence with dependency ordering
-    # =========================================================================
-
-    # Intent types that create entities (from IntentBatcher)
-    CREATOR_INTENTS = {"bubble.create", "idea.create", "code.generate"}
-
-    # Intent dependencies: {dependent_intent: creator_intent}
-    DEPENDENT_INTENTS = {
-        "bubble.enter": "bubble.create",
-        "idea.create": "bubble.create",
-        "idea.update": "idea.create",
-        "idea.connect": "idea.create",
-        "idea.delete": "idea.create",
-        "idea.expand": "idea.create",
-        "idea.move": "bubble.create",
-        "idea.auto_link": "idea.create",
-    }
-
-    async def _process_multi_step(
-        self,
-        steps: List[Dict[str, Any]],
-        response_hint: str,
-        context: Optional[TaskContext] = None
-    ) -> OrchestrationResult:
-        """
-        Execute multiple tools in sequence with dependency ordering.
-
-        Uses Kahn's algorithm for topological sorting based on
-        IntentBatcher's dependency logic.
-
-        Args:
-            steps: List of {event_type, payload} dicts
-            response_hint: Initial response hint from classifier
-            context: Optional task context
-
-        Returns:
-            OrchestrationResult with combined results
-        """
-        # Generate job_id upfront for reasoning tracking
-        job_id = f"multi-{uuid.uuid4().hex[:8]}"
-
-        if not steps:
-            return OrchestrationResult(
-                job_id=job_id,
-                event_type="multi_step",
-                stream="local",
-                response_hint="Keine Schritte zu ausfuehren.",
-                is_conversational=True
-            )
-
-        # Start reasoning context for this job
-        if self.reasoning_logger:
-            user_input = context.user_input if context else ""
-            self.reasoning_logger.start_job(job_id, None, user_input)
-
-        # Order steps by dependencies
-        ordered_steps = self._order_by_dependencies(steps)
-        logger.info(f"Multi-step: Executing {len(ordered_steps)} steps in order")
-
-        # Log dependency ordering reasoning
-        if self.reasoning_logger:
-            reasoning = self._explain_dependency_order(steps, ordered_steps)
-            try:
-                await self.reasoning_logger.log_dependency_reasoning(
-                    job_id=job_id,
-                    ordered_steps=ordered_steps,
-                    reasoning=reasoning
-                )
-            except Exception as e:
-                logger.debug(f"Reasoning log failed (non-critical): {e}")
-
-        results = []
-        all_success = True
-        created_entities = {}  # Track created entity names for later steps
-        total_steps = len(ordered_steps)
-
-        for i, step in enumerate(ordered_steps):
-            event_type = step.get("event_type", "")
-            payload = step.get("payload", {}).copy()  # Copy to avoid modifying original
-
-            # Enrich payload with created entities from previous steps
-            # e.g., if bubble.create created "Businessplan", bubble.enter should use it
-            if event_type in self.DEPENDENT_INTENTS:
-                creator_type = self.DEPENDENT_INTENTS[event_type]
-                if creator_type in created_entities:
-                    entity_name = created_entities[creator_type]
-                    logger.info(f"Multi-step: Enriching {event_type} with {creator_type} result: {entity_name}")
-                    # Set appropriate parameter based on event type
-                    if event_type == "bubble.enter" and not payload.get("bubble_name"):
-                        payload["bubble_name"] = entity_name
-                    elif event_type == "idea.create" and not payload.get("bubble_name"):
-                        payload["bubble_name"] = entity_name
-                    elif event_type == "idea.delete" and not payload.get("bubble_name"):
-                        payload["bubble_name"] = entity_name
-
-            # Get executor for this event type
-            executor = self._tool_executors.get(event_type)
-            if not executor:
-                logger.warning(f"Multi-step [{i+1}/{len(ordered_steps)}]: No executor for {event_type}, skipping")
-                results.append({
-                    "event_type": event_type,
-                    "success": False,
-                    "error": f"Tool {event_type} nicht verfuegbar"
-                })
-                continue
-
-            try:
-                logger.info(f"Multi-step [{i+1}/{total_steps}]: Executing {event_type}")
-
-                # Log tool start reasoning
-                if self.reasoning_logger:
-                    try:
-                        await self.reasoning_logger.log_tool_start(
-                            job_id=job_id,
-                            tool_name=event_type,
-                            params=payload,
-                            step_index=i + 1,
-                            total_steps=total_steps,
-                            reasoning=f"Executing {event_type} as step {i+1} of {total_steps}"
-                        )
-                    except Exception as e:
-                        logger.debug(f"Reasoning log failed (non-critical): {e}")
-
-                # Execute tool with timing (with tool state tracking)
-                try:
-                    from tools.session_tools import mark_tool_start, mark_tool_end
-                    mark_tool_start()
-                except ImportError:
-                    mark_tool_end = None
-
-                start_time = time.perf_counter()
-                try:
-                    result = executor(payload) if payload else executor({})
-                finally:
-                    if 'mark_tool_end' in dir() and mark_tool_end:
-                        mark_tool_end()
-                latency_ms = (time.perf_counter() - start_time) * 1000
-
-                # Track created entities for dependency resolution
-                if event_type in self.CREATOR_INTENTS:
-                    entity_name = payload.get("title") or payload.get("name") or ""
-                    if entity_name:
-                        created_entities[event_type] = entity_name
-
-                # Format result
-                result_str = self._format_result_for_voice(event_type, result)
-
-                # Log successful tool execution
-                if HAS_TOOL_LOGGER and get_tool_logger:
-                    get_tool_logger().log_execution(
-                        tool_name=event_type,
-                        params=payload or {},
-                        result=result_str,
-                        latency_ms=latency_ms,
-                        success=True,
-                        source_event="multi_step"
-                    )
-
-                results.append({
-                    "event_type": event_type,
-                    "success": True,
-                    "result": result_str
-                })
-
-                # Log tool completion reasoning
-                if self.reasoning_logger:
-                    try:
-                        await self.reasoning_logger.log_tool_complete(
-                            job_id=job_id,
-                            tool_name=event_type,
-                            result=result_str,
-                            step_index=i + 1,
-                            total_steps=total_steps,
-                            latency_ms=latency_ms
-                        )
-                    except Exception as e:
-                        logger.debug(f"Reasoning log failed (non-critical): {e}")
-
-                logger.info(f"Multi-step [{i+1}/{total_steps}]: {event_type} completed")
-
-            except Exception as e:
-                logger.error(f"Multi-step [{i+1}/{total_steps}]: {event_type} failed: {e}")
-                # Log failed tool execution
-                if HAS_TOOL_LOGGER and get_tool_logger:
-                    get_tool_logger().log_error(
-                        tool_name=event_type,
-                        params=payload or {},
-                        error=str(e),
-                        latency_ms=0
-                    )
-
-                # Log tool error reasoning
-                if self.reasoning_logger:
-                    try:
-                        await self.reasoning_logger.log_tool_error(
-                            job_id=job_id,
-                            tool_name=event_type,
-                            error=str(e),
-                            step_index=i + 1,
-                            total_steps=total_steps
-                        )
-                    except Exception as re:
-                        logger.debug(f"Reasoning log failed (non-critical): {re}")
-
-                results.append({
-                    "event_type": event_type,
-                    "success": False,
-                    "error": str(e)
-                })
-                all_success = False
-                # Continue with remaining steps (best effort)
-
-        # Generate summary for voice output
-        summary = self._format_multi_step_result(results)
-
-        # Log result reasoning and end job
-        if self.reasoning_logger:
-            try:
-                await self.reasoning_logger.log_result_reasoning(
-                    job_id=job_id,
-                    summary=summary,
-                    voice_response=summary
-                )
-                self.reasoning_logger.end_job(job_id)
-            except Exception as e:
-                logger.debug(f"Reasoning log failed (non-critical): {e}")
-
-        return OrchestrationResult(
-            job_id=job_id,
-            event_type="multi_step",
-            stream="local",
-            response_hint=summary,
-            is_conversational=False,
-            error=None if all_success else "Einige Schritte fehlgeschlagen"
-        )
-
-    def _order_by_dependencies(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Order steps based on dependency rules using Kahn's algorithm.
-
-        Args:
-            steps: List of {event_type, payload} dicts
-
-        Returns:
-            Reordered list with dependencies satisfied
-        """
-        if len(steps) <= 1:
-            return steps
-
-        n = len(steps)
-
-        # Build dependency graph
-        creator_indices = {}  # event_type -> index
-        in_degree = {i: 0 for i in range(n)}
-        graph = {i: [] for i in range(n)}  # adjacency list
-
-        for i, step in enumerate(steps):
-            event_type = step.get("event_type", "")
-
-            # Track creator intents
-            if event_type in self.CREATOR_INTENTS:
-                creator_indices[event_type] = i
-
-            # Check if this step depends on a creator
-            creator_type = self.DEPENDENT_INTENTS.get(event_type)
-            if creator_type and creator_type in creator_indices:
-                dep_index = creator_indices[creator_type]
-                graph[dep_index].append(i)
-                in_degree[i] += 1
-                logger.debug(f"Multi-step: {event_type} (index {i}) depends on {creator_type} (index {dep_index})")
-
-        # Kahn's algorithm for topological sort
-        queue = [i for i in range(n) if in_degree[i] == 0]
-        order = []
-
-        while queue:
-            node = queue.pop(0)
-            order.append(node)
-
-            for neighbor in graph[node]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        # Check for cycles (should not happen with our dependency rules)
-        if len(order) != n:
-            logger.warning("Multi-step: Circular dependency detected, using original order")
-            return steps
-
-        # Reorder steps
-        ordered = [steps[i] for i in order]
-        logger.debug(f"Multi-step: Reordered steps: {[s.get('event_type') for s in ordered]}")
-        return ordered
-
-    def _explain_dependency_order(
-        self,
-        original_steps: List[Dict[str, Any]],
-        ordered_steps: List[Dict[str, Any]]
-    ) -> str:
-        """
-        Generate a human-readable explanation of the dependency ordering.
-
-        Args:
-            original_steps: Steps before ordering
-            ordered_steps: Steps after dependency ordering
-
-        Returns:
-            Explanation string for reasoning log
-        """
-        if len(ordered_steps) <= 1:
-            return "Single step, no ordering needed"
-
-        original_order = [s.get("event_type", "") for s in original_steps]
-        new_order = [s.get("event_type", "") for s in ordered_steps]
-
-        if original_order == new_order:
-            return f"Order unchanged: {' → '.join(new_order)}"
-
-        # Find dependencies that caused reordering
-        explanations = []
-        for i, step in enumerate(ordered_steps):
-            event_type = step.get("event_type", "")
-            creator_type = self.DEPENDENT_INTENTS.get(event_type)
-            if creator_type:
-                # Find where creator is in the order
-                for _, prev_step in enumerate(ordered_steps[:i]):
-                    if prev_step.get("event_type") == creator_type:
-                        explanations.append(f"{event_type} depends on {creator_type}")
-                        break
-
-        if explanations:
-            deps = "; ".join(explanations)
-            return f"Reordered based on dependencies ({deps}): {' → '.join(new_order)}"
-
-        return f"Reordered: {' → '.join(new_order)}"
-
-    def _format_multi_step_result(self, results: List[Dict[str, Any]]) -> str:
-        """
-        Format multi-step results for voice output.
-
-        Combines successful results into a natural summary.
-
-        Args:
-            results: List of step results
-
-        Returns:
-            Voice-friendly summary string
-        """
-        successful = [r for r in results if r.get("success")]
-        failed = [r for r in results if not r.get("success")]
-
-        parts = []
-
-        if successful:
-            # Take most meaningful results
-            for r in successful:
-                result_text = r.get("result", "")
-                if result_text and result_text != "Erledigt.":
-                    # Truncate long results
-                    if len(result_text) > 80:
-                        result_text = result_text[:77] + "..."
-                    parts.append(result_text)
-                else:
-                    parts.append(f"{r['event_type']} erledigt")
-
-        if failed:
-            fail_count = len(failed)
-            parts.append(f"{fail_count} Schritt{'e' if fail_count > 1 else ''} fehlgeschlagen")
-
-        if parts:
-            # Join with natural connectors
-            if len(parts) == 1:
-                return parts[0]
-            elif len(parts) == 2:
-                return f"{parts[0]}. {parts[1]}."
-            else:
-                return ". ".join(parts[:3]) + "."
-
-        return "Alle Schritte ausgefuehrt."
-
-    def _enrich_with_task_context(self, response: str, user_context) -> str:
-        """Add task memory context to response if relevant."""
-        if not user_context or not hasattr(user_context, 'get_task_context_string'):
-            return response
-
-        task_context = user_context.get_task_context_string()
-        if task_context:
-            # Only add if not already mentioned
-            if "aufgabe" not in response.lower() and "task" not in response.lower():
-                return f"{response} ({task_context})"
-        return response
-
-    def _format_result_for_voice(self, event_type: str, result: Any) -> str:
-        """Format tool result for natural voice output."""
-        if result is None:
-            return "Erledigt."
-
-        if isinstance(result, str):
-            return result
-
-        if isinstance(result, dict):
-            # Handle common result patterns
-            if "message" in result:
-                return result["message"]
-            if "bubbles" in result:
-                bubbles = result["bubbles"]
-                if not bubbles:
-                    return "Du hast noch keine Spaces."
-                count = len(bubbles)
-                names = [b.get("title", b.get("name", "Unbenannt")) for b in bubbles[:5]]
-                if count <= 5:
-                    return f"Du hast {count} Spaces: {', '.join(names)}."
-                return f"Du hast {count} Spaces. Die ersten sind: {', '.join(names)}."
-            if "ideas" in result:
-                ideas = result["ideas"]
-                if not ideas:
-                    return "Keine Ideen gefunden."
-                count = len(ideas)
-                return f"Ich habe {count} Ideen gefunden."
-            if "id" in result:
-                # Created something
-                return f"Erledigt. ID: {result['id']}"
-
-        if isinstance(result, list):
-            if not result:
-                return "Keine Ergebnisse gefunden."
-            return f"Ich habe {len(result)} Eintraege gefunden."
-
-        return str(result)[:200]
-
-    async def _store_supermemory_task_completed(
-        self,
-        job_id: str,
-        event_type: str,
-        result: str,
-        duration_ms: int,
-        session_id: str = None
-    ) -> None:
-        """Store task completion event to Supermemory (non-blocking)."""
-        if self.sm_task_memory and self.sm_task_memory.is_available:
-            try:
-                await self.sm_task_memory.store_task_completed(
-                    task_id=job_id,
-                    intent_type=event_type,
-                    result=result,
-                    duration_ms=duration_ms,
-                    session_id=session_id
-                )
-            except Exception as e:
-                logger.debug(f"[Supermemory] Failed to store task completed: {e}")
-
-        # Track intent usage for user profile learning
-        if self.sm_user_profile and self.sm_user_profile.is_available:
-            try:
-                await self.sm_user_profile.track_intent_usage(event_type)
-            except Exception as e:
-                logger.debug(f"[Supermemory] Failed to track intent usage: {e}")
-
-    async def _store_supermemory_task_failed(
-        self,
-        job_id: str,
-        event_type: str,
-        error: str,
-        session_id: str = None
-    ) -> None:
-        """Store task failure event to Supermemory (non-blocking)."""
-        if self.sm_task_memory and self.sm_task_memory.is_available:
-            try:
-                await self.sm_task_memory.store_task_failed(
-                    task_id=job_id,
-                    intent_type=event_type,
-                    error=error,
-                    session_id=session_id
-                )
-            except Exception as e:
-                logger.debug(f"[Supermemory] Failed to store task failed: {e}")
+    # ── Sync execution methods moved to swarm/orchestrator/sync_executor.py ──
+    # ── Result formatting methods moved to swarm/orchestrator/result_formatter.py ──
 
     def process_intent_sync(
         self,

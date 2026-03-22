@@ -1,7 +1,7 @@
 """
 VibeMind Navigation Tools
 
-ElevenLabs client tools for voice-controlled UI navigation.
+Client tools for voice-controlled UI navigation.
 These tools enable agents to navigate the multiverse, select items,
 and enter/exit views without keyboard interaction.
 
@@ -22,11 +22,14 @@ Usage:
 """
 
 import sys
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+logger = logging.getLogger(__name__)
 
 # Global reference to Electron IPC sender (set by electron_backend.py)
 _electron_send_message: Optional[Callable[[dict], None]] = None
@@ -81,7 +84,8 @@ def navigate_to_space(params: Dict[str, Any]) -> str:
         Confirmation message
     """
     space = params.get("space", "").lower().strip()
-    
+    logger.debug("navigate_to_space called with space=%s", space)
+
     # Normalize aliases
     space_aliases = {
         "idea": "ideas",
@@ -411,7 +415,7 @@ def continue_to_project(params: Dict[str, Any]) -> str:
 # TOOL REGISTRY
 # ==============================================================================
 
-# All tools that can be registered with ElevenLabs
+# All available tools
 NAVIGATION_TOOLS = {
     # Space Navigation
     "navigate_to_space": navigate_to_space,

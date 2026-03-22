@@ -110,6 +110,7 @@ class SystemContextStore:
         Returns:
             List of relevant ContextEntry objects, sorted by relevance
         """
+        logger.debug("get_relevant called: request=%s, limit=%s", user_request[:60], limit)
         self._cleanup()
 
         if not self._entries:

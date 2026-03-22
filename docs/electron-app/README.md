@@ -15,6 +15,24 @@ electron-app/
 ├── rowboat-manager.js          # Rowboat BrowserView embedding
 ├── rowboat-preload.js          # Preload script for Rowboat BrowserView
 ├── swe-design-manager.js       # Factory Space (SWE Design) BrowserView embedding
+├── clawport-manager.js         # ClawPort Dashboard BrowserView integration
+├── clawport-preload.js         # Preload script for ClawPort Dashboard
+├── dashboard/                  # ClawPort Dashboard (Vite + React)
+│   ├── package.json            # Dashboard dependencies (React 19, Vite 6)
+│   ├── vite.config.ts          # Vite build config (base: './')
+│   ├── tsconfig.json           # TypeScript config
+│   ├── index.html              # Entry HTML
+│   └── src/
+│       ├── main.tsx            # React root
+│       ├── App.tsx             # Tab router (Schedule, Agents, Chat, Memory)
+│       ├── types.ts            # Shared TypeScript interfaces
+│       ├── styles/globals.css  # CSS custom properties design system
+│       ├── hooks/useIPC.ts     # IPC query hooks + Python message listener
+│       └── features/
+│           ├── ScheduleMonitor.tsx  # APScheduler task management
+│           ├── AgentStatus.tsx      # 8 agent status cards with live dots
+│           ├── ChatPanel.tsx        # Text input → IntentOrchestrator
+│           └── MemoryBrowser.tsx    # Supermemory service overview + search
 ├── main-simple.js              # Simplified main process (for testing)
 ├── test-main.js                # Test entry point
 ├── package.json                # Dependencies and build configuration
@@ -41,7 +59,7 @@ The main process is the core of the Electron app (64KB). It handles:
 - **Python Backend Spawning** -- Launches the Python backend (`python/electron_backend.py`) as a child process, communicating via stdin/stdout JSON messages.
 - **IPC Routing** -- Routes messages between the renderer process and the Python backend.
 - **Window Management** -- Creates and manages the main BrowserWindow.
-- **BrowserView Integration** -- Manages embedded views for Coding Engine Dashboard, Rowboat, and SWE Design.
+- **BrowserView Integration** -- Manages embedded views for Coding Engine Dashboard, Rowboat, SWE Design, and ClawPort Dashboard. Views are mutually exclusive — showing one hides the others.
 
 ### Python Communication Protocol
 
@@ -115,6 +133,61 @@ Embeds the Factory Space (SWE Design) UI in a BrowserView. Handles:
 - BrowserView lifecycle for the SWE Design interface
 - Shuttle pipeline visualization
 - Communication with the SWE Design backend
+- Graceful degradation when SWE Design submodule is not available
+
+### ClawPort Manager (`clawport-manager.js`)
+
+Embeds the ClawPort Dashboard (a standalone Vite + React app) as a BrowserView overlay. Follows the same pattern as `RowboatManager`. Handles:
+
+- BrowserView lifecycle (create, show, hide, destroy)
+- Loads from `dashboard/dist/index.html` (production) or dev server URL
+- Resize tracking with titlebar + tab bar offset
+- Mutual exclusion with all other BrowserView managers
+
+The dashboard provides 4 features accessible via tabs:
+
+| Tab | Feature | Python IPC Messages |
+|-----|---------|-------------------|
+| Schedule | APScheduler task management | `get_scheduled_tasks`, `update_task_status` |
+| Agents | 8 backend agent status cards | `get_agent_status` |
+| Chat | Text input → IntentOrchestrator | `chat_text_input`, `get_conversation_history` |
+| Memory | Supermemory service overview | `get_memory_overview`, `search_memory`, `get_recent_memory` |
+
+**IPC Flow (ClawPort → Python):**
+
+```
+ClawPort React App
+  → window.vibemindDashboard.invoke('clawport:get-agent-status')
+    → ipcRenderer.invoke (clawport-preload.js)
+      → ipcMain.handle (main.js)
+        → sendToPythonAndWait({type: 'get_agent_status'}, 'agent_status_list')
+          → Python electron_backend.py → _handle_get_agent_status_sync()
+            → Returns JSON via stdout
+```
+
+**Agent Status Tracking:**
+
+The Python backend tracks the last event per agent in-memory via `_agent_last_events`. Every `tool_action` message updates the corresponding agent's status (started → completed/error) using the `_EVENT_PREFIX_TO_AGENT` mapping:
+
+```python
+_EVENT_PREFIX_TO_AGENT = {
+    "bubble.": "bubbles", "idea.": "ideas", "code.": "coding",
+    "desktop.": "desktop", "roarboot.": "roarboot", "research.": "zeroclaw",
+    "minibook.": "minibook", "schedule.": "schedule",
+}
+```
+
+## BrowserView Mutual Exclusion
+
+All 4 BrowserView managers (Dashboard, Rowboat, SweDesign, ClawPort) are mutually exclusive. When any view is shown, all others are hidden:
+
+```javascript
+// In each show-* handler:
+if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+```
 
 ## Renderer
 
@@ -126,6 +199,7 @@ The main HTML entry point for the renderer process. Contains:
 - UI panels for bubbles, ideas, and tools
 - Modal dialogs for exploration, formatting, and settings
 - Script and style imports
+- Dashboard tab button for ClawPort navigation
 
 ### `multiverse.js` (106KB)
 
@@ -199,7 +273,13 @@ cd electron-app
 # Development
 npm start                    # Start in development mode
 
-# Production builds
+# Dashboard development (hot-reload)
+npm run dashboard:dev        # Start Vite dev server for ClawPort dashboard
+
+# Build dashboard (required before production builds)
+npm run dashboard:build      # Build ClawPort dashboard to dashboard/dist/
+
+# Production builds (auto-builds dashboard first)
 npm run build:win            # Windows installer (.exe)
 npm run build:mac            # macOS DMG
 npm run build:linux          # Linux AppImage

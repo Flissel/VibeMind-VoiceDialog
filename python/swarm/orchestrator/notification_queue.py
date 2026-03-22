@@ -7,7 +7,7 @@ The NotificationQueue enables async feedback without TTS injection:
 3. On next user input, Rachel checks queue
 4. Rachel includes pending results in her response
 
-This approach is 100% compatible with ElevenLabs Conversational AI.
+This approach is compatible with the voice Conversational AI layer.
 """
 
 import logging
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _debug_print(msg: str):
     """Print debug message to stderr for visibility in Electron."""
-    print(f"[Python DEBUG] [NotificationQueue] {msg}", file=sys.stderr)
+    logger.debug(f"[NotificationQueue] {msg}")
 
 
 @dataclass

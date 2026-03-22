@@ -59,6 +59,7 @@ async def mcp_click(x: int, y: int, button: str = "left", double_click: bool = F
     Returns:
         Dict with success status and details
     """
+    logger.debug("mcp_click called with x=%s y=%s button=%s", x, y, button)
     if not HAS_PYAUTOGUI:
         return {"success": False, "error": "pyautogui not installed"}
 
@@ -99,6 +100,7 @@ async def mcp_type(text: str, interval: float = 0.02, use_clipboard: bool = Fals
     Returns:
         Dict with success status
     """
+    logger.debug("mcp_type called with text_length=%s use_clipboard=%s", len(text), use_clipboard)
     if not HAS_PYAUTOGUI:
         return {"success": False, "error": "pyautogui not installed"}
 
@@ -192,6 +194,7 @@ async def mcp_press_key(key: str) -> Dict[str, Any]:
     Returns:
         Dict with success status
     """
+    logger.debug("mcp_press_key called with key=%s", key)
     if not HAS_PYAUTOGUI:
         return {"success": False, "error": "pyautogui not installed"}
 
@@ -228,6 +231,7 @@ async def mcp_read_screen(region: Optional[Dict[str, int]] = None) -> Dict[str, 
     Returns:
         Dict with extracted text and success status
     """
+    logger.debug("mcp_read_screen called with region=%s", region)
     if not HAS_OCR:
         return {"success": False, "error": "pytesseract/PIL not installed"}
 
@@ -290,6 +294,7 @@ async def mcp_validate(target: str, timeout: float = 10.0) -> Dict[str, Any]:
     Returns:
         Dict with element location if found
     """
+    logger.debug("mcp_validate called with target=%s", target)
     if not HAS_OCR:
         return {"success": False, "error": "pytesseract/PIL not installed"}
 
@@ -395,7 +400,7 @@ async def mcp_get_focus() -> Dict[str, Any]:
 
 
 # =============================================================================
-# TOOL DEFINITIONS FOR ELEVENLABS
+# TOOL DEFINITIONS
 # =============================================================================
 
 HANDOFF_TOOLS = [

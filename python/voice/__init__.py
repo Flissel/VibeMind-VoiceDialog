@@ -1,9 +1,7 @@
 """
 Voice Layer Package for VibeMind
 
-Provides voice I/O abstraction supporting multiple providers:
-- OpenAI Realtime API (default) - Speech-to-Speech with native function calling
-- ElevenLabs Conversational AI (legacy fallback)
+Provides voice I/O via OpenAI Realtime API (Speech-to-Speech with native function calling).
 
 The voice layer ONLY handles audio I/O and speech interaction.
 All backend logic (Orchestrator, Agents, Tools) remains unchanged.

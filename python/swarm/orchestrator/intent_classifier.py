@@ -11,6 +11,8 @@ import os
 import time
 from typing import Dict, Any, Optional
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Lazy import for structured logging (avoid circular imports)
@@ -87,10 +89,23 @@ Der Bereich fuer Ideen-Management. Bubbles sind Themen-Container fuer Ideen.
   → "Fuege neue Ideen hinzu", "Generiere ergaenzende Ideen"
 - idea.move: Idee verschieben
   → "Verschiebe [IDEE] nach [SPACE]"
-- idea.format: Ideen in strukturierte Formate konvertieren (LLM-powered)
-  → "Formatiere die Ideen in Aktionslisten", "Erstelle Tabelle mit Vorteilen/Nachteilen"
-  → "Konvertiere in [action_list|pros_cons_table|technical_specs|hierarchy|comparison_table]"
-  → Payload: {"format_type": "action_list", "original_request": "..."}
+- idea.format_note: Als Notiz formatieren
+  → "Formatiere als Notiz", "Mach eine Notiz daraus"
+- idea.format_action_list: Als Aktionsliste formatieren
+  → "Formatiere als Aktionsliste", "Mach Aktionspunkte daraus", "To-Do Liste"
+- idea.format_pros_cons: Als Pro/Contra formatieren
+  → "Formatiere als Pro und Contra", "Vorteile und Nachteile", "Pros and Cons"
+- idea.format_hierarchy: Als Hierarchie formatieren
+  → "Formatiere als Hierarchie", "Hierarchisch strukturieren", "Baumstruktur"
+- idea.format_specs: Als technische Spezifikation formatieren
+  → "Formatiere als Spezifikation", "Technische Specs", "Requirements"
+- idea.convert_format: Format konvertieren
+  → "Konvertiere das Format", "Aendere das Format", "Wandle um in"
+  → Payload: {"target_format": "action_list|pros_cons|hierarchy|specs|note"}
+- idea.list_formats: Verfuegbare Formate anzeigen
+  → "Welche Formate gibt es?", "Zeig mir die Formatoptionen"
+- idea.format_revert: Format zuruecksetzen
+  → "Format zuruecksetzen", "Format rueckgaengig", "Revert Format", "Undo"
 - idea.structure: Komplexe Strukturierungen und Organisation
   → "Organisiere die Ideen hierarchisch", "Erstelle Übersicht aller Konzepte"
   → "Strukturiere alle Ideen systematisch"
@@ -108,6 +123,13 @@ Der Bereich fuer Ideen-Management. Bubbles sind Themen-Container fuer Ideen.
 - idea.explain: Idee erklaeren lassen (KI-Erklaerung)
   → "Erklaere die Idee [NAME]", "Was bedeutet [NAME]?", "Was ist [NAME]?"
   → Payload: {"idea_name": "[NAME]"}
+- idea.generate_doc: Projektdokumentation generieren (exportiert ALLES als Markdown-Datei)
+  → "Erstelle Projektdoku", "Generiere Dokumentation", "Exportiere als Dokument"
+  → "Erstelle Projektdokumentation fuer [NAME]", "Erstelle Doku"
+  → "Dokumentation generieren", "Exportiere Projekt", "Mach eine Doku"
+  → Payload: {"bubble_name": "[NAME]"}
+  WICHTIG: idea.generate_doc EXPORTIERT alle vorhandenen Inhalte als zusammenhaengendes
+  Dokument (LLM-synthesiert). idea.whitepaper GENERIERT neuen Text aus verknuepften Ideen.
 
 **Idee Exploration Event-Types (AI-Scientist Tree Search):**
 - idea.explore.start: Starte tiefe Verbindungssuche zwischen Ideen
@@ -176,15 +198,27 @@ Der Bereich fuer Desktop-Automatisierung. WICHTIG: Nur fuer echte Desktop-Aktion
 
 Nachrichten senden via WhatsApp, Telegram, Discord etc. und Web-Suche ueber Clawdbot Bridge.
 
-**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web, Clawdbot
+**Schluesselwoerter:** WhatsApp, Telegram, Nachricht, senden, schicke, schreibe an, suche im Web, Clawdbot, Mutter, schreib
 
 **Event-Types:**
-- messaging.whatsapp: WhatsApp Nachricht senden
+- messaging.send: Nachricht an einen Kontakt senden (plattformunabhaengig)
+  → "Schreib meiner Mutter dass ich spaeter komme", "Sende an Peter: Bin unterwegs"
+  → "Schick eine Nachricht an Mama", "Schreibe an den Boss: Meeting verschoben"
+  → "Sende per WhatsApp an Max: Hallo", "Telegram an @user: Text"
+  → payload: {"recipient": "...", "message": "...", "platform": "auto"}
+  WICHTIG: "Schreib meiner/meinem [Person]" → messaging.send, NICHT idea.create!
+  Wenn der User sagt "Schreib an [Person]..." ist IMMER messaging.send gemeint!
+  platform kann "auto", "whatsapp", "telegram" etc. sein. Bei "auto" wird WhatsApp bevorzugt.
+- messaging.whatsapp: WhatsApp Nachricht senden (explizit WhatsApp)
   → "Schicke WhatsApp an Max: Hallo", "WhatsApp Nachricht an +49...", "Sende per WhatsApp"
   → payload: {"recipient": "...", "message": "..."}
-- messaging.telegram: Telegram Nachricht senden
+- messaging.telegram: Telegram Nachricht senden (explizit Telegram)
   → "Telegram an @user: Text", "Schicke Telegram Nachricht"
   → payload: {"recipient": "...", "message": "..."}
+- messaging.read: Nachrichten lesen / pruefen ob neue Nachrichten da sind
+  → "Gibt es neue Nachrichten?", "Was hat Mutter geschrieben?", "Neue Messages?"
+  → "Zeig meine Nachrichten", "Hab ich neue Nachrichten?"
+  → payload: {}
 - web.search: Web-Suche durchfuehren
   → "Such im Web nach X", "Google X", "Suche online nach"
   → payload: {"query": "..."}
@@ -229,6 +263,20 @@ Der Bereich fuer Wissensmanagement. Durchsucht Knowledge Graph aus Emails, Meeti
   → "Oeffne Roarboot", "Zeig mir Rowboat", "Knowledge Graph anzeigen"
 - roarboot.reset: Neues Gespraech mit Roarboot starten (Kontext zuruecksetzen)
   → "Neues Gespraech mit Roarboot", "Roarboot Reset", "Roarboot Kontext loeschen"
+- roarboot.chat: Freier Chat mit Rowboat (Multi-Turn Konversation mit Knowledge Graph Kontext)
+  → "Frag Rowboat ...", "Rowboat, was denkst du ueber ...", "Chat mit Rowboat", "Sprich mit Rowboat"
+  Payload: {{"message": "...", "context": "general"}}
+- roarboot.rag.search: Semantische Suche im Knowledge Graph (Vektorsuche, aehnliche Konzepte finden)
+  → "Finde aehnliche Konzepte zu X", "Semantische Suche nach X", "RAG Suche X"
+  Payload: {{"query": "..."}}
+- roarboot.upload: Dokument in Knowledge Graph aufnehmen (PDF, DOCX, MD, TXT oder Text)
+  → "Verarbeite dieses Dokument", "Lade Datei in Knowledge Graph", "Upload in Rowboat"
+  Payload: {{"file_path": "...", "text": "...", "title": "..."}}
+- roarboot.graph.explore: Knowledge Graph Verbindungen eines Themas erkunden
+  → "Zeig mir die Verbindungen von X", "Graph fuer X", "Wie haengt X zusammen?"
+  Payload: {{"subject": "..."}}
+- roarboot.tools.list: Verfuegbare Rowboat-Tools und Integrationen auflisten
+  → "Welche Tools hat Rowboat?", "Rowboat Integrationen", "Was kann Rowboat?"
 - roarboot.docker.start: Rowboat Docker-Container starten
   → "Starte Roarboot", "Starte Rowboat Docker", "Roarboot hochfahren"
 - roarboot.docker.stop: Rowboat Docker-Container stoppen
@@ -343,10 +391,136 @@ Der Bereich fuer zeitgesteuerte Aufgaben: Erinnerungen, wiederkehrende Aktionen,
   → "Erstelle eine Idee fuer Marketing" → idea.create (NICHT schedule!)
 Nur wenn ein Zeitausdruck erkennbar ist, wird schedule.create verwendet.
 
+### 8. N8N WORKFLOW BUILDER SPACE (Workflow-Automatisierung)
+Der Bereich fuer n8n Workflow-Erstellung und -Verwaltung. Generiert Workflows aus Beschreibungen und pusht sie zu n8n.
+
+**Schluesselwoerter:** workflow, n8n, automatisierung, automation, webhook, trigger, agent workflow, pipeline
+
+**Event-Types:**
+- n8n.generate: Workflow aus natuerlichsprachlicher Beschreibung generieren und in n8n speichern
+  → "Erstelle einen Workflow fuer...", "Baue einen n8n Workflow der..."
+  → "Ich brauche einen Workflow mit Webhook und DB..."
+  → "Erstelle eine Automatisierung fuer..."
+  → payload: {"description": "..."}
+- n8n.list: Alle Workflows in n8n auflisten
+  → "Zeig meine Workflows", "Welche Workflows gibt es?", "n8n Workflows"
+- n8n.status: n8n Instanz Status pruefen
+  → "Ist n8n online?", "n8n Status", "Workflow-System Status"
+- n8n.activate: Workflow aktivieren
+  → "Aktiviere Workflow X", "Starte Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.deactivate: Workflow deaktivieren
+  → "Deaktiviere Workflow X", "Stoppe Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.delete: Workflow loeschen
+  → "Loesche Workflow X", "Entferne Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.execute: Workflow manuell ausfuehren
+  → "Fuehre Workflow X aus", "Trigger Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+- n8n.describe: Workflow-Details anzeigen
+  → "Beschreibe Workflow X", "Was macht Workflow X?", "Zeig Details von Workflow X"
+  → payload: {"name": "...", "workflow_id": "..."}
+
+### 9. AGENTFARM SPACE (Multi-Agent Teams via Autogen)
+Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Teams aus mehreren KI-Agenten.
+
+**Schluesselwoerter:** agent team, agentfarm, autogen, multi-agent, team erstellen, team starten, zusammenarbeit, collaboration, agenten
+
+**Event-Types:**
+- agentfarm.create_team: Neues Agent-Team erstellen
+  → "Erstelle ein Agent-Team fuer Customer Support", "Neues Team mit 3 Agenten"
+  → payload: {"template_id": "...", "team_name": "..."}
+- agentfarm.run: Team-Run starten mit einer Aufgabe
+  → "Starte das Team mit der Aufgabe FAQ erstellen", "Lass das Team X arbeiten an Y"
+  → payload: {"team_id": "...", "task": "..."}
+- agentfarm.status: AgentFarm Uebersicht aller Teams und Runs
+  → "Wie ist der Status der Agent Farm?", "AgentFarm Status", "Zeig die Teams"
+- agentfarm.list_teams: Alle Teams auflisten
+  → "Welche Teams gibt es?", "Zeig mir alle Agent-Teams"
+- agentfarm.stop: Laufenden Run stoppen
+  → "Stopp den laufenden Run", "Agent-Team anhalten"
+  → payload: {"run_id": "..."}
+- agentfarm.results: Ergebnisse eines Runs abrufen
+  → "Was sind die Ergebnisse?", "Zeig mir die Run-Ergebnisse"
+  → payload: {"run_id": "..."}
+- agentfarm.list_templates: Verfuegbare Team-Templates auflisten
+  → "Welche Team-Templates gibt es?", "Zeig Team-Vorlagen"
+- agentfarm.collaborate: Multi-Space Zusammenarbeit starten
+  → "Starte eine Zusammenarbeit aller Agents fuer X"
+  → payload: {"task": "...", "goal": "..."}
+- agentfarm.pipeline.start: Starte Code-Generierung-Pipeline
+  → "Starte die Pipeline fuer einen Chat-Bot"
+  → payload: {"task_description": "..."}
+- agentfarm.pipeline.status: Pipeline-Fortschritt abfragen
+  → "Wie ist der Pipeline-Status?"
+- agentfarm.forge.start: Starte kontinuierliche Verbesserung (Forge)
+  → "Starte den Forge-Prozess fuer Projekt X"
+  → payload: {"project_id": "..."}
+- agentfarm.forge.status: Forge-Status abfragen
+  → "Wie laeuft der Forge?"
+- agentfarm.open: AgentFarm Dashboard oeffnen
+  → "Oeffne AgentFarm"
+
 ### WICHTIGE UNTERSCHEIDUNG - MINIBOOK vs DIRECT
 - minibook.collaborate: Aufgabe benoetigt MEHRERE Spaces (z.B. Recherche + Idee) → "Recherchiere X und erstelle daraus eine Idee"
 - Einzelne Actions (research.web, idea.create, etc.): Aufgabe passt in EINEN Space → "Recherchiere X" oder "Erstelle eine Idee"
 Nur wenn der User explizit 2+ verschiedene Domains in EINER Anfrage kombiniert, wird minibook.collaborate verwendet.
+
+### 10. BLAUE ROSE (Aufgaben-Empfehlung)
+NUR fuer explizite Empfehlungs-Anfragen. Die Blaue Rose beobachtet passiv — der User muss aktiv fragen.
+
+**Schluesselwoerter:** was soll ich, empfiehl, vorschlag, blaue rose, flowzen
+
+**Event-Types:**
+- rose.recommend: Aufgabe basierend auf Tageszeit empfehlen (NUR wenn User EXPLIZIT fragt!)
+  → "Was soll ich jetzt machen?", "Empfiehl mir eine Aufgabe"
+  → "Was passt gerade am besten?", "Blaue Rose"
+  → "Gib mir einen Vorschlag", "Was waere jetzt sinnvoll?"
+  → payload: {"mood": "..."} (optional)
+- rose.status: Blaue Rose Status
+  → "Blaue Rose Status", "Flowzen Status"
+
+### 11. MIROFISH SPACE (Swarm Intelligence Prediction Engine)
+Multi-Agent Simulation und Vorhersage-Engine. Nimmt Seed-Daten, baut einen Knowledge Graph, simuliert Agenten-Interaktionen und generiert Vorhersage-Reports.
+
+**Schluesselwoerter:** mirofish, vorhersage, prediction, simulation, simulieren, agenten-simulation, predict, swarm intelligence
+
+**Event-Types:**
+- mirofish.simulate: Vorhersage-Simulation starten (End-to-End Pipeline)
+  → "Simuliere die Reaktion auf unser neues Produkt", "Starte eine MiroFish Vorhersage"
+  → "Sage vorher wie der Markt auf X reagiert", "Prediction fuer Y"
+  → payload: {"requirement": "...", "text": "...", "agent_count": 100, "rounds": 10}
+- mirofish.graph.build: Knowledge Graph aus Seed-Daten aufbauen (ohne Simulation)
+  → "Erstelle einen MiroFish Graph aus diesem Text"
+  → payload: {"requirement": "...", "text": "..."}
+- mirofish.graph.search: MiroFish Knowledge Graph durchsuchen
+  → "Suche im MiroFish Graph nach X"
+  → payload: {"graph_id": "...", "query": "..."}
+- mirofish.list_projects: Alle MiroFish Projekte auflisten
+  → "Welche MiroFish Projekte gibt es?", "MiroFish Projekte"
+- mirofish.report.chat: Mit MiroFish Report-Agent chatten
+  → "Frag den MiroFish Report ueber X"
+  → payload: {"report_id": "...", "question": "..."}
+- mirofish.interview: Simulierten Agenten interviewen
+  → "Interview den Agenten Max aus der Simulation"
+  → payload: {"simulation_id": "...", "agent_name": "...", "question": "..."}
+- mirofish.status: MiroFish Verbindungsstatus pruefen
+  → "MiroFish Status", "Ist MiroFish verbunden?"
+- mirofish.docker.start: MiroFish Docker starten
+  → "Starte MiroFish Docker"
+- mirofish.docker.stop: MiroFish Docker stoppen
+  → "Stopp MiroFish Docker"
+- mirofish.docker.status: MiroFish Docker Status
+  → "MiroFish Docker Status"
+
+### WICHTIGE UNTERSCHEIDUNG - BLAUE ROSE vs ANDERE
+- rose.recommend: User fragt EXPLIZIT nach Empfehlung → "Was soll ich machen?"
+- schedule.list: Zeigt geplante Termine → "Was steht an?" (NICHT rose!)
+- idea.list: Zeigt vorhandene Ideen → "Zeig meine Ideen" (NICHT rose!)
+- conversation.greeting: Begruessung → "Hallo" (NICHT rose!)
+- conversation.help: Hilfe → "Was kannst du?" (NICHT rose!)
+NUR wenn der User eine EMPFEHLUNG oder VORSCHLAG will → rose.recommend
 
 ### KONVERSATION
 
@@ -534,7 +708,7 @@ class IntentClassifier:
             model: Model override (default: Claude Haiku for speed)
         """
         self._client = model_client
-        self._model = model or os.getenv("CLASSIFIER_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("classifier")
         self._own_client = None
 
     def _post_process_classification(self, result: Dict[str, Any], user_input: str) -> Dict[str, Any]:
@@ -613,8 +787,9 @@ class IntentClassifier:
                 logger.debug(f"Post-process: idea.create -> desktop.type for '{user_input[:30]}...'")
 
         # Rule 4: "druecke enter/escape/tab" -> desktop.press_key
-        if intent == "conversation.unknown" and "drück" in text_lower or "drueck" in text_lower:
-            key_names = ["enter", "escape", "tab", "strg", "ctrl", "alt", "shift", "space", "leertaste"]
+        if ("drück" in text_lower or "drueck" in text_lower or "press" in text_lower):
+            key_names = ["enter", "escape", "tab", "strg", "ctrl", "alt", "shift", "space", "leertaste",
+                         "backspace", "delete", "entfernen", "f1", "f2", "f3", "f4", "f5"]
             for key in key_names:
                 if key in text_lower:
                     result["event_type"] = "desktop.press_key"
@@ -645,6 +820,46 @@ class IntentClassifier:
                 result["event_type"] = "openclaw.status"
                 result["payload"] = {}
                 logger.debug(f"Post-process: -> openclaw.status")
+
+        # Rule 6c: Space-specific status commands -> space.status
+        # Fixes: "N8n Status", "Rowboat Status", "Schedule Status" misclassified as conversation.listening
+        if intent in ["conversation.listening", "conversation.unknown"]:
+            status_map = {
+                "n8n": "n8n.status", "n8n-status": "n8n.status",
+                "rowboat": "roarboot.status", "roarboot": "roarboot.status",
+                "schedule": "schedule.status", "zeitplan": "schedule.status",
+                "minibook": "minibook.status",
+                "agentfarm": "agentfarm.status", "agent farm": "agentfarm.status",
+                "mirofish": "mirofish.status", "miro fish": "mirofish.status",
+                "code": "code.status", "coding": "code.status",
+            }
+            if "status" in text_lower:
+                for keyword, event in status_map.items():
+                    if keyword in text_lower:
+                        result["event_type"] = event
+                        result["payload"] = {}
+                        self._applied_rules.append(f"rule_6c_status_{keyword}")
+                        logger.debug(f"Post-process: -> {event} (status keyword)")
+                        break
+
+            # "Was steht heute an?" / "Was steht an?" -> schedule.status
+            schedule_phrases = ["was steht an", "was steht heute", "heutige termine", "today's schedule"]
+            if any(p in text_lower for p in schedule_phrases):
+                result["event_type"] = "schedule.status"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6c_schedule_today")
+                logger.debug("Post-process: -> schedule.status (today query)")
+
+        # Rule 6d: N8n-specific commands missed by LLM
+        if intent in ["conversation.unknown", "conversation.listening"] and "workflow" in text_lower:
+            if any(kw in text_lower for kw in ["ausführ", "ausfuehr", "fuehr", "execute", "run", "starte"]):
+                result["event_type"] = "n8n.execute"
+                result["payload"] = {"description": user_input}
+                self._applied_rules.append("rule_6d_n8n_execute")
+            elif any(kw in text_lower for kw in ["beschreib", "describe", "detail", "zeig details"]):
+                result["event_type"] = "n8n.describe"
+                result["payload"] = {"description": user_input}
+                self._applied_rules.append("rule_6d_n8n_describe")
 
         # Rule 7: evaluation.clarify - "ich meinte" / "eigentlich wollte" - MUST NOT execute action
         clarify_keywords = ["meinte", "eigentlich wollte", "ich wollte eigentlich", "nicht das"]
@@ -1000,37 +1215,53 @@ class IntentClassifier:
                     logger.debug(f"Post-process: {intent} -> idea.expand (expand word detected)")
 
         # =====================================================================
-        # Rule 25: Strukturierte Formatierung -> idea.format
-        # Fixes: "Formatiere die Ideen in Aktionslisten" -> idea.format
-        # Enables LLM-driven structured content conversion
+        # Rule 25: Strukturierte Formatierung -> idea.format_* Sub-Types
+        # Maps format requests to specific event types for the format dispatcher
         # =====================================================================
-        if intent in ["conversation.unknown", "idea.list", "idea.expand"]:
-            format_keywords = ["formatiere", "formatiert", "konvertiere", "wandele", "ueberfuehre", "ueberführen"]
-            structure_keywords = ["aktionsliste", "action list", "tabelle", "table", "hierarchie", "hierarchy",
-                                  "vor/nachteile", "pros/cons", "technische specs", "technical specs"]
+        format_intents = {"idea.format", "idea.format_note", "idea.format_action_list",
+                         "idea.format_pros_cons", "idea.format_hierarchy", "idea.format_specs",
+                         "idea.convert_format", "idea.list_formats"}
+        if intent in ["conversation.unknown", "idea.list", "idea.expand", "idea.format"] or intent in format_intents:
+            format_keywords = ["formatiere", "formatiert", "konvertiere", "wandele", "format"]
+            has_format = any(kw in text_lower for kw in format_keywords)
 
-            has_format_keyword = any(kw in text_lower for kw in format_keywords)
-            has_structure_keyword = any(kw in text_lower for kw in structure_keywords)
+            if has_format or intent in format_intents:
+                # Determine specific format sub-type from text
+                if "notiz" in text_lower or "note" in text_lower:
+                    result["event_type"] = "idea.format_note"
+                elif "aktionsliste" in text_lower or "action" in text_lower or "to-do" in text_lower or "todo" in text_lower:
+                    result["event_type"] = "idea.format_action_list"
+                elif "pro" in text_lower and ("contra" in text_lower or "con" in text_lower) or "vor" in text_lower and "nachteil" in text_lower:
+                    result["event_type"] = "idea.format_pros_cons"
+                elif "hierarchie" in text_lower or "hierarchy" in text_lower or "baum" in text_lower:
+                    result["event_type"] = "idea.format_hierarchy"
+                elif "spec" in text_lower or "spezifikation" in text_lower or "requirement" in text_lower:
+                    result["event_type"] = "idea.format_specs"
+                elif "konvertiere" in text_lower or "wandle" in text_lower or "convert" in text_lower or "aendere" in text_lower:
+                    result["event_type"] = "idea.convert_format"
+                elif "welche formate" in text_lower or "formatoptionen" in text_lower or "list format" in text_lower:
+                    result["event_type"] = "idea.list_formats"
+                elif intent not in format_intents:
+                    # Generic format — keep idea.format_action_list as default
+                    result["event_type"] = "idea.format_action_list"
 
-            if has_format_keyword or has_structure_keyword:
-                result["event_type"] = "idea.format"
-                # Extract target format from text
-                format_type = "action_list"  # default
-                if "aktionsliste" in text_lower or "action list" in text_lower:
-                    format_type = "action_list"
-                elif "tabelle" in text_lower or "table" in text_lower:
-                    if "vor" in text_lower and "nachteil" in text_lower:
-                        format_type = "pros_cons_table"
-                    else:
-                        format_type = "comparison_table"
-                elif "hierarchie" in text_lower or "hierarchy" in text_lower:
-                    format_type = "hierarchy"
-                elif "technische" in text_lower and "specs" in text_lower:
-                    format_type = "technical_specs"
+                result["payload"] = result.get("payload", {})
+                result["payload"]["original_request"] = user_input
+                self._applied_rules.append("rule_25_format_subtype")
+                logger.debug(f"Post-process: -> {result['event_type']}")
 
-                result["payload"] = {"format_type": format_type, "original_request": user_input}
-                self._applied_rules.append("rule_25_structured_formatting")
-                logger.debug(f"Post-process: -> idea.format ({format_type})")
+        # =====================================================================
+        # Rule 25b: Format Revert -> idea.format_revert
+        # "Mach das rueckgaengig", "Revert", "Undo format"
+        # =====================================================================
+        revert_keywords = ["rueckgaengig", "rückgängig", "revert", "undo", "zurueck zum",
+                           "vorheriges format", "previous format", "undo format",
+                           "format zurück", "format zurueck", "zurücksetzen", "zuruecksetzen"]
+        if any(kw in text_lower for kw in revert_keywords):
+            result["event_type"] = "idea.format_revert"
+            result["payload"] = {}
+            self._applied_rules.append("rule_25b_format_revert")
+            logger.debug("Post-process: -> idea.format_revert")
 
         # =====================================================================
         # Rule 26: Komplexe Strukturierungen -> idea.structure
@@ -1247,15 +1478,8 @@ class IntentClassifier:
         """
         if self._own_client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._own_client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                from llm_config import get_client
+                self._own_client = get_client("classifier")
                 logger.info(f"IntentClassifier using {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create classifier client: {e}")
@@ -1279,20 +1503,30 @@ class IntentClassifier:
         try:
             prompt = CLASSIFIER_PROMPT_TEMPLATE.replace("$INTENT$", intent_text)
 
+            # Append plugin classifier hints (dynamic event types)
+            try:
+                from plugins.plugin_manager import get_plugin_manager
+                plugin_context = get_plugin_manager().get_classifier_context()
+                if plugin_context:
+                    prompt += "\n\n## Zusaetzliche Spaces (Plugins)\n\n" + plugin_context
+            except Exception:
+                pass  # Plugin system not available
+
+            # GPT-5+ uses max_completion_tokens, older models use max_tokens
+            token_param = "max_completion_tokens" if "gpt-5" in self._model or "o1" in self._model else "max_tokens"
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,  # Low temperature for consistent classification
-                max_tokens=500,
+                temperature=0.1,
+                **{token_param: 500},
             )
 
             content = response.choices[0].message.content.strip()
 
             # Phase 12: Debug logging - show raw LLM response
-            import sys
-            print(f"[Python DEBUG] [LLM RESPONSE] {content[:300]}", file=sys.stderr)
+            logger.debug(f"[LLM RESPONSE] {content[:300]}")
 
             # Extract JSON from response (handle markdown code blocks and explanatory text)
             if "```json" in content:

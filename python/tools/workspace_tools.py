@@ -1,8 +1,8 @@
 """
 Vibemind Workspace Tools
 
-ElevenLabs client tools for Ideas, Projects, and Canvas operations.
-These tools are called directly by ElevenLabs agents via voice commands.
+Client tools for Ideas, Projects, and Canvas operations.
+These tools are called directly by voice agents via voice commands.
 
 Tool Categories:
 - Ideas: capture_idea, list_ideas, score_idea, get_idea
@@ -12,6 +12,7 @@ Tool Categories:
 """
 
 import sys
+import logging
 
 import json
 
@@ -20,6 +21,8 @@ from typing import Dict, Any, Optional, List, Callable
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+logger = logging.getLogger(__name__)
 
 from data import (
     IdeasRepository,
@@ -80,6 +83,7 @@ def capture_idea(params: Dict[str, Any]) -> str:
         Success message with idea title
     """
     title = params.get("title", "").strip()
+    logger.debug("capture_idea called with title=%s", title)
 
     if not title:
         return "I need a title for your idea. What should I call it?"
@@ -127,6 +131,7 @@ def list_ideas(params: Dict[str, Any]) -> str:
     status = params.get("status")
     limit = int(params.get("limit", 5))
     top_scored = params.get("top_scored", False)
+    logger.debug("list_ideas called with filter_by=%s status=%s limit=%s", filter_by, status, limit)
 
     repo = IdeasRepository()
 
@@ -171,6 +176,7 @@ def get_idea(params: Dict[str, Any]) -> str:
     """
     idea_id = params.get("id")
     title = params.get("title", "").strip()
+    logger.debug("get_idea called with id=%s title=%s", idea_id, title)
 
     repo = IdeasRepository()
     idea = None
@@ -283,6 +289,7 @@ def create_project(params: Dict[str, Any]) -> str:
         Success message with project name
     """
     name = params.get("name", "").strip()
+    logger.debug("create_project called with name=%s", name)
 
     if not name:
         return "What should we call this project?"
@@ -469,6 +476,7 @@ def add_to_canvas(params: Dict[str, Any]) -> str:
     note = params.get("note")
     x = float(params.get("x", 0))
     y = float(params.get("y", 0))
+    logger.debug("add_to_canvas called with idea_title=%s project_name=%s", idea_title, project_name)
 
     canvas_repo = CanvasRepository()
     ideas_repo = IdeasRepository()
@@ -877,7 +885,7 @@ def delete_bubble_node(params: Dict[str, Any]) -> str:
 # TOOL REGISTRY
 # ==============================================================================
 
-# All tools that can be registered with ElevenLabs
+# All available tools
 WORKSPACE_TOOLS = {
     # Ideas
     "capture_idea": capture_idea,

@@ -25,9 +25,6 @@ from .bubble_tools import (
     delete_all_bubbles_except,
     enter_bubble,
     exit_bubble,
-    # Agent transfers
-    transfer_to_rachel,
-    transfer_to_multiverse,
     # Utilities
     generate_bubble_embeddings,
     get_pending_agent_switch,
@@ -46,6 +43,7 @@ from .idea_tools import (
     list_ideas,
     count_ideas,
     create_idea,
+    create_idea_batch,
     add_image,
     find_idea,
     update_idea,
@@ -90,6 +88,7 @@ from .summary_tools import (
     get_requirement_clarifications,
     sync_shuttle_from_orchestrator,
     create_stage_shuttles,
+    generate_project_doc,
     # Helper functions
     _fetch_orchestrator_project_state,
     # Registry
@@ -137,8 +136,6 @@ __all__ = [
     "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
-    "transfer_to_rachel",
-    "transfer_to_multiverse",
     "generate_bubble_embeddings",
     "get_pending_agent_switch",
     "get_current_bubble_db_id",
@@ -149,6 +146,7 @@ __all__ = [
     "list_ideas",
     "count_ideas",
     "create_idea",
+    "create_idea_batch",
     "add_image",
     "find_idea",
     "update_idea",
@@ -181,6 +179,7 @@ __all__ = [
     "get_requirement_clarifications",
     "sync_shuttle_from_orchestrator",
     "create_stage_shuttles",
+    "generate_project_doc",
     "_fetch_orchestrator_project_state",
     "SUMMARY_TOOLS",
     "register_summary_tools",

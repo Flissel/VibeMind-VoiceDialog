@@ -27,7 +27,7 @@ Rachel führt **keine Tools direkt aus** — sie leitet Anfragen an den Orchestr
 User Voice (16kHz Mic)
        │
        ▼
-ElevenLabs Conversational AI SDK
+OpenAI Realtime API (Speech-to-Speech)
        │
        ▼
 ┌──────────────────────────────────────────────┐
@@ -118,7 +118,7 @@ Bubbles sind **Ideen-Container** in Rachels Multiverse — vergleichbar mit Ordn
 
 ## Tech Stack
 
-- **Voice:** ElevenLabs Conversational AI SDK
+- **Voice:** OpenAI Realtime API (Speech-to-Speech)
 - **Backend:** Python 3.11+ (Electron Backend via stdin/stdout JSON IPC)
 - **Frontend:** Electron + Three.js (3D Multiverse UI)
 - **Database:** SQLite (`vibemind.db`)
@@ -172,9 +172,8 @@ VibeMind-VoiceDialog/
 │   │   ├── database.py            # SQLite Schema
 │   │   ├── models.py              # Data Models
 │   │   └── repository.py          # CRUD Operations
-│   ├── elevenlabs_voice_dialog.py  # Voice Dialog Entry Point
 │   ├── electron_backend.py         # Electron ↔ Python IPC
-│   └── voice_dialog_main.py        # Main Entry
+│   └── voice/                      # OpenAI Realtime Voice
 ├── electron-app/
 │   ├── main.js                     # Electron Main Process
 │   ├── preload.js                  # IPC Bridge
@@ -196,11 +195,11 @@ Ideas.Space läuft als Teil des VibeMind Dual-Systems:
 
 | System | Runtime | Aufgabe |
 |--------|---------|---------|
-| **ElevenLabs Voice Agents** | Cloud | Rachel, Alice, Adam, Antoni — Sprachverarbeitung |
+| **OpenAI Realtime Voice** | Cloud | Speech-to-Speech mit Function Calling |
 | **Swarm/AutoGen User Agents** | Lokal (Ollama) | Backend-Logik, Tool-Ausführung, Memory |
 
 ```
-Cloud: ElevenLabs ──► Rachel Voice ──► TTS Response
+Cloud: OpenAI Realtime ──► Voice Session ──► TTS Response
                           │
                      IPC (JSON)
                           │
@@ -223,7 +222,7 @@ pip install -r requirements.txt
 
 # .env konfigurieren
 cp .env.example .env
-# ELEVENLABS_API_KEY und ANTHROPIC_API_KEY eintragen
+# OPENAI_API_KEY eintragen
 
 # Starten
 start_vibemind_production.bat

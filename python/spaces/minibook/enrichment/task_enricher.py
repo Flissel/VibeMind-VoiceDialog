@@ -9,18 +9,17 @@ a structured payload for each agent with:
 """
 
 import logging
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
 
 from .context_gather import EnrichmentContext
 from .space_router import RoutingDecision
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [TaskEnricher] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[TaskEnricher] %s", msg)
 
 
 @dataclass
@@ -78,6 +77,7 @@ class TaskEnricher:
         Returns:
             List of EnrichedTask objects (one per agent)
         """
+        _logger.debug("enrich called: event_type=%s, primary_space=%s", event_type, routing.primary_space)
         from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
 
         tasks = []
@@ -144,12 +144,19 @@ class TaskEnricher:
         if space_key in ("ideas", "coding", "swe_design", "transformer"):
             if ctx.current_bubble_name:
                 agent_ctx["current_bubble"] = ctx.current_bubble_name
+            if ctx.current_bubble_id:
+                agent_ctx["current_bubble_id"] = ctx.current_bubble_id
+
+        # Idea count (for SpaceAgent context)
+        idea_count = getattr(ctx, "idea_count", 0)
+        if idea_count:
+            agent_ctx["idea_count"] = idea_count
 
         # Conversation history (primary gets more)
         if is_primary and ctx.conversation_history:
-            agent_ctx["conversation"] = ctx.conversation_history[-3:]
+            agent_ctx["conversation_history"] = ctx.conversation_history[-5:]
         elif ctx.conversation_history:
-            agent_ctx["conversation"] = ctx.conversation_history[-1:]
+            agent_ctx["conversation_history"] = ctx.conversation_history[-2:]
 
         # Recent results (for continuity)
         if ctx.recent_results:

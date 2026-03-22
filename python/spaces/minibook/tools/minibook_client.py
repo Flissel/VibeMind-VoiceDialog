@@ -20,7 +20,6 @@ API Reference:
 
 import logging
 import os
-import sys
 from typing import Dict, Any, Optional, List
 
 try:
@@ -29,12 +28,12 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    """Print debug message to stderr."""
-    print(f"[Python DEBUG] [MinibookClient] {msg}", file=sys.stderr, flush=True)
+    """Log debug message."""
+    _logger.debug("[MinibookClient] %s", msg)
 
 
 class MinibookClient:
@@ -49,7 +48,7 @@ class MinibookClient:
         self._url = (url or os.getenv("MINIBOOK_URL", "http://localhost:3480")).rstrip("/")
         self._agents: Dict[str, Dict[str, str]] = {}  # name -> {api_key, id}
         self._project_id: Optional[str] = None
-        logger.info(f"MinibookClient: target={self._url}")
+        _logger.info(f"MinibookClient: target={self._url}")
 
     # =========================================================================
     # Agent Management
@@ -65,6 +64,7 @@ class MinibookClient:
 
         The api_key is only returned once — we store it in memory.
         """
+        _logger.debug("register_agent called: name=%s", name)
         resp = requests.post(
             f"{self._url}/api/v1/agents",
             json={"name": name},
@@ -103,6 +103,7 @@ class MinibookClient:
         POST /api/v1/projects
         Body: {"name": "<name>", "description": "<desc>"}
         """
+        _logger.debug("create_project called: name=%s, agent=%s", name, agent_name)
         resp = requests.post(
             f"{self._url}/api/v1/projects",
             json={"name": name, "description": description},
@@ -159,21 +160,36 @@ class MinibookClient:
         content: str,
         agent_name: str = "vibemind_orchestrator",
         post_type: str = "discussion",
+        title: str = "",
     ) -> Dict[str, Any]:
         """
         Create a post in a project.
 
         POST /api/v1/projects/:id/posts
-        Body: {"content": "<content>", "type": "<type>"}
+        Body: {"title": "<title>", "content": "<content>", "type": "<type>"}
 
         Supports @mentions: "@vibemind_ideas bitte erstelle..."
         """
+        _logger.debug("create_post called: project_id=%s, agent=%s, type=%s", project_id, agent_name, post_type)
+        if not title:
+            # Auto-generate title from content (first 80 chars, first line)
+            first_line = content.split("\n")[0].strip()
+            # Strip markdown code fences
+            if first_line.startswith("```"):
+                first_line = content.split("\n", 2)[-1].split("\n")[0].strip() if "\n" in content else "Task"
+            title = first_line[:80] if first_line else "Task"
+        body = {"title": title, "content": content, "type": post_type}
         resp = requests.post(
             f"{self._url}/api/v1/projects/{project_id}/posts",
-            json={"content": content, "type": post_type},
+            json=body,
             headers=self._auth_headers(agent_name),
             timeout=10,
         )
+        if not resp.ok:
+            _debug_print(
+                f"POST /posts failed: {resp.status_code} — {resp.text[:500]}"
+            )
+            _debug_print(f"  body sent: content={content[:200]}... type={post_type} agent={agent_name}")
         resp.raise_for_status()
         data = resp.json()
         _debug_print(f"Created post in project {project_id} (id={data.get('id', '?')})")
@@ -208,12 +224,17 @@ class MinibookClient:
         POST /api/v1/posts/:id/comments
         Body: {"content": "<content>"}
         """
+        _logger.debug("create_comment called: post_id=%s, agent=%s", post_id, agent_name)
         resp = requests.post(
             f"{self._url}/api/v1/posts/{post_id}/comments",
             json={"content": content},
             headers=self._auth_headers(agent_name),
             timeout=10,
         )
+        if not resp.ok:
+            _debug_print(
+                f"POST /comments failed: {resp.status_code} — {resp.text[:500]}"
+            )
         resp.raise_for_status()
         return resp.json()
 

@@ -1,9 +1,5 @@
 # Python dependencies for VibeMind Voice Dialog
 
-# ElevenLabs Conversational AI (required)
-elevenlabs>=1.0.0
-pyaudio>=0.2.13
-
 # Audio processing (required for voice dialog)
 sounddevice>=0.4.6
 numpy>=1.24.0
@@ -52,6 +48,9 @@ pyperclip>=1.8.0
 # Redis for Claude Orchestrator
 redis>=4.0.0
 
+# MongoDB (Rowboat knowledge base publishing)
+pymongo>=4.6.0
+
 # OCR for screen reading
 pytesseract>=0.3.10
 Pillow>=10.0.0
@@ -70,3 +69,7 @@ accelerate>=0.24.0
 
 # Schedule Space - APScheduler for task scheduling, reminders, alarms
 APScheduler>=3.10.0
+
+# eyeTerm - Hands-free screen understanding controller
+vosk>=0.3.45
+comtypes>=1.4.0

@@ -6,9 +6,12 @@ Handles database connection, schema creation, and migrations.
 
 import sqlite3
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 # Default database location
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "vibemind.db"
@@ -24,7 +27,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 14
+    SCHEMA_VERSION = 19
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -279,6 +282,48 @@ class Database:
     CREATE INDEX IF NOT EXISTS idx_sched_status ON scheduled_tasks(status);
     CREATE INDEX IF NOT EXISTS idx_sched_next_run ON scheduled_tasks(next_run_at);
     CREATE INDEX IF NOT EXISTS idx_sched_created ON scheduled_tasks(created_at DESC);
+
+    -- Flowzen: mood/energy state (inferred by activity tracker)
+    CREATE TABLE IF NOT EXISTS flowzen_checkins (
+        id           TEXT PRIMARY KEY,
+        mood         TEXT NOT NULL,
+        energy       INTEGER NOT NULL DEFAULT 5,
+        time_window  TEXT DEFAULT '',
+        hour         INTEGER DEFAULT 0,
+        source       TEXT DEFAULT 'inferred',
+        notes        TEXT DEFAULT '',
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Flowzen: observed intent activity log
+    CREATE TABLE IF NOT EXISTS flowzen_activity (
+        id           TEXT PRIMARY KEY,
+        event_type   TEXT NOT NULL,
+        time_window  TEXT DEFAULT '',
+        hour         INTEGER DEFAULT 0,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_flowzen_checkins_created ON flowzen_checkins(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC);
+
+    -- Flowzen: warm diary entries generated every 30 min
+    CREATE TABLE IF NOT EXISTS flowzen_diary (
+        id              TEXT PRIMARY KEY,
+        entry_text      TEXT NOT NULL,
+        mood            TEXT DEFAULT 'calm',
+        energy          INTEGER DEFAULT 5,
+        time_window     TEXT DEFAULT '',
+        hour            INTEGER DEFAULT 0,
+        intent_count    INTEGER DEFAULT 0,
+        category        TEXT DEFAULT '',
+        brain_action    TEXT DEFAULT '',
+        brain_reasoning TEXT DEFAULT '',
+        raw_data        TEXT DEFAULT '{}',
+        source          TEXT DEFAULT 'periodic',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -288,7 +333,7 @@ class Database:
         Args:
             db_path: Path to SQLite database file. Defaults to vibemind.db in python/ dir.
         """
-        self.db_path = db_path or DEFAULT_DB_PATH
+        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self._connection: Optional[sqlite3.Connection] = None
         self._ensure_database()
 
@@ -623,6 +668,123 @@ class Database:
             except Exception:
                 pass  # Indexes may already exist
 
+        # Migration 14 -> 15: Add previous_content_json for format revert
+        if from_version < 15:
+            try:
+                conn.execute("ALTER TABLE canvas_nodes ADD COLUMN previous_content_json TEXT")
+            except Exception:
+                pass  # Column may already exist
+
+        # Migration 15 -> 16: Plugin state table
+        if from_version < 16:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS plugin_state (
+                        plugin_id TEXT PRIMARY KEY,
+                        enabled INTEGER DEFAULT 0,
+                        version_seen TEXT,
+                        accepted_at TIMESTAMP,
+                        rejected_at TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass  # Table may already exist
+
+        # Migration 16 -> 17: HybridRouter sessions + identity links
+        if from_version < 17:
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_key   TEXT PRIMARY KEY,
+                        agent_id      TEXT NOT NULL,
+                        channel       TEXT NOT NULL,
+                        canonical_id  TEXT,
+                        space_state   TEXT,
+                        last_route    TEXT,
+                        last_active   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS session_history (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_key   TEXT NOT NULL REFERENCES sessions(session_key),
+                        speaker       TEXT NOT NULL,
+                        text          TEXT NOT NULL,
+                        event_type    TEXT,
+                        timestamp     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS identity_links (
+                        channel       TEXT NOT NULL,
+                        peer_id       TEXT NOT NULL,
+                        canonical_id  TEXT NOT NULL,
+                        PRIMARY KEY (channel, peer_id)
+                    )
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_session_history_key ON session_history(session_key)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_identity_canonical ON identity_links(canonical_id)")
+            except Exception:
+                pass  # Tables may already exist
+
+        # Migration 17 -> 18: Flowzen circadian tables
+        if from_version < 18:
+            logger.info("Migration v18: Flowzen circadian tables")
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS flowzen_checkins (
+                        id           TEXT PRIMARY KEY,
+                        mood         TEXT NOT NULL,
+                        energy       INTEGER NOT NULL DEFAULT 5,
+                        time_window  TEXT DEFAULT '',
+                        hour         INTEGER DEFAULT 0,
+                        source       TEXT DEFAULT 'inferred',
+                        notes        TEXT DEFAULT '',
+                        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS flowzen_activity (
+                        id           TEXT PRIMARY KEY,
+                        event_type   TEXT NOT NULL,
+                        time_window  TEXT DEFAULT '',
+                        hour         INTEGER DEFAULT 0,
+                        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            except Exception:
+                pass
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_checkins_created ON flowzen_checkins(created_at DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_activity_created ON flowzen_activity(created_at DESC)")
+            except Exception:
+                pass
+
+        if from_version < 19:
+            logger.info("Migration v19: Flowzen diary table")
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flowzen_diary (
+                    id              TEXT PRIMARY KEY,
+                    entry_text      TEXT NOT NULL,
+                    mood            TEXT DEFAULT 'calm',
+                    energy          INTEGER DEFAULT 5,
+                    time_window     TEXT DEFAULT '',
+                    hour            INTEGER DEFAULT 0,
+                    intent_count    INTEGER DEFAULT 0,
+                    category        TEXT DEFAULT '',
+                    brain_action    TEXT DEFAULT '',
+                    brain_reasoning TEXT DEFAULT '',
+                    raw_data        TEXT DEFAULT '{}',
+                    source          TEXT DEFAULT 'periodic',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC)")
+
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))
 
@@ -672,6 +834,12 @@ class Database:
         """Get current schema version"""
         row = self.fetch_one("SELECT version FROM schema_version LIMIT 1")
         return row[0] if row else 0
+
+    def initialize(self):
+        """Explicit initialisation hook (schema already applied in __init__)."""
+        # _ensure_database() is called from __init__; this is a no-op alias
+        # kept for callers that want an explicit init step (e.g. tests).
+        pass
 
     def close(self):
         """Close database connection if open"""

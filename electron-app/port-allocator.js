@@ -16,7 +16,9 @@ const execAsync = promisify(exec);
 
 class PortAllocator {
   constructor() {
-    this.vncBasePort = 6081;
+    // VNC ports start at 6200 to avoid Windows/Hyper-V TCP exclusion range
+    // (Hyper-V often reserves 5940-6139 on Windows 11 + Docker Desktop)
+    this.vncBasePort = 6200;
     this.appBasePort = 3001;
     this.maxPorts = 20;
 

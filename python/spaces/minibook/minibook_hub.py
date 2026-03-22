@@ -16,16 +16,15 @@ SpaceMinibookResponders execute tools. Minibook stores the task/result pairs.
 
 import json
 import logging
-import sys
 import time
 import uuid
 from typing import Optional, Any, Callable, Dict
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [MinibookHub] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[MinibookHub] %s", msg)
 
 
 class MinibookHub:
@@ -150,6 +149,7 @@ class MinibookHub:
                     content=full_content,
                     agent_name="vibemind_orchestrator",
                     post_type="task",
+                    title=f"[{event_type}] {intent_text[:60]}",
                 )
                 post_id = post_data.get("id", "")
             except Exception as e:
@@ -222,7 +222,7 @@ class MinibookHub:
                     return None
 
         except Exception as e:
-            logger.error(f"MinibookHub.dispatch error: {e}")
+            _logger.error(f"MinibookHub.dispatch error: {e}")
             _debug_print(f"Dispatch error: {e}")
             return None
 

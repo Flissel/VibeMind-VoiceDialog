@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field
 
+logger = logging.getLogger(__name__)
+
 # AutoGen 0.4 imports
 try:
     from autogen_agentchat.agents import AssistantAgent
@@ -45,6 +47,15 @@ try:
 except ImportError:
     HAS_AIOHTTP = False
     print("WARNING: aiohttp not installed. Install with: pip install aiohttp")
+
+# Enable ANSI escape codes on Windows CMD (Virtual Terminal Processing)
+if sys.platform == "win32":
+    try:
+        import ctypes
+        _kernel32 = ctypes.windll.kernel32
+        _kernel32.SetConsoleMode(_kernel32.GetStdHandle(-11), 7)
+    except Exception:
+        pass  # Fallback: colors won't render but nothing breaks
 
 
 # ========================================================================
@@ -162,9 +173,10 @@ class CDPClient:
     
     async def send(self, method: str, params: Dict = None) -> Dict:
         """Send CDP command and wait for response."""
+        logger.debug("CDPClient.send: method=%s", method)
         if not self.ws:
             raise RuntimeError("Not connected")
-        
+
         self.message_id += 1
         msg_id = self.message_id
         
@@ -258,6 +270,92 @@ class CDPClient:
 
 
 # ========================================================================
+# SPACE LOG COLORING (mirrors python/swarm/logging/space_logger.py)
+# ========================================================================
+
+SPACE_ANSI = {
+    "bubbles": "\033[96m", "ideas": "\033[92m", "coding": "\033[93m",
+    "desktop": "\033[95m", "rowboat": "\033[94m", "research": "\033[91m",
+    "minibook": "\033[97m", "schedule": "\033[36m", "voice": "\033[33m",
+    "orchestrator": "\033[35m", "brain": "\033[32m", "system": "\033[2m",
+}
+SPACE_TAGS = {
+    "bubbles": "[BUBBLES]", "ideas": "[IDEAS]", "coding": "[CODING]",
+    "desktop": "[DESKTOP]", "rowboat": "[ROWBOAT]", "research": "[RESEARCH]",
+    "minibook": "[MINIBOOK]", "schedule": "[SCHEDULE]", "voice": "[VOICE]",
+    "orchestrator": "[ORCH]", "brain": "[BRAIN]", "system": "[SYSTEM]",
+}
+LEVEL_ANSI = {
+    "DEBUG": "\033[2m", "INFO": "", "WARNING": "\033[93m",
+    "ERROR": "\033[91m", "CRITICAL": "\033[91;1m",
+}
+RST = "\033[0m"
+DIM = "\033[2m"
+
+# Node.js service prefix → space mapping (for non-Python logs)
+NODE_SERVICE_SPACE = {
+    "[GraphBuilder]": "rowboat", "[Rowboat]": "rowboat",
+    "[Main]": "system", "[DockerManager]": "system",
+    "[PortAllocator]": "system", "[Brain-Server]": "brain",
+    "[BrainManager]": "brain", "[Fireflies]": "system",
+    "[Granola]": "system", "[PreBuilt]": "system",
+    "[AgentRunner]": "system", "[DEBUG]": "system",
+    "[Python stderr]": "system", "[Python stdout]": "system",
+    "[Python ERROR]": "system", "[Python]": "system",
+    "[eyeTerm]": "desktop", "[Coding Engine]": "coding",
+    "[Sensory]": "brain", "[AgentLoop]": "brain",
+    "[Production": "brain",
+    "Google OAuth": "system", "Sleeping for": "system",
+}
+
+# Suppress high-frequency noise lines
+SUPPRESS_PATTERNS = (
+    "Forwarded to renderer:",
+    '"objectId"',
+    '"className": "Object"',
+)
+
+
+def _print_space_log(log: Dict):
+    """Print a SpaceLogger JSON log with ANSI colors (whole line in space color)."""
+    s = log.get("s", "system")
+    tag = SPACE_TAGS.get(s, "[SYSTEM]").ljust(10)
+    color = SPACE_ANSI.get(s, SPACE_ANSI["system"])
+    level_pad = (log.get("l", "") or "").ljust(5)
+    ts = log.get("t", "")
+    msg = log.get("m", "")
+    print(f"{color}{tag} {level_pad} [{ts}] {msg}{RST}")
+
+
+def _print_ipc_log(obj: Dict):
+    """Print an IPC trace log in dim style."""
+    d = obj.get("dir", "\u2192")
+    label = f"Python{d}Electron" if d == "\u2192" else f"Electron{d}Python"
+    t = obj.get("type", "?")
+    preview = obj.get("preview", "")
+    # Truncate long previews
+    if len(preview) > 120:
+        preview = preview[:120] + "..."
+    print(f"{DIM}[IPC]      {label} {t}: {preview}{RST}")
+
+
+def _should_suppress(message: str) -> bool:
+    """Check if a message should be suppressed (noise reduction)."""
+    for pattern in SUPPRESS_PATTERNS:
+        if pattern in message:
+            return True
+    return False
+
+
+def _detect_node_service_space(message: str) -> Optional[str]:
+    """Detect space from Node.js service prefix in message."""
+    for prefix, space in NODE_SERVICE_SPACE.items():
+        if prefix in message:
+            return space
+    return None
+
+
+# ========================================================================
 # DEBUG LOGGER
 # ========================================================================
 
@@ -283,8 +381,13 @@ class DebugLogger:
         self.log_handle = open(self.log_file, "w", encoding="utf-8")
         print(f"Debug logs: {self.log_file}")
     
-    def log(self, category: str, level: str, message: str, data: Dict = None):
-        """Write a log entry."""
+    def log(self, category: str, level: str, message: str, data: Dict = None, silent: bool = False):
+        """Write a log entry.
+
+        Args:
+            silent: If True, only write to file without printing to console.
+                    Used when caller already printed a colored line.
+        """
         entry = {
             "timestamp": datetime.now().isoformat(),
             "category": category,
@@ -292,23 +395,24 @@ class DebugLogger:
             "message": message,
             "data": data or {}
         }
-        
+
         # Write to file
         if self.log_handle:
             self.log_handle.write(json.dumps(entry) + "\n")
             self.log_handle.flush()
-        
-        # Also print to console
-        level_colors = {
-            "error": "\033[91m",
-            "warning": "\033[93m",
-            "info": "\033[94m",
-            "debug": "\033[90m"
-        }
-        reset = "\033[0m"
-        color = level_colors.get(level, "")
-        print(f"{color}[{category}] {level.upper()}: {message}{reset}")
-        
+
+        # Print to console (unless caller already did)
+        if not silent:
+            level_colors = {
+                "error": "\033[91m",
+                "warning": "\033[93m",
+                "info": "\033[94m",
+                "debug": "\033[90m"
+            }
+            reset = "\033[0m"
+            color = level_colors.get(level, "")
+            print(f"{color}[{category}] {level.upper()}: {message}{reset}", flush=True)
+
         self.entry_count += 1
         
         # Check rotation
@@ -427,7 +531,7 @@ When errors occur, analyze them and suggest fixes."""
         """Handle console API calls."""
         msg_type = params.get("type", "log")
         args = params.get("args", [])
-        
+
         # Extract message text
         messages = []
         for arg in args:
@@ -435,68 +539,72 @@ When errors occur, analyze them and suggest fixes."""
                 messages.append(arg.get("value", ""))
             else:
                 messages.append(str(arg.get("value", arg)))
-        
+
         message = " ".join(messages)
-        
-        # Determine level from console type
-        level_map = {
-            "log": "info",
-            "info": "info",
-            "warning": "warning",
-            "warn": "warning",
-            "error": "error",
-            "debug": "debug"
-        }
-        level = level_map.get(msg_type, "info")
-        
-        # Parse IPC messages for better categorization
-        category = "console"
-        parsed_data = {"type": msg_type}
-        
-        # Check if message is from Python IPC (JSON format)
-        if "[Python IPC]:" in message:
+
+        # ── Suppress noise ──
+        if _should_suppress(message):
+            return
+
+        # ── Structured JSON logs (forwarded by main.js via console.log) ──
+        if len(messages) >= 1:
             try:
-                json_str = message.split("[Python IPC]:", 1)[1].strip()
-                ipc_data = json.loads(json_str)
-                
-                # Determine category and level from IPC message type
-                ipc_type = ipc_data.get("type", "unknown")
-                category = f"ipc:{ipc_type}"
-                parsed_data = ipc_data
-                
-                # Set error level for error types
-                if "error" in ipc_type.lower() or ipc_data.get("error"):
-                    level = "error"
-                    message = ipc_data.get("error", message)
-                elif "warning" in ipc_type.lower():
-                    level = "warning"
-                else:
-                    message = f"{ipc_type}: {json.dumps(ipc_data)}"
-                    
-            except (json.JSONDecodeError, IndexError):
+                obj = json.loads(messages[0])
+
+                # SpaceLogger JSON (__space_log)
+                if obj.get("__space_log"):
+                    _print_space_log(obj)
+                    self.stats["console_logs"] += 1
+                    self.logger.log(
+                        f"space:{obj.get('s', 'system')}",
+                        (obj.get("l", "INFO") or "INFO").lower(),
+                        obj.get("m", ""),
+                        obj,
+                        silent=True,
+                    )
+                    if obj.get("l") in ("ERROR", "CRITICAL"):
+                        self.stats["errors"] += 1
+                    elif obj.get("l") == "WARNING":
+                        self.stats["warnings"] += 1
+                    return
+
+                # IPC trace (__ipc_log)
+                if obj.get("__ipc_log"):
+                    _print_ipc_log(obj)
+                    self.stats["console_logs"] += 1
+                    self.logger.log("ipc", "debug", f"{obj.get('type','?')}", obj, silent=True)
+                    return
+
+            except (json.JSONDecodeError, TypeError, ValueError):
                 pass
-        
-        # Check for Python ERROR prefix
-        elif "[Python ERROR]:" in message:
-            level = "error"
-            category = "ipc:error"
-            message = message.split("[Python ERROR]:", 1)[1].strip()
-        
-        # Check for Python stderr
-        elif "[Python stderr]:" in message:
-            category = "stderr"
-            # Check if it's a warning or error
-            if "warning" in message.lower():
-                level = "warning"
-            elif "error" in message.lower() or "traceback" in message.lower():
-                level = "error"
-        
-        self.logger.log(category, level, message, parsed_data)
+
+        # ── Node.js service logs (GraphBuilder, Main, BrainManager etc.) ──
+        node_space = _detect_node_service_space(message)
+        if node_space:
+            color = SPACE_ANSI.get(node_space, SPACE_ANSI["system"])
+            tag = SPACE_TAGS.get(node_space, "[SYSTEM]").ljust(10)
+            level_str = "ERROR" if msg_type in ("error",) else "INFO"
+            level_color = LEVEL_ANSI.get(level_str, "")
+            print(f"{color}{tag} {level_str.ljust(5)} {message}{RST}")
+            self.stats["console_logs"] += 1
+            self.logger.log(f"node:{node_space}", level_str.lower(), message, silent=True)
+            if msg_type == "error":
+                self.stats["errors"] += 1
+            return
+
+        # ── Fallback: everything else gets [SYSTEM] space coloring ──
+        level_str = "ERROR" if msg_type in ("error",) else \
+                    "WARNING" if msg_type in ("warning", "warn") else "INFO"
+        color = SPACE_ANSI["system"]
+        tag = SPACE_TAGS["system"].ljust(10)
+        level_color = LEVEL_ANSI.get(level_str, "")
+        print(f"{color}{tag} {level_color}{level_str.ljust(5)}{RST} {color}{message}{RST}")
         self.stats["console_logs"] += 1
-        
-        if level == "error":
+        self.logger.log("console", level_str.lower(), message, silent=True)
+
+        if level_str == "ERROR":
             self.stats["errors"] += 1
-        elif level == "warning":
+        elif level_str == "WARNING":
             self.stats["warnings"] += 1
     
     async def _on_exception_thrown(self, params: Dict):
@@ -550,6 +658,7 @@ When errors occur, analyze them and suggest fixes."""
     
     async def start(self):
         """Start the debug agent."""
+        logger.debug("ElectronDebugAgent.start called")
         print("\n" + "="*60)
         print("Electron Debug Agent")
         print("="*60)
@@ -584,6 +693,7 @@ When errors occur, analyze them and suggest fixes."""
     
     async def stop(self):
         """Stop the debug agent."""
+        logger.debug("ElectronDebugAgent.stop called")
         self.running = False
         await self.cdp.disconnect()
         self.logger.close()

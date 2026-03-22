@@ -62,6 +62,7 @@ The `__init__.py` provides a lazy-import registry that avoids circular dependenc
 - `get_desktop_agent()` -- Singleton from `spaces/desktop/agents/desktop_agent.py`
 - `get_coding_agent()` -- Singleton from `spaces/coding/agents/coding_agent.py`
 - `get_roarboot_agent()` -- Singleton from `spaces/rowboat/agents/roarboot_agent.py`
+- `get_n8n_agent()` -- Singleton from `spaces/n8n/agents/n8n_agent.py`
 
 Class names are also available via `__getattr__` for backward compatibility.
 
@@ -80,7 +81,7 @@ Provides parallel execution via Redis Consumer Groups:
 
 Agent implementations have migrated from `swarm/backend_agents/` to `spaces/*/agents/`. The base class and registry remain in `swarm/backend_agents/` while concrete agents live in their respective spaces.
 
-## All 8 Backend Agents
+## All 10 Backend Agents
 
 | Agent | Stream | File Path | Tool Count |
 |-------|--------|-----------|------------|
@@ -89,10 +90,11 @@ Agent implementations have migrated from `swarm/backend_agents/` to `spaces/*/ag
 | RachelAgent | (voice agent) | `python/spaces/ideas/agents/rachel_agent.py` | -- |
 | CodingAgent | `events:tasks:coding` | `python/spaces/coding/agents/coding_agent.py` | 8 tools |
 | DesktopAgent | `events:tasks:desktop` | `python/spaces/desktop/agents/desktop_agent.py` | 12 tools |
-| RoarbootAgent | `events:tasks:rowboat` | `python/spaces/rowboat/agents/roarboot_agent.py` | 13 tools |
+| RoarbootBackendAgent | `events:tasks:roarboot` | `python/spaces/rowboat/agents/roarboot_agent.py` | 13 tools |
 | ZeroClawResearchAgent | (research) | `python/spaces/research/agents/zeroclaw_research_agent.py` | -- |
 | MinibookAgent | (minibook) | `python/spaces/minibook/agents/minibook_agent.py` | -- |
 | ScheduleAgent | (schedule) | `python/spaces/schedule/agents/schedule_agent.py` | -- |
+| N8nBackendAgent | `events:tasks:n8n` | `python/spaces/n8n/agents/n8n_agent.py` | 8 tools |
 
 Additionally, some spaces have swarm agent variants for multi-agent coordination:
 - `python/spaces/ideas/agents/ideas_swarm_agent.py`

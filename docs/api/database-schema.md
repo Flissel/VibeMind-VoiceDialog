@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-SQLite database at `python/vibemind.db`. Schema version: 14.
+SQLite database at `python/vibemind.db`. Schema version: 14. 21 tables.
 
 ## ER Diagram
 
@@ -42,6 +42,7 @@ erDiagram
 | content_json | TEXT | Yes | Structured content |
 | embedding_vector | BLOB | Yes | Semantic embedding |
 | embedding_hash | TEXT | Yes | Cache key |
+| promoted_to_project_id | TEXT | FK→projects.id | Promoted project reference |
 
 ### projects
 
@@ -59,6 +60,8 @@ erDiagram
 | job_id | TEXT | Coding engine job ID |
 | requirements_json | TEXT | JSON requirements spec |
 | convergence_progress | REAL | Generation progress (0-100) |
+| created_at | TEXT | ISO timestamp |
+| metadata | TEXT | JSON object |
 
 ### canvas_nodes
 
@@ -73,6 +76,9 @@ erDiagram
 | linked_project_id | TEXT FK→projects.id | Linked project |
 | format_schema | TEXT | JSON format definition |
 | content_json | TEXT | Structured content |
+| summary | TEXT | Auto-generated summary |
+| metadata | TEXT | JSON object |
+| last_formatted | TEXT | ISO timestamp of last format |
 
 ### canvas_edges
 
@@ -92,6 +98,7 @@ erDiagram
 | ended_at | TEXT | ISO timestamp |
 | summary | TEXT | Session summary |
 | agent_id | TEXT | Voice agent name |
+| metadata | TEXT | JSON metadata |
 
 ### conversation_history
 
@@ -115,6 +122,12 @@ erDiagram
 | current_stage | TEXT | `mining` / `requirements` / `validation` / `knowledge_graph` / `techstack` / `complete` |
 | score | REAL | Evaluation score |
 | requirement_results | TEXT | JSON results |
+| passed_count | INTEGER | Passed requirement count |
+| failed_count | INTEGER | Failed requirement count |
+| total_count | INTEGER | Total requirements |
+| created_at | TEXT | ISO timestamp |
+| completed_at | TEXT | ISO timestamp |
+| metadata | TEXT | JSON object |
 
 ### exploration_sessions
 
@@ -220,3 +233,152 @@ Generated diagram storage for visualization exports.
 | created_at | TEXT | ISO timestamp |
 | updated_at | TEXT | ISO timestamp |
 | metadata | TEXT | JSON object |
+
+### schema_version
+
+Schema migration tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| version | INTEGER PK | Current schema version number |
+
+### user_preferences
+
+User interaction preferences learned over time.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| user_id | TEXT | User identifier |
+| preference_key | TEXT | Preference key |
+| preference_value | TEXT | Preference value |
+| confidence | REAL | Confidence level (0.0-1.0) |
+| learned_at | TEXT | ISO timestamp |
+
+### intent_analysis_log
+
+Intent classification audit trail. Created in `python/swarm/analysis/intent_analysis_team.py`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| session_id | TEXT | Conversation session |
+| user_input | TEXT | Original user utterance |
+| selected_intent | TEXT | Final classified event type |
+| hypotheses | TEXT | JSON array of all candidate intents |
+| was_correct | INTEGER | Feedback flag (1=correct, 0=wrong) |
+| created_at | TEXT | ISO timestamp |
+
+### intent_corrections
+
+User corrections to intent classification for training improvement.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| original_log_id | TEXT | Reference to intent_analysis_log |
+| session_id | TEXT | Conversation session |
+| original_input | TEXT | Original user utterance |
+| original_intent | TEXT | Originally classified event type |
+| original_payload | TEXT | JSON original payload |
+| corrected_intent | TEXT | Corrected event type |
+| corrected_payload | TEXT | JSON corrected payload |
+| user_explanation | TEXT | User's explanation of correction |
+| created_at | TEXT | ISO timestamp |
+| used_for_training | INTEGER | 0=not used, 1=used for retraining |
+
+### synthetic_utterances
+
+Synthetic test utterances for batch evaluation of the intent classifier.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| text | TEXT | Test utterance text |
+| expected_intent | TEXT | Target event type |
+| expected_payload | TEXT | JSON expected payload |
+| category | TEXT | Utterance category |
+| difficulty | TEXT | `easy` / `medium` / `hard` |
+| tags | TEXT | JSON array |
+| source | TEXT | `manual` / `generated` / `user_feedback` |
+| created_at | TEXT | ISO timestamp |
+
+### evaluation_runs
+
+Batch evaluation run tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| name | TEXT | Run name |
+| started_at | TEXT | ISO timestamp |
+| completed_at | TEXT | ISO timestamp |
+| total_tests | INTEGER | Number of test cases |
+| correct | INTEGER | Correct count |
+| accuracy | REAL | Accuracy percentage |
+| config | TEXT | JSON: classifier model, flags |
+| report | TEXT | JSON: full evaluation report |
+
+### evaluation_results
+
+Individual test results within an evaluation run.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| run_id | TEXT FK→evaluation_runs.id | Parent run |
+| utterance_id | TEXT | Reference to synthetic_utterances |
+| input_text | TEXT | Test input text |
+| expected_intent | TEXT | Expected event type |
+| expected_payload | TEXT | JSON expected payload |
+| predicted_intent | TEXT | Predicted event type |
+| predicted_payload | TEXT | JSON predicted payload |
+| confidence | REAL | Classification confidence |
+| hypotheses | TEXT | JSON array of all candidates |
+| is_correct | INTEGER | 1=correct, 0=wrong |
+| intent_match | INTEGER | Intent matched flag |
+| payload_match | INTEGER | Payload matched flag |
+| latency_ms | REAL | Classification latency |
+| created_at | TEXT | ISO timestamp |
+
+### persistent_tasks
+
+Long-running task state persistence across conversation sessions.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| user_id | TEXT | User identifier (default: `default`) |
+| session_id | TEXT | Originating session |
+| title | TEXT | Task name |
+| description | TEXT | Task description |
+| status | TEXT | `pending` / `in_progress` / `completed` / `blocked` / `cancelled` |
+| created_at | TEXT | ISO timestamp |
+| started_at | TEXT | ISO timestamp |
+| completed_at | TEXT | ISO timestamp |
+| intent_type | TEXT | Original event_type |
+| payload | TEXT | JSON original parameters |
+| job_id | TEXT | Last job_id for this task |
+| progress | INTEGER | Progress percentage (0-100) |
+| stage | TEXT | Current execution stage |
+| result | TEXT | JSON result |
+| error | TEXT | Error message |
+| priority | INTEGER | 1=low, 2=medium, 3=high |
+| tags | TEXT | JSON array |
+| updated_at | TEXT | ISO timestamp |
+
+### conversion_ai_personalities
+
+AI personality profiles for voice/text style customization.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PK | UUID |
+| user_id | TEXT UNIQUE | User identifier |
+| name | TEXT | Personality name |
+| style | TEXT | `formal` / `casual` / `technical` |
+| verbosity | TEXT | `concise` / `detailed` |
+| traits | TEXT | JSON array of personality traits |
+| language | TEXT | Language code (default: `de`) |
+| created_at | TEXT | ISO timestamp |
+| updated_at | TEXT | ISO timestamp |

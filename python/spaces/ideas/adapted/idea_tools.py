@@ -6,8 +6,11 @@ These can be used directly as FunctionTool in AssistantAgent.
 """
 
 from typing import Optional, List
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Add python/ root to path (4 levels up from spaces/ideas/adapted/)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -39,7 +42,7 @@ def create_idea(title: str = None, content: str = "", type: str = "note") -> str
         Confirmation message
     """
     if not title:
-        return "Fehler: Kein Titel angegeben. Bitte sag mir wie die Idee heissen soll."
+        return "Error: No title provided. Please tell me what the idea should be called."
     from spaces.ideas.tools.idea_tools import create_idea as _create_idea
     return _create_idea({"title": title, "content": content, "type": type})
 
@@ -56,7 +59,7 @@ def add_image(url: str = None, title: str = "Image") -> str:
         Confirmation message
     """
     if not url:
-        return "Fehler: Keine URL angegeben. Bitte sag mir welches Bild hinzugefuegt werden soll."
+        return "Error: No URL provided. Please tell me which image to add."
     from spaces.ideas.tools.idea_tools import add_image as _add_image
     return _add_image({"url": url, "title": title})
 
@@ -72,7 +75,7 @@ def find_idea(query: str = None) -> str:
         Matching notes or 'no matches'
     """
     if not query:
-        return "Fehler: Kein Suchbegriff angegeben. Bitte sag mir wonach du suchen moechtest."
+        return "Error: No search term provided. Please tell me what to search for."
     from spaces.ideas.tools.idea_tools import find_idea as _find_idea
     return _find_idea({"query": query})
 
@@ -90,7 +93,7 @@ def update_idea(idea_name: str = None, new_content: str = "", new_title: str = "
         Confirmation message
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee aktualisiert werden soll."
+        return "Error: No idea name. Please tell me which idea to update."
     from spaces.ideas.tools.idea_tools import update_idea as _update_idea
     return _update_idea({
         "idea_name": idea_name,
@@ -111,7 +114,7 @@ def connect_ideas(idea1: str = None, idea2: str = None) -> str:
         Confirmation message
     """
     if not idea1 or not idea2:
-        return "Fehler: Zwei Ideen-Namen benoetigt. Bitte sag mir welche Ideen verbunden werden sollen."
+        return "Error: Two idea names needed. Please tell me which ideas to connect."
     from spaces.ideas.tools.idea_tools import connect_ideas as _connect_ideas
     return _connect_ideas({"idea1": idea1, "idea2": idea2})
 
@@ -130,7 +133,7 @@ def disconnect_ideas(idea1: str = None, idea2: str = None) -> str:
         Confirmation message
     """
     if not idea1 or not idea2:
-        return "Fehler: Zwei Ideen-Namen benoetigt. Bitte sag mir welche Verbindung entfernt werden soll."
+        return "Error: Two idea names needed. Please tell me which connection to remove."
     from spaces.ideas.tools.idea_tools import disconnect_ideas as _disconnect_ideas
     return _disconnect_ideas({"idea1": idea1, "idea2": idea2})
 
@@ -146,7 +149,7 @@ def delete_idea(idea_name: str = None) -> str:
         Confirmation message
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee geloescht werden soll."
+        return "Error: No idea name. Please tell me which idea to delete."
     from spaces.ideas.tools.idea_tools import delete_idea as _delete_idea
     return _delete_idea({"idea_name": idea_name})
 
@@ -202,7 +205,7 @@ def format_idea_as_table(
         Confirmation with table preview
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee formatiert werden soll."
+        return "Error: No idea name. Please tell me which idea to format."
     from tools.structured_formatting_tools import format_idea_as_table as _format_idea_as_table
     return _format_idea_as_table(
         idea_name=idea_name,
@@ -327,9 +330,9 @@ def move_idea(idea_name: str = None, target_space: str = None) -> str:
         Confirmation or error message
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee verschoben werden soll."
+        return "Error: No idea name. Please tell me which idea to move."
     if not target_space:
-        return "Fehler: Kein Ziel-Space angegeben. Bitte sag mir wohin die Idee verschoben werden soll."
+        return "Error: No target Space provided. Please tell me where to move the idea."
     from spaces.ideas.tools.idea_tools import move_idea as _move_idea
     return _move_idea({"idea_name": idea_name, "target_space": target_space})
 
@@ -348,9 +351,9 @@ def connect_ideas_multi(source: str = None, targets: list = None) -> str:
         Confirmation message listing successful connections
     """
     if not source:
-        return "Fehler: Keine Quell-Idee angegeben. Bitte sag mir welche Idee verbunden werden soll."
+        return "Error: No source idea provided. Please tell me which idea to connect."
     if not targets:
-        return "Fehler: Keine Ziel-Ideen angegeben. Bitte sag mir mit welchen Ideen verbunden werden soll."
+        return "Error: No target ideas provided. Please tell me which ideas to connect with."
     from spaces.ideas.tools.idea_tools import connect_ideas_multi as _connect_ideas_multi
     return _connect_ideas_multi({"source": source, "targets": targets})
 
@@ -369,7 +372,7 @@ def link_idea_to_root(idea_name: str = None, bubble_id: str = None) -> str:
         Confirmation message
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee mit Root verbunden werden soll."
+        return "Error: No idea name. Please tell me which idea to link with Root."
     from spaces.ideas.tools.idea_tools import link_idea_to_root as _link_idea_to_root
     params = {"idea_name": idea_name}
     if bubble_id:
@@ -390,7 +393,7 @@ def classify_idea(idea_name: str = None) -> str:
         Classification result
     """
     if not idea_name:
-        return "Fehler: Kein Ideen-Name angegeben. Bitte sag mir welche Idee klassifiziert werden soll."
+        return "Error: No idea name. Please tell me which idea to classify."
     from spaces.ideas.tools.idea_tools import classify_idea as _classify_idea
     return _classify_idea({"idea_name": idea_name})
 

@@ -1,35 +1,71 @@
 """
 VibeMind → Rowboat Publishing Module
 
-Publishes space metadata to Rowboat's knowledge graph (~/.rowboat/).
-Each space has a publisher that writes JSON manifests and
-Rowboat-native markdown notes.
+Publishes space metadata to Rowboat's knowledge base.
+
+Two backends:
+1. MongoDB (preferred) — writes directly into Rowboat's DB so the
+   rag-worker automatically chunks, embeds, and indexes content.
+2. Filesystem (fallback) — writes to ~/.rowboat/ for Graph Builder.
+
+The MongoDB publisher includes a schema semaphore that validates
+compatibility on every write. If the schema changes, it disables
+itself and falls back to filesystem publishing automatically.
 
 Usage:
     from publishing import get_ideas_publisher
     get_ideas_publisher().publish_bubble(bubble_id="abc123")
 
 All publishing is fire-and-forget. Import errors or missing
-~/.rowboat/ gracefully degrade to no-ops.
+dependencies gracefully degrade to no-ops.
 """
 
-from .config import is_publishing_enabled, is_space_enabled
+import logging
+from .config import is_publishing_enabled, is_space_enabled, is_mongo_enabled
+
+logger = logging.getLogger(__name__)
 
 # Singleton instances
 _ideas_publisher = None
 _swe_design_publisher = None
 _arch_team_publisher = None
 _coding_publisher = None
+_doc_publisher = None
+
+
+def _try_create_mongo_publisher():
+    """Try to create a MongoDB publisher. Returns None on failure."""
+    if not is_mongo_enabled():
+        return None
+    try:
+        from .rowboat_mongo_publisher import RowboatMongoPublisher
+        pub = RowboatMongoPublisher()
+        if pub.is_available:
+            logger.info("[Publishing] Using MongoDB publisher (direct DB)")
+            return pub
+        logger.warning("[Publishing] MongoDB schema check failed, using filesystem")
+        return None
+    except Exception as e:
+        logger.warning(f"[Publishing] MongoDB publisher unavailable: {e}")
+        return None
 
 
 def get_ideas_publisher():
-    """Get the Ideas → Rowboat publisher (singleton)."""
+    """Get the Ideas → Rowboat publisher (singleton).
+
+    Priority: MongoDB → Filesystem → NoOp
+    """
     global _ideas_publisher
     if _ideas_publisher is None:
         if not is_space_enabled("ideas"):
             return _NoOpPublisher()
-        from .ideas_publisher import IdeasPublisher
-        _ideas_publisher = IdeasPublisher()
+        # Try MongoDB first
+        mongo = _try_create_mongo_publisher()
+        if mongo:
+            _ideas_publisher = mongo
+        else:
+            from .ideas_publisher import IdeasPublisher
+            _ideas_publisher = IdeasPublisher()
     return _ideas_publisher
 
 
@@ -64,6 +100,20 @@ def get_coding_publisher():
         from .coding_publisher import CodingPublisher
         _coding_publisher = CodingPublisher()
     return _coding_publisher
+
+
+def get_doc_publisher():
+    """Get the Doc → filesystem publisher (singleton).
+
+    Writes project documentation as Markdown files to ~/.rowboat/docs/.
+    """
+    global _doc_publisher
+    if _doc_publisher is None:
+        if not is_publishing_enabled():
+            return _NoOpPublisher()
+        from .doc_publisher import DocPublisher
+        _doc_publisher = DocPublisher()
+    return _doc_publisher
 
 
 class _NoOpPublisher:

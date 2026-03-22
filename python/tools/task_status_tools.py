@@ -58,9 +58,10 @@ def check_task_status(params: Dict[str, Any]) -> str:
     Returns:
         Status message for voice output
     """
+    logger.debug("check_task_status called with task_id=%s", params.get("task_id"))
     task_id = params.get("task_id")
     if not task_id:
-        return "Kein Task-ID angegeben. Sag mir welchen Task ich pruefen soll."
+        return "No task ID provided. Tell me which task to check."
 
     r = _get_redis()
     if r is None:
@@ -70,34 +71,34 @@ def check_task_status(params: Dict[str, Any]) -> str:
             rt_state = get_real_time_state()
             for task in rt_state.state.active_tasks or []:
                 if task["id"] == task_id or task["id"].startswith(task_id):
-                    return f"Task {task['intent']} laeuft noch..."
+                    return f"Task {task['intent']} is still running..."
             for comp in rt_state.state.recent_completions or []:
                 if comp["id"] == task_id or comp["id"].startswith(task_id):
-                    status = "erledigt" if comp.get("success", True) else "fehlgeschlagen"
-                    return f"Task {comp['intent']} ist {status}: {comp.get('result', '')[:100]}"
-            return f"Task {task_id[:8]}... nicht gefunden."
+                    status = "completed" if comp.get("success", True) else "failed"
+                    return f"Task {comp['intent']} is {status}: {comp.get('result', '')[:100]}"
+            return f"Task {task_id[:8]}... not found."
         except Exception as e:
             logger.debug(f"[TaskStatus] RealTimeState fallback failed: {e}")
-            return "Redis nicht verfuegbar. Kann Task-Status nicht pruefen."
+            return "Redis not available. Cannot check task status."
 
     try:
         # Check job hash
         job_data = r.hgetall(f"job:{task_id}")
         if job_data:
             status = job_data.get("status", "unknown")
-            intent = job_data.get("intent_type", job_data.get("event_type", "unbekannt"))
+            intent = job_data.get("intent_type", job_data.get("event_type", "unknown"))
 
             if status == "completed":
                 result = job_data.get("result", "")[:100]
-                return f"Task {intent} abgeschlossen" + (f": {result}" if result else ".")
+                return f"Task {intent} completed" + (f": {result}" if result else ".")
             elif status == "running":
                 started = job_data.get("started_at", "")
-                return f"Task {intent} laeuft noch..." + (f" (gestartet: {started})" if started else "")
+                return f"Task {intent} is still running..." + (f" (started: {started})" if started else "")
             elif status == "failed":
-                error = job_data.get("error", "unbekannt")[:50]
-                return f"Task {intent} fehlgeschlagen: {error}"
+                error = job_data.get("error", "unknown")[:50]
+                return f"Task {intent} failed: {error}"
             elif status == "pending":
-                return f"Task {intent} wartet auf Ausfuehrung."
+                return f"Task {intent} is pending execution."
             else:
                 return f"Task {intent} hat Status: {status}"
 
@@ -106,14 +107,14 @@ def check_task_status(params: Dict[str, Any]) -> str:
             job_data = r.hgetall(key)
             if job_data:
                 status = job_data.get("status", "unknown")
-                intent = job_data.get("intent_type", "unbekannt")
-                return f"Task {intent} gefunden mit Status: {status}"
+                intent = job_data.get("intent_type", "unknown")
+                return f"Task {intent} found with status: {status}"
 
-        return f"Task {task_id[:8]}... nicht gefunden."
+        return f"Task {task_id[:8]}... not found."
 
     except Exception as e:
         logger.error(f"[TaskStatus] check_task_status error: {e}")
-        return f"Fehler beim Pruefen des Tasks: {e}"
+        return f"Error checking task: {e}"
 
 
 def list_active_tasks(params: Dict[str, Any]) -> str:
@@ -129,6 +130,7 @@ def list_active_tasks(params: Dict[str, Any]) -> str:
     Returns:
         List of active tasks for voice output
     """
+    logger.debug("list_active_tasks called")
     # First check RealTimeState (always available)
     active_from_state = []
     try:
@@ -170,19 +172,19 @@ def list_active_tasks(params: Dict[str, Any]) -> str:
             seen_ids.add(task["id"])
 
     if not all_active:
-        return "Keine Tasks laufen gerade. Das System ist bereit."
+        return "No tasks running. System is ready."
 
     # Format for voice
     if len(all_active) == 1:
         task = all_active[0]
-        return f"Ein Task laeuft: {task['intent']}"
+        return f"One task running: {task['intent']}"
 
-    lines = [f"{len(all_active)} Tasks laufen:"]
+    lines = [f"{len(all_active)} tasks running:"]
     for i, task in enumerate(all_active[:5], 1):
         lines.append(f"{i}. {task['intent']}")
 
     if len(all_active) > 5:
-        lines.append(f"... und {len(all_active) - 5} weitere.")
+        lines.append(f"... and {len(all_active) - 5} more.")
 
     return " ".join(lines)
 
@@ -199,9 +201,10 @@ def get_queue_status(params: Dict[str, Any]) -> str:
     Returns:
         Queue statistics for voice output
     """
+    logger.debug("get_queue_status called")
     r = _get_redis()
     if r is None:
-        return "Redis nicht verfuegbar. Queue-Status kann nicht abgerufen werden."
+        return "Redis not available. Cannot retrieve queue status."
 
     streams = [
         ("events:tasks", "Allgemein"),
@@ -226,12 +229,12 @@ def get_queue_status(params: Dict[str, Any]) -> str:
             pass
 
     if total_pending == 0:
-        return "Alle Queues sind leer. Das System ist bereit fuer neue Aufgaben."
+        return "All queues empty. System ready for new tasks."
 
     if len(queue_stats) == 1:
-        return f"Eine wartende Aufgabe in Queue {queue_stats[0]}."
+        return f"One pending task in queue {queue_stats[0]}."
 
-    return f"{total_pending} wartende Aufgaben. {', '.join(queue_stats)}."
+    return f"{total_pending} pending tasks. {', '.join(queue_stats)}."
 
 
 def get_recent_completions(params: Dict[str, Any]) -> str:
@@ -246,20 +249,21 @@ def get_recent_completions(params: Dict[str, Any]) -> str:
     Returns:
         Recent completion summary for voice output
     """
+    logger.debug("get_recent_completions called")
     try:
         from swarm.context.real_time_state import get_real_time_state
         rt_state = get_real_time_state()
 
         completions = rt_state.state.recent_completions or []
         if not completions:
-            return "Keine kuerzlich abgeschlossenen Tasks."
+            return "No recently completed tasks."
 
         if len(completions) == 1:
             comp = completions[0]
-            status = "erledigt" if comp.get("success", True) else "fehlgeschlagen"
-            return f"Letzter Task {comp['intent']} ist {status}."
+            status = "completed" if comp.get("success", True) else "failed"
+            return f"Last task {comp['intent']} is {status}."
 
-        lines = [f"{len(completions)} Tasks kuerzlich abgeschlossen:"]
+        lines = [f"{len(completions)} tasks recently completed:"]
         for comp in completions[-3:]:
             status = "✓" if comp.get("success", True) else "✗"
             lines.append(f"{status} {comp['intent']}")
@@ -268,7 +272,7 @@ def get_recent_completions(params: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.error(f"[TaskStatus] get_recent_completions error: {e}")
-        return "Konnte abgeschlossene Tasks nicht abrufen."
+        return "Could not retrieve completed tasks."
 
 
 # Tool definitions for registration

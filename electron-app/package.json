@@ -5,17 +5,24 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dashboard:build": "cd dashboard && npm run build",
+    "dashboard:dev": "cd dashboard && npm run dev",
+    "agentfarm:build": "cd agentfarm && npm run build",
+    "agentfarm:dev": "cd agentfarm && npm run dev",
     "build:rowboat": "bash scripts/build-rowboat.sh",
-    "build": "electron-builder",
+    "build": "npm run dashboard:build && npm run agentfarm:build && electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "test:e2e": "npx playwright test"
   },
   "author": "VibeMind",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^25.0.0",
-    "electron-builder": "^24.0.0"
+    "@playwright/test": "^1.48.0",
+    "electron": "^25.9.8",
+    "electron-builder": "^24.0.0",
+    "electron-playwright-helpers": "^2.1.0"
   },
   "build": {
     "appId": "com.vibemind.app",
@@ -56,11 +63,16 @@
     "files": [
       "**/*",
       "rowboat-services.cjs",
-      "rowboat-preload.js"
+      "rowboat-preload.js",
+      "dashboard/dist/**/*",
+      "clawport-manager.js",
+      "clawport-preload.js"
     ]
   },
   "dependencies": {
+    "@sentry/electron": "^7.10.0",
     "dotenv": "^17.3.1",
+    "node-fetch": "^3.3.2",
     "three": "^0.128.0"
   }
 }

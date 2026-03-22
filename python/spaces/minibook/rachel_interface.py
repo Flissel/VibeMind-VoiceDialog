@@ -12,16 +12,15 @@ This is a passive data aggregator, NOT an execution agent.
 
 import logging
 import time
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from collections import deque
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [RachelInterface] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[RachelInterface] %s", msg)
 
 
 # =============================================================================
@@ -236,6 +235,7 @@ class RachelInterface:
         Injected on every voice interaction so Rachel can answer
         status queries without tool calls.
         """
+        _logger.debug("get_prompt_context called: agents=%s, active_tasks=%s", len(self._agents), len(self._active_tasks))
         lines = ["=== VibeMind Agent Status ==="]
 
         # Agent status line
@@ -287,6 +287,7 @@ class RachelInterface:
 
         Returns a structured dict for voice output.
         """
+        _logger.debug("get_agent_report called: agent_count=%s", len(self._agents))
         agents_info = []
         online_count = 0
         for agent in self._agents.values():
@@ -322,6 +323,7 @@ class RachelInterface:
 
         Returns active and recent tasks.
         """
+        _logger.debug("get_task_dashboard called: active_tasks=%s, recent_results=%s", len(self._active_tasks), len(self._recent_results))
         active = []
         for task in self._active_tasks.values():
             active.append({

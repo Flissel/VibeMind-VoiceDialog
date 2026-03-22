@@ -27,7 +27,7 @@ class Idea:
     An idea captured from voice or text input.
 
     Ideas can be scored and promoted to projects.
-    Each idea can have its own ElevenLabs agent for voice interaction.
+    Each idea can have its own agent for voice interaction.
     """
     id: str
     title: str
@@ -46,7 +46,7 @@ class Idea:
     novelty: float = 0.0
     urgency: float = 0.0
 
-    # ElevenLabs agent ID for this bubble/idea (for multi-agent architecture)
+    # Agent ID for this bubble/idea (for multi-agent architecture)
     agent_id: Optional[str] = None
 
     # Parent bubble ID for nested bubble hierarchy
@@ -242,6 +242,7 @@ class CanvasNode:
     # Structured formatting fields (for LLM-generated structured content)
     format_schema: Optional[Dict[str, Any]] = None  # JSON Schema defining allowed structure
     content_json: Optional[Dict[str, Any]] = None   # Structured JSON content (alternative to plain text)
+    previous_content_json: Optional[Dict[str, Any]] = None  # Previous content_json for revert
     last_formatted: Optional[datetime] = None       # When content was last structured by LLM
 
     def to_dict(self) -> Dict[str, Any]:
@@ -264,6 +265,7 @@ class CanvasNode:
             # Structured formatting fields
             "format_schema": json.dumps(self.format_schema) if self.format_schema else None,
             "content_json": json.dumps(self.content_json) if self.content_json else None,
+            "previous_content_json": json.dumps(self.previous_content_json) if self.previous_content_json else None,
             "last_formatted": self.last_formatted.isoformat() if self.last_formatted else None,
         }
 
@@ -275,6 +277,7 @@ class CanvasNode:
         # Parse structured formatting fields
         format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
         content_json = json.loads(data.get("content_json", "{}")) if isinstance(data.get("content_json"), str) and data.get("content_json") else None
+        previous_content_json = json.loads(data.get("previous_content_json", "{}")) if isinstance(data.get("previous_content_json"), str) and data.get("previous_content_json") else None
 
         last_formatted = data.get("last_formatted")
         if isinstance(last_formatted, str):
@@ -296,6 +299,7 @@ class CanvasNode:
             # Structured formatting fields
             format_schema=format_schema,
             content_json=content_json,
+            previous_content_json=previous_content_json,
             last_formatted=last_formatted,
         )
 
@@ -866,4 +870,132 @@ class ScheduledTask:
             created_at=parse_dt(data.get("created_at")) or datetime.now(),
             updated_at=parse_dt(data.get("updated_at")),
             metadata=metadata,
+        )
+
+
+# --- Flowzen (Blaue Rose) --- Passive Circadian Intelligence Layer --------
+
+
+@dataclass
+class FlowzenCheckin:
+    """
+    A mood/energy state inferred by the Flowzen activity tracker.
+
+    Mood values: 'energized', 'focused', 'calm', 'tired', 'anxious'
+    Time windows: 'early_morning', 'morning', 'midday', 'afternoon', 'evening', 'night'
+    """
+    id: str
+    mood: str
+    energy: int                                            # 1-10 (inferred)
+    time_window: str = ""
+    hour: int = 0
+    source: str = "inferred"                               # 'inferred' or 'explicit'
+    notes: str = ""
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "mood": self.mood,
+            "energy": self.energy,
+            "time_window": self.time_window,
+            "hour": self.hour,
+            "source": self.source,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenCheckin":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+        return cls(
+            id=data["id"],
+            mood=data["mood"],
+            energy=data.get("energy", 5),
+            time_window=data.get("time_window", ""),
+            hour=data.get("hour", 0),
+            source=data.get("source", "inferred"),
+            notes=data.get("notes", ""),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+        )
+
+
+@dataclass
+class FlowzenActivity:
+    """
+    A logged intent event observed by the Blaue Rose activity tracker.
+
+    Used to detect inactivity gaps and infer mood from usage patterns.
+    """
+    id: str
+    event_type: str                                        # e.g. "idea.create"
+    time_window: str = ""
+    hour: int = 0
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "event_type": self.event_type,
+            "time_window": self.time_window,
+            "hour": self.hour,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenActivity":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+        return cls(
+            id=data["id"],
+            event_type=data.get("event_type", ""),
+            time_window=data.get("time_window", ""),
+            hour=data.get("hour", 0),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
+        )
+
+
+@dataclass
+class FlowzenDiaryEntry:
+    """A warm, personal diary entry generated every 30 minutes by the Blaue Rose."""
+    id: str
+    entry_text: str
+    mood: str = "calm"
+    energy: int = 5
+    time_window: str = ""
+    hour: int = 0
+    intent_count: int = 0
+    category: str = ""
+    brain_action: str = ""
+    brain_reasoning: str = ""
+    raw_data: str = "{}"           # JSON string of full summary
+    source: str = "periodic"       # "periodic" or "manual"
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id, "entry_text": self.entry_text,
+            "mood": self.mood, "energy": self.energy,
+            "time_window": self.time_window, "hour": self.hour,
+            "intent_count": self.intent_count, "category": self.category,
+            "brain_action": self.brain_action, "brain_reasoning": self.brain_reasoning,
+            "raw_data": self.raw_data, "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FlowzenDiaryEntry":
+        def parse_dt(v):
+            return datetime.fromisoformat(v) if isinstance(v, str) else v
+        return cls(
+            id=data["id"], entry_text=data.get("entry_text", ""),
+            mood=data.get("mood", "calm"), energy=data.get("energy", 5),
+            time_window=data.get("time_window", ""), hour=data.get("hour", 0),
+            intent_count=data.get("intent_count", 0), category=data.get("category", ""),
+            brain_action=data.get("brain_action", ""), brain_reasoning=data.get("brain_reasoning", ""),
+            raw_data=data.get("raw_data", "{}"), source=data.get("source", "periodic"),
+            created_at=parse_dt(data.get("created_at")) or datetime.now(),
         )

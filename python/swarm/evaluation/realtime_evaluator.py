@@ -82,6 +82,7 @@ class RealtimeEvaluator:
         Returns:
             Log entry ID for later feedback
         """
+        logger.debug("on_classification called with session_id=%s, user_input=%s", session_id, user_input[:80])
         classification = LiveClassification(
             id=generate_id(),
             session_id=session_id,
@@ -132,6 +133,7 @@ class RealtimeEvaluator:
         Returns:
             Response message for Rachel to speak
         """
+        logger.debug("on_feedback called with feedback_type=%s, correction=%s", feedback_type, correction)
         if not self._last_classification:
             return "Kein vorheriger Intent zum Bewerten vorhanden."
 
@@ -175,6 +177,7 @@ class RealtimeEvaluator:
         Returns:
             Response message
         """
+        logger.debug("on_clarification called with clarification=%s", clarification[:80] if clarification else None)
         if not self._last_classification:
             return "Ich bin nicht sicher worauf sich das bezieht."
 
@@ -237,6 +240,7 @@ class RealtimeEvaluator:
         Returns:
             Dict with total, correct, incorrect, accuracy
         """
+        logger.debug("get_session_stats called with session_id=%s", session_id)
         if session_id and self.repo:
             try:
                 return self.repo.get_analysis_stats(session_id=session_id)
@@ -269,6 +273,7 @@ class RealtimeEvaluator:
         Returns:
             Dict with current stats and recent activity
         """
+        logger.debug("get_live_dashboard_data called")
         if self.repo:
             try:
                 stats = self.repo.get_analysis_stats()
@@ -319,6 +324,7 @@ class RealtimeEvaluator:
         Returns:
             German text Rachel can speak
         """
+        logger.debug("format_stats_for_voice called with session_id=%s", session_id)
         stats = self.get_session_stats(session_id)
 
         total = stats.get("total", 0)

@@ -30,6 +30,26 @@ if %errorlevel%==0 (
 )
 
 REM ================================================
+REM Start Minibook Docker (ports 3480/3481)
+REM ================================================
+echo.
+echo Checking Minibook...
+netstat -an | findstr ":3480" | findstr "LISTENING" > nul
+if %errorlevel%==0 (
+    echo Minibook already running on port 3480
+    goto :minibook_done
+)
+echo Starting Minibook Docker containers...
+docker compose -f "%PROJECT_ROOT%\docker-compose.minibook.yml" up -d 2>nul
+if %errorlevel%==0 (
+    echo Minibook started (Backend :3480, Frontend :3481^)
+    timeout /t 3 /nobreak > nul
+) else (
+    echo Warning: Minibook Docker failed - collaboration disabled
+)
+:minibook_done
+
+REM ================================================
 REM Check Redis for Claude Orchestrator (port 6379)
 REM ================================================
 REM Check for port 6379 (works on English "LISTENING" and German "ABHÖREN")

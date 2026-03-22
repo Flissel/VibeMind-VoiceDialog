@@ -223,6 +223,7 @@ class ConversationRouter:
         Returns:
             Formatted context string (empty if no matches)
         """
+        logger.debug("get_routing_context: user_input=%s limit=%s", user_input[:50], limit)
         similar = await self.get_similar_past_intents(user_input, limit)
 
         if not similar:

@@ -379,6 +379,7 @@ def get_status() -> Dict[str, Any]:
 
 async def test_adapter():
     """Test the MCP tools adapter."""
+    logger.debug("test_adapter called")
     print("MCP Tools Adapter Status:")
     status = get_status()
     for key, value in status.items():

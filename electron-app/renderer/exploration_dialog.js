@@ -405,37 +405,37 @@ class ExplorationDialog {
             <div class="exploration-dialog-header">
                 <div class="exploration-dialog-icon">🔗</div>
                 <div>
-                    <div class="exploration-dialog-title">Verbindung gefunden</div>
-                    <div class="exploration-dialog-subtitle">Interaktive Exploration</div>
+                    <div class="exploration-dialog-title">Connection Found</div>
+                    <div class="exploration-dialog-subtitle">Interactive Exploration</div>
                 </div>
             </div>
 
             <div class="exploration-connection-preview">
-                <div class="exploration-bubble">${node.source_bubble_title || 'Quelle'}</div>
+                <div class="exploration-bubble">${node.source_bubble_title || 'Source'}</div>
                 <div class="exploration-arrow">→</div>
-                <div class="exploration-edge-label">${node.edge_label || 'verbunden'}</div>
+                <div class="exploration-edge-label">${node.edge_label || 'connected'}</div>
                 <div class="exploration-arrow">→</div>
-                <div class="exploration-bubble">${node.target_bubble_title || 'Ziel'}</div>
+                <div class="exploration-bubble">${node.target_bubble_title || 'Target'}</div>
             </div>
 
             <div class="exploration-dialog-content">
-                ${node.reasoning || message.question_text || 'Soll ich diese Verbindung behalten?'}
+                ${node.reasoning || message.question_text || 'Should I keep this connection?'}
             </div>
 
             <div class="exploration-score">
-                <span>Bewertung:</span>
+                <span>Score:</span>
                 <strong>${scorePercent}%</strong>
             </div>
 
             <div class="exploration-dialog-buttons">
                 <button class="exploration-btn exploration-btn-accept" data-response="accept">
-                    ✓ Behalten (Y)
+                    ✓ Keep (Y)
                 </button>
                 <button class="exploration-btn exploration-btn-reject" data-response="reject">
-                    ✗ Ablehnen (N)
+                    ✗ Reject (N)
                 </button>
                 <button class="exploration-btn exploration-btn-explore" data-response="explore_deeper">
-                    ↓ Tiefer (D)
+                    ↓ Deeper (D)
                 </button>
             </div>
         `;
@@ -452,13 +452,13 @@ class ExplorationDialog {
             <div class="exploration-dialog-header">
                 <div class="exploration-dialog-icon">🧭</div>
                 <div>
-                    <div class="exploration-dialog-title">Richtung wählen</div>
+                    <div class="exploration-dialog-title">Choose Direction</div>
                     <div class="exploration-dialog-subtitle">Guided Exploration</div>
                 </div>
             </div>
 
             <div class="exploration-dialog-content">
-                ${message.question_text || 'Welchen Bereich soll ich als nächstes erkunden?'}
+                ${message.question_text || 'Which area should I explore next?'}
             </div>
 
             <div class="exploration-dialog-buttons">
@@ -477,18 +477,18 @@ class ExplorationDialog {
             <div class="exploration-dialog-header">
                 <div class="exploration-dialog-icon">🎯</div>
                 <div>
-                    <div class="exploration-dialog-title">${stageName} abgeschlossen</div>
-                    <div class="exploration-dialog-subtitle">${nodesFound} Verbindungen gefunden</div>
+                    <div class="exploration-dialog-title">${stageName} completed</div>
+                    <div class="exploration-dialog-subtitle">${nodesFound} connections found</div>
                 </div>
             </div>
 
             <div class="exploration-dialog-content">
-                Beste Bewertung: ${scorePercent}%. Soll ich weitermachen?
+                Best score: ${scorePercent}%. Should I continue?
             </div>
 
             <div class="exploration-progress">
                 <div class="exploration-progress-text">
-                    <span>Fortschritt</span>
+                    <span>Progress</span>
                     <span>${this.getStageProgress(stageName)}</span>
                 </div>
                 <div class="exploration-progress-bar">
@@ -498,13 +498,13 @@ class ExplorationDialog {
 
             <div class="exploration-dialog-buttons">
                 <button class="exploration-btn exploration-btn-accept" data-response="continue">
-                    → Weitermachen
+                    → Continue
                 </button>
                 <button class="exploration-btn exploration-btn-secondary" data-response="show_results">
-                    👁 Ergebnisse zeigen
+                    👁 Show Results
                 </button>
                 <button class="exploration-btn exploration-btn-reject" data-response="stop">
-                    ⏹ Stoppen
+                    ⏹ Stop
                 </button>
             </div>
         `;
@@ -520,12 +520,12 @@ class ExplorationDialog {
             <div class="exploration-dialog-header">
                 <div class="exploration-dialog-icon">❓</div>
                 <div>
-                    <div class="exploration-dialog-title">Frage</div>
+                    <div class="exploration-dialog-title">Question</div>
                 </div>
             </div>
 
             <div class="exploration-dialog-content">
-                ${message.question_text || message.question || 'Bitte wähle eine Option.'}
+                ${message.question_text || message.question || 'Please choose an option.'}
             </div>
 
             <div class="exploration-dialog-buttons">
@@ -604,7 +604,7 @@ class ExplorationDialog {
         this.hideStatusIndicator();
 
         // Show summary notification
-        const summary = message.summary || `Exploration abgeschlossen. ${message.stats?.total_nodes || 0} Verbindungen gefunden.`;
+        const summary = message.summary || `Exploration completed. ${message.stats?.total_nodes || 0} connections found.`;
         this.showNotification(summary);
     }
 
@@ -620,7 +620,7 @@ class ExplorationDialog {
         indicator.innerHTML = `
             <div class="exploration-status-dot"></div>
             <div class="exploration-status-text">
-                Exploration läuft... ${this.explorationState.nodesDiscovered} Verbindungen
+                Exploration running... ${this.explorationState.nodesDiscovered} connections
             </div>
         `;
         indicator.classList.remove('hidden');
@@ -631,7 +631,7 @@ class ExplorationDialog {
         if (indicator && this.explorationState.isRunning) {
             const statusText = indicator.querySelector('.exploration-status-text');
             if (statusText) {
-                statusText.textContent = `${this.explorationState.stage || 'Exploration'}... ${this.explorationState.nodesDiscovered} Verbindungen`;
+                statusText.textContent = `${this.explorationState.stage || 'Exploration'}... ${this.explorationState.nodesDiscovered} connections`;
             }
         }
     }

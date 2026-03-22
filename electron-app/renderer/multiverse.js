@@ -2,8 +2,8 @@
  * VibeMind Multiverse Navigator for Electron
  * 
  * Features:
- * - Ideas Universe (blue bubbles - Rachel's Space)
- * - Desktop Automation (golden Light Planet - Adam's Space)
+ * - Ideas Universe (blue bubbles)
+ * - Desktop Automation (golden Light Planet)
  * - Animated camera navigation between spaces
  * - Hand gesture navigation via WebSocket
  * - IPC integration with Python backend
@@ -55,7 +55,7 @@ class MultiverseApp {
                 position: new THREE.Vector3(16, 0, 11),
                 icon: '🧬',
                 name: 'Project Space',
-                agent: { name: 'Sofia', slug: 'sofia', role: 'Project Manager' },
+                agent: { name: 'Coding', slug: 'coding', role: 'Project Manager' },
                 color: 0x44ff88
             },
             desktop: {
@@ -63,7 +63,7 @@ class MultiverseApp {
                 position: new THREE.Vector3(22, 0, -14),
                 icon: '🌟',
                 name: 'Desktop Automation',
-                agent: { name: 'Adam', slug: 'adam', role: 'Desktop Worker' },
+                agent: { name: 'Desktop', slug: 'desktop', role: 'Desktop Worker' },
                 color: 0xff8844
             },
             roarboot: {
@@ -81,6 +81,54 @@ class MultiverseApp {
                 name: 'SWE Design Factory',
                 agent: { name: 'Factory', slug: 'swedesign', role: 'Spec Generator' },
                 color: 0xff6633
+            },
+            clawport: {
+                objects: [],
+                position: new THREE.Vector3(-8, 0, 12),
+                icon: '\u{1F4CA}',
+                name: 'Dashboard',
+                agent: { name: 'Dashboard', slug: 'clawport', role: 'System Dashboard' },
+                color: 0x8866ff
+            },
+            agentfarm: {
+                objects: [],
+                position: new THREE.Vector3(-14, 0, 18),
+                icon: '\u{1F3E1}',
+                name: 'Agent Farm',
+                agent: { name: 'Farmer', slug: 'agentfarm', role: 'Agent Orchestrator' },
+                color: 0x88aa44
+            },
+            thebrain: {
+                objects: [],
+                position: new THREE.Vector3(14, 0, -22),
+                icon: '\u{1F9E0}',
+                name: 'The Brain',
+                agent: { name: 'Brain', slug: 'thebrain', role: 'Knowledge Center' },
+                color: 0xff66aa
+            },
+            video: {
+                objects: [],
+                position: new THREE.Vector3(-20, 0, 24),
+                icon: '\u{1F3AC}',
+                name: 'Video Studio',
+                agent: { name: 'Director', slug: 'video', role: 'Video Producer' },
+                color: 0xee4466
+            },
+            flowzen: {
+                objects: [],
+                position: new THREE.Vector3(0, 4, -8),
+                icon: '\u{1F339}',
+                name: 'Blaue Rose',
+                agent: { name: 'Flowzen', slug: 'flowzen', role: 'Circadian Intelligence' },
+                color: 0x3366cc
+            },
+            mirofish: {
+                objects: [],
+                position: new THREE.Vector3(20, 0, 18),
+                icon: '\u{1F41F}',
+                name: 'MiroFish',
+                agent: { name: 'MiroFish', slug: 'mirofish', role: 'Prediction Engine' },
+                color: 0x00ccbb
             }
         };
         
@@ -260,8 +308,8 @@ class MultiverseApp {
         
         // Scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x020208);
-        this.scene.fog = new THREE.FogExp2(0x020208, 0.025);
+        this.scene.background = new THREE.Color(0x0a0812);
+        this.scene.fog = new THREE.FogExp2(0x0a0812, 0.020);
         
         // Camera
         this.camera = new THREE.PerspectiveCamera(
@@ -296,6 +344,12 @@ class MultiverseApp {
         this.createDesktopSpace();
         this.createRoarbootSpace();
         this.createSweDesignSpace();
+        this.createDashboardSpace();
+        this.createAgentFarmSpace();
+        this.createVideoSpace();
+        this.createBrainSpace();
+        this.createFlowzenSpace();
+        this.createMiroFishSpace();
         this.createEnvironment();
         this.createConnectionPaths();
 
@@ -336,7 +390,10 @@ class MultiverseApp {
         
         // Start animation loop
         this.animate();
-        
+
+        // Game console chat overlay
+        this.initGameConsole();
+
         console.log('[Multiverse] Initialized successfully');
     }
     
@@ -1030,9 +1087,963 @@ class MultiverseApp {
     }
 
     // ========================================================================
+    // DASHBOARD (ClawPort) SPACE — Schülertafel
+    // ========================================================================
+
+    createDashboardSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.clawport.position);
+        const dashColor = 0x8866ff;
+
+        // --- Schülertafel (Chalkboard) — main visual element ---
+        const boardGroup = new THREE.Group();
+        boardGroup.position.set(0, 1.6, 0);
+
+        // Board surface (dark green)
+        const boardW = 3.2, boardH = 2.0, boardD = 0.06;
+        const boardGeom = new THREE.BoxGeometry(boardW, boardH, boardD);
+        const boardMat  = new THREE.MeshPhongMaterial({
+            color: 0x1a3a1a,
+            emissive: 0x0a1a0a,
+            emissiveIntensity: 0.15,
+            specular: 0x111111,
+            shininess: 20,
+        });
+        const board = new THREE.Mesh(boardGeom, boardMat);
+        boardGroup.add(board);
+
+        // Wooden frame (4 bars)
+        const frameMat = new THREE.MeshPhongMaterial({
+            color: 0x8B5A2B,
+            emissive: 0x3a2510,
+            emissiveIntensity: 0.15,
+        });
+        const ft = 0.08;
+        const topBar = new THREE.Mesh(new THREE.BoxGeometry(boardW + ft * 2, ft, boardD + 0.02), frameMat);
+        topBar.position.y = boardH / 2 + ft / 2;
+        boardGroup.add(topBar);
+        const botBar = new THREE.Mesh(new THREE.BoxGeometry(boardW + ft * 2, ft, boardD + 0.02), frameMat);
+        botBar.position.y = -(boardH / 2 + ft / 2);
+        boardGroup.add(botBar);
+        const leftBar = new THREE.Mesh(new THREE.BoxGeometry(ft, boardH, boardD + 0.02), frameMat);
+        leftBar.position.x = -(boardW / 2 + ft / 2);
+        boardGroup.add(leftBar);
+        const rightBar = new THREE.Mesh(new THREE.BoxGeometry(ft, boardH, boardD + 0.02), frameMat);
+        rightBar.position.x = boardW / 2 + ft / 2;
+        boardGroup.add(rightBar);
+
+        // Chalk tray
+        const tray = new THREE.Mesh(
+            new THREE.BoxGeometry(boardW * 0.8, 0.06, 0.18), frameMat);
+        tray.position.set(0, -(boardH / 2 + ft + 0.02), boardD / 2 + 0.09);
+        boardGroup.add(tray);
+
+        // Stand legs (A-frame)
+        const legMat = new THREE.MeshPhongMaterial({
+            color: 0x6B4226, emissive: 0x2a1a0a, emissiveIntensity: 0.1,
+        });
+        const legGeom = new THREE.CylinderGeometry(0.04, 0.05, 2.8, 6);
+        const legL = new THREE.Mesh(legGeom, legMat);
+        legL.position.set(-1.2, -1.4, 0.1);
+        legL.rotation.z = 0.08;
+        boardGroup.add(legL);
+        const legR = new THREE.Mesh(legGeom, legMat);
+        legR.position.set(1.2, -1.4, 0.1);
+        legR.rotation.z = -0.08;
+        boardGroup.add(legR);
+        // rear legs
+        const rearGeom = new THREE.CylinderGeometry(0.035, 0.04, 2.4, 6);
+        const rearL = new THREE.Mesh(rearGeom, legMat);
+        rearL.position.set(-0.9, -1.2, -0.5);
+        rearL.rotation.x = 0.25;
+        boardGroup.add(rearL);
+        const rearR = new THREE.Mesh(rearGeom, legMat);
+        rearR.position.set(0.9, -1.2, -0.5);
+        rearR.rotation.x = 0.25;
+        boardGroup.add(rearR);
+
+        // Canvas text on board
+        const canvas = document.createElement('canvas');
+        canvas.width  = 512;
+        canvas.height = 320;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#1a3a1a';
+        ctx.fillRect(0, 0, 512, 320);
+        // Title
+        ctx.fillStyle = '#e8e8d0';
+        ctx.font = 'bold 42px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Dashboard', 256, 58);
+        // Subtitle
+        ctx.font = '22px "Segoe UI", Arial, sans-serif';
+        ctx.fillStyle = '#ccccaa';
+        ctx.fillText('System Monitor', 256, 95);
+        // Separator
+        ctx.strokeStyle = '#aaaaaa';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(60, 115);
+        ctx.lineTo(452, 115);
+        ctx.stroke();
+        // Bullet points
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#bbbbaa';
+        ctx.font = '20px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'left';
+        const items = [
+            '📅  Schedule Monitor',
+            '🤖  Agent Status',
+            '💬  Chat Interface',
+            '🧠  Memory Browser',
+        ];
+        items.forEach((txt, i) => {
+            ctx.fillText(txt, 65, 150 + i * 36);
+        });
+        // Chalk dust marks
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        for (let i = 0; i < 20; i++) {
+            ctx.fillRect(
+                Math.random() * 480 + 16,
+                Math.random() * 300 + 10,
+                Math.random() * 12 + 2, 1);
+        }
+
+        const boardTexture = new THREE.CanvasTexture(canvas);
+        const textPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(boardW - 0.1, boardH - 0.1),
+            new THREE.MeshBasicMaterial({ map: boardTexture, transparent: true })
+        );
+        textPlane.position.z = boardD / 2 + 0.005;
+        boardGroup.add(textPlane);
+
+        // Make the board clickable
+        board.userData = { type: 'dashboard-board', title: 'Dashboard' };
+        this.spaces.clawport.objects.push(board);
+
+        spaceGroup.add(boardGroup);
+        this.spaces.clawport.board = boardGroup;
+        this.spaces.clawport.boardTexture = boardTexture;
+        this.spaces.clawport.boardCanvas = canvas;
+
+        // Glow sphere (purple)
+        const glowGeom = new THREE.IcosahedronGeometry(2.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: dashColor, transparent: true, opacity: 0.06, side: THREE.BackSide,
+        });
+        spaceGroup.add(new THREE.Mesh(glowGeom, glowMat));
+
+        // Base ring
+        const baseGeom = new THREE.RingGeometry(2.5, 3, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: dashColor, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.clawport.group = spaceGroup;
+
+        console.log('[Multiverse] Dashboard Space (Chalkboard) created');
+    }
+
+    // ========================================================================
+    // AGENT FARM SPACE (BAUERNHOF)
+    // ========================================================================
+
+    createAgentFarmSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.agentfarm.position);
+
+        const farmColor = 0x88aa44;
+
+        // --- Barn (main building) ---
+        const barnGroup = new THREE.Group();
+        barnGroup.position.set(0, 0, 0);
+
+        // Barn body (red wooden barn)
+        const barnBodyGeom = new THREE.BoxGeometry(2.4, 1.6, 1.8);
+        const barnBodyMat = new THREE.MeshPhongMaterial({
+            color: 0xaa3322,
+            emissive: 0x441111,
+            emissiveIntensity: 0.2,
+        });
+        const barnBody = new THREE.Mesh(barnBodyGeom, barnBodyMat);
+        barnBody.position.y = 0.8;
+        barnBody.userData = { type: 'agentfarm-barn', title: 'Agent Farm' };
+        barnGroup.add(barnBody);
+        this.spaces.agentfarm.objects.push(barnBody);
+
+        // Barn roof (triangular prism)
+        const roofShape = new THREE.Shape();
+        roofShape.moveTo(-1.4, 0);
+        roofShape.lineTo(0, 1.1);
+        roofShape.lineTo(1.4, 0);
+        roofShape.lineTo(-1.4, 0);
+        const roofExtrudeSettings = { depth: 2.0, bevelEnabled: false };
+        const roofGeom = new THREE.ExtrudeGeometry(roofShape, roofExtrudeSettings);
+        const roofMat = new THREE.MeshPhongMaterial({
+            color: 0x664422,
+            emissive: 0x221100,
+            emissiveIntensity: 0.1,
+        });
+        const roof = new THREE.Mesh(roofGeom, roofMat);
+        roof.position.set(0, 1.6, -1.0);
+        barnGroup.add(roof);
+
+        // Barn door (dark opening)
+        const doorGeom = new THREE.PlaneGeometry(0.6, 0.9);
+        const doorMat = new THREE.MeshBasicMaterial({ color: 0x221111 });
+        const door = new THREE.Mesh(doorGeom, doorMat);
+        door.position.set(0, 0.45, 0.91);
+        barnGroup.add(door);
+
+        // Silo (cylinder next to barn)
+        const siloGeom = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 12);
+        const siloMat = new THREE.MeshPhongMaterial({
+            color: 0x888888,
+            emissive: 0x222222,
+            emissiveIntensity: 0.15,
+        });
+        const silo = new THREE.Mesh(siloGeom, siloMat);
+        silo.position.set(1.6, 1.1, -0.3);
+        barnGroup.add(silo);
+
+        // Silo cap (dome)
+        const siloCapGeom = new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const siloCap = new THREE.Mesh(siloCapGeom, siloMat);
+        siloCap.position.set(1.6, 2.2, -0.3);
+        barnGroup.add(siloCap);
+
+        spaceGroup.add(barnGroup);
+        this.spaces.agentfarm.barn = barnGroup;
+
+        // --- Fence (wooden fence around property) ---
+        const fenceMat = new THREE.MeshPhongMaterial({
+            color: 0x886633,
+            emissive: 0x221100,
+            emissiveIntensity: 0.1,
+        });
+
+        // Fence posts in a semicircle
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI + Math.PI / 2;
+            const r = 3.0;
+            const postGeom = new THREE.BoxGeometry(0.08, 0.6, 0.08);
+            const post = new THREE.Mesh(postGeom, fenceMat);
+            post.position.set(Math.cos(angle) * r, 0.3, Math.sin(angle) * r);
+            spaceGroup.add(post);
+
+            // Horizontal rail
+            if (i < 7) {
+                const nextAngle = ((i + 1) / 8) * Math.PI + Math.PI / 2;
+                const railGeom = new THREE.BoxGeometry(0.04, 0.04, 1.2);
+                const rail = new THREE.Mesh(railGeom, fenceMat);
+                const mx = (Math.cos(angle) + Math.cos(nextAngle)) * r / 2;
+                const mz = (Math.sin(angle) + Math.sin(nextAngle)) * r / 2;
+                rail.position.set(mx, 0.4, mz);
+                rail.lookAt(new THREE.Vector3(
+                    Math.cos(nextAngle) * r + spaceGroup.position.x,
+                    0.4 + spaceGroup.position.y,
+                    Math.sin(nextAngle) * r + spaceGroup.position.z
+                ));
+                spaceGroup.add(rail);
+            }
+        }
+
+        // --- Windmill ---
+        const windmillGroup = new THREE.Group();
+        windmillGroup.position.set(-2.0, 0, 1.5);
+
+        // Windmill tower
+        const towerGeom = new THREE.CylinderGeometry(0.15, 0.25, 2.0, 8);
+        const towerMat = new THREE.MeshPhongMaterial({
+            color: 0xccbb99,
+            emissive: 0x332200,
+            emissiveIntensity: 0.1,
+        });
+        const tower = new THREE.Mesh(towerGeom, towerMat);
+        tower.position.y = 1.0;
+        windmillGroup.add(tower);
+
+        // Windmill blades (cross shape)
+        const bladesGroup = new THREE.Group();
+        bladesGroup.position.set(0, 2.1, 0.18);
+        for (let i = 0; i < 4; i++) {
+            const bladeGeom = new THREE.BoxGeometry(0.12, 0.9, 0.02);
+            const bladeMat = new THREE.MeshBasicMaterial({
+                color: 0xeeddcc,
+                transparent: true,
+                opacity: 0.8,
+            });
+            const blade = new THREE.Mesh(bladeGeom, bladeMat);
+            blade.position.y = 0.5;
+            blade.rotation.z = (i / 4) * Math.PI * 2;
+            // Pivot each blade from center
+            const bladeWrapper = new THREE.Group();
+            bladeWrapper.add(blade);
+            bladeWrapper.rotation.z = (i / 4) * Math.PI * 2;
+            bladesGroup.add(bladeWrapper);
+        }
+        windmillGroup.add(bladesGroup);
+        this.spaces.agentfarm.blades = bladesGroup;
+
+        spaceGroup.add(windmillGroup);
+
+        // --- Agent "animals" (small colored blobs wandering) ---
+        const agentColors = [0xff6644, 0x44aaff, 0xffcc22, 0x44ff88, 0xaa66ff, 0xff4488];
+        this.spaces.agentfarm.animals = [];
+        for (let i = 0; i < 6; i++) {
+            const animalGroup = new THREE.Group();
+
+            // Body (small sphere)
+            const bodyGeom = new THREE.SphereGeometry(0.15, 8, 6);
+            const bodyMat = new THREE.MeshPhongMaterial({
+                color: agentColors[i],
+                emissive: agentColors[i],
+                emissiveIntensity: 0.4,
+            });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            body.position.y = 0.15;
+            animalGroup.add(body);
+
+            // Eyes (two tiny white spheres)
+            const eyeGeom = new THREE.SphereGeometry(0.03, 6, 4);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const eyeL = new THREE.Mesh(eyeGeom, eyeMat);
+            eyeL.position.set(-0.06, 0.2, 0.12);
+            animalGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeom, eyeMat);
+            eyeR.position.set(0.06, 0.2, 0.12);
+            animalGroup.add(eyeR);
+
+            // Place around the farm
+            const angle = (i / 6) * Math.PI * 2;
+            const r = 1.5 + Math.random() * 0.5;
+            animalGroup.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+            animalGroup.userData = {
+                wanderAngle: angle,
+                wanderSpeed: 0.3 + Math.random() * 0.4,
+                wanderRadius: r,
+                phase: Math.random() * Math.PI * 2,
+            };
+
+            spaceGroup.add(animalGroup);
+            this.spaces.agentfarm.animals.push(animalGroup);
+        }
+
+        // --- Ground (green grass plane) ---
+        const groundGeom = new THREE.CircleGeometry(4, 32);
+        const groundMat = new THREE.MeshPhongMaterial({
+            color: 0x44662a,
+            emissive: 0x112200,
+            emissiveIntensity: 0.1,
+            side: THREE.DoubleSide,
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01;
+        spaceGroup.add(ground);
+
+        // --- Glow sphere ---
+        const glowGeom = new THREE.IcosahedronGeometry(3.0, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: farmColor, transparent: true, opacity: 0.06, side: THREE.BackSide,
+        });
+        spaceGroup.add(new THREE.Mesh(glowGeom, glowMat));
+
+        // --- Base marker ring ---
+        const baseGeom = new THREE.RingGeometry(3.5, 3.8, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: farmColor, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.agentfarm.group = spaceGroup;
+
+        console.log('[Multiverse] Agent Farm Space (Bauernhof) created');
+    }
+
+    // ========================================================================
+    // VIDEO STUDIO SPACE (FILMSTUDIO)
+    // ========================================================================
+
+    createVideoSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.video.position);
+
+        const studioColor = 0xee4466;
+
+        // --- Studio building (flat wide box) ---
+        const studioGeom = new THREE.BoxGeometry(3.5, 1.8, 2.5);
+        const studioMat = new THREE.MeshPhongMaterial({
+            color: 0x2a2a3a,
+            transparent: true,
+            opacity: 0.85,
+        });
+        const studio = new THREE.Mesh(studioGeom, studioMat);
+        studio.position.y = 0.9;
+        studio.userData = { type: 'video-studio', title: 'Video Studio' };
+        spaceGroup.add(studio);
+        this.spaces.video.objects.push(studio);
+
+        // --- Film clapperboard on top ---
+        const clapGeom = new THREE.BoxGeometry(1.2, 0.08, 0.8);
+        const clapMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        const clap = new THREE.Mesh(clapGeom, clapMat);
+        clap.position.set(0, 1.85, 0);
+        spaceGroup.add(clap);
+
+        // Clapperboard stripes (red/white)
+        const stripeGeom = new THREE.BoxGeometry(1.2, 0.06, 0.35);
+        const stripeMat = new THREE.MeshPhongMaterial({ color: studioColor });
+        const stripe = new THREE.Mesh(stripeGeom, stripeMat);
+        stripe.position.set(0, 1.92, -0.15);
+        stripe.rotation.x = -0.15;
+        spaceGroup.add(stripe);
+        this.spaces.video.clap = stripe;
+
+        // --- Camera on tripod (right side) ---
+        const tripodGeom = new THREE.CylinderGeometry(0.03, 0.05, 1.2, 6);
+        const tripodMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+        const tripod = new THREE.Mesh(tripodGeom, tripodMat);
+        tripod.position.set(2.2, 0.6, 0);
+        spaceGroup.add(tripod);
+
+        const cameraGeom = new THREE.BoxGeometry(0.4, 0.3, 0.5);
+        const cameraMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+        const camera = new THREE.Mesh(cameraGeom, cameraMat);
+        camera.position.set(2.2, 1.3, 0);
+        spaceGroup.add(camera);
+
+        // Camera lens (small cylinder)
+        const lensGeom = new THREE.CylinderGeometry(0.08, 0.1, 0.2, 8);
+        const lensMat = new THREE.MeshPhongMaterial({ color: 0x3366aa, emissive: 0x112244, emissiveIntensity: 0.5 });
+        const lens = new THREE.Mesh(lensGeom, lensMat);
+        lens.rotation.z = Math.PI / 2;
+        lens.position.set(2.2, 1.3, -0.35);
+        spaceGroup.add(lens);
+
+        // --- Spotlight (left side, angled) ---
+        const spotPoleGeom = new THREE.CylinderGeometry(0.03, 0.04, 1.8, 6);
+        const spotPole = new THREE.Mesh(spotPoleGeom, tripodMat);
+        spotPole.position.set(-2.0, 0.9, 0.5);
+        spaceGroup.add(spotPole);
+
+        const spotLightGeom = new THREE.ConeGeometry(0.2, 0.35, 8);
+        const spotLightMat = new THREE.MeshPhongMaterial({ color: 0xffdd44, emissive: 0xffaa00, emissiveIntensity: 0.8 });
+        const spotLight = new THREE.Mesh(spotLightGeom, spotLightMat);
+        spotLight.position.set(-2.0, 1.9, 0.5);
+        spotLight.rotation.z = 0.3;
+        spaceGroup.add(spotLight);
+        this.spaces.video.spotlight = spotLight;
+
+        // --- Ground (dark studio floor) ---
+        const groundGeom = new THREE.CircleGeometry(5, 32);
+        const groundMat = new THREE.MeshPhongMaterial({
+            color: 0x1a1a2a,
+            transparent: true,
+            opacity: 0.6,
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0.01;
+        spaceGroup.add(ground);
+
+        // --- Accent ring ---
+        const ringGeom = new THREE.RingGeometry(4.5, 5, 48);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: studioColor,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+        });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.02;
+        spaceGroup.add(ring);
+
+        // --- Base marker ring ---
+        const baseGeom = new THREE.RingGeometry(4.5, 4.8, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: studioColor, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.video.group = spaceGroup;
+
+        console.log('[Multiverse] Video Studio Space created');
+    }
+
+    // ========================================================================
+    // THE BRAIN SPACE (GEHIRN)
+    // ========================================================================
+
+    createBrainSpace() {
+        const spaceGroup = new THREE.Group();
+        spaceGroup.position.copy(this.spaces.thebrain.position);
+
+        const brainColor = 0xff66aa;
+
+        // --- Brain (organic deformed sphere) ---
+        const brainGroup = new THREE.Group();
+        brainGroup.position.set(0, 1.8, 0);
+
+        // Main brain shape (icosahedron for organic look)
+        const brainGeom = new THREE.IcosahedronGeometry(1.2, 3);
+        // Deform vertices for organic brain wrinkles
+        const positions = brainGeom.attributes.position;
+        for (let i = 0; i < positions.count; i++) {
+            const x = positions.getX(i);
+            const y = positions.getY(i);
+            const z = positions.getZ(i);
+            const noise = Math.sin(x * 5) * Math.cos(y * 4) * Math.sin(z * 6) * 0.08;
+            const fissure = Math.sin(x * 12 + y * 8) * 0.04;
+            const len = Math.sqrt(x * x + y * y + z * z);
+            const scale = 1 + noise + fissure;
+            positions.setXYZ(i, x / len * 1.2 * scale, y / len * 1.0 * scale, z / len * 1.1 * scale);
+        }
+        brainGeom.computeVertexNormals();
+
+        const brainMat = new THREE.MeshPhongMaterial({
+            color: 0xee8899,
+            emissive: 0x662244,
+            emissiveIntensity: 0.3,
+            shininess: 30,
+            transparent: true,
+            opacity: 0.85,
+        });
+        const brain = new THREE.Mesh(brainGeom, brainMat);
+        brain.userData = { type: 'thebrain', title: 'The Brain' };
+        brainGroup.add(brain);
+        this.spaces.thebrain.objects.push(brain);
+        this.spaces.thebrain.brain = brain;
+
+        // Brain center fissure line (median line)
+        const fissureGeom = new THREE.BoxGeometry(0.02, 1.0, 1.4);
+        const fissureMat = new THREE.MeshBasicMaterial({
+            color: 0xcc5577, transparent: true, opacity: 0.5,
+        });
+        const fissure = new THREE.Mesh(fissureGeom, fissureMat);
+        fissure.position.y = 0.15;
+        brainGroup.add(fissure);
+
+        spaceGroup.add(brainGroup);
+        this.spaces.thebrain.brainGroup = brainGroup;
+
+        // --- Neural network (synaptic connections) ---
+        const neuronCount = 60;
+        const neuronPositions = new Float32Array(neuronCount * 3);
+        for (let i = 0; i < neuronCount; i++) {
+            const r = 2.0 + Math.random() * 2.0;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            neuronPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            neuronPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) + 1.5;
+            neuronPositions[i * 3 + 2] = r * Math.cos(phi);
+        }
+        const neuronGeom = new THREE.BufferGeometry();
+        neuronGeom.setAttribute('position', new THREE.BufferAttribute(neuronPositions, 3));
+        const neuronMat = new THREE.PointsMaterial({
+            color: 0xff88cc, size: 0.08, transparent: true, opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+        });
+        const neurons = new THREE.Points(neuronGeom, neuronMat);
+        spaceGroup.add(neurons);
+        this.spaces.thebrain.neurons = neurons;
+
+        // --- Synaptic connection lines (firing neurons) ---
+        const lineCount = 30;
+        const lineMat = new THREE.LineBasicMaterial({
+            color: 0xff99dd, transparent: true, opacity: 0.2,
+        });
+        this.spaces.thebrain.synapses = [];
+        for (let i = 0; i < lineCount; i++) {
+            const a = Math.floor(Math.random() * neuronCount);
+            const b = Math.floor(Math.random() * neuronCount);
+            const lineGeom = new THREE.BufferGeometry();
+            const pts = new Float32Array(6);
+            pts[0] = neuronPositions[a * 3];
+            pts[1] = neuronPositions[a * 3 + 1];
+            pts[2] = neuronPositions[a * 3 + 2];
+            pts[3] = neuronPositions[b * 3];
+            pts[4] = neuronPositions[b * 3 + 1];
+            pts[5] = neuronPositions[b * 3 + 2];
+            lineGeom.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+            const line = new THREE.Line(lineGeom, lineMat.clone());
+            spaceGroup.add(line);
+            this.spaces.thebrain.synapses.push(line);
+        }
+
+        // --- Brain stem (cylinder going downward) ---
+        const stemGeom = new THREE.CylinderGeometry(0.2, 0.15, 1.2, 8);
+        const stemMat = new THREE.MeshPhongMaterial({
+            color: 0xdd7788,
+            emissive: 0x441122,
+            emissiveIntensity: 0.2,
+        });
+        const stem = new THREE.Mesh(stemGeom, stemMat);
+        stem.position.set(0, 0.4, -0.2);
+        spaceGroup.add(stem);
+
+        // --- Thought bubbles (floating ideas) ---
+        this.spaces.thebrain.thoughtBubbles = [];
+        for (let i = 0; i < 5; i++) {
+            const bubbleGeom = new THREE.SphereGeometry(0.12 + Math.random() * 0.1, 8, 6);
+            const bubbleMat = new THREE.MeshBasicMaterial({
+                color: 0xffaadd, transparent: true, opacity: 0.3 + Math.random() * 0.2,
+            });
+            const bubble = new THREE.Mesh(bubbleGeom, bubbleMat);
+            const angle = (i / 5) * Math.PI * 2;
+            bubble.position.set(
+                Math.cos(angle) * 2.5,
+                2.5 + Math.random() * 1.5,
+                Math.sin(angle) * 2.5
+            );
+            bubble.userData = {
+                floatPhase: Math.random() * Math.PI * 2,
+                floatSpeed: 0.5 + Math.random() * 0.5,
+                baseY: bubble.position.y,
+            };
+            spaceGroup.add(bubble);
+            this.spaces.thebrain.thoughtBubbles.push(bubble);
+        }
+
+        // --- Glow sphere ---
+        const glowGeom = new THREE.IcosahedronGeometry(3.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: brainColor, transparent: true, opacity: 0.06, side: THREE.BackSide,
+        });
+        spaceGroup.add(new THREE.Mesh(glowGeom, glowMat));
+
+        // --- Base marker ring ---
+        const baseGeom = new THREE.RingGeometry(3.5, 3.8, 32);
+        const baseMat = new THREE.MeshBasicMaterial({
+            color: brainColor, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+        });
+        const base = new THREE.Mesh(baseGeom, baseMat);
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = -2;
+        spaceGroup.add(base);
+
+        this.scene.add(spaceGroup);
+        this.spaces.thebrain.group = spaceGroup;
+
+        console.log('[Multiverse] Brain Space (Gehirn) created');
+    }
+
+    createFlowzenSpace() {
+        const group = new THREE.Group();
+        const pos = this.spaces.flowzen.position;
+        group.position.copy(pos);
+
+        // --- Glass Dome ---
+        const domeGeo = new THREE.SphereGeometry(1.8, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeMat = new THREE.MeshPhysicalMaterial({
+            color: 0xaaccff,
+            metalness: 0.0,
+            roughness: 0.05,
+            transmission: 0.92,
+            transparent: true,
+            opacity: 0.25,
+            thickness: 0.3,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.1,
+            side: THREE.DoubleSide,
+        });
+        const dome = new THREE.Mesh(domeGeo, domeMat);
+        dome.position.set(0, 0, 0);
+        group.add(dome);
+
+        // --- Base Plate ---
+        const baseGeo = new THREE.CylinderGeometry(1.8, 1.9, 0.15, 32);
+        const baseMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            metalness: 0.8,
+            roughness: 0.3,
+        });
+        const basePlate = new THREE.Mesh(baseGeo, baseMat);
+        basePlate.position.set(0, -0.075, 0);
+        group.add(basePlate);
+
+        // --- Rose Stem ---
+        const stemCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0.1, 0),
+            new THREE.Vector3(0.05, 0.5, 0.02),
+            new THREE.Vector3(-0.03, 0.9, -0.01),
+            new THREE.Vector3(0, 1.2, 0),
+        ]);
+        const stemGeo = new THREE.TubeGeometry(stemCurve, 12, 0.03, 6, false);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.7 });
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        group.add(stem);
+
+        // --- Rose Bloom (layered petals) ---
+        const petalColor = 0x2255bb;
+        const bloomGroup = new THREE.Group();
+        bloomGroup.position.set(0, 1.25, 0);
+
+        // Center bud
+        const budGeo = new THREE.SphereGeometry(0.08, 12, 12);
+        const budMat = new THREE.MeshStandardMaterial({
+            color: 0x1144aa,
+            emissive: 0x0033aa,
+            emissiveIntensity: 0.3,
+        });
+        bloomGroup.add(new THREE.Mesh(budGeo, budMat));
+
+        // 3 layers of petals (inner, mid, outer)
+        const petalLayers = [
+            { count: 5, radius: 0.12, size: 0.1, tilt: 0.4 },
+            { count: 7, radius: 0.22, size: 0.14, tilt: 0.7 },
+            { count: 9, radius: 0.32, size: 0.16, tilt: 1.0 },
+        ];
+
+        petalLayers.forEach((layer) => {
+            for (let i = 0; i < layer.count; i++) {
+                const angle = (i / layer.count) * Math.PI * 2;
+                const petalGeo = new THREE.SphereGeometry(layer.size, 8, 6);
+                petalGeo.scale(1, 0.3, 1.5);
+                const petalMat = new THREE.MeshStandardMaterial({
+                    color: petalColor,
+                    emissive: 0x1133aa,
+                    emissiveIntensity: 0.2,
+                    roughness: 0.4,
+                    side: THREE.DoubleSide,
+                });
+                const petal = new THREE.Mesh(petalGeo, petalMat);
+                petal.position.set(
+                    Math.cos(angle) * layer.radius,
+                    -layer.tilt * 0.1,
+                    Math.sin(angle) * layer.radius
+                );
+                petal.rotation.set(layer.tilt, angle, 0);
+                petal.userData.isPetal = true;
+                bloomGroup.add(petal);
+            }
+        });
+
+        group.add(bloomGroup);
+
+        // --- Petal Particles (falling petals effect, initially hidden) ---
+        const particleCount = 15;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+            particlePositions[i * 3] = (Math.random() - 0.5) * 2;
+            particlePositions[i * 3 + 1] = Math.random() * 2;
+            particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+        }
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        const particleMat = new THREE.PointsMaterial({
+            color: 0x4477cc,
+            size: 0.04,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+        });
+        const particles = new THREE.Points(particleGeo, particleMat);
+        group.add(particles);
+
+        // --- Soft Glow Light ---
+        const glowLight = new THREE.PointLight(0x3366cc, 0.5, 4);
+        glowLight.position.set(0, 1.2, 0);
+        group.add(glowLight);
+
+        // Store references for animation
+        this.spaces.flowzen.group = group;
+        this.spaces.flowzen.objects = [dome, bloomGroup, particles, glowLight, basePlate];
+        this.spaces.flowzen.dome = dome;
+        this.spaces.flowzen.bloom = bloomGroup;
+        this.spaces.flowzen.particles = particles;
+        this.spaces.flowzen.glowLight = glowLight;
+        this.spaces.flowzen.roseState = 'idle';
+
+        this.scene.add(group);
+
+        console.log('[Multiverse] Flowzen Space (Blaue Rose) created');
+    }
+
+    // ========================================================================
+    // MIROFISH SPACE (Aquarium Sphere with Fish Swarm)
+    // ========================================================================
+
+    createMiroFishSpace() {
+        const pos = this.spaces.mirofish.position;
+        const group = new THREE.Group();
+        group.position.copy(pos);
+
+        // --- Glass Aquarium Sphere ---
+        const sphereGeo = new THREE.IcosahedronGeometry(2.2, 4);
+        const sphereMat = new THREE.MeshPhysicalMaterial({
+            color: 0x88ddee,
+            metalness: 0.0,
+            roughness: 0.05,
+            transmission: 0.92,
+            thickness: 0.5,
+            transparent: true,
+            opacity: 0.25,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.1,
+            envMapIntensity: 0.3,
+            side: THREE.DoubleSide,
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        group.add(sphere);
+        this.spaces.mirofish.dome = sphere;
+
+        // --- Water Surface Ring (equator shimmer) ---
+        const waterGeo = new THREE.TorusGeometry(2.2, 0.04, 8, 64);
+        const waterMat = new THREE.MeshBasicMaterial({
+            color: 0x44ddcc,
+            transparent: true,
+            opacity: 0.4,
+        });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = Math.PI / 2;
+        water.position.y = 0.3;
+        group.add(water);
+
+        // --- Fish Swarm (12 small cone-shaped fish) ---
+        const fishGroup = new THREE.Group();
+        const fishColors = [0x00eebb, 0x44ffcc, 0x00bbaa, 0x22ddff, 0x66ffdd, 0x00aacc];
+        const fish = [];
+
+        for (let i = 0; i < 12; i++) {
+            const fishMesh = new THREE.Group();
+
+            // Body (elongated cone — visible size)
+            const bodyGeo = new THREE.ConeGeometry(0.18, 0.55, 6);
+            bodyGeo.rotateX(Math.PI / 2);
+            const bodyMat = new THREE.MeshPhongMaterial({
+                color: fishColors[i % fishColors.length],
+                emissive: fishColors[i % fishColors.length],
+                emissiveIntensity: 0.6,
+                transparent: true,
+                opacity: 0.9,
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            fishMesh.add(body);
+
+            // Tail fin (visible triangle)
+            const tailGeo = new THREE.ConeGeometry(0.14, 0.2, 3);
+            tailGeo.rotateX(Math.PI / 2);
+            const tailMat = new THREE.MeshPhongMaterial({
+                color: fishColors[i % fishColors.length],
+                emissive: fishColors[i % fishColors.length],
+                emissiveIntensity: 0.5,
+                transparent: true,
+                opacity: 0.8,
+            });
+            const tail = new THREE.Mesh(tailGeo, tailMat);
+            tail.position.z = 0.35;
+            fishMesh.add(tail);
+
+            // Randomize orbit parameters
+            const angle = (i / 12) * Math.PI * 2;
+            const radius = 0.8 + Math.random() * 0.8;
+            const yOffset = (Math.random() - 0.5) * 1.2;
+            const speed = 0.4 + Math.random() * 0.4;
+            const phase = Math.random() * Math.PI * 2;
+
+            fishMesh.userData = {
+                angle, radius, yOffset, speed, phase,
+                yWobble: 0.1 + Math.random() * 0.15,
+                yWobbleSpeed: 1.5 + Math.random() * 1.5,
+            };
+
+            fishGroup.add(fishMesh);
+            fish.push(fishMesh);
+        }
+
+        group.add(fishGroup);
+        this.spaces.mirofish.fish = fish;
+        this.spaces.mirofish.fishGroup = fishGroup;
+
+        // --- Bubble Particles (rising air bubbles inside) ---
+        const bubbleCount = 30;
+        const bubblePositions = new Float32Array(bubbleCount * 3);
+        for (let i = 0; i < bubbleCount; i++) {
+            const r = Math.random() * 1.5;
+            const theta = Math.random() * Math.PI * 2;
+            bubblePositions[i * 3] = Math.cos(theta) * r * 0.3;
+            bubblePositions[i * 3 + 1] = (Math.random() - 0.5) * 3;
+            bubblePositions[i * 3 + 2] = Math.sin(theta) * r * 0.3;
+        }
+        const bubbleGeo = new THREE.BufferGeometry();
+        bubbleGeo.setAttribute('position', new THREE.BufferAttribute(bubblePositions, 3));
+        const bubbleMat = new THREE.PointsMaterial({
+            size: 0.12,
+            color: 0xaaffee,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+        });
+        const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+        group.add(bubbles);
+        this.spaces.mirofish.bubbles = bubbles;
+
+        // --- Metallic Base Stand ---
+        const baseGeo = new THREE.CylinderGeometry(1.0, 1.2, 0.3, 32);
+        const baseMat = new THREE.MeshPhongMaterial({
+            color: 0x1a2a2e,
+            metalness: 0.8,
+            transparent: true,
+            opacity: 0.9,
+        });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.y = -2.3;
+        group.add(base);
+
+        // --- Glow Light ---
+        const glowLight = new THREE.PointLight(0x00ccbb, 1.2, 18);
+        glowLight.position.set(0, 0, 0);
+        group.add(glowLight);
+        this.spaces.mirofish.glowLight = glowLight;
+
+        // --- Glow Sphere ---
+        const glowGeo = new THREE.IcosahedronGeometry(3.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0x00ccbb,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.BackSide,
+        });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        group.add(glow);
+
+        // --- Base Marker Ring ---
+        const ringGeo = new THREE.TorusGeometry(2.8, 0.03, 8, 64);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x00ccbb,
+            transparent: true,
+            opacity: 0.15,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = -2;
+        group.add(ring);
+
+        this.spaces.mirofish.objects.push(group);
+        this.scene.add(group);
+
+        console.log('[Multiverse] MiroFish Space (Aquarium) created');
+    }
+
+    // ========================================================================
     // ENVIRONMENT
     // ========================================================================
-    
+
     createEnvironment() {
         // Stars
         const starCount = 2000;
@@ -1087,6 +2098,11 @@ class MultiverseApp {
         factoryLight.position.copy(this.spaces.swedesign.position);
         factoryLight.position.y += 2; // Above the building
         this.scene.add(factoryLight);
+
+        // Add light for MiroFish Space
+        const mirofishLight = new THREE.PointLight(0x00ccbb, 1, 20);
+        mirofishLight.position.copy(this.spaces.mirofish.position);
+        this.scene.add(mirofishLight);
     }
     
     createConnectionPaths() {
@@ -1188,6 +2204,28 @@ class MultiverseApp {
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
 
+        // Apply space theme to CSS custom properties
+        const SPACE_ACCENT_RGB = {
+            ideas:     '68,136,255',
+            projects:  '68,255,136',
+            desktop:   '255,136,68',
+            roarboot:  '34,204,170',
+            swedesign: '255,102,51',
+            clawport:  '136,102,255',
+            agentfarm: '136,170,68',
+            video:     '238,68,102',
+            thebrain:  '255,102,170',
+            flowzen:   '51,102,204',
+        };
+        const accentRgb = SPACE_ACCENT_RGB[targetSpace] || SPACE_ACCENT_RGB.ideas;
+        document.documentElement.style.setProperty('--space-accent-rgb', accentRgb);
+        const hexColor = this.spaces[targetSpace]?.color;
+        document.documentElement.style.setProperty('--space-accent',
+            hexColor ? '#' + hexColor.toString(16).padStart(6, '0') : '#4488ff');
+
+        // Update game console agent badge
+        this.updateGameConsoleAgent(targetSpace);
+
         const space = this.spaces[targetSpace];
         if (!space) {
             console.error('[Multiverse] Unknown space:', targetSpace);
@@ -1216,6 +2254,31 @@ class MultiverseApp {
             if (window.vibemind && window.vibemind.hideSweDesign) {
                 window.vibemind.hideSweDesign();
                 console.log('[Multiverse] Hiding SWE Design BrowserView');
+            }
+        }
+
+        // Hide ClawPort Dashboard BrowserView when leaving clawport space
+        if (this.currentSpace === 'clawport' && targetSpace !== 'clawport') {
+            if (window.vibemind && window.vibemind.hideClawPort) {
+                window.vibemind.hideClawPort();
+                console.log('[Multiverse] Hiding ClawPort Dashboard');
+            }
+        }
+
+        // Hide Brain Dashboard BrowserView when leaving thebrain space
+        if (this.currentSpace === 'thebrain' && targetSpace !== 'thebrain') {
+            if (window.vibemind && window.vibemind.hideBrain) {
+                window.vibemind.hideBrain();
+                console.log('[Multiverse] Hiding Brain Dashboard');
+            }
+        }
+
+        // Hide Agent Farm BrowserView when leaving agentfarm or video space
+        if ((this.currentSpace === 'agentfarm' || this.currentSpace === 'video') &&
+            targetSpace !== 'agentfarm' && targetSpace !== 'video') {
+            if (window.vibemind && window.vibemind.hideAgentFarm) {
+                window.vibemind.hideAgentFarm();
+                console.log('[Multiverse] Hiding Agent Farm');
             }
         }
 
@@ -1265,6 +2328,48 @@ class MultiverseApp {
                 }
             }
 
+            // Show ClawPort Dashboard BrowserView when entering clawport space
+            if (targetSpace === 'clawport') {
+                if (window.vibemind && window.vibemind.showClawPort) {
+                    window.vibemind.showClawPort();
+                    console.log('[Multiverse] Showing ClawPort Dashboard');
+                }
+            }
+
+            // Show Brain Dashboard BrowserView when entering thebrain space
+            if (targetSpace === 'thebrain') {
+                if (window.vibemind && window.vibemind.showBrain) {
+                    window.vibemind.showBrain();
+                    console.log('[Multiverse] Showing Brain Dashboard');
+                }
+            }
+
+            // Show Agent Farm BrowserView when entering agentfarm space
+            if (targetSpace === 'agentfarm') {
+                if (window.vibemind && window.vibemind.showAgentFarm) {
+                    window.vibemind.showAgentFarm();
+                    console.log('[Multiverse] Showing Agent Farm');
+                }
+            }
+
+            // Show Agent Farm with Video tab when entering video space
+            if (targetSpace === 'video') {
+                if (window.vibemind && window.vibemind.showAgentFarmTab) {
+                    window.vibemind.showAgentFarmTab('video');
+                    console.log('[Multiverse] Showing Agent Farm (Video tab)');
+                }
+            }
+
+            // Show/hide Flowzen panel
+            const fzPanel = document.getElementById('flowzen-panel');
+            if (fzPanel) {
+                if (targetSpace === 'flowzen') {
+                    fzPanel.classList.remove('hidden');
+                } else {
+                    fzPanel.classList.add('hidden');
+                }
+            }
+
             // Notify IPC
             if (window.vibemind) {
                 window.vibemind.navigateToSpace(targetSpace);
@@ -1299,7 +2404,134 @@ class MultiverseApp {
         
         updateCamera();
     }
-    
+
+    // ========================================================================
+    // GAME CONSOLE CHAT OVERLAY
+    // ========================================================================
+
+    initGameConsole() {
+        this.gcVisible = false;
+        this.gcBusy = false;
+        this.gcMessages = [];
+        this.GC_MAX_MESSAGES = 5;
+        this.GC_FADE_DELAY = 8000;
+
+        const input = document.getElementById('gc-input');
+        const sendBtn = document.getElementById('gc-send-btn');
+
+        // Toggle with 'c' key (for chat) — only when not typing in an input
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'c' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+                e.preventDefault();
+                this.toggleGameConsole();
+                return;
+            }
+            if (e.key === 'Escape' && this.gcVisible) {
+                input.value = '';
+                input.blur();
+            }
+        });
+
+        // Enter sends
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.sendGameConsoleMessage();
+            }
+            // Stop propagation so Three.js keyboard controls don't fire
+            e.stopPropagation();
+        });
+
+        // Send button click
+        sendBtn.addEventListener('click', () => this.sendGameConsoleMessage());
+
+        console.log('[Multiverse] Game console initialized (press ` to toggle)');
+    }
+
+    toggleGameConsole() {
+        const el = document.getElementById('game-console');
+        this.gcVisible = !this.gcVisible;
+        el.classList.toggle('hidden', !this.gcVisible);
+
+        // Shift voice panel to avoid overlap
+        const voicePanel = document.getElementById('voice-panel');
+        if (voicePanel) {
+            voicePanel.style.bottom = this.gcVisible ? '90px' : '20px';
+            voicePanel.style.transition = 'bottom 0.25s ease';
+        }
+
+        if (this.gcVisible) {
+            document.getElementById('gc-input').focus();
+        }
+    }
+
+    async sendGameConsoleMessage() {
+        const input = document.getElementById('gc-input');
+        const text = input.value.trim();
+        if (!text || this.gcBusy) return;
+
+        input.value = '';
+        this.gcBusy = true;
+
+        // Show user message
+        this.addGcMessage(text, 'user');
+
+        // Show spinner, hide send button
+        document.getElementById('gc-spinner').classList.remove('hidden');
+        document.getElementById('gc-send-btn').classList.add('hidden');
+
+        try {
+            const response = await window.vibemind.sendChatMessage(text);
+            const agentMsg = response?.message || 'No response';
+            const isError = response?.success === false;
+            this.addGcMessage(agentMsg, isError ? 'error' : 'agent');
+        } catch (err) {
+            this.addGcMessage(`Error: ${err.message}`, 'error');
+        } finally {
+            this.gcBusy = false;
+            document.getElementById('gc-spinner').classList.add('hidden');
+            document.getElementById('gc-send-btn').classList.remove('hidden');
+        }
+    }
+
+    addGcMessage(text, type) {
+        const container = document.getElementById('gc-messages');
+        const div = document.createElement('div');
+        div.className = `gc-msg gc-${type}`;
+        div.textContent = text;
+        container.appendChild(div);
+
+        this.gcMessages.push(div);
+
+        // Trim to max messages
+        while (this.gcMessages.length > this.GC_MAX_MESSAGES) {
+            const old = this.gcMessages.shift();
+            old.remove();
+        }
+
+        // Auto-scroll
+        container.scrollTop = container.scrollHeight;
+
+        // Auto-fade after delay
+        setTimeout(() => {
+            div.classList.add('gc-fading');
+            setTimeout(() => {
+                div.remove();
+                const idx = this.gcMessages.indexOf(div);
+                if (idx !== -1) this.gcMessages.splice(idx, 1);
+            }, 500);
+        }, this.GC_FADE_DELAY);
+    }
+
+    updateGameConsoleAgent(spaceId) {
+        const space = this.spaces[spaceId];
+        if (!space) return;
+        const nameEl = document.getElementById('gc-agent-name');
+        const iconEl = document.getElementById('gc-agent-icon');
+        if (nameEl) nameEl.textContent = space.agent.name;
+        if (iconEl) iconEl.textContent = space.icon;
+    }
+
     // ========================================================================
     // HAND TRACKING
     // ========================================================================
@@ -1608,6 +2840,56 @@ class MultiverseApp {
             }
         });
 
+        // Animate Dashboard Chalkboard (gentle rocking)
+        if (this.spaces.clawport.board) {
+            this.spaces.clawport.board.rotation.y = Math.sin(elapsed * 0.3) * 0.02;
+            this.spaces.clawport.board.rotation.z = Math.sin(elapsed * 0.5 + 1) * 0.008;
+        }
+
+        // Animate Agent Farm (windmill blades + wandering animals)
+        if (this.spaces.agentfarm.blades) {
+            this.spaces.agentfarm.blades.rotation.z += 0.015;
+        }
+        if (this.spaces.agentfarm.animals) {
+            this.spaces.agentfarm.animals.forEach((animal) => {
+                const d = animal.userData;
+                d.wanderAngle += d.wanderSpeed * 0.01;
+                animal.position.x = Math.cos(d.wanderAngle + Math.sin(elapsed * d.wanderSpeed + d.phase) * 0.3) * d.wanderRadius;
+                animal.position.z = Math.sin(d.wanderAngle + Math.sin(elapsed * d.wanderSpeed + d.phase) * 0.3) * d.wanderRadius;
+                animal.position.y = Math.abs(Math.sin(elapsed * 2 + d.phase)) * 0.05; // tiny hop
+            });
+        }
+
+        // Animate Video Studio (clapperboard wobble + spotlight pulse)
+        if (this.spaces.video.clap) {
+            this.spaces.video.clap.rotation.x = -0.15 + Math.sin(elapsed * 3) * 0.08;
+        }
+        if (this.spaces.video.spotlight) {
+            const pulse = 0.6 + Math.sin(elapsed * 2) * 0.3;
+            this.spaces.video.spotlight.material.emissiveIntensity = pulse;
+        }
+
+        // Animate Brain (pulsing + synapse flicker + thought bubbles float)
+        if (this.spaces.thebrain.brain) {
+            const pulse = 1 + Math.sin(elapsed * 1.5) * 0.03;
+            this.spaces.thebrain.brain.scale.set(pulse, pulse * 0.95, pulse);
+        }
+        if (this.spaces.thebrain.brainGroup) {
+            this.spaces.thebrain.brainGroup.rotation.y = Math.sin(elapsed * 0.2) * 0.05;
+        }
+        if (this.spaces.thebrain.synapses) {
+            this.spaces.thebrain.synapses.forEach((line, i) => {
+                line.material.opacity = 0.1 + Math.abs(Math.sin(elapsed * 3 + i * 1.7)) * 0.3;
+            });
+        }
+        if (this.spaces.thebrain.thoughtBubbles) {
+            this.spaces.thebrain.thoughtBubbles.forEach((bubble) => {
+                const d = bubble.userData;
+                bubble.position.y = d.baseY + Math.sin(elapsed * d.floatSpeed + d.floatPhase) * 0.3;
+                bubble.material.opacity = 0.2 + Math.sin(elapsed * d.floatSpeed * 0.7 + d.floatPhase) * 0.15;
+            });
+        }
+
         // Animate Roarboot Space (gentle bobbing + ripple pulse)
         if (this.spaces.roarboot.boat) {
             this.spaces.roarboot.boat.position.y = 0.1 + Math.sin(elapsed * 0.8) * 0.15;
@@ -1620,6 +2902,83 @@ class MultiverseApp {
             const s = 1 + Math.sin(elapsed * 0.6) * 0.1;
             this.spaces.roarboot.ripple.scale.set(s, s, 1);
             this.spaces.roarboot.ripple.material.opacity = 0.1 + Math.sin(elapsed * 0.6) * 0.05;
+        }
+
+        // Animate MiroFish (fish swarm orbiting + rising bubbles)
+        if (this.spaces.mirofish.fish) {
+            this.spaces.mirofish.fish.forEach((f) => {
+                const d = f.userData;
+                d.angle += d.speed * delta;
+                const x = Math.cos(d.angle + d.phase) * d.radius;
+                const z = Math.sin(d.angle + d.phase) * d.radius;
+                const y = d.yOffset + Math.sin(elapsed * d.yWobbleSpeed + d.phase) * d.yWobble;
+                f.position.set(x, y, z);
+                // Face direction of movement
+                f.lookAt(
+                    x + Math.cos(d.angle + d.phase + 0.1) * d.radius,
+                    y,
+                    z + Math.sin(d.angle + d.phase + 0.1) * d.radius
+                );
+            });
+        }
+        if (this.spaces.mirofish.bubbles) {
+            const pos = this.spaces.mirofish.bubbles.geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                let y = pos.getY(i);
+                y += 0.008 + Math.random() * 0.003;
+                if (y > 1.8) y = -1.8;
+                pos.setY(i, y);
+                pos.setX(i, pos.getX(i) + Math.sin(elapsed + i) * 0.0005);
+            }
+            pos.needsUpdate = true;
+        }
+        if (this.spaces.mirofish.dome) {
+            this.spaces.mirofish.dome.rotation.y += 0.001;
+        }
+        if (this.spaces.mirofish.glowLight) {
+            this.spaces.mirofish.glowLight.intensity = 0.5 + Math.sin(elapsed * 0.7) * 0.15;
+        }
+
+        // Animate Flowzen Rose (glow pulse + state-dependent effects)
+        if (this.spaces.flowzen && this.spaces.flowzen.bloom) {
+            const fz = this.spaces.flowzen;
+            const roseState = fz.roseState || 'idle';
+
+            // Bloom gentle rotation
+            fz.bloom.rotation.y += 0.003;
+
+            // State-dependent effects
+            if (roseState === 'idle') {
+                // Soft blue glow pulse
+                fz.glowLight.intensity = 0.4 + Math.sin(elapsed * 0.8) * 0.15;
+                fz.dome.material.opacity = 0.2 + Math.sin(elapsed * 0.5) * 0.05;
+            } else if (roseState === 'active') {
+                // Brighter pulse when receiving intents
+                fz.glowLight.intensity = 0.7 + Math.sin(elapsed * 2) * 0.2;
+            } else if (roseState === 'recommending') {
+                // Bright glow, particles rise
+                fz.glowLight.intensity = 1.2 + Math.sin(elapsed * 3) * 0.3;
+                fz.glowLight.color.setHex(0x55aaff);
+                fz.particles.material.opacity = 0.6;
+                const positions = fz.particles.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 1] += 0.005;
+                    if (positions[i + 1] > 2.5) positions[i + 1] = 0;
+                }
+                fz.particles.geometry.attributes.position.needsUpdate = true;
+            } else if (roseState === 'rest') {
+                // Dim, petals fall slowly
+                fz.glowLight.intensity = 0.15 + Math.sin(elapsed * 0.3) * 0.05;
+                fz.dome.material.opacity = 0.35;
+                fz.particles.material.opacity = 0.4;
+                const positions = fz.particles.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 1] -= 0.003;
+                    positions[i] += Math.sin(elapsed + i) * 0.001;
+                    if (positions[i + 1] < 0) positions[i + 1] = 2;
+                }
+                fz.particles.geometry.attributes.position.needsUpdate = true;
+            }
         }
 
         // Update requirement shuttles
@@ -1672,6 +3031,18 @@ class MultiverseApp {
             }
         }
 
+        // Check Dashboard chalkboard click — navigate into Dashboard
+        if (this.spaces.clawport?.group && this.currentSpace !== 'clawport') {
+            const boardObjects = this.spaces.clawport.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const boardHit = raycaster.intersectObjects(boardObjects);
+            if (boardHit.length > 0) {
+                this.navigateToSpace('clawport');
+                return;
+            }
+        }
+
         // Check Roarboot boat click (visible from any space) — navigate into Roarboot
         if (this.spaces.roarboot?.group && this.currentSpace !== 'roarboot') {
             const boatObjects = this.spaces.roarboot.group.children.filter(
@@ -1680,6 +3051,54 @@ class MultiverseApp {
             const boatHit = raycaster.intersectObjects(boatObjects);
             if (boatHit.length > 0) {
                 this.navigateToSpace('roarboot');
+                return;
+            }
+        }
+
+        // Check Agent Farm click — navigate into Agent Farm
+        if (this.spaces.agentfarm?.group && this.currentSpace !== 'agentfarm') {
+            const farmObjects = this.spaces.agentfarm.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const farmHit = raycaster.intersectObjects(farmObjects);
+            if (farmHit.length > 0) {
+                this.navigateToSpace('agentfarm');
+                return;
+            }
+        }
+
+        // Check Video Studio click — navigate to video space
+        if (this.spaces.video?.group && this.currentSpace !== 'video') {
+            const videoObjects = this.spaces.video.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const videoHit = raycaster.intersectObjects(videoObjects);
+            if (videoHit.length > 0) {
+                this.navigateToSpace('video');
+                return;
+            }
+        }
+
+        // Check Flowzen (Blaue Rose) click — navigate into Flowzen
+        if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
+            const roseObjects = this.spaces.flowzen.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const roseHit = raycaster.intersectObjects(roseObjects);
+            if (roseHit.length > 0) {
+                this.navigateToSpace('flowzen');
+                return;
+            }
+        }
+
+        // Check Brain click — navigate into The Brain
+        if (this.spaces.thebrain?.group && this.currentSpace !== 'thebrain') {
+            const brainObjects = this.spaces.thebrain.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const brainHit = raycaster.intersectObjects(brainObjects);
+            if (brainHit.length > 0) {
+                this.navigateToSpace('thebrain');
                 return;
             }
         }
@@ -1795,16 +3214,74 @@ class MultiverseApp {
             return;
         }
 
-        // Create fullscreen dashboard (no custom header - VibeMind's nav tabs handle navigation)
+        // Create fullscreen dashboard: eyeTerm top + desktop streams below
         panel = document.createElement('div');
         panel.id = 'vapi-panel';
-        panel.innerHTML = `
-            <div id="vapi-loading">
-                <div class="spinner"></div>
-                <span>Connecting to Automation backend...</span>
-            </div>
-            <iframe id="vapi-frame" style="display:none;" allow="microphone; autoplay" allowfullscreen></iframe>
-        `;
+
+        // --- eyeTerm camera strip (top, fixed 25% height) ---
+        const eyetermStrip = document.createElement('div');
+        eyetermStrip.id = 'eyeterm-strip';
+
+        // Placeholder shown when MJPEG stream is offline
+        const eyetermPlaceholder = document.createElement('div');
+        eyetermPlaceholder.id = 'eyeterm-placeholder';
+        eyetermPlaceholder.textContent = 'eyeTerm — waiting for camera...';
+        eyetermStrip.appendChild(eyetermPlaceholder);
+
+        // MJPEG stream image (hidden until connected)
+        const eyetermImg = document.createElement('img');
+        eyetermImg.id = 'eyeterm-feed';
+        eyetermImg.alt = 'eyeTerm';
+        eyetermImg.style.display = 'none';
+        eyetermImg.addEventListener('load', () => {
+            eyetermImg.style.display = '';
+            eyetermPlaceholder.style.display = 'none';
+        });
+        eyetermImg.addEventListener('error', () => {
+            eyetermImg.style.display = 'none';
+            eyetermPlaceholder.style.display = '';
+            // Retry every 3s with cache-buster
+            setTimeout(() => {
+                eyetermImg.src = 'http://127.0.0.1:8099/stream?t=' + Date.now();
+            }, 3000);
+        });
+        // Start trying to connect
+        eyetermImg.src = 'http://127.0.0.1:8099/stream';
+        eyetermStrip.appendChild(eyetermImg);
+
+        const eyetermLabel = document.createElement('div');
+        eyetermLabel.id = 'eyeterm-strip-label';
+        eyetermLabel.textContent = 'eyeTerm';
+        eyetermStrip.appendChild(eyetermLabel);
+        panel.appendChild(eyetermStrip);
+
+        // --- Desktop streams area (fills remaining space) ---
+        const streamsArea = document.createElement('div');
+        streamsArea.id = 'desktop-streams-area';
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'vapi-loading';
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+        loadingDiv.appendChild(spinner);
+        const loadingText = document.createElement('span');
+        loadingText.textContent = 'Connecting to Automation backend...';
+        loadingDiv.appendChild(loadingText);
+        streamsArea.appendChild(loadingDiv);
+
+        // Desktop stream via host-frame polling (no iframe needed)
+        const desktopImg = document.createElement('img');
+        desktopImg.id = 'desktop-stream-img';
+        desktopImg.alt = 'Desktop Stream';
+        desktopImg.style.display = 'none';
+        streamsArea.appendChild(desktopImg);
+
+        const clickCanvas = document.createElement('canvas');
+        clickCanvas.id = 'click-overlay';
+        clickCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10';
+        streamsArea.appendChild(clickCanvas);
+        panel.appendChild(streamsArea);
+
         document.body.appendChild(panel);
 
         // Show with fade-in
@@ -1813,37 +3290,99 @@ class MultiverseApp {
             requestAnimationFrame(() => panel.classList.add('fade-in'));
         });
 
-        // Poll backend health, then load iframe
-        let attempts = 0;
-        const maxAttempts = 20;
-        const pollHealth = () => {
-            attempts++;
-            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
-                .then(r => {
+        // Desktop stream: poll host-frame endpoint for screenshots
+        let _desktopStreamActive = false;
+        let _desktopFps = 0;
+        const startDesktopStream = () => {
+            _desktopStreamActive = true;
+            const imgEl = document.getElementById('desktop-stream-img');
+            const loadEl = document.getElementById('vapi-loading');
+            let lastFrameTime = 0;
+
+            const fetchFrame = async () => {
+                if (!_desktopStreamActive) return;
+                try {
+                    const r = await fetch('http://localhost:8007/api/desktop/screenshot', {
+                        signal: AbortSignal.timeout(3000),
+                    });
                     if (r.ok) {
-                        const loadingEl = document.getElementById('vapi-loading');
-                        const frameEl = document.getElementById('vapi-frame');
-                        if (loadingEl) loadingEl.style.display = 'none';
-                        if (frameEl) {
-                            frameEl.src = 'http://localhost:8007/voice/dashboard';
-                            frameEl.style.display = 'block';
+                        const data = await r.json();
+                        const frameData = data.screenshot?.data || data.frame;
+                        if (frameData && imgEl) {
+                            imgEl.src = 'data:image/jpeg;base64,' + frameData;
+                            imgEl.style.display = '';
+                            if (loadEl) loadEl.style.display = 'none';
+                            // FPS counter
+                            const now = performance.now();
+                            if (lastFrameTime) _desktopFps = Math.round(1000 / (now - lastFrameTime));
+                            lastFrameTime = now;
                         }
-                    } else if (attempts < maxAttempts) {
-                        setTimeout(pollHealth, 3000);
                     }
-                })
+                } catch (e) {
+                    // Backend not reachable — retry silently
+                }
+                // Next frame: target ~7 fps
+                if (_desktopStreamActive) setTimeout(fetchFrame, 140);
+            };
+            // Start after health check
+            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                .then(r => { if (r.ok || r.status === 503) fetchFrame(); })
                 .catch(() => {
-                    if (attempts < maxAttempts) {
-                        setTimeout(pollHealth, 3000);
-                    } else {
-                        const loadingEl = document.getElementById('vapi-loading');
-                        if (loadingEl) {
-                            loadingEl.innerHTML = '<span>Backend not reachable. Check Automation_ui.</span>';
-                        }
-                    }
+                    // Retry health check every 3s
+                    const retryHealth = setInterval(() => {
+                        fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                            .then(r => { if (r.ok || r.status === 503) { clearInterval(retryHealth); fetchFrame(); } })
+                            .catch(() => {});
+                    }, 3000);
                 });
         };
-        setTimeout(pollHealth, 2000);
+        setTimeout(startDesktopStream, 1000);
+
+        // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on canvas
+        if (window.vibemind && window.vibemind.onPythonMessage) {
+            window.vibemind.onPythonMessage((msg) => {
+                if (msg.type !== 'eyeterm_click_dots') return;
+                const canvas = document.getElementById('click-overlay');
+                if (!canvas) return;
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const sw = msg.screen_w || 1920;
+                const sh = msg.screen_h || 1080;
+                for (const d of msg.dots) {
+                    const alpha = Math.max(0.15, 1.0 - d.age / 10.0);
+                    const cx = (d.cx / sw) * canvas.width;
+                    const cy = (d.cy / sh) * canvas.height;
+                    const px = (d.px / sw) * canvas.width;
+                    const py = (d.py / sh) * canvas.height;
+                    // Error line (yellow)
+                    ctx.strokeStyle = `rgba(255,200,0,${alpha})`;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(cx, cy);
+                    ctx.stroke();
+                    // Predicted (red)
+                    ctx.fillStyle = `rgba(255,60,60,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Actual click (green)
+                    ctx.fillStyle = `rgba(0,255,100,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Residual label on recent dots
+                    if (d.age < 5) {
+                        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+                        ctx.font = '11px monospace';
+                        ctx.fillText(d.r + 'px', cx + 9, cy - 3);
+                    }
+                }
+            });
+        }
     }
 
     /**

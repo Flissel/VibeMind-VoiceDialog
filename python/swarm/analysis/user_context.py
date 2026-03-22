@@ -137,6 +137,7 @@ class UserContextBuilder:
         Returns:
             Populated UserContext
         """
+        logger.debug("build: user_id=%s session_id=%s", user_id, session_id)
         context = UserContext(
             user_id=user_id,
             session_id=session_id,
@@ -168,6 +169,7 @@ class UserContextBuilder:
 
     async def _load_recent_actions(self, context: UserContext) -> None:
         """Load recent actions from SystemContextStore."""
+        logger.debug("_load_recent_actions called")
         if self.context_store is None:
             return
 
@@ -230,6 +232,7 @@ class UserContextBuilder:
 
     async def _load_task_memory(self, context: UserContext) -> None:
         """Load persistent task memory from database."""
+        logger.debug("_load_task_memory: user_id=%s", context.user_id)
         try:
             from data.task_memory_repository import get_task_memory_repository
 

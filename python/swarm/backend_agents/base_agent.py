@@ -589,6 +589,21 @@ class BaseBackendAgent(ABC):
                 result=result,
                 event_type=event_type
             )
+
+            # Record agent execution for Rowboat MongoDB (for Brain seeding)
+            try:
+                from publishing import get_ideas_publisher
+                pub = get_ideas_publisher()
+                if hasattr(pub, 'record_agent_execution'):
+                    pub.record_agent_execution(
+                        agent_name=self.name,
+                        event_type=event_type,
+                        tool_name=tool_name,
+                        success=True,
+                    )
+            except Exception:
+                pass
+
             logger.info(f"{self.name}: Completed {event_type} (job={job_id})")
 
         except Exception as e:
@@ -602,6 +617,20 @@ class BaseBackendAgent(ABC):
                 error=str(e)
             )
             await self._publish_error(job_id, str(e), event_type=event_type)
+
+            # Record failed execution for Rowboat MongoDB (for Brain seeding)
+            try:
+                from publishing import get_ideas_publisher
+                pub = get_ideas_publisher()
+                if hasattr(pub, 'record_agent_execution'):
+                    pub.record_agent_execution(
+                        agent_name=self.name,
+                        event_type=event_type,
+                        tool_name=tool_name,
+                        success=False,
+                    )
+            except Exception:
+                pass
 
     async def _publish_status(
         self,

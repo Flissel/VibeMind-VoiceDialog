@@ -5,6 +5,10 @@ MIGRATED TO: spaces/ideas/tools/bubble_tools.py
 This file re-exports for backward compatibility.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Re-export everything from new location
 from spaces.ideas.tools.bubble_tools import (
     # Bubble management
@@ -20,9 +24,6 @@ from spaces.ideas.tools.bubble_tools import (
     delete_all_bubbles_except,
     enter_bubble,
     exit_bubble,
-    # Agent transfers
-    transfer_to_rachel,
-    transfer_to_multiverse,
     # Utilities
     generate_bubble_embeddings,
     get_pending_agent_switch,
@@ -46,8 +47,6 @@ __all__ = [
     "delete_all_bubbles_except",
     "enter_bubble",
     "exit_bubble",
-    "transfer_to_rachel",
-    "transfer_to_multiverse",
     "generate_bubble_embeddings",
     "get_pending_agent_switch",
     "get_current_bubble_db_id",

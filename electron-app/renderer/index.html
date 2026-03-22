@@ -53,6 +53,30 @@
                 <span class="space-icon">&#x1F6A3;</span>
                 <span class="space-name">Rowboat</span>
             </button>
+            <button class="space-tab" id="tab-clawport" data-space="clawport">
+                <span class="space-icon">&#x1F4CA;</span>
+                <span class="space-name">Dashboard</span>
+            </button>
+            <button class="space-tab" id="tab-video" data-space="video">
+                <span class="space-icon">&#x1F3AC;</span>
+                <span class="space-name">Video Studio</span>
+            </button>
+            <button class="space-tab" id="tab-agentfarm" data-space="agentfarm">
+                <span class="space-icon">&#x1F3E1;</span>
+                <span class="space-name">Agent Farm</span>
+            </button>
+            <button class="space-tab" id="tab-thebrain" data-space="thebrain">
+                <span class="space-icon">&#x1F9E0;</span>
+                <span class="space-name">The Brain</span>
+            </button>
+            <button class="space-tab" id="tab-flowzen" data-space="flowzen">
+                <span class="space-icon">&#x1F339;</span>
+                <span class="space-name">Blaue Rose</span>
+            </button>
+            <button class="space-tab" id="tab-mirofish" data-space="mirofish">
+                <span class="space-icon">&#x1F41F;</span>
+                <span class="space-name">MiroFish</span>
+            </button>
         </div>
         <div class="agent-status" id="agent-status">
             <span class="agent-indicator"></span>
@@ -155,6 +179,21 @@
             <div id="transcript-content"></div>
         </div>
 
+        <!-- Game Console Chat Overlay (backtick to toggle) -->
+        <div id="game-console" class="game-console hidden">
+            <div class="gc-messages" id="gc-messages"></div>
+            <div class="gc-input-row">
+                <span class="gc-agent-badge" id="gc-agent-badge">
+                    <span class="gc-agent-icon" id="gc-agent-icon">💭</span>
+                    <span class="gc-agent-name" id="gc-agent-name">Rachel</span>
+                </span>
+                <input type="text" id="gc-input" class="gc-input"
+                       placeholder="Type a command..." autocomplete="off" spellcheck="false" />
+                <button id="gc-send-btn" class="gc-send-btn" title="Send (Enter)">▶</button>
+                <div id="gc-spinner" class="gc-spinner hidden"></div>
+            </div>
+        </div>
+
         <!-- Shuttle Info Panel -->
         <div id="shuttle-info-panel" class="hidden">
             <div class="shuttle-header">
@@ -205,11 +244,43 @@
             </div>
         </div>
 
+        <!-- Flowzen (Blaue Rose) Recommendation Panel -->
+        <div id="flowzen-panel" class="flowzen-panel hidden">
+            <div class="flowzen-header">
+                <span class="flowzen-icon">🌹</span>
+                <span class="flowzen-title">Blaue Rose</span>
+                <span class="flowzen-state" id="flowzen-state-badge">idle</span>
+            </div>
+            <div class="flowzen-status" id="flowzen-status">
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Tageszeit</span>
+                    <span class="flowzen-stat-value" id="fz-time-window">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Stimmung</span>
+                    <span class="flowzen-stat-value" id="fz-mood">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Kategorie</span>
+                    <span class="flowzen-stat-value" id="fz-category">—</span>
+                </div>
+            </div>
+            <button class="flowzen-recommend-btn" id="fz-recommend-btn">
+                Was soll ich machen?
+            </button>
+            <div class="flowzen-recommendations" id="fz-recommendations">
+                <div class="flowzen-empty">Noch keine Empfehlungen</div>
+            </div>
+        </div>
+
         <!-- Roarboot Space is now rendered via BrowserView (rowboat-manager.js) -->
         <!-- No iframe needed — BrowserView overlays the window directly -->
 
         <!-- Transition Overlay -->
         <div id="transition-overlay"></div>
+
+        <!-- eyeTerm Calibration Overlay -->
+        <div id="calibration-overlay"></div>
 
         <!-- VNC Live Preview Container (NEW) -->
         <div id="vnc-preview-container" class="hidden">
@@ -233,6 +304,52 @@
                     <div class="vnc-loading-details" id="vnc-loading-details">Initializing Docker container...</div>
                 </div>
             </div>
+        </div>
+
+        <!-- Claude Code Runner Panel -->
+        <div id="claude-runner-panel" class="hidden" style="
+            position: fixed; bottom: 20px; right: 20px; z-index: 1000;
+            background: rgba(15, 15, 25, 0.95); border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px; padding: 16px; width: 380px;
+            backdrop-filter: blur(20px); font-family: 'Inter', sans-serif;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🤖</span>
+                    <span style="color: #e0e0e0; font-weight: 600; font-size: 14px;">Claude Code Runner</span>
+                </div>
+                <span id="claude-runner-status" style="
+                    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+                    background: rgba(100, 100, 100, 0.3); color: #888;
+                ">Stopped</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="claude-runner-repo" placeholder="Git repo path (e.g. C:\projects\my-app)"
+                    style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+                           background: rgba(0,0,0,0.3); color: #e0e0e0; font-size: 12px; box-sizing: border-box;" />
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button id="claude-runner-start-btn" style="
+                    flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(0, 255, 136, 0.2); color: #00ff88; font-size: 12px; font-weight: 600;
+                ">Start</button>
+                <button id="claude-runner-stop-btn" disabled style="
+                    flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(255, 68, 68, 0.15); color: #ff4444; font-size: 12px; font-weight: 600;
+                    opacity: 0.4;
+                ">Stop</button>
+                <button id="claude-runner-vnc-btn" disabled style="
+                    padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer;
+                    background: rgba(100, 140, 255, 0.2); color: #648cff; font-size: 12px; font-weight: 600;
+                    opacity: 0.4;
+                ">VNC</button>
+            </div>
+            <div id="claude-runner-details" style="
+                margin-top: 10px; padding: 8px; border-radius: 6px;
+                background: rgba(0,0,0,0.2); color: #888; font-size: 11px;
+                font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; max-height: 80px; overflow-y: auto;
+            ">Not running</div>
         </div>
 
         <!-- Shuttle Interior View (zoomed-in shuttle space) -->
@@ -322,118 +439,203 @@
                 </button>
             </div>
 
-            <!-- Checkpoint Content Panels -->
+            <!-- Wizard Content Panels -->
             <div class="checkpoint-panels">
-                <!-- Mining Panel: Shows extracted requirements -->
+
+                <!-- Step 1: Mining / Project Context -->
                 <div class="checkpoint-panel active" id="checkpoint-mining">
                     <div class="panel-header">
-                        <h4>⛏️ Mining Results</h4>
-                        <span class="panel-count" id="mining-count">0 requirements extracted</span>
+                        <h4>⛏️ Project Context</h4>
+                        <span class="panel-count" id="mining-count">Define your project</span>
                     </div>
-                    <div class="requirements-grid" id="shuttle-requirements-grid">
-                        <div class="req-loading">Loading requirements...</div>
+                    <div class="wizard-form" id="wizard-form-mining">
+                        <div class="wizard-field">
+                            <label for="wizard-project-name">Project Name</label>
+                            <input type="text" id="wizard-project-name" placeholder="e.g. Marketing Platform" />
+                        </div>
+                        <div class="wizard-field">
+                            <label for="wizard-project-desc">Description</label>
+                            <textarea id="wizard-project-desc" rows="3" placeholder="What does this project do?"></textarea>
+                        </div>
+                        <div class="wizard-field-row">
+                            <div class="wizard-field">
+                                <label for="wizard-domain">Domain</label>
+                                <input type="text" id="wizard-domain" placeholder="e.g. E-Commerce, FinTech" />
+                            </div>
+                            <div class="wizard-field">
+                                <label for="wizard-target-users">Target Users</label>
+                                <input type="text" id="wizard-target-users" placeholder="e.g. End Users, Admins" />
+                            </div>
+                        </div>
+                        <div class="wizard-context-result hidden" id="wizard-context-result">
+                            <h5>Generated Context</h5>
+                            <div id="wizard-context-content"></div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="action-btn secondary" id="wizard-generate-context">
+                                Generate Context
+                            </button>
+                            <button class="action-btn primary" id="wizard-next-to-requirements">
+                                Next: Requirements →
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Validation Panel: Shows 9-criteria scores -->
+                <!-- Step 2: Requirements + Stakeholders -->
                 <div class="checkpoint-panel" id="checkpoint-validation">
                     <div class="panel-header">
-                        <h4>✓ Validation Results (IEEE 29148)</h4>
-                        <span class="panel-count" id="validation-count">0 evaluated</span>
+                        <h4>📋 Requirements & Stakeholders</h4>
+                        <span class="panel-count" id="validation-count">0 requirements</span>
                     </div>
-                    <div class="validation-criteria-grid" id="validation-criteria-grid">
-                        <div class="criteria-header">
-                            <span>Criterion</span>
-                            <span>Score</span>
-                            <span>Status</span>
+                    <div class="wizard-form" id="wizard-form-requirements">
+                        <!-- Stakeholders Section -->
+                        <div class="wizard-section">
+                            <div class="wizard-section-header">
+                                <h5>Stakeholders</h5>
+                                <button class="action-btn small" id="wizard-generate-stakeholders">
+                                    Generate
+                                </button>
+                            </div>
+                            <div class="wizard-stakeholders-grid" id="wizard-stakeholders-grid">
+                                <div class="wizard-placeholder">Click "Generate" to create stakeholders from project context</div>
+                            </div>
                         </div>
-                        <div class="criteria-row">
-                            <span>Clarity</span>
-                            <span class="criteria-score" id="criteria-clarity">-</span>
-                            <span class="criteria-status">⏳</span>
+
+                        <!-- Requirements Section -->
+                        <div class="wizard-section">
+                            <div class="wizard-section-header">
+                                <h5>Requirements</h5>
+                                <button class="action-btn small" id="wizard-add-requirement">+ Add</button>
+                                <button class="action-btn small secondary" id="wizard-run-gap-analysis">
+                                    Gap Analysis
+                                </button>
+                            </div>
+                            <div class="requirements-grid" id="wizard-requirements-grid">
+                                <div class="wizard-placeholder">Requirements from bubble ideas will appear here</div>
+                            </div>
                         </div>
-                        <div class="criteria-row">
-                            <span>Testability</span>
-                            <span class="criteria-score" id="criteria-testability">-</span>
-                            <span class="criteria-status">⏳</span>
+
+                        <!-- Suggestions Notification Area -->
+                        <div class="wizard-suggestions hidden" id="wizard-suggestions">
+                            <h5>Suggestions</h5>
+                            <div id="wizard-suggestions-list"></div>
                         </div>
-                        <div class="criteria-row">
-                            <span>Measurability</span>
-                            <span class="criteria-score" id="criteria-measurability">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Atomicity</span>
-                            <span class="criteria-score" id="criteria-atomic">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Conciseness</span>
-                            <span class="criteria-score" id="criteria-concise">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Unambiguous</span>
-                            <span class="criteria-score" id="criteria-unambiguous">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Design Independent</span>
-                            <span class="criteria-score" id="criteria-design_independent">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Consistent Language</span>
-                            <span class="criteria-score" id="criteria-consistent_language">-</span>
-                            <span class="criteria-status">⏳</span>
-                        </div>
-                        <div class="criteria-row">
-                            <span>Purpose Independent</span>
-                            <span class="criteria-score" id="criteria-purpose_independent">-</span>
-                            <span class="criteria-status">⏳</span>
+
+                        <div class="wizard-actions">
+                            <button class="action-btn secondary" id="wizard-back-to-mining">
+                                ← Back
+                            </button>
+                            <button class="action-btn primary" id="wizard-next-to-constraints">
+                                Next: Constraints →
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Knowledge Graph Panel: Shows entities and relationships -->
+                <!-- Step 3: Constraints + Validation -->
                 <div class="checkpoint-panel" id="checkpoint-knowledge_graph">
                     <div class="panel-header">
-                        <h4>✳️ Knowledge Graph</h4>
-                        <span class="panel-count" id="kg-count">0 nodes, 0 edges</span>
+                        <h4>🔒 Constraints & Validation</h4>
+                        <span class="panel-count" id="kg-count">0 constraints</span>
                     </div>
-                    <div class="kg-preview" id="kg-preview">
-                        <div class="kg-placeholder">
-                            <div class="kg-icon">✳️</div>
-                            <div>Knowledge Graph not yet built</div>
-                            <div class="kg-hint">Enable USE_KG_API=true to build entity relationships</div>
+                    <div class="wizard-form" id="wizard-form-constraints">
+                        <div class="wizard-section">
+                            <div class="wizard-section-header">
+                                <h5>Constraints</h5>
+                                <button class="action-btn small" id="wizard-extract-constraints">
+                                    Auto-Extract
+                                </button>
+                            </div>
+                            <div class="wizard-constraints-grid" id="wizard-constraints-grid">
+                                <div class="wizard-placeholder">Click "Auto-Extract" to find constraints from requirements</div>
+                            </div>
+                        </div>
+
+                        <!-- Validation Summary -->
+                        <div class="wizard-section">
+                            <h5>Validation Summary</h5>
+                            <div class="wizard-validation-summary" id="wizard-validation-summary">
+                                <div class="validation-stat">
+                                    <span class="stat-label">Requirements</span>
+                                    <span class="stat-value" id="wizard-val-reqs">0</span>
+                                </div>
+                                <div class="validation-stat">
+                                    <span class="stat-label">Stakeholders</span>
+                                    <span class="stat-value" id="wizard-val-stakeholders">0</span>
+                                </div>
+                                <div class="validation-stat">
+                                    <span class="stat-label">Constraints</span>
+                                    <span class="stat-value" id="wizard-val-constraints">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="wizard-actions">
+                            <button class="action-btn secondary" id="wizard-back-to-requirements">
+                                ← Back
+                            </button>
+                            <button class="action-btn primary" id="wizard-next-to-techstack">
+                                Next: Finalize →
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- TechStack Panel: Shows architecture recommendations -->
+                <!-- Step 4: TechStack + Finalize -->
                 <div class="checkpoint-panel" id="checkpoint-techstack">
                     <div class="panel-header">
-                        <h4>🚀 TechStack Recommendations</h4>
-                        <span class="panel-count" id="techstack-count">Not detected</span>
+                        <h4>🚀 Finalize & Send to SWE Design</h4>
+                        <span class="panel-count" id="techstack-count">Ready to finalize</span>
                     </div>
-                    <div class="techstack-preview" id="techstack-preview">
-                        <div class="techstack-placeholder">
-                            <div class="techstack-icon">🚀</div>
-                            <div>TechStack not yet detected</div>
-                            <div class="techstack-hint">Enable USE_TECHSTACK_API=true to detect recommended technologies</div>
+                    <div class="wizard-form" id="wizard-form-techstack">
+                        <!-- Work Division -->
+                        <div class="wizard-field">
+                            <label for="wizard-work-division">Work Division Strategy</label>
+                            <select id="wizard-work-division">
+                                <option value="per_feature">Per Feature</option>
+                                <option value="per_team">Per Team</option>
+                                <option value="per_module">Per Module</option>
+                            </select>
+                        </div>
+
+                        <!-- Package Summary -->
+                        <div class="wizard-section">
+                            <h5>Work Package Summary</h5>
+                            <div class="wizard-package-summary" id="wizard-package-summary">
+                                <div class="package-row">
+                                    <span>Project</span>
+                                    <span id="wizard-pkg-project">-</span>
+                                </div>
+                                <div class="package-row">
+                                    <span>Domain</span>
+                                    <span id="wizard-pkg-domain">-</span>
+                                </div>
+                                <div class="package-row">
+                                    <span>Requirements</span>
+                                    <span id="wizard-pkg-reqs">0</span>
+                                </div>
+                                <div class="package-row">
+                                    <span>Stakeholders</span>
+                                    <span id="wizard-pkg-stakeholders">0</span>
+                                </div>
+                                <div class="package-row">
+                                    <span>Constraints</span>
+                                    <span id="wizard-pkg-constraints">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="wizard-actions">
+                            <button class="action-btn secondary" id="wizard-back-to-constraints">
+                                ← Back
+                            </button>
+                            <button class="action-btn primary" id="wizard-finalize">
+                                Finalize & Send to SWE Design
+                            </button>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="shuttle-actions">
-                <button id="shuttle-open-orchestrator" class="action-btn secondary">
-                    🔧 Open Orchestrator
-                </button>
-                <button id="shuttle-continue-to-project" class="action-btn primary">
-                    Continue to Projects →
-                </button>
             </div>
         </div>
     </div>
@@ -469,7 +671,10 @@
         const voiceIndicator = document.getElementById('voice-indicator');
         const voiceStatus = document.getElementById('voice-status');
 
+        let voiceConnecting = false;  // Debounce flag
+        let voiceConnectTimer = null;  // Safety timeout
         voiceBtn.onclick = () => {
+            if (voiceConnecting) return;  // Ignore clicks during connection
             if (voiceActive) {
                 window.vibemind.stopVoice();
                 voiceActive = false;
@@ -477,11 +682,24 @@
                 voiceStatus.textContent = 'Voice: Inactive';
                 voiceBtn.textContent = 'Start Voice';
             } else {
+                voiceConnecting = true;
                 window.vibemind.startVoice();
-                voiceActive = true;
-                voiceIndicator.className = 'active';
-                voiceStatus.textContent = 'Voice: Listening...';
-                voiceBtn.textContent = 'Stop Voice';
+                voiceIndicator.className = 'connecting';
+                voiceStatus.textContent = 'Verbinde... (bis zu 30s beim ersten Mal)';
+                voiceBtn.textContent = 'Verbinde...';
+                voiceBtn.style.opacity = '0.6';
+                // Safety net: reset voiceConnecting after 35s if no response
+                if (voiceConnectTimer) clearTimeout(voiceConnectTimer);
+                voiceConnectTimer = setTimeout(() => {
+                    if (voiceConnecting) {
+                        console.warn('[Voice] Connection timeout — resetting button');
+                        voiceConnecting = false;
+                        voiceBtn.textContent = 'Start Voice';
+                        voiceBtn.style.opacity = '1';
+                        voiceIndicator.className = 'inactive';
+                        voiceStatus.textContent = 'Voice: Timeout';
+                    }
+                }, 35000);
             }
         };
 
@@ -718,6 +936,35 @@
                     // Could open a project canvas or detail view
                     break;
 
+                case 'project_issue_detected':
+                    // Live issue detected during code generation
+                    if (message.issue) {
+                        const severity = message.issue.severity || 'medium';
+                        const issueIcon = severity === 'critical' ? '🔴' :
+                                          severity === 'high' ? '🟠' : '🟡';
+                        const issueTitle = message.issue.title || 'Issue detected';
+                        const issueCategory = message.issue.category ? ` [${message.issue.category}]` : '';
+                        showTranscript('Quality', `${issueIcon} ${issueTitle}${issueCategory}`);
+                        console.log('[UI] Issue detected:', severity, issueTitle);
+                    }
+                    break;
+
+                case 'project_quality_update':
+                    // Quality summary updated during/after generation
+                    if (message.summary) {
+                        const total = message.summary.total_issues || 0;
+                        const bySev = message.summary.by_severity || {};
+                        const critical = bySev.critical || 0;
+                        const high = bySev.high || 0;
+                        const medium = bySev.medium || 0;
+                        const low = bySev.low || 0;
+                        const autoFixed = message.summary.auto_fixed || 0;
+                        const qualityMsg = `📊 Quality: ${total} issues (${critical} critical, ${high} high, ${medium} medium, ${low} low) — ${autoFixed} auto-fixed`;
+                        showTranscript('Quality', qualityMsg);
+                        console.log('[UI] Quality update:', message.summary);
+                    }
+                    break;
+
                 // ============================================
                 // PROJECT LIVE PREVIEW MESSAGES (NEW)
                 // ============================================
@@ -857,18 +1104,41 @@
                     exitSpace();
                     break;
 
+                case 'voice_status':
+                    // Connection progress feedback (e.g. "Verbinde mit OpenAI Realtime...")
+                    voiceIndicator.className = 'connecting';
+                    voiceStatus.textContent = message.message || 'Verbinde...';
+                    voiceBtn.textContent = 'Verbinde...';
+                    break;
+
                 case 'voice_started':
                     voiceActive = true;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
                     voiceIndicator.className = 'active';
                     voiceStatus.textContent = 'Voice: Listening...';
                     voiceBtn.textContent = 'Stop Voice';
+                    voiceBtn.style.opacity = '1';
                     break;
 
                 case 'voice_stopped':
                     voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
                     voiceIndicator.className = 'inactive';
                     voiceStatus.textContent = 'Voice: Inactive';
                     voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
+                    break;
+
+                case 'voice_error':
+                    voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
+                    voiceIndicator.className = 'inactive';
+                    voiceStatus.textContent = 'Voice: Error';
+                    voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
                     break;
 
                 // Canvas events
@@ -1099,6 +1369,32 @@
                     }
                     break;
                     
+                case 'calibration_target': {
+                    const calOverlay = document.getElementById('calibration-overlay');
+                    if (calOverlay) {
+                        calOverlay.classList.add('active');
+                        while (calOverlay.firstChild) calOverlay.removeChild(calOverlay.firstChild);
+                        const dot = document.createElement('div');
+                        dot.className = 'calibration-dot';
+                        dot.style.left = message.x + 'px';
+                        dot.style.top = message.y + 'px';
+                        calOverlay.appendChild(dot);
+                        const info = document.createElement('div');
+                        info.className = 'calibration-info';
+                        info.textContent = 'Kalibrierung: Punkt ' + (message.index + 1) + '/' + message.total;
+                        calOverlay.appendChild(info);
+                    }
+                    break;
+                }
+                case 'calibration_done': {
+                    const calOverlay2 = document.getElementById('calibration-overlay');
+                    if (calOverlay2) {
+                        calOverlay2.classList.remove('active');
+                        while (calOverlay2.firstChild) calOverlay2.removeChild(calOverlay2.firstChild);
+                    }
+                    break;
+                }
+
                 case 'space_changed':
                     // Space was changed (from backend, keyboard shortcut, or agent transfer)
                     console.log('[Space] Changed to:', message.space);
@@ -1131,13 +1427,25 @@
                             console.log('[Space] Triggering animated navigation to:', message.space);
                             window.multiverseApp.navigateToSpace(message.space);
                         }
-                        
+
+                        // Show/hide Brain Dashboard BrowserView
+                        if (message.space === 'thebrain' && window.vibemind && window.vibemind.showBrain) {
+                            window.vibemind.showBrain();
+                            console.log('[Space] Showing Brain Dashboard');
+                        }
+
                         // Show reason if provided (e.g., from agent transfer)
                         if (message.reason) {
                             showTranscript('System', message.reason);
                         }
                     } else {
                         console.log('[Space] Already in space:', message.space);
+
+                        // Ensure Brain Dashboard is shown even if already in space
+                        if (message.space === 'thebrain' && window.vibemind && window.vibemind.showBrain) {
+                            window.vibemind.showBrain();
+                            console.log('[Space] Showing Brain Dashboard (already in space)');
+                        }
                     }
                     break;
                     
@@ -1473,6 +1781,19 @@
                     }
                     break;
 
+                // ============================================
+                // WIZARD RESPONSES (from Python wizard_handler)
+                // ============================================
+                case 'wizard_initialized':
+                case 'wizard_state':
+                case 'wizard_step_saved':
+                case 'wizard_agent_result':
+                case 'wizard_finalized':
+                case 'wizard_suggestion_resolved':
+                    // Dispatch to wizard controller via custom event
+                    window.dispatchEvent(new CustomEvent('message-from-python', { detail: message }));
+                    break;
+
                 // Roarboot status (tab dot only — BrowserView handles its own UI)
                 case 'roarboot_status':
                     if (window.multiverseApp && window.multiverseApp.updateRoarbootStatus) {
@@ -1508,6 +1829,54 @@
                     }
                     // Store for BrowserView update banner
                     window._rowboatUpdateInfo = message;
+                    break;
+
+                // ============================================
+                // FLOWZEN (BLAUE ROSE) MESSAGES
+                // ============================================
+
+                case 'flowzen_rose_state':
+                    if (window.multiverseApp && window.multiverseApp.spaces.flowzen) {
+                        window.multiverseApp.spaces.flowzen.roseState = message.state || 'idle';
+                        console.log('[Flowzen] Rose state:', message.state);
+                    }
+                    updateFlowzenPanel({ state: message.state });
+                    break;
+
+                case 'flowzen_status_result':
+                    updateFlowzenPanel(message);
+                    break;
+
+                case 'flowzen_recommend_result':
+                    if (message.recommendation) {
+                        addFlowzenRecommendation({
+                            category: message.recommendation.category,
+                            reasoning: message.recommendation.reasoning,
+                            idea_title: message.recommendation.idea_title,
+                            mood: message.recommendation.mood,
+                            time: new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}),
+                        });
+                        updateFlowzenPanel({
+                            mood: message.recommendation.mood,
+                            category: message.recommendation.category,
+                            current_time_window: message.recommendation.time_window,
+                        });
+                    }
+                    break;
+
+                // Rowboat update auto-applied
+                case 'rowboat_update_applied':
+                    console.log(`[UI] Rowboat auto-updated: ${message.old_version} -> ${message.new_version}`);
+                    {
+                        const rTab = document.getElementById('tab-roarboot');
+                        if (rTab) {
+                            const nameSpan = rTab.querySelector('.space-name');
+                            if (nameSpan) {
+                                nameSpan.textContent = 'Rowboat \u2705 Updated';
+                                setTimeout(() => { nameSpan.textContent = 'Rowboat'; }, 10000);
+                            }
+                        }
+                    }
                     break;
             }
         });
@@ -1636,6 +2005,112 @@
             }
         });
         
+        // ========================================
+        // CLAUDE CODE RUNNER
+        // ========================================
+        const crPanel = document.getElementById('claude-runner-panel');
+        const crStatus = document.getElementById('claude-runner-status');
+        const crDetails = document.getElementById('claude-runner-details');
+        const crRepoInput = document.getElementById('claude-runner-repo');
+        const crStartBtn = document.getElementById('claude-runner-start-btn');
+        const crStopBtn = document.getElementById('claude-runner-stop-btn');
+        const crVncBtn = document.getElementById('claude-runner-vnc-btn');
+        let crPolling = null;
+
+        crStartBtn?.addEventListener('click', async () => {
+            const repoPath = crRepoInput?.value?.trim();
+            if (!repoPath) { crDetails.textContent = 'Please enter a git repo path'; return; }
+
+            crStartBtn.disabled = true;
+            crStartBtn.style.opacity = '0.4';
+            crStatus.textContent = 'Starting...';
+            crStatus.style.background = 'rgba(255, 200, 0, 0.2)';
+            crStatus.style.color = '#ffc800';
+            crDetails.textContent = 'Building Docker image & starting container...';
+
+            try {
+                const result = await window.vibemind.engine.claudeRunner.start(repoPath);
+                if (result.success) {
+                    crStopBtn.disabled = false;
+                    crStopBtn.style.opacity = '1';
+                    crVncBtn.disabled = false;
+                    crVncBtn.style.opacity = '1';
+                    crVncBtn.dataset.vncPort = result.vncPort;
+                    crStatus.textContent = 'Running';
+                    crStatus.style.background = 'rgba(0, 255, 136, 0.2)';
+                    crStatus.style.color = '#00ff88';
+                    crDetails.textContent = `Container started. VNC: ${result.vncPort}`;
+                    startCrPolling();
+                } else {
+                    crStartBtn.disabled = false;
+                    crStartBtn.style.opacity = '1';
+                    crStatus.textContent = 'Error';
+                    crStatus.style.background = 'rgba(255, 68, 68, 0.2)';
+                    crStatus.style.color = '#ff4444';
+                    crDetails.textContent = result.error;
+                }
+            } catch (error) {
+                crStartBtn.disabled = false;
+                crStartBtn.style.opacity = '1';
+                crStatus.textContent = 'Error';
+                crDetails.textContent = error.message;
+            }
+        });
+
+        crStopBtn?.addEventListener('click', async () => {
+            await window.vibemind.engine.claudeRunner.stop();
+            stopCrPolling();
+            crStartBtn.disabled = false;
+            crStartBtn.style.opacity = '1';
+            crStopBtn.disabled = true;
+            crStopBtn.style.opacity = '0.4';
+            crVncBtn.disabled = true;
+            crVncBtn.style.opacity = '0.4';
+            crStatus.textContent = 'Stopped';
+            crStatus.style.background = 'rgba(100, 100, 100, 0.3)';
+            crStatus.style.color = '#888';
+            crDetails.textContent = 'Not running';
+            hideVncPreview();
+        });
+
+        crVncBtn?.addEventListener('click', () => {
+            const vncPort = crVncBtn.dataset.vncPort;
+            if (vncPort) {
+                showVncPreview(
+                    `http://localhost:${vncPort}/vnc.html?autoconnect=true&resize=scale`,
+                    'Claude Code Runner',
+                    'claude-runner'
+                );
+            }
+        });
+
+        function startCrPolling() {
+            stopCrPolling();
+            crPolling = setInterval(async () => {
+                try {
+                    const s = await window.vibemind.engine.claudeRunner.getStatus();
+                    if (!s.running) { crStopBtn.click(); return; }
+                    const icons = { idle: '🟢', processing: '🔵', completed: '✅', failed: '❌', error: '🔴', starting: '🟡' };
+                    crDetails.textContent =
+                        `${icons[s.state] || '⚪'} ${s.message || s.state}` +
+                        (s.branch ? `\nBranch: ${s.branch}` : '') +
+                        (s.details ? `\n${s.details}` : '');
+                    crStatus.textContent = s.state || 'Running';
+                } catch { /* ignore */ }
+            }, 5000);
+        }
+
+        function stopCrPolling() {
+            if (crPolling) { clearInterval(crPolling); crPolling = null; }
+        }
+
+        // Show/hide runner panel with keyboard shortcut (Ctrl+Shift+R)
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+                crPanel?.classList.toggle('hidden');
+            }
+        });
+
         // Open Project Button Handler
         document.getElementById('open-project-btn')?.addEventListener('click', async () => {
             const projectId = window.multiverseApp?.selectedProjectId;
@@ -1695,13 +2170,13 @@
             shuttlePanel?.classList.add('hidden');
         });
 
-        // Navigate with Alice button
+        // Navigate shuttle
         shuttleNavigateBtn?.addEventListener('click', () => {
-            console.log('[Shuttle] Navigate with Alice clicked');
+            console.log('[Shuttle] Navigate clicked');
             if (window.vibemind?.sendToPython) {
                 window.vibemind.sendToPython({
                     type: 'shuttle_navigate',
-                    action: 'transfer_to_alice'
+                    action: 'navigate'
                 });
             }
             shuttlePanel?.classList.add('hidden');
@@ -1734,6 +2209,9 @@
         window.addEventListener('shuttle-entered', (event) => {
             currentShuttleData = event.detail;
             console.log('[Shuttle Interior] Entered:', currentShuttleData);
+
+            // Initialize wizard for this shuttle
+            initWizard(currentShuttleData);
 
             // Update interior view with shuttle data
             document.getElementById('shuttle-interior-name').textContent = currentShuttleData.bubbleName || 'Requirement Shuttle';
@@ -1947,6 +2425,530 @@
                 }
             });
         }
+
+        // ========================================
+        // SHUTTLE WIZARD CONTROLLER
+        // ========================================
+
+        const wizardState = {
+            shuttleId: null,
+            bubbleId: null,
+            currentStep: 'mining',
+            project: {},
+            context: {},
+            stakeholders: [],
+            requirements: [],
+            constraints: {},
+            _lastGapSuggestions: [],
+        };
+
+        // Initialize wizard when entering a shuttle
+        function initWizard(shuttleData) {
+            wizardState.shuttleId = shuttleData.id;
+            wizardState.bubbleId = shuttleData.bubbleId;
+            wizardState.currentStep = 'mining';
+
+            // Request wizard state from backend (may have persisted data)
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_init_from_bubble',
+                    shuttle_id: shuttleData.id,
+                    bubble_id: shuttleData.bubbleId,
+                });
+            }
+        }
+
+        // Handle wizard messages from Python backend
+        // Note: innerHTML usage below is safe — all content originates from our
+        // own Python backend (wizard_handler.py) and SQLite, never from
+        // untrusted user-supplied HTML. The data is structured JSON that we
+        // format into simple display strings (titles, descriptions, scores).
+        window.addEventListener('message-from-python', (e) => {
+            const msg = e.detail;
+            if (!msg) return;
+
+            if (msg.type === 'wizard_initialized') {
+                console.log('[Wizard] Initialized:', msg);
+                if (msg.project) {
+                    wizardState.project = msg.project;
+                    document.getElementById('wizard-project-name').value = msg.project.name || '';
+                    document.getElementById('wizard-project-desc').value = msg.project.description || '';
+                    document.getElementById('wizard-domain').value = msg.project.domain || '';
+                    document.getElementById('wizard-target-users').value = msg.project.target_users || '';
+                }
+            }
+
+            if (msg.type === 'wizard_state') {
+                console.log('[Wizard] State loaded:', msg);
+                Object.assign(wizardState, {
+                    currentStep: msg.current_step || 'mining',
+                    project: msg.project || {},
+                    context: msg.context || {},
+                    stakeholders: msg.stakeholders || [],
+                    requirements: msg.requirements || [],
+                    constraints: msg.constraints || {},
+                });
+                renderWizardRequirements();
+                renderWizardStakeholders();
+                navigateWizardStep(wizardState.currentStep);
+            }
+
+            if (msg.type === 'wizard_agent_result') {
+                console.log('[Wizard] Agent result:', msg.team, msg);
+                handleAgentTeamResult(msg);
+            }
+
+            if (msg.type === 'wizard_step_saved') {
+                console.log('[Wizard] Step saved:', msg);
+            }
+
+            if (msg.type === 'wizard_finalized') {
+                console.log('[Wizard] Finalized:', msg);
+                if (msg.success) {
+                    const statusEl = document.getElementById('techstack-count');
+                    if (statusEl) statusEl.textContent = 'Finalized!';
+                }
+            }
+        });
+
+        function navigateWizardStep(step) {
+            const stepMap = {
+                'mining': 'mining',
+                'requirements': 'validation',
+                'knowledge_graph': 'knowledge_graph',
+                'techstack': 'techstack',
+            };
+            const panelKey = stepMap[step] || step;
+
+            // Update checkpoint tabs
+            const checkpointStages = ['mining', 'validation', 'knowledge_graph', 'techstack'];
+            document.querySelectorAll('.checkpoint-tab').forEach(tab => {
+                tab.style.display = '';
+                tab.classList.toggle('active', tab.dataset.stage === panelKey);
+            });
+
+            // Update panels
+            document.querySelectorAll('.checkpoint-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('checkpoint-' + panelKey);
+            if (panel) panel.classList.add('active');
+
+            // Update tab status icons
+            const wizardSteps = ['mining', 'requirements', 'knowledge_graph', 'techstack'];
+            const currentIdx = wizardSteps.indexOf(step);
+            checkpointStages.forEach((s, i) => {
+                const tabStatus = document.getElementById('tab-status-' + s);
+                if (tabStatus) {
+                    if (i < currentIdx) tabStatus.textContent = '\u2705';
+                    else if (i === currentIdx) tabStatus.textContent = '\uD83D\uDD04';
+                    else tabStatus.textContent = '\u23F3';
+                }
+            });
+
+            // Update summary on finalize step
+            if (step === 'techstack') updatePackageSummary();
+
+            // Update validation summary on constraints step
+            if (step === 'knowledge_graph') {
+                document.getElementById('wizard-val-reqs').textContent = wizardState.requirements.length;
+                document.getElementById('wizard-val-stakeholders').textContent = wizardState.stakeholders.length;
+                const cCount = Object.values(wizardState.constraints).reduce(
+                    function(sum, arr) { return sum + (Array.isArray(arr) ? arr.length : 0); }, 0
+                );
+                document.getElementById('wizard-val-constraints').textContent = cCount;
+                document.getElementById('kg-count').textContent = cCount + ' constraints';
+            }
+        }
+
+        function updatePackageSummary() {
+            document.getElementById('wizard-pkg-project').textContent = wizardState.project.name || '-';
+            document.getElementById('wizard-pkg-domain').textContent = wizardState.project.domain || '-';
+            document.getElementById('wizard-pkg-reqs').textContent = wizardState.requirements.length;
+            document.getElementById('wizard-pkg-stakeholders').textContent = wizardState.stakeholders.length;
+            const cCount = Object.values(wizardState.constraints).reduce(
+                function(sum, arr) { return sum + (Array.isArray(arr) ? arr.length : 0); }, 0
+            );
+            document.getElementById('wizard-pkg-constraints').textContent = cCount;
+        }
+
+        function collectMiningData() {
+            return {
+                name: document.getElementById('wizard-project-name').value,
+                description: document.getElementById('wizard-project-desc').value,
+                domain: document.getElementById('wizard-domain').value,
+                target_users: document.getElementById('wizard-target-users').value,
+            };
+        }
+
+        // Render functions use textContent for text values and build DOM
+        // elements safely. The req/stakeholder/constraint data comes from our
+        // own Python backend, not user-controlled HTML.
+
+        function renderWizardRequirements() {
+            const grid = document.getElementById('wizard-requirements-grid');
+            if (!grid) return;
+            grid.textContent = '';
+            const reqs = wizardState.requirements;
+            if (reqs.length === 0) {
+                const ph = document.createElement('div');
+                ph.className = 'wizard-placeholder';
+                ph.textContent = 'No requirements yet';
+                grid.appendChild(ph);
+                return;
+            }
+            reqs.forEach(function(req, i) {
+                const card = document.createElement('div');
+                card.className = 'req-card';
+
+                const header = document.createElement('div');
+                header.className = 'req-card-header';
+                const idSpan = document.createElement('span');
+                idSpan.className = 'req-id';
+                idSpan.textContent = req.id || 'REQ-' + String(i+1).padStart(3,'0');
+                const prioSpan = document.createElement('span');
+                prioSpan.className = 'req-priority';
+                prioSpan.textContent = req.priority || 'medium';
+                header.appendChild(idSpan);
+                header.appendChild(prioSpan);
+
+                const text = document.createElement('div');
+                text.className = 'req-text';
+                text.textContent = req.title || req.text || 'Untitled';
+
+                card.appendChild(header);
+                card.appendChild(text);
+
+                if (req.description) {
+                    const desc = document.createElement('div');
+                    desc.className = 'req-desc';
+                    desc.textContent = req.description;
+                    card.appendChild(desc);
+                }
+
+                grid.appendChild(card);
+            });
+            document.getElementById('validation-count').textContent = reqs.length + ' requirements';
+        }
+
+        function renderWizardStakeholders() {
+            const grid = document.getElementById('wizard-stakeholders-grid');
+            if (!grid) return;
+            grid.textContent = '';
+            const stakeholders = wizardState.stakeholders;
+            if (stakeholders.length === 0) {
+                const ph = document.createElement('div');
+                ph.className = 'wizard-placeholder';
+                ph.textContent = 'No stakeholders generated yet';
+                grid.appendChild(ph);
+                return;
+            }
+            stakeholders.forEach(function(s) {
+                const card = document.createElement('div');
+                card.className = 'stakeholder-card';
+                const role = document.createElement('div');
+                role.className = 'stakeholder-role';
+                role.textContent = s.role || s.name || 'Unknown';
+                card.appendChild(role);
+                if (s.concerns) {
+                    const concerns = document.createElement('div');
+                    concerns.className = 'stakeholder-concerns';
+                    concerns.textContent = Array.isArray(s.concerns) ? s.concerns.join(', ') : s.concerns;
+                    card.appendChild(concerns);
+                }
+                grid.appendChild(card);
+            });
+        }
+
+        function handleAgentTeamResult(msg) {
+            if (msg.team === 'context_enricher' && msg.success) {
+                wizardState.context = (msg.suggestions && msg.suggestions[0]) || {};
+                var resultDiv = document.getElementById('wizard-context-result');
+                var contentDiv = document.getElementById('wizard-context-content');
+                if (resultDiv && contentDiv) {
+                    contentDiv.textContent = '';
+                    var ctx = wizardState.context;
+                    ['summary', 'business', 'technical', 'user'].forEach(function(key) {
+                        if (ctx[key]) {
+                            var p = document.createElement('p');
+                            var strong = document.createElement('strong');
+                            strong.textContent = key.charAt(0).toUpperCase() + key.slice(1) + ': ';
+                            p.appendChild(strong);
+                            p.appendChild(document.createTextNode(ctx[key]));
+                            contentDiv.appendChild(p);
+                        }
+                    });
+                    resultDiv.classList.remove('hidden');
+                }
+            }
+
+            if (msg.team === 'stakeholder' && msg.success) {
+                wizardState.stakeholders = msg.suggestions || [];
+                renderWizardStakeholders();
+            }
+
+            if (msg.team === 'requirement_gap' && msg.success) {
+                var suggestions = msg.suggestions || [];
+                wizardState._lastGapSuggestions = suggestions;
+                var sugDiv = document.getElementById('wizard-suggestions');
+                var sugList = document.getElementById('wizard-suggestions-list');
+                if (sugDiv && sugList && suggestions.length > 0) {
+                    sugList.textContent = '';
+                    suggestions.forEach(function(s, i) {
+                        var card = document.createElement('div');
+                        card.className = 'suggestion-card';
+                        card.dataset.index = i;
+
+                        var header = document.createElement('div');
+                        header.className = 'suggestion-header';
+                        var typeSpan = document.createElement('span');
+                        typeSpan.className = 'suggestion-type';
+                        typeSpan.textContent = s.type || 'requirement';
+                        var confSpan = document.createElement('span');
+                        confSpan.className = 'suggestion-confidence';
+                        confSpan.textContent = ((s.confidence || 0) * 100).toFixed(0) + '%';
+                        header.appendChild(typeSpan);
+                        header.appendChild(confSpan);
+
+                        var text = document.createElement('div');
+                        text.className = 'suggestion-text';
+                        text.textContent = s.title || s.text || 'Suggested requirement';
+
+                        card.appendChild(header);
+                        card.appendChild(text);
+
+                        if (s.gap_area) {
+                            var reason = document.createElement('div');
+                            reason.className = 'suggestion-reason';
+                            reason.textContent = s.gap_area;
+                            card.appendChild(reason);
+                        }
+
+                        var actions = document.createElement('div');
+                        actions.className = 'suggestion-actions';
+                        var acceptBtn = document.createElement('button');
+                        acceptBtn.className = 'action-btn small';
+                        acceptBtn.textContent = 'Accept';
+                        acceptBtn.addEventListener('click', function() { window.acceptSuggestion(i); });
+                        var dismissBtn = document.createElement('button');
+                        dismissBtn.className = 'action-btn small secondary';
+                        dismissBtn.textContent = 'Dismiss';
+                        dismissBtn.addEventListener('click', function() { window.dismissSuggestion(i); });
+                        actions.appendChild(acceptBtn);
+                        actions.appendChild(dismissBtn);
+                        card.appendChild(actions);
+
+                        sugList.appendChild(card);
+                    });
+                    sugDiv.classList.remove('hidden');
+                }
+            }
+
+            if (msg.team === 'constraint' && msg.success) {
+                var newConstraints = msg.suggestions || [];
+                newConstraints.forEach(function(c) {
+                    var cat = c.category || 'technical';
+                    if (!wizardState.constraints[cat]) wizardState.constraints[cat] = [];
+                    wizardState.constraints[cat].push(c);
+                });
+                renderWizardConstraints();
+            }
+        }
+
+        function renderWizardConstraints() {
+            var grid = document.getElementById('wizard-constraints-grid');
+            if (!grid) return;
+            grid.textContent = '';
+            var entries = Object.entries(wizardState.constraints);
+            if (entries.length === 0) {
+                var ph = document.createElement('div');
+                ph.className = 'wizard-placeholder';
+                ph.textContent = 'No constraints yet';
+                grid.appendChild(ph);
+                return;
+            }
+            var total = 0;
+            entries.forEach(function(entry) {
+                var cat = entry[0];
+                var items = entry[1] || [];
+                total += items.length;
+                var catDiv = document.createElement('div');
+                catDiv.className = 'constraint-category';
+                var h6 = document.createElement('h6');
+                h6.textContent = cat;
+                catDiv.appendChild(h6);
+                items.forEach(function(c) {
+                    var item = document.createElement('div');
+                    item.className = 'constraint-item';
+                    var textSpan = document.createElement('span');
+                    textSpan.textContent = c.constraint || c.text || '';
+                    var confSpan = document.createElement('span');
+                    confSpan.className = 'constraint-confidence';
+                    confSpan.textContent = ((c.confidence || 0) * 100).toFixed(0) + '%';
+                    item.appendChild(textSpan);
+                    item.appendChild(confSpan);
+                    catDiv.appendChild(item);
+                });
+                grid.appendChild(catDiv);
+            });
+            document.getElementById('kg-count').textContent = total + ' constraints';
+        }
+
+        // Global functions for suggestion buttons
+        window.acceptSuggestion = function(index) {
+            var suggestions = wizardState._lastGapSuggestions || [];
+            if (suggestions[index]) {
+                wizardState.requirements.push({
+                    id: 'REQ-' + String(wizardState.requirements.length + 1).padStart(3, '0'),
+                    title: suggestions[index].title || suggestions[index].text || '',
+                    description: suggestions[index].description || '',
+                    priority: suggestions[index].priority || 'medium',
+                    status: 'pending',
+                });
+                renderWizardRequirements();
+            }
+            var sugList = document.getElementById('wizard-suggestions-list');
+            var cards = sugList ? sugList.querySelectorAll('.suggestion-card') : [];
+            if (cards[index]) cards[index].remove();
+        };
+
+        window.dismissSuggestion = function(index) {
+            var sugList = document.getElementById('wizard-suggestions-list');
+            var cards = sugList ? sugList.querySelectorAll('.suggestion-card') : [];
+            if (cards[index]) cards[index].remove();
+        };
+
+        // ---- Wizard Navigation Buttons ----
+
+        // Step 1: Generate Context
+        document.getElementById('wizard-generate-context')?.addEventListener('click', function() {
+            var data = collectMiningData();
+            wizardState.project = data;
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_run_agent',
+                    shuttle_id: wizardState.shuttleId,
+                    team: 'context_enricher',
+                    input: data,
+                });
+            }
+        });
+
+        // Step 1 → Step 2
+        document.getElementById('wizard-next-to-requirements')?.addEventListener('click', function() {
+            var data = collectMiningData();
+            wizardState.project = data;
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_submit_step',
+                    shuttle_id: wizardState.shuttleId,
+                    step: 'mining',
+                    data: Object.assign({}, data, { context: wizardState.context }),
+                });
+            }
+            navigateWizardStep('requirements');
+            renderWizardRequirements();
+        });
+
+        // Step 2: Generate Stakeholders
+        document.getElementById('wizard-generate-stakeholders')?.addEventListener('click', function() {
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_run_agent',
+                    shuttle_id: wizardState.shuttleId,
+                    team: 'stakeholder',
+                    input: wizardState.project,
+                });
+            }
+        });
+
+        // Step 2: Add Requirement manually
+        document.getElementById('wizard-add-requirement')?.addEventListener('click', function() {
+            var title = prompt('Requirement title:');
+            if (title) {
+                wizardState.requirements.push({
+                    id: 'REQ-' + String(wizardState.requirements.length + 1).padStart(3, '0'),
+                    title: title,
+                    description: '',
+                    priority: 'medium',
+                    status: 'pending',
+                });
+                renderWizardRequirements();
+            }
+        });
+
+        // Step 2: Run Gap Analysis
+        document.getElementById('wizard-run-gap-analysis')?.addEventListener('click', function() {
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_run_agent',
+                    shuttle_id: wizardState.shuttleId,
+                    team: 'requirement_gap',
+                    input: {},
+                });
+            }
+        });
+
+        // Step 2 → Step 3
+        document.getElementById('wizard-next-to-constraints')?.addEventListener('click', function() {
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_submit_step',
+                    shuttle_id: wizardState.shuttleId,
+                    step: 'requirements',
+                    data: {
+                        stakeholders: wizardState.stakeholders,
+                        requirements: wizardState.requirements,
+                    },
+                });
+            }
+            navigateWizardStep('knowledge_graph');
+        });
+
+        // Step 3: Extract Constraints
+        document.getElementById('wizard-extract-constraints')?.addEventListener('click', function() {
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_run_agent',
+                    shuttle_id: wizardState.shuttleId,
+                    team: 'constraint',
+                    input: {},
+                });
+            }
+        });
+
+        // Step 3 → Step 4
+        document.getElementById('wizard-next-to-techstack')?.addEventListener('click', function() {
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_submit_step',
+                    shuttle_id: wizardState.shuttleId,
+                    step: 'knowledge_graph',
+                    data: { constraints: wizardState.constraints },
+                });
+            }
+            navigateWizardStep('techstack');
+        });
+
+        // Step 4: Finalize
+        document.getElementById('wizard-finalize')?.addEventListener('click', function() {
+            var workDivision = document.getElementById('wizard-work-division').value;
+            if (window.vibemind?.sendToPython) {
+                window.vibemind.sendToPython({
+                    type: 'wizard_submit_step',
+                    shuttle_id: wizardState.shuttleId,
+                    step: 'techstack',
+                    data: { work_division: workDivision },
+                });
+                window.vibemind.sendToPython({
+                    type: 'wizard_finalize',
+                    shuttle_id: wizardState.shuttleId,
+                });
+            }
+        });
+
+        // Back buttons
+        document.getElementById('wizard-back-to-mining')?.addEventListener('click', function() { navigateWizardStep('mining'); });
+        document.getElementById('wizard-back-to-requirements')?.addEventListener('click', function() { navigateWizardStep('requirements'); });
+        document.getElementById('wizard-back-to-constraints')?.addEventListener('click', function() { navigateWizardStep('knowledge_graph'); });
 
         // ========================================
         // PHASE 13: STAGE-SPECIFIC RENDERING FUNCTIONS
@@ -2322,6 +3324,34 @@
             };
         }
 
+        const tabClawport = document.getElementById('tab-clawport');
+        if (tabClawport) {
+            tabClawport.onclick = () => {
+                switchSpace('clawport');
+            };
+        }
+
+        const tabAgentfarm = document.getElementById('tab-agentfarm');
+        if (tabAgentfarm) {
+            tabAgentfarm.onclick = () => {
+                switchSpace('agentfarm');
+            };
+        }
+
+        const tabThebrain = document.getElementById('tab-thebrain');
+        if (tabThebrain) {
+            tabThebrain.onclick = () => {
+                switchSpace('thebrain');
+            };
+        }
+
+        const tabFlowzen = document.getElementById('tab-flowzen');
+        if (tabFlowzen) {
+            tabFlowzen.onclick = () => {
+                switchSpace('flowzen');
+            };
+        }
+
         async function switchSpace(spaceId) {
             if (spaceId === currentSpace) return;
             
@@ -2369,6 +3399,15 @@
             } else if (spaceId === 'roarboot') {
                 if (spaceIcon) spaceIcon.textContent = '\u{1F6A3}';
                 if (spaceName) spaceName.textContent = 'Rowboat';
+            } else if (spaceId === 'clawport') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F4CA}';
+                if (spaceName) spaceName.textContent = 'Dashboard';
+            } else if (spaceId === 'agentfarm') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F3E1}';
+                if (spaceName) spaceName.textContent = 'Agent Farm';
+            } else if (spaceId === 'thebrain') {
+                if (spaceIcon) spaceIcon.textContent = '\u{1F9E0}';
+                if (spaceName) spaceName.textContent = 'The Brain';
             }
             // Show the indicator when space changes
             if (spaceIndicator) spaceIndicator.classList.remove('hidden');
@@ -2388,6 +3427,17 @@
             } else if (spaceId === 'ideas') {
                 if (projectInfo) projectInfo.classList.add('hidden');
             }
+
+            // Show/hide Flowzen panel
+            const fzPanel = document.getElementById('flowzen-panel');
+            if (fzPanel) {
+                if (spaceId === 'flowzen') {
+                    fzPanel.classList.remove('hidden');
+                    requestFlowzenStatus();
+                } else {
+                    fzPanel.classList.add('hidden');
+                }
+            }
         }
         
         function updateAgentDisplay(agentName) {
@@ -2401,6 +3451,102 @@
                 indicator.className = 'agent-indicator ' + agentName.toLowerCase();
             }
         }
+
+        // ============================================
+        // FLOWZEN (BLAUE ROSE) PANEL
+        // ============================================
+
+        const fzRecommendations = [];
+
+        function requestFlowzenStatus() {
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_status' });
+            }
+        }
+
+        function requestFlowzenRecommend() {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) {
+                btn.classList.add('loading');
+                btn.textContent = 'Denke nach...';
+            }
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_recommend' });
+            }
+        }
+
+        function updateFlowzenPanel(data) {
+            const timeEl = document.getElementById('fz-time-window');
+            const moodEl = document.getElementById('fz-mood');
+            const catEl = document.getElementById('fz-category');
+            const stateEl = document.getElementById('flowzen-state-badge');
+
+            if (timeEl && data.current_time_window) {
+                const windowNames = {
+                    early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
+                    afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+                };
+                timeEl.textContent = windowNames[data.current_time_window] || data.current_time_window;
+            }
+            if (moodEl && data.mood) moodEl.textContent = data.mood;
+            if (catEl && data.category) catEl.textContent = data.category;
+            if (stateEl && data.state !== undefined) {
+                const state = data.state || 'idle';
+                stateEl.textContent = state;
+                stateEl.className = 'flowzen-state ' + state;
+            }
+        }
+
+        function _buildRecCard(r) {
+            const card = document.createElement('div');
+            card.className = 'flowzen-rec-card';
+
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'rec-time';
+            timeDiv.textContent = r.time || new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+            card.appendChild(timeDiv);
+
+            const catDiv = document.createElement('div');
+            catDiv.className = 'rec-category';
+            catDiv.textContent = r.category || '\u2014';
+            card.appendChild(catDiv);
+
+            const reasonDiv = document.createElement('div');
+            reasonDiv.className = 'rec-reasoning';
+            reasonDiv.textContent = r.reasoning || '';
+            card.appendChild(reasonDiv);
+
+            if (r.idea_title) {
+                const suggDiv = document.createElement('div');
+                suggDiv.className = 'rec-suggestion';
+                suggDiv.textContent = '\u2192 ' + r.idea_title;
+                card.appendChild(suggDiv);
+            }
+            return card;
+        }
+
+        function addFlowzenRecommendation(rec) {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) {
+                btn.classList.remove('loading');
+                btn.textContent = 'Was soll ich machen?';
+            }
+
+            fzRecommendations.unshift(rec);
+            if (fzRecommendations.length > 10) fzRecommendations.pop();
+
+            const container = document.getElementById('fz-recommendations');
+            if (!container) return;
+
+            while (container.firstChild) { container.removeChild(container.firstChild); }
+            fzRecommendations.forEach(function(r) { container.appendChild(_buildRecCard(r)); });
+        }
+
+        // Wire up Flowzen recommend button
+        (function() {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) { btn.addEventListener('click', requestFlowzenRecommend); }
+        })();
 
         // ========================================
         // SUMMARIES PANEL

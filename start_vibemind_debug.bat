@@ -12,13 +12,15 @@ set ELECTRON_RUN_AS_NODE=
 cd /d %~dp0
 set PROJECT_ROOT=%cd%
 
-REM Check if port 9222 is already in use
-netstat -an | findstr ":9222" > nul
-if %errorlevel%==0 (
-    echo Warning: Port 9222 already in use
-    echo Killing existing process...
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":9222"') do taskkill /F /PID %%a 2>nul
-    timeout /t 2 /nobreak > nul
+REM Kill any existing Electron processes early
+echo Cleaning up old Electron processes...
+taskkill /F /IM electron.exe 2>nul
+
+REM Kill stale Python processes holding camera/ports from previous crashes
+echo Cleaning up stale Python processes on eyeTerm ports...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8099" ^| findstr "LISTENING"') do (
+    echo Killing stale process on port 8099: PID %%a
+    taskkill /F /PID %%a 2>nul
 )
 
 REM ================================================
@@ -41,6 +43,25 @@ if %errorlevel%==0 (
 )
 
 REM ================================================
+REM Start Minibook Docker (ports 3480/3481)
+REM ================================================
+echo.
+echo Checking Minibook...
+
+netstat -an | findstr ":3480" | findstr "LISTENING" > nul
+if %errorlevel%==0 (
+    echo Minibook already running on port 3480
+    goto :minibook_done
+)
+echo Starting Minibook Docker containers...
+REM Use --no-build to avoid blocking on first-time image builds
+REM Pre-build with: docker compose -f docker-compose.minibook.yml build
+start /B cmd /c "docker compose -f "%PROJECT_ROOT%\docker-compose.minibook.yml" up -d 2>nul && echo Minibook started || echo Warning: Minibook Docker failed" > nul 2>&1
+echo Minibook starting in background (Backend :3480, Frontend :3481^)
+timeout /t 2 /nobreak > nul
+:minibook_done
+
+REM ================================================
 REM Check Redis for Claude Orchestrator (port 6379)
 REM ================================================
 REM Check for port 6379 (works on English "LISTENING" and German "ABHÖREN")
@@ -60,16 +81,30 @@ if not exist "electron-app\node_modules\electron\dist\electron.exe" (
     exit /b 1
 )
 
+REM ================================================
+REM Use port 9223 for Electron DevTools
+REM (9222 is Chrome/MoireServer default - causes race conditions)
+REM ================================================
+echo.
+set DEBUG_PORT=9223
+
 REM Start Electron with debug port (in new window)
-echo Starting Electron with debug port 9222...
+echo Starting Electron with debug port %DEBUG_PORT%...
 echo Project root: %PROJECT_ROOT%
-start "VibeMind Electron" "%PROJECT_ROOT%\electron-app\node_modules\electron\dist\electron.exe" --remote-debugging-port=9222 "%PROJECT_ROOT%\electron-app"
+start "VibeMind Electron" "%PROJECT_ROOT%\electron-app\node_modules\electron\dist\electron.exe" --remote-debugging-port=%DEBUG_PORT% "%PROJECT_ROOT%\electron-app"
 
-REM Wait for Electron to start
-echo Waiting for Electron to start...
-timeout /t 5 /nobreak > nul
+REM Wait for Electron to fully start (Rowboat, Python backend, etc.)
+echo Waiting for Electron to start (8s)...
+timeout /t 8 /nobreak > nul
 
-REM Info: Debug Agent will try multiple ports (9222, 9223, 9224)
+REM Verify DevTools port is up
+netstat -an | findstr ":%DEBUG_PORT%" | findstr "LISTENING" > nul
+if %errorlevel%==0 (
+    echo Electron DevTools ready on port %DEBUG_PORT%
+) else (
+    echo Warning: DevTools port %DEBUG_PORT% not yet listening - Debug Agent will retry
+)
+
 echo Electron started. Debug Agent will automatically find the correct port.
 
 echo.

@@ -11,15 +11,16 @@ Falls back to keyword-based routing if LLM is unavailable.
 import json
 import logging
 import os
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-logger = logging.getLogger(__name__)
+from llm_config import get_model, get_async_client
+
+_logger = logging.getLogger(__name__)
 
 
 def _debug_print(msg: str):
-    print(f"[Python DEBUG] [SpaceRouter] {msg}", file=sys.stderr, flush=True)
+    _logger.debug("[SpaceRouter] %s", msg)
 
 
 @dataclass
@@ -49,6 +50,7 @@ EVENT_TYPE_TO_SPACE: Dict[str, str] = {
     "roarboot.": "rowboat",
     "schedule.": "schedule",
     "minibook.": "ideas",  # default for minibook.* events
+    "rose.": "flowzen",
 }
 
 
@@ -83,10 +85,10 @@ class SpaceRouter:
 
     def __init__(
         self,
-        enrichment_model: str = "openai/gpt-4o-mini",
+        enrichment_model: Optional[str] = None,
         use_llm: bool = True,
     ):
-        self._model = enrichment_model
+        self._model = enrichment_model or get_model("space_router")
         self._use_llm = use_llm
 
     async def route(
@@ -166,16 +168,7 @@ class SpaceRouter:
         decide which spaces are needed.
         """
         try:
-            from openai import AsyncOpenAI
-
-            api_key = os.getenv("OPENROUTER_API_KEY", "")
-            if not api_key:
-                return None
-
-            client = AsyncOpenAI(
-                api_key=api_key,
-                base_url="https://openrouter.ai/api/v1",
-            )
+            client = get_async_client("space_router")
 
             # Build agent registry description for the prompt
             from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
@@ -229,10 +222,10 @@ class SpaceRouter:
             )
 
         except json.JSONDecodeError as e:
-            logger.warning(f"SpaceRouter: LLM returned invalid JSON: {e}")
+            _logger.warning(f"SpaceRouter: LLM returned invalid JSON: {e}")
             return None
         except Exception as e:
-            logger.warning(f"SpaceRouter: LLM routing failed: {e}")
+            _logger.warning(f"SpaceRouter: LLM routing failed: {e}")
             return None
 
     def _route_by_keywords(self, user_text: str) -> RoutingDecision:

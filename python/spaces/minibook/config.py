@@ -5,9 +5,14 @@ Configuration for the Minibook inter-space collaboration layer.
 Minibook runs locally and VibeMind communicates via its REST API.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
+
+from llm_config import get_model
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,7 +59,7 @@ class MinibookConfig:
             hub_enabled=os.getenv("USE_MINIBOOK_HUB", "false").lower() in ("true", "1"),
             hub_sync_timeout=float(os.getenv("MINIBOOK_HUB_SYNC_TIMEOUT", "10.0")),
             hub_async_timeout=float(os.getenv("MINIBOOK_HUB_ASYNC_TIMEOUT", "120.0")),
-            enrichment_model=os.getenv("MINIBOOK_ENRICHMENT_MODEL", "openai/gpt-4o-mini"),
+            enrichment_model=get_model("space_router"),
             enrichment_enabled=os.getenv("MINIBOOK_ENRICHMENT_LLM", "true").lower() in ("true", "1"),
             rachel_prompt_enabled=os.getenv("MINIBOOK_RACHEL_PROMPT", "true").lower() in ("true", "1"),
         )

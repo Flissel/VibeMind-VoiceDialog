@@ -10,9 +10,12 @@ Each format agent knows how to:
 3. Validate the output
 """
 
+import asyncio
 import json
 import logging
+import os
 import sys
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
@@ -35,7 +38,6 @@ logger = logging.getLogger(__name__)
 def _get_llm_client():
     """Get OpenRouter LLM client."""
     from openai import OpenAI
-    import os
 
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -47,45 +49,59 @@ def _get_llm_client():
     )
 
 
+def _call_format_agent_sync(prompt: str, target_format: str) -> Dict[str, Any]:
+    """Synchronous LLM call — run in executor for async contexts."""
+    client = _get_llm_client()
+
+    response = client.chat.completions.create(
+        model="anthropic/claude-sonnet-4-5",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+        max_tokens=3000,
+    )
+
+    content = response.choices[0].message.content.strip()
+
+    # Extract JSON from response
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0].strip()
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0].strip()
+    elif not content.startswith("{") and "{" in content:
+        first_brace = content.find("{")
+        content = content[first_brace:]
+
+    result = json.loads(content)
+
+    # Ensure type field is correct
+    type_mapping = {
+        "simple_table": "table",
+        "pros_cons_table": "pros_cons_table",
+    }
+    expected_type = type_mapping.get(target_format, target_format)
+    if "type" not in result:
+        result["type"] = expected_type
+
+    return result
+
+
 def _call_format_agent(prompt: str, target_format: str) -> Dict[str, Any]:
-    """Call LLM to convert content to target format."""
-    try:
-        client = _get_llm_client()
+    """Call LLM with retry (sync wrapper for backward compat).
 
-        response = client.chat.completions.create(
-            model="anthropic/claude-sonnet-4.5",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=3000,
-        )
-
-        content = response.choices[0].message.content.strip()
-
-        # Extract JSON from response
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        elif not content.startswith("{") and "{" in content:
-            first_brace = content.find("{")
-            content = content[first_brace:]
-
-        result = json.loads(content)
-
-        # Ensure type field is correct
-        type_mapping = {
-            "simple_table": "table",
-            "pros_cons_table": "pros_cons_table",
-        }
-        expected_type = type_mapping.get(target_format, target_format)
-        if "type" not in result:
-            result["type"] = expected_type
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Format agent call failed: {e}")
-        raise
+    Retries up to 3 times with exponential backoff on failure.
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            return _call_format_agent_sync(prompt, target_format)
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                wait = 2 ** attempt  # 1s, 2s
+                logger.warning(f"Format LLM attempt {attempt+1} failed: {e}, retrying in {wait}s")
+                time.sleep(wait)
+    logger.error(f"Format LLM failed after 3 attempts: {last_error}")
+    raise last_error
 
 
 def _extract_content_text(content_json: Optional[Dict], plain_content: str = "") -> str:
@@ -98,7 +114,7 @@ def _extract_content_text(content_json: Optional[Dict], plain_content: str = "")
 
     # Add title if present
     if content_json.get("title"):
-        parts.append(f"Titel: {content_json['title']}")
+        parts.append(f"Title: {content_json['title']}")
 
     if content_type == "note":
         parts.append(content_json.get("text", ""))
@@ -107,7 +123,7 @@ def _extract_content_text(content_json: Optional[Dict], plain_content: str = "")
         headers = content_json.get("headers", [])
         rows = content_json.get("rows", [])
         if headers:
-            parts.append("Spalten: " + ", ".join(headers))
+            parts.append("Columns: " + ", ".join(headers))
         for row in rows:
             parts.append(" | ".join(str(cell) for cell in row))
 
@@ -116,13 +132,13 @@ def _extract_content_text(content_json: Optional[Dict], plain_content: str = "")
             task = item.get("task", "")
             status = item.get("status", "pending")
             priority = item.get("priority", "medium")
-            parts.append(f"- [{status}] {task} (Prioritaet: {priority})")
+            parts.append(f"- [{status}] {task} (Priority: {priority})")
 
     elif content_type == "pros_cons_table":
-        parts.append("Vorteile:")
+        parts.append("Pros:")
         for pro in content_json.get("pros", []):
             parts.append(f"+ {pro.get('point', '')}")
-        parts.append("Nachteile:")
+        parts.append("Cons:")
         for con in content_json.get("cons", []):
             parts.append(f"- {con.get('point', '')}")
 
@@ -202,6 +218,7 @@ WICHTIG:
 
 def format_as_table(source_content: Dict[str, Any], title: str = "", columns: str = "") -> Dict[str, Any]:
     """Convert any format to table."""
+    logger.debug("format_as_table: title=%s, columns=%s", title, columns)
     text = _extract_content_text(source_content)
     original_title = source_content.get("title", title)
 
@@ -780,7 +797,7 @@ def convert_format(params: Dict[str, Any]) -> str:
     columns = params.get("columns", "")
 
     if not target_format:
-        return "Bitte gib ein Zielformat an (table, action_list, pros_cons, hierarchy, specs, note)."
+        return "Please specify a target format (table, action_list, pros_cons, hierarchy, specs, note)."
 
     # Normalize format names
     format_aliases = {
@@ -816,7 +833,7 @@ def convert_format(params: Dict[str, Any]) -> str:
 
     if target_format not in FORMAT_AGENTS:
         available = ", ".join(FORMAT_AGENTS.keys())
-        return f"Unbekanntes Format '{target_format}'. Verfuegbar: {available}"
+        return f"Unknown format '{target_format}'. Available: {available}"
 
     try:
         # Find the idea
@@ -828,7 +845,7 @@ def convert_format(params: Dict[str, Any]) -> str:
         bubble_id = get_current_bubble_db_id()
 
         if not bubble_id:
-            return "Bitte betrete zuerst einen Space."
+            return "Please enter a space first."
 
         # Find the node
         all_nodes = canvas_repo.list_nodes(limit=500)
@@ -836,21 +853,26 @@ def convert_format(params: Dict[str, Any]) -> str:
 
         target_node = None
         if idea_name:
-            # Find by name
+            # Find by name (fuzzy match)
             idea_lower = idea_name.lower()
             for node in nodes_in_bubble:
                 if node.title and idea_lower in node.title.lower():
                     target_node = node
                     break
         else:
-            # Use first node with content
-            for node in nodes_in_bubble:
-                if node.content or node.content_json:
-                    target_node = node
-                    break
+            # Smart fallback: single node → use it; multiple → most recent
+            content_nodes = [n for n in nodes_in_bubble if n.content or n.content_json]
+            if len(content_nodes) == 1:
+                target_node = content_nodes[0]
+            elif content_nodes:
+                # Use most recently formatted, or last created (by id)
+                target_node = max(
+                    content_nodes,
+                    key=lambda n: (n.last_formatted or datetime.min, n.id)
+                )
 
         if not target_node:
-            return f"Keine Idee '{idea_name}' im aktuellen Space gefunden." if idea_name else "Keine Ideen im aktuellen Space."
+            return f"No idea '{idea_name}' found in current space." if idea_name else "No ideas in current space to format."
 
         # Get source content
         source_content = target_node.content_json or {"type": "note", "text": target_node.content or ""}
@@ -875,7 +897,10 @@ def convert_format(params: Dict[str, Any]) -> str:
                 logger.info(f"Used fallback note format for {target_format}")
             except Exception as fallback_error:
                 logger.error(f"Fallback also failed: {fallback_error}")
-                return f"Fehler bei der Formatierung: {error_msg}"
+                return f"Format error: {error_msg}"
+
+        # Save previous content for revert
+        target_node.previous_content_json = source_content
 
         # Update the node
         target_node.content_json = new_content
@@ -885,24 +910,26 @@ def convert_format(params: Dict[str, Any]) -> str:
         # Save to database
         canvas_repo.update_node(target_node)
 
-        # Send to Electron
+        # Send to Electron UI
         _send_format_update_to_electron(target_node.id, bubble_id, new_content, target_format)
 
-        format_names = {
-            "note": "Notiz",
-            "table": "Tabelle",
-            "action_list": "Aufgabenliste",
-            "pros_cons": "Pro-Contra-Liste",
-            "hierarchy": "Gliederung",
-            "specs": "Spezifikation",
-        }
-        format_display = format_names.get(target_format, target_format)
+        # Notify via NotificationQueue (Rachel picks up via check_results)
+        try:
+            from swarm.orchestrator.notification_queue import get_notification_queue
+            get_notification_queue().add_notification(
+                job_id=f"format-{target_node.id}",
+                event_type="idea.format_complete",
+                result=f"Formatted '{target_node.title}' as {target_format}. Say 'revert' to undo.",
+                metadata={"node_id": target_node.id, "format_type": target_format},
+            )
+        except Exception as nq_err:
+            logger.warning(f"Could not add format notification: {nq_err}")
 
-        return f"Idee '{target_node.title}' als {format_display} formatiert."
+        return f"Formatted '{target_node.title}' as {target_format}. Revert available."
 
     except Exception as e:
         logger.error(f"Format conversion failed: {e}")
-        return f"Fehler bei der Formatierung: {str(e)}"
+        return f"Format error: {str(e)}"
 
 
 def _send_format_update_to_electron(node_id: str, bubble_id: str, content: Dict, format_type: str):
@@ -940,7 +967,7 @@ def get_idea_format(params: Dict[str, Any]) -> str:
         bubble_id = get_current_bubble_db_id()
 
         if not bubble_id:
-            return "Bitte betrete zuerst einen Space."
+            return "Please enter a Space first."
 
         canvas_repo = CanvasRepository()
         all_nodes = canvas_repo.list_nodes(limit=500)
@@ -953,7 +980,7 @@ def get_idea_format(params: Dict[str, Any]) -> str:
                     current_format = "note"
                     if node.content_json:
                         current_format = node.content_json.get("type", "note")
-                    return f"Idee '{node.title}' ist als {current_format} formatiert."
+                    return f"Idea '{node.title}' is formatted as {current_format}."
 
         # List all formats in bubble
         formats = []
@@ -963,11 +990,11 @@ def get_idea_format(params: Dict[str, Any]) -> str:
                 fmt = node.content_json.get("type", "note")
             formats.append(f"- {node.title}: {fmt}")
 
-        return "Formate der Ideen:\n" + "\n".join(formats)
+        return "Idea formats:\n" + "\n".join(formats)
 
     except Exception as e:
         logger.error(f"Failed to get format: {e}")
-        return f"Fehler: {str(e)}"
+        return f"Error: {str(e)}"
 
 
 def list_available_formats(params: Dict[str, Any] = None) -> str:
@@ -977,53 +1004,54 @@ def list_available_formats(params: Dict[str, Any] = None) -> str:
     Returns:
         str: List of formats with descriptions
     """
+    logger.debug("list_available_formats: listing all formats")
     formats = [
-        ("note", "Einfache Textnotiz (Standard)"),
-        ("table", "Tabelle mit Spalten und Zeilen"),
-        ("action_list", "Aufgabenliste mit Status und Prioritaet"),
-        ("pros_cons", "Pro-Contra-Analyse"),
-        ("hierarchy", "Hierarchische Gliederung/Outline"),
-        ("specs", "Technische Spezifikationen"),
-        ("kanban", "Kanban-Board mit Spalten und Cards"),
-        ("mindmap", "Mind Map mit zentralem Konzept und Zweigen"),
-        ("swot", "SWOT-Analyse (Staerken, Schwaechen, Chancen, Risiken)"),
-        ("user_story", "User Stories (Als X moechte ich Y, damit Z)"),
-        ("flowchart", "Flowchart/Prozessdiagramm mit Schritten und Entscheidungen"),
+        ("note", "Simple text note (default)"),
+        ("table", "Table with columns and rows"),
+        ("action_list", "Task list with status and priority"),
+        ("pros_cons", "Pros and cons analysis"),
+        ("hierarchy", "Hierarchical outline"),
+        ("specs", "Technical specifications"),
+        ("kanban", "Kanban board with columns and cards"),
+        ("mindmap", "Mind map with central concept and branches"),
+        ("swot", "SWOT analysis (Strengths, Weaknesses, Opportunities, Threats)"),
+        ("user_story", "User Stories (As X I want Y so that Z)"),
+        ("flowchart", "Flowchart/process diagram with steps and decisions"),
     ]
 
-    lines = ["Verfuegbare Formate:"]
+    lines = ["Available formats:"]
     for fmt, desc in formats:
         lines.append(f"  - {fmt}: {desc}")
 
-    lines.append("\nSage z.B. 'Formatiere als Kanban-Board' oder 'Mach eine Mind Map daraus'.")
+    lines.append("\nSay e.g. 'Format as Kanban board' or 'Make a mind map out of it'.")
 
     return "\n".join(lines)
 
 
 # =============================================================================
-# TOOL DEFINITIONS (for ElevenLabs registration)
+# TOOL DEFINITIONS
 # =============================================================================
 
 CONVERT_FORMAT_DEFINITION = {
     "type": "function",
     "function": {
         "name": "convert_format",
-        "description": "Konvertiert eine Idee in ein anderes Format (Tabelle, Aufgabenliste, Pro-Contra, Gliederung, Spezifikation, Notiz)",
+        "description": "Converts an idea to another format (table, action list, pros/cons, hierarchy, specification, note)",
         "parameters": {
             "type": "object",
             "properties": {
                 "idea_name": {
                     "type": "string",
-                    "description": "Name der Idee die konvertiert werden soll"
+                    "description": "Name of the idea to convert"
                 },
                 "target_format": {
                     "type": "string",
                     "enum": ["note", "table", "action_list", "pros_cons", "hierarchy", "specs"],
-                    "description": "Zielformat"
+                    "description": "Target format"
                 },
                 "columns": {
                     "type": "string",
-                    "description": "Optionale Spaltennamen fuer Tabellen (kommagetrennt)"
+                    "description": "Optional column names for tables (comma-separated)"
                 }
             },
             "required": ["target_format"]
@@ -1035,13 +1063,13 @@ GET_FORMAT_DEFINITION = {
     "type": "function",
     "function": {
         "name": "get_idea_format",
-        "description": "Zeigt das aktuelle Format einer Idee an",
+        "description": "Shows the current format of an idea",
         "parameters": {
             "type": "object",
             "properties": {
                 "idea_name": {
                     "type": "string",
-                    "description": "Name der Idee"
+                    "description": "Name of the idea"
                 }
             }
         }
@@ -1052,7 +1080,7 @@ LIST_FORMATS_DEFINITION = {
     "type": "function",
     "function": {
         "name": "list_available_formats",
-        "description": "Listet alle verfuegbaren Formattypen auf",
+        "description": "Lists all available format types",
         "parameters": {
             "type": "object",
             "properties": {}
@@ -1136,11 +1164,77 @@ def format_idea_flowchart(params: Dict[str, Any]) -> str:
     return convert_format(params)
 
 
+# =============================================================================
+# REVERT FORMAT
+# =============================================================================
+
+def revert_format(params: Dict[str, Any]) -> str:
+    """Revert an idea node to its previous format (undo last format change).
+
+    Args (via params):
+        idea_name: Name of the idea to revert (optional, uses smart fallback)
+
+    Returns:
+        str: Success/error message
+    """
+    idea_name = (params.get("idea_name") or params.get("name") or "").strip()
+
+    try:
+        canvas_repo = CanvasRepository()
+
+        from tools.bubble_tools import get_current_bubble_db_id
+        bubble_id = get_current_bubble_db_id()
+
+        if not bubble_id:
+            return "Please enter a space first."
+
+        all_nodes = canvas_repo.list_nodes(limit=500)
+        nodes_in_bubble = [n for n in all_nodes if n.linked_idea_id == bubble_id]
+
+        target_node = None
+        if idea_name:
+            idea_lower = idea_name.lower()
+            for node in nodes_in_bubble:
+                if node.title and idea_lower in node.title.lower():
+                    target_node = node
+                    break
+        else:
+            # Find most recently formatted node with previous content
+            candidates = [n for n in nodes_in_bubble if n.previous_content_json]
+            if candidates:
+                target_node = max(candidates, key=lambda n: (n.last_formatted or datetime.min, n.id))
+
+        if not target_node:
+            return f"No idea found to revert." if not idea_name else f"No idea '{idea_name}' found."
+
+        if not target_node.previous_content_json:
+            return f"No previous format available for '{target_node.title}'."
+
+        # Swap content_json <-> previous_content_json
+        target_node.content_json, target_node.previous_content_json = (
+            target_node.previous_content_json, target_node.content_json
+        )
+        target_node.last_formatted = datetime.now()
+
+        canvas_repo.update_node(target_node)
+
+        # Determine format type for UI update
+        reverted_type = target_node.content_json.get("type", "note") if target_node.content_json else "note"
+        _send_format_update_to_electron(target_node.id, bubble_id, target_node.content_json, reverted_type)
+
+        return f"Reverted '{target_node.title}' to previous format ({reverted_type})."
+
+    except Exception as e:
+        logger.error(f"Revert failed: {e}")
+        return f"Revert error: {str(e)}"
+
+
 # Registry for tool manager
 FORMAT_TOOLS = {
     "convert_format": convert_format,
     "get_idea_format": get_idea_format,
     "list_available_formats": list_available_formats,
+    "revert_format": revert_format,
 }
 
 # Intent executor mappings (for IntentOrchestrator)
@@ -1158,6 +1252,7 @@ FORMAT_EXECUTORS = {
     "idea.format_flowchart": format_idea_flowchart,
     "idea.convert_format": convert_format,
     "idea.list_formats": list_available_formats,
+    "idea.format_revert": revert_format,
 }
 
 FORMAT_TOOL_DEFINITIONS = [

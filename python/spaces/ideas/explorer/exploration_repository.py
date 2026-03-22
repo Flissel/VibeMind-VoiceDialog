@@ -83,6 +83,7 @@ class ExplorationRepository:
 
     def get_session(self, session_id: str) -> Optional[ExplorationSession]:
         """Get session by ID."""
+        logger.debug("get_session: session_id=%s", session_id)
         if not self.conn:
             return None
 
@@ -137,6 +138,7 @@ class ExplorationRepository:
 
     def get_active_sessions(self) -> List[ExplorationSession]:
         """Get all running exploration sessions."""
+        logger.debug("get_active_sessions: querying running sessions")
         if not self.conn:
             return []
 
@@ -191,6 +193,7 @@ class ExplorationRepository:
 
     def get_nodes_for_session(self, session_id: str) -> List[IdeaNode]:
         """Get all nodes for a session."""
+        logger.debug("get_nodes_for_session: session_id=%s", session_id)
         if not self.conn:
             return []
 
@@ -252,6 +255,8 @@ class ExplorationRepository:
         min_score: float = 0.0,
     ) -> List[IdeaNode]:
         """Get best-scoring nodes, optionally filtered by session."""
+        logger.debug("get_best_nodes: session_id=%s, top_k=%s, min_score=%s",
+                     session_id, top_k, min_score)
         if not self.conn:
             return []
 
@@ -303,6 +308,8 @@ class ExplorationRepository:
         is_rejected: Optional[bool] = None,
     ) -> None:
         """Update node acceptance/rejection status."""
+        logger.debug("update_node_status: node_id=%s, accepted=%s, rejected=%s",
+                     node_id, is_accepted, is_rejected)
         if not self.conn:
             return
 
@@ -376,6 +383,8 @@ class ExplorationRepository:
         min_confidence: float = 0.0,
     ) -> List[Dict[str, Any]]:
         """Get discovered edges, optionally filtered by bubble."""
+        logger.debug("get_discovered_edges: bubble_id=%s, min_confidence=%s",
+                     bubble_id, min_confidence)
         if not self.conn:
             return []
 

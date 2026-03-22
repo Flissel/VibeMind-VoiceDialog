@@ -18,6 +18,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ActiveOperation:
@@ -180,12 +182,11 @@ class SystemStatusMonitor:
         self._print_status_line(f"[-] {op.operation_type}: {status_char} ({op.elapsed_seconds:.1f}s)")
 
     def _print_status_line(self, msg: str):
-        """Print a status line to stderr with timestamp."""
-        import sys
+        """Log a status line with timestamp."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         active_count = len(self._active_ops)
         prefix = f"[{timestamp}] [{active_count} active]"
-        print(f"[Python DEBUG] {prefix} {msg}", file=sys.stderr, flush=True)
+        _logger.debug(f"{prefix} {msg}")
 
     def get_status(self) -> Dict[str, Any]:
         """Get current system status."""
@@ -211,8 +212,7 @@ class SystemStatusMonitor:
             return [op.to_dict() for op in self._active_ops.values()]
 
     def print_status_summary(self):
-        """Print a human-readable status summary to stderr."""
-        import sys
+        """Log a human-readable status summary."""
         status = self.get_status()
 
         lines = [
@@ -238,7 +238,7 @@ class SystemStatusMonitor:
 
         lines.append("=" * 50)
 
-        print("\n".join(f"[Python DEBUG] {l}" for l in lines), file=sys.stderr, flush=True)
+        _logger.debug("\n".join(lines))
 
     def check_stuck_operations(self, threshold_seconds: float = 15.0) -> List[Dict[str, Any]]:
         """Check for operations that have been running too long."""
@@ -249,10 +249,9 @@ class SystemStatusMonitor:
                     stuck.append(op.to_dict())
 
         if stuck:
-            import sys
-            print(f"[Python DEBUG] [WARNING] {len(stuck)} stuck operations (>{threshold_seconds}s):", file=sys.stderr, flush=True)
+            _logger.debug(f"[WARNING] {len(stuck)} stuck operations (>{threshold_seconds}s):")
             for op in stuck:
-                print(f"[Python DEBUG]   [{op['elapsed_s']:.0f}s] {op['type']}: {op['description'][:50]}", file=sys.stderr, flush=True)
+                _logger.debug(f"  [{op['elapsed_s']:.0f}s] {op['type']}: {op['description'][:50]}")
 
         return stuck
 

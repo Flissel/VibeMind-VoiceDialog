@@ -1,14 +1,16 @@
 """
-Rowboat Update Checker
+Rowboat Update Checker + Auto-Pull
 
-Periodically checks GitHub for new Rowboat releases and notifies VibeMind
-when an update is available. Similar to Rowboat's own update-electron-app
-mechanism, but works with the git submodule model.
+Periodically checks GitHub for new Rowboat releases. When a newer version
+is found, automatically pulls it (stash → pull → stash pop) and notifies
+the Electron UI.
 
 Architecture:
   Python daemon thread  ──check──→  GitHub API (releases/latest)
         ↓ (if newer)
-  rowboat_update_available  ──→  Electron main.js  ──→  BrowserView + Tab badge
+  auto-pull: git stash → git pull origin main → git stash pop
+        ↓
+  rowboat_update_applied  ──→  Electron main.js  ──→  Tab badge
 """
 
 import os
@@ -16,6 +18,7 @@ import json
 import time
 import logging
 import subprocess
+import threading
 import urllib.request
 import urllib.error
 from typing import Optional, Callable, Dict, Any
@@ -42,6 +45,7 @@ class RowboatUpdateChecker:
     def __init__(self, send_message: Callable[[Dict[str, Any]], None]):
         self._send_message = send_message
         self._interval = int(os.getenv("ROWBOAT_UPDATE_CHECK_INTERVAL", str(DEFAULT_CHECK_INTERVAL)))
+        self._auto_pull = os.getenv("ROWBOAT_AUTO_PULL", "true").lower() == "true"
         self._current_version: Optional[str] = None
         self._latest_version: Optional[str] = None
         self._submodule_path = self._find_submodule_path()
@@ -60,19 +64,71 @@ class RowboatUpdateChecker:
         return os.path.join(project_root, "python", "spaces", "roarboot", "rowboat")
 
     def _get_current_version(self) -> Optional[str]:
-        """Get the current submodule version via git describe --tags."""
+        """Get the current submodule version via git rev-parse or HEAD file."""
+        if not os.path.isdir(self._submodule_path):
+            logger.warning(f"[UpdateChecker] Submodule path does not exist: {self._submodule_path}")
+            return None
+
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": ""}
+
+        # Fast path: rev-parse just reads .git/HEAD — should be instant
         try:
             result = subprocess.run(
-                ["git", "describe", "--tags", "--always"],
-                capture_output=True, text=True, timeout=10,
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=3,
                 cwd=self._submodule_path,
+                env=env,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout.strip():
                 version = result.stdout.strip()
-                logger.debug(f"[UpdateChecker] Current version: {version}")
+                logger.debug(f"[UpdateChecker] Current version (commit): {version}")
                 return version
+        except subprocess.TimeoutExpired:
+            logger.debug("[UpdateChecker] git rev-parse timed out, trying file read")
+        except Exception:
+            pass
+
+        # Fallback: read the HEAD ref directly from the filesystem
+        try:
+            git_path = os.path.join(self._submodule_path, ".git")
+            # Submodules have a .git file pointing to the real gitdir
+            if os.path.isfile(git_path):
+                with open(git_path, "r") as f:
+                    content = f.read().strip()
+                if content.startswith("gitdir:"):
+                    gitdir = content[7:].strip()
+                    if not os.path.isabs(gitdir):
+                        gitdir = os.path.normpath(os.path.join(self._submodule_path, gitdir))
+                    head_file = os.path.join(gitdir, "HEAD")
+                else:
+                    head_file = None
+            elif os.path.isdir(git_path):
+                head_file = os.path.join(git_path, "HEAD")
+            else:
+                head_file = None
+
+            if head_file and os.path.isfile(head_file):
+                with open(head_file, "r") as f:
+                    head_content = f.read().strip()
+                if head_content.startswith("ref:"):
+                    # HEAD points to a branch — resolve it
+                    ref_path = head_content[4:].strip()
+                    ref_file = os.path.join(os.path.dirname(head_file), ref_path)
+                    if os.path.isfile(ref_file):
+                        with open(ref_file, "r") as f:
+                            version = f.read().strip()[:10]
+                            logger.debug(f"[UpdateChecker] Current version (file): {version}")
+                            return version
+                else:
+                    # Detached HEAD — it's a commit hash
+                    version = head_content[:10]
+                    logger.debug(f"[UpdateChecker] Current version (detached): {version}")
+                    return version
         except Exception as e:
-            logger.warning(f"[UpdateChecker] Failed to get current version: {e}")
+            logger.warning(f"[UpdateChecker] Failed to read HEAD file: {e}")
+
+        logger.warning(f"[UpdateChecker] Could not determine version for {self._submodule_path}")
         return None
 
     def _get_latest_release(self) -> Optional[Dict[str, Any]]:
@@ -128,46 +184,204 @@ class RowboatUpdateChecker:
             # Fallback: string comparison
             return latest_norm != current_norm
 
+    def _run_git(self, *args, timeout: int = 60) -> subprocess.CompletedProcess:
+        """Run a git command in the submodule directory (non-interactive, no window)."""
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": ""}
+        return subprocess.run(
+            ["git", *args],
+            capture_output=True, text=True, timeout=timeout,
+            cwd=self._submodule_path,
+            env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+    def _auto_pull_update(self) -> Dict[str, Any]:
+        """
+        Auto-pull latest changes: stash local changes, pull, restore.
+
+        Returns:
+            Dict with keys: success, old_version, new_version, error
+        """
+        old_version = self._current_version or "unknown"
+        stashed = False
+
+        try:
+            # 1. Check for local changes
+            status = self._run_git("status", "--porcelain", timeout=10)
+            has_changes = bool(status.stdout.strip())
+
+            # 2. Stash if dirty
+            if has_changes:
+                logger.info("[UpdateChecker] Stashing local changes...")
+                stash_result = self._run_git(
+                    "stash", "push", "-m", "auto-pull before update", "--include-untracked"
+                )
+                if stash_result.returncode != 0:
+                    return {"success": False, "old_version": old_version,
+                            "new_version": old_version, "error": f"Stash failed: {stash_result.stderr.strip()}"}
+                stashed = True
+
+            # 3. Pull
+            logger.info("[UpdateChecker] Pulling latest from origin/main...")
+            pull_result = self._run_git("pull", "origin", "main", timeout=30)
+            if pull_result.returncode != 0:
+                # Restore stash on failure
+                if stashed:
+                    self._run_git("stash", "pop")
+                return {"success": False, "old_version": old_version,
+                        "new_version": old_version, "error": f"Pull failed: {pull_result.stderr.strip()}"}
+
+            # 4. Restore stash
+            if stashed:
+                logger.info("[UpdateChecker] Restoring local changes...")
+                pop_result = self._run_git("stash", "pop")
+                if pop_result.returncode != 0:
+                    conflict_msg = pop_result.stderr.strip()
+                    logger.warning(f"[UpdateChecker] Stash pop had conflicts: {conflict_msg}")
+                    self._send_message({
+                        "type": "rowboat_update_error",
+                        "error": f"Stash pop conflict after update: {conflict_msg}",
+                        "details": "Local changes conflicted with the pulled update. Manual resolution may be needed.",
+                    })
+
+            # 5. Get new version
+            new_version = self._get_current_version() or "unknown"
+            logger.info(f"[UpdateChecker] Auto-pull complete: {old_version} -> {new_version}")
+
+            return {"success": True, "old_version": old_version, "new_version": new_version, "error": None}
+
+        except subprocess.TimeoutExpired:
+            if stashed:
+                self._run_git("stash", "pop")
+            return {"success": False, "old_version": old_version,
+                    "new_version": old_version, "error": "Git operation timed out"}
+        except Exception as e:
+            if stashed:
+                try:
+                    self._run_git("stash", "pop")
+                except Exception:
+                    pass
+            return {"success": False, "old_version": old_version,
+                    "new_version": old_version, "error": str(e)}
+
     def check_once(self) -> Optional[Dict[str, Any]]:
         """
         Perform a single update check.
         Returns release info if an update is available, None otherwise.
         """
+        logger.info("[UpdateChecker] Running update check...")
+
         self._current_version = self._get_current_version()
         if not self._current_version:
-            logger.warning("[UpdateChecker] Cannot determine current version")
+            logger.warning("[UpdateChecker] Cannot determine current version — skipping check")
             return None
+
+        logger.info(f"[UpdateChecker] Current local version: {self._current_version}")
 
         release = self._get_latest_release()
         if not release:
+            logger.info("[UpdateChecker] GitHub API returned no releases")
             return None
 
         latest_tag = release["tag_name"]
+        logger.info(f"[UpdateChecker] Latest GitHub release: {latest_tag} ({release.get('name', 'unnamed')})")
+
+        if not latest_tag:
+            logger.warning("[UpdateChecker] Release tag_name is empty — cannot compare versions")
+            return None
+
         if self._is_newer(self._current_version, latest_tag):
             self._latest_version = latest_tag
-            logger.info(f"[UpdateChecker] Update available: {self._current_version} → {latest_tag}")
+            logger.info(f"[UpdateChecker] Update available: {self._current_version} -> {latest_tag}")
             return release
 
-        logger.debug(f"[UpdateChecker] Up to date: {self._current_version}")
+        logger.info(f"[UpdateChecker] Up to date (local={self._current_version}, remote={latest_tag})")
         return None
 
+    def check_now(self) -> Optional[Dict[str, Any]]:
+        """
+        Trigger an immediate update check from outside the timer loop.
+        Can be called from an IPC handler. Returns the check result.
+        """
+        logger.info("[UpdateChecker] Manual check triggered")
+        try:
+            release = self.check_once()
+            if release:
+                self._handle_release(release)
+            else:
+                self._send_message({
+                    "type": "rowboat_update_check_result",
+                    "up_to_date": True,
+                    "current_version": self._current_version or "unknown",
+                })
+            return release
+        except Exception as e:
+            logger.error(f"[UpdateChecker] Manual check failed: {e}")
+            self._send_message({
+                "type": "rowboat_update_check_result",
+                "up_to_date": False,
+                "error": str(e),
+            })
+            return None
+
+    def _handle_release(self, release: Dict[str, Any]):
+        """Handle a detected release: auto-pull or notify."""
+        if self._auto_pull:
+            result = self._auto_pull_update()
+            if result["success"]:
+                self._send_message({
+                    "type": "rowboat_update_applied",
+                    "old_version": result["old_version"],
+                    "new_version": result["new_version"],
+                    "release_name": release.get("name", ""),
+                    "changelog": release.get("body", ""),
+                })
+            else:
+                logger.warning(f"[UpdateChecker] Auto-pull failed: {result['error']}")
+                self._send_message({
+                    "type": "rowboat_update_available",
+                    "current_version": self._current_version,
+                    "latest_version": release["tag_name"],
+                    "release_name": release.get("name", ""),
+                    "release_url": release.get("html_url", ""),
+                    "changelog": release.get("body", ""),
+                    "auto_pull_error": result["error"],
+                })
+        else:
+            self._send_message({
+                "type": "rowboat_update_available",
+                "current_version": self._current_version,
+                "latest_version": release["tag_name"],
+                "release_name": release.get("name", ""),
+                "release_url": release.get("html_url", ""),
+                "changelog": release.get("body", ""),
+            })
+
     def _run_loop(self):
-        """Main loop: check periodically and notify via callback."""
-        # Initial delay to let the app stabilize
-        time.sleep(30)
+        """Main loop: check periodically, auto-pull if enabled, and notify."""
+        # Short delay to let the app stabilize
+        time.sleep(10)
+
+        # First check — log result clearly
+        logger.info("[UpdateChecker] Running first update check after startup...")
+        try:
+            release = self.check_once()
+            if release:
+                logger.info(f"[UpdateChecker] First check: UPDATE AVAILABLE ({release['tag_name']})")
+                self._handle_release(release)
+            else:
+                logger.info(f"[UpdateChecker] First check: no update available (current={self._current_version or 'unknown'})")
+        except Exception as e:
+            logger.error(f"[UpdateChecker] First check failed: {e}")
+
+        # Wait for next interval, then loop
+        time.sleep(self._interval)
 
         while self._running:
             try:
                 release = self.check_once()
                 if release:
-                    self._send_message({
-                        "type": "rowboat_update_available",
-                        "current_version": self._current_version,
-                        "latest_version": release["tag_name"],
-                        "release_name": release.get("name", ""),
-                        "release_url": release.get("html_url", ""),
-                        "changelog": release.get("body", ""),
-                    })
+                    self._handle_release(release)
             except Exception as e:
                 logger.error(f"[UpdateChecker] Check failed: {e}")
 
@@ -176,8 +390,6 @@ class RowboatUpdateChecker:
 
     def start(self):
         """Start the update checker as a daemon thread."""
-        import threading
-
         if self._running:
             return
 
@@ -188,7 +400,7 @@ class RowboatUpdateChecker:
             name="rowboat-update-checker",
         )
         self._thread.start()
-        logger.info(f"[UpdateChecker] Started (interval={self._interval}s)")
+        logger.info(f"[UpdateChecker] Started (interval={self._interval}s, auto_pull={self._auto_pull})")
 
     def stop(self):
         """Stop the update checker."""

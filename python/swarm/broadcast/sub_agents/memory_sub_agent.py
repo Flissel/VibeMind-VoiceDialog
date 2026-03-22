@@ -22,10 +22,12 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from swarm.broadcast.dispatcher import IntentPayload
 
+from llm_config import get_model, get_async_client
+
 logger = logging.getLogger(__name__)
 
 # Use lightweight model for cost-efficient profiling
-PROFILING_MODEL = os.getenv("PROFILING_MODEL", "openai/gpt-4o-mini")
+PROFILING_MODEL = get_model("profiling")
 
 
 class MemorySubAgent:
@@ -120,8 +122,7 @@ class MemorySubAgent:
         )
 
         try:
-            from swarm.cloud_client import get_openrouter_client
-            client = get_openrouter_client()
+            client = get_async_client("profiling")
 
             response = await client.chat.completions.create(
                 model=PROFILING_MODEL,

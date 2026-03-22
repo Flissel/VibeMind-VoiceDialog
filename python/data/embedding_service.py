@@ -8,13 +8,14 @@ Uses all-MiniLM-L6-v2 model (384 dimensions, fast, multilingual-capable).
 import json
 import hashlib
 import logging
-import sys
 import threading
 from typing import List, Optional, Tuple
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 logger = logging.getLogger(__name__)
+
+_logger = logging.getLogger(__name__)
 
 # System Status Monitor integration
 try:
@@ -62,7 +63,7 @@ def _get_model():
                     {"model": "all-MiniLM-L6-v2"}
                 )
 
-            print("[Python DEBUG] [EmbeddingService] Loading model all-MiniLM-L6-v2...", file=sys.stderr, flush=True)
+            _logger.debug("[EmbeddingService] Loading model all-MiniLM-L6-v2...")
             logger.info("[EmbeddingService] Loading model all-MiniLM-L6-v2...")
 
             # Load with timeout (60 seconds max)
@@ -76,12 +77,12 @@ def _get_model():
                 except FuturesTimeoutError:
                     _model_load_attempted = False  # Allow retry
                     logger.error("[EmbeddingService] Model loading timed out after 60s")
-                    print("[Python DEBUG] [EmbeddingService] Model loading TIMEOUT (60s)", file=sys.stderr, flush=True)
+                    _logger.debug("[EmbeddingService] Model loading TIMEOUT (60s)")
                     if _monitor and op_id:
                         _monitor.complete_operation(op_id, success=False, error="Timeout after 60s")
                     return None
 
-            print("[Python DEBUG] [EmbeddingService] Model loaded successfully", file=sys.stderr, flush=True)
+            _logger.debug("[EmbeddingService] Model loaded successfully")
             logger.info("[EmbeddingService] Model loaded successfully")
 
             if _monitor and op_id:
@@ -92,14 +93,14 @@ def _get_model():
         except ImportError:
             logger.warning("[EmbeddingService] sentence-transformers not installed. "
                           "Run: pip install sentence-transformers")
-            print("[Python DEBUG] [EmbeddingService] sentence-transformers NOT INSTALLED", file=sys.stderr, flush=True)
+            _logger.debug("[EmbeddingService] sentence-transformers NOT INSTALLED")
             if _monitor and op_id:
                 _monitor.complete_operation(op_id, success=False, error="Not installed")
             return None
         except Exception as e:
             _model_load_attempted = False  # Allow retry on transient errors
             logger.error(f"[EmbeddingService] Failed to load model: {e}")
-            print(f"[Python DEBUG] [EmbeddingService] FAILED: {e}", file=sys.stderr, flush=True)
+            _logger.debug(f"[EmbeddingService] FAILED: {e}")
             if _monitor and op_id:
                 _monitor.complete_operation(op_id, success=False, error=str(e))
             return None
@@ -202,13 +203,13 @@ class EmbeddingService:
                 # Real model loaded — clear any previous fallback
                 if self._using_fallback:
                     logger.info("[EmbeddingService] Upgraded from fallback to real model")
-                    print("[Python DEBUG] [EmbeddingService] Upgraded to real model", file=sys.stderr, flush=True)
+                    _logger.debug("[EmbeddingService] Upgraded to real model")
                     self._fallback_model = None
                     self._using_fallback = False
             elif self._fallback_model is None:
                 # Use fallback if main model failed
                 logger.info("[EmbeddingService] Using hash-based fallback embeddings")
-                print("[Python DEBUG] [EmbeddingService] Using hash-based fallback", file=sys.stderr, flush=True)
+                _logger.debug("[EmbeddingService] Using hash-based fallback")
                 self._fallback_model = HashBasedEmbedding()
                 self._using_fallback = True
 
@@ -383,6 +384,7 @@ class EmbeddingService:
         Returns:
             Similarity score between 0 and 1
         """
+        logger.debug("text_similarity: text1_len=%s text2_len=%s", len(text1), len(text2))
         if not text1 or not text2:
             return 0.0
 

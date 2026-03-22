@@ -108,6 +108,7 @@ class RowboatManager {
         });
       }
       console.log('[RowboatManager] Renderer loaded');
+
     });
 
     this.rowboatView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -194,6 +195,25 @@ class RowboatManager {
   relayEvent(channel, payload) {
     if (this.rowboatView && !this.rowboatView.webContents.isDestroyed()) {
       this.rowboatView.webContents.send(channel, payload);
+    }
+  }
+
+  /**
+   * Check if Claude Code OAuth token is available.
+   * Reads credentials directly (we are in the main process).
+   */
+  _isClaudeCodeAvailable() {
+    try {
+      const os = require('os');
+      const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      if (!fs.existsSync(credPath)) return false;
+      const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+      const oauth = creds?.claudeAiOauth;
+      if (!oauth?.accessToken) return false;
+      if (oauth.expiresAt && oauth.expiresAt < Date.now() + 300000) return false;
+      return true;
+    } catch {
+      return false;
     }
   }
 

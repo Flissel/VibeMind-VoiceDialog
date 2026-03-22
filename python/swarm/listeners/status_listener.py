@@ -14,15 +14,11 @@ Deferred Feedback Pattern:
 """
 
 import logging
-import sys
 from typing import Callable, Optional, Any
 
 logger = logging.getLogger(__name__)
 
-
-def _debug_print(msg: str):
-    """Print debug message to stderr for visibility in Electron."""
-    print(f"[Python DEBUG] [StatusListener] {msg}", file=sys.stderr)
+_logger = logging.getLogger(__name__)
 
 
 class StatusListener:
@@ -31,7 +27,7 @@ class StatusListener:
 
     Uses deferred feedback pattern:
     - Completed tasks → NotificationQueue → Rachel speaks on next input
-    - This is 100% compatible with ElevenLabs Conversational AI
+    - This is compatible with the voice Conversational AI layer
     """
 
     # Status messages for optional TTS callback (mostly unused with deferred pattern)
@@ -103,7 +99,7 @@ class StatusListener:
 
         self._running = True
         logger.info("StatusListener: Starting to listen on events:status")
-        _debug_print("STARTED - listening on events:status (Redis async mode)")
+        _logger.debug("[StatusListener] STARTED - listening on events:status (Redis async mode)")
 
         await self.bus.subscribe("events:status", self._handle_status)
 
@@ -128,7 +124,7 @@ class StatusListener:
             job_id = event.job_id
 
             # Log all received events to stderr for debugging
-            _debug_print(f"RECEIVED: {event_type} (job={job_id[:8] if job_id else 'none'})")
+            _logger.debug(f"[StatusListener] RECEIVED: {event_type} (job={job_id[:8] if job_id else 'none'})")
             logger.debug(f"StatusListener: Received {event_type} for job {job_id}")
 
             # Update JobManager
@@ -143,7 +139,7 @@ class StatusListener:
                     result=payload.get("result", "Fertig"),
                     metadata=payload
                 )
-                _debug_print(f"QUEUED to NotificationQueue: {original_event} (job={job_id[:8] if job_id else 'none'})")
+                _logger.debug(f"[StatusListener] QUEUED to NotificationQueue: {original_event} (job={job_id[:8] if job_id else 'none'})")
                 logger.info(f"StatusListener: Queued notification for {job_id}")
 
             elif event_type == "task.error":
@@ -154,7 +150,7 @@ class StatusListener:
                     result=f"Fehler: {payload.get('error', 'Unbekannter Fehler')}",
                     metadata=payload
                 )
-                _debug_print(f"QUEUED ERROR to NotificationQueue: {original_event} (job={job_id[:8] if job_id else 'none'})")
+                _logger.debug(f"[StatusListener] QUEUED ERROR to NotificationQueue: {original_event} (job={job_id[:8] if job_id else 'none'})")
                 logger.info(f"StatusListener: Queued error notification for {job_id}")
 
             # Optional TTS callback for real-time feedback (legacy/debugging)

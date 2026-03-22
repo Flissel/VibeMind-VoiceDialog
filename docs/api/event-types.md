@@ -46,6 +46,7 @@ Stream: `events:tasks:ideas`
 | `idea.expand` | `{idea_name, count?}` | Expand into sub-ideas |
 | `idea.explain` | `{idea_name}` | Explain an idea |
 | `idea.analyze_links` | `{idea_name?}` | Analyze link structure |
+| `idea.generate_doc` | `{idea_name?}` | Generate documentation for idea |
 
 ### Idea Format Events
 
@@ -60,6 +61,7 @@ All format events route to the ideas stream and map to the `convert_format` tool
 | `idea.format_specs` | specs |
 | `idea.convert_format` | (user-specified) |
 | `idea.list_formats` | (lists available formats) |
+| `idea.format_revert` | (reverts to previous format) |
 
 ### Idea Exploration Events
 
@@ -182,6 +184,21 @@ Stream: `events:tasks:schedule`
 | `schedule.modify` | `{task_id, changes}` | Modify task |
 | `schedule.status` | `{task_id?}` | Get schedule status |
 | `schedule.snooze` | `{task_id, duration}` | Snooze a scheduled task |
+
+## N8n Events
+
+Stream: `events:tasks:n8n`
+
+| Event Type | Parameters | Description |
+|-----------|-----------|-------------|
+| `n8n.generate` | `{description}` | Generate workflow from natural language |
+| `n8n.list` | — | List all workflows |
+| `n8n.status` | — | Get n8n instance health status |
+| `n8n.activate` | `{name}` | Activate a workflow |
+| `n8n.deactivate` | `{name}` | Deactivate a workflow |
+| `n8n.delete` | `{name}` | Delete a workflow |
+| `n8n.execute` | `{name}` | Execute a workflow manually |
+| `n8n.describe` | `{name}` | Show workflow details |
 
 ## Status Events
 

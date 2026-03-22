@@ -1,0 +1,22 @@
+{
+  "id": "brain",
+  "version": "1.0.0",
+  "name": "Brain (Tahlamus)",
+  "description": "Neurowissenschaftlich inspiriertes Kognitionssystem mit eigenstaendigen Microservices",
+  "author": "VibeMind Team",
+  "category": "cognitive",
+  "changelog": "Initial release",
+
+  "agent_module": "",
+  "agent_class": "",
+  "agent_factory": "",
+
+  "stream": "",
+  "event_routes": {},
+
+  "classifier_hints": {},
+
+  "builtin": true,
+  "env_flag": null,
+  "dependencies": []
+}

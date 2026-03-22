@@ -1,6 +1,6 @@
 """
 Test script for Vibemind Workspace Tools
-Verifies tools work with ElevenLabs-style parameter format.
+Verifies tools work with voice-style parameter format.
 """
 
 import sys
@@ -17,7 +17,7 @@ def main():
     print('Testing Vibemind Workspace Tools...')
     print()
 
-    # Test capture_idea (ElevenLabs format - params dict)
+    # Test capture_idea (voice format - params dict)
     result = capture_idea({
         'title': 'Voice command automation',
         'description': 'Automate desktop tasks with voice commands',

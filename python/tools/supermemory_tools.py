@@ -1,5 +1,5 @@
 """
-SuperMemory Tools for ElevenLabs Voice Integration
+SuperMemory Tools for Voice Integration
 
 Provides voice-callable tools for storing and retrieving context
 from SuperMemory AI. Used for persistent memory across sessions.
@@ -96,11 +96,11 @@ def search_memory(params: Dict[str, Any]) -> str:
     logger.info(f"search_memory called with query: '{query}', limit: {limit}")
     
     if not query:
-        return "Was soll ich in meinen Erinnerungen suchen?"
+        return "What should I search for in my memories?"
     
     client = _get_client()
     if not client:
-        return "SuperMemory ist nicht konfiguriert. Bitte SUPERMEMORY_API_KEY in .env setzen."
+        return "SuperMemory not configured. Set SUPERMEMORY_API_KEY in .env."
     
     session_id = get_session_id()
     
@@ -113,7 +113,7 @@ def search_memory(params: Dict[str, Any]) -> str:
         
         if not results:
             logger.info(f"No memories found for query: '{query}'")
-            return f"Ich habe keine Erinnerungen zu '{query}' gefunden."
+            return f"No memories found for '{query}'."
         
         # Format results for voice response
         memories = []
@@ -128,14 +128,14 @@ def search_memory(params: Dict[str, Any]) -> str:
             memory_type = metadata.get("type", "memory")
             memories.append(f"{i}. {content}")
         
-        result_text = f"Ich habe {len(memories)} Erinnerungen gefunden: " + " ".join(memories)
+        result_text = f"I found {len(memories)} memories: " + " ".join(memories)
         logger.info(f"Found {len(memories)} memories for query: '{query}'")
         
         return result_text
         
     except Exception as e:
         logger.error(f"Error searching memory: {e}")
-        return f"Fehler bei der Suche: {str(e)}"
+        return f"Search error: {str(e)}"
 
 
 def store_to_supermemory(params: Dict[str, Any]) -> str:
@@ -164,11 +164,11 @@ def store_to_supermemory(params: Dict[str, Any]) -> str:
     logger.info(f"store_to_supermemory called with content: '{content[:50]}...', category: '{category}'")
     
     if not content:
-        return "Was soll ich mir merken?"
+        return "What should I remember?"
     
     client = _get_client()
     if not client:
-        return "SuperMemory ist nicht konfiguriert. Bitte SUPERMEMORY_API_KEY in .env setzen."
+        return "SuperMemory not configured. Set SUPERMEMORY_API_KEY in .env."
     
     session_id = get_session_id()
     
@@ -196,11 +196,11 @@ def store_to_supermemory(params: Dict[str, Any]) -> str:
         memory_id = result.get("id", "unknown")
         logger.info(f"Stored memory: {memory_id}")
         
-        return f"Ich habe mir gemerkt: {content[:100]}{'...' if len(content) > 100 else ''}"
+        return f"I remembered: {content[:100]}{'...' if len(content) > 100 else ''}"
         
     except Exception as e:
         logger.error(f"Error storing memory: {e}")
-        return f"Fehler beim Speichern: {str(e)}"
+        return f"Error saving: {str(e)}"
 
 
 def recall_conversation(params: Dict[str, Any]) -> str:
@@ -217,7 +217,7 @@ def recall_conversation(params: Dict[str, Any]) -> str:
     """
     client = _get_client()
     if not client:
-        return "SuperMemory ist nicht konfiguriert."
+        return "SuperMemory not configured."
     
     session_id = get_session_id()
     
@@ -225,7 +225,7 @@ def recall_conversation(params: Dict[str, Any]) -> str:
         history = client.get_conversation_history(session_id)
         
         if not history:
-            return "Wir haben noch nicht viel besprochen in dieser Session."
+            return "We haven't discussed much in this session yet."
         
         # Summarize history
         topics = []
@@ -233,16 +233,16 @@ def recall_conversation(params: Dict[str, Any]) -> str:
             metadata = item.get("metadata", {})
             agent = metadata.get("agent", "")
             if agent:
-                topics.append(f"Mit {agent}")
-        
+                topics.append(f"With {agent}")
+
         if topics:
-            return f"In dieser Session: {', '.join(set(topics))}. Insgesamt {len(history)} Interaktionen."
+            return f"In this session: {', '.join(set(topics))}. Total {len(history)} interactions."
         else:
-            return f"Wir haben {len(history)} Interaktionen in dieser Session."
+            return f"We have {len(history)} interactions in this session."
             
     except Exception as e:
         logger.error(f"Error recalling conversation: {e}")
-        return f"Fehler beim Abrufen der Historie: {str(e)}"
+        return f"Error fetching history: {str(e)}"
 
 
 def clear_session_memory(params: Dict[str, Any]) -> str:
@@ -267,7 +267,7 @@ def clear_session_memory(params: Dict[str, Any]) -> str:
     
     logger.info(f"Cleared session {old_session}, new session: {new_session}")
     
-    return "Neue Session gestartet. Ich habe den lokalen Kontext zurückgesetzt."
+    return "New session started. Local context has been reset."
 
 
 # =============================================================================

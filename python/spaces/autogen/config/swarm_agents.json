@@ -1,0 +1,146 @@
+{
+  "SwarmManager": {
+    "id": "7b0de7b2-2abe-417e-ada8-96625c5d74eb",
+    "name": "SwarmManager",
+    "api_key": "mb_9c1e8e177cd942629d10bbf666044ada",
+    "created_at": "2026-03-02T18:37:08.727079",
+    "last_seen": null,
+    "online": null
+  },
+  "ArchitectAgent": {
+    "id": "e15b2ab6-1c1a-44aa-9dd6-22ac1b7c180a",
+    "name": "ArchitectAgent",
+    "api_key": "mb_de637559a76b40deab1763f2b2d31f67",
+    "created_at": "2026-03-02T18:37:08.742968",
+    "last_seen": null,
+    "online": null
+  },
+  "CoderAgent": {
+    "id": "db8986b3-a21a-40bd-864c-286fadcc732f",
+    "name": "CoderAgent",
+    "api_key": "mb_a0107b3e22c64074b040dd856ca60a59",
+    "created_at": "2026-03-02T18:37:08.754189",
+    "last_seen": null,
+    "online": null
+  },
+  "ReviewerAgent": {
+    "id": "8bb94b81-1b93-4257-9edb-1d913f65fc44",
+    "name": "ReviewerAgent",
+    "api_key": "mb_9c7b5ce55fb84b8181a83840a022a1ee",
+    "created_at": "2026-03-02T18:37:08.765996",
+    "last_seen": null,
+    "online": null
+  },
+  "TesterAgent": {
+    "id": "3939e3cd-c3bb-4194-ba94-5d21cd202f4b",
+    "name": "TesterAgent",
+    "api_key": "mb_c05476f23fc94e8ea4844bdec060a3b5",
+    "created_at": "2026-03-02T18:37:08.778255",
+    "last_seen": null,
+    "online": null
+  },
+  "ValidatorAgent": {
+    "id": "e4525a7b-f646-4e15-ac09-77291151f778",
+    "name": "ValidatorAgent",
+    "api_key": "mb_cd60a05aea474c4180d509805a702f67",
+    "created_at": "2026-03-02T18:37:08.790619",
+    "last_seen": null,
+    "online": null
+  },
+  "CatalogAgent": {
+    "id": "56b422e1-3ab3-4f45-b137-2f1373a2fb76",
+    "name": "CatalogAgent",
+    "api_key": "mb_c29ab122ff374a7184c62426f234024c",
+    "created_at": "2026-03-02T18:37:08.802635",
+    "last_seen": null,
+    "online": null
+  },
+  "BuilderAgent": {
+    "id": "34f5f5f8-7ec3-4aaa-ba69-74f86ceb0fa3",
+    "name": "BuilderAgent",
+    "api_key": "mb_f2e3e71b5e43411cafd9db5cfb3384e3",
+    "created_at": "2026-03-02T18:37:08.817747",
+    "last_seen": null,
+    "online": null
+  },
+  "ExecutorAgent": {
+    "id": "86d5f5ea-7784-4928-aebb-e2291a6bacc9",
+    "name": "ExecutorAgent",
+    "api_key": "mb_31536429e6064115b0e78f61d43a16bc",
+    "created_at": "2026-03-02T18:37:08.825928",
+    "last_seen": null,
+    "online": null
+  },
+  "OutputEvalAgent": {
+    "id": "3ec063d5-841b-45d1-abbd-ad5f3fa3aab1",
+    "name": "OutputEvalAgent",
+    "api_key": "mb_4a331629e94a41f6a80345db208fface",
+    "created_at": "2026-03-02T18:37:08.834248",
+    "last_seen": null,
+    "online": null
+  },
+  "EvalReporterAgent": {
+    "id": "db198568-a46b-4f9b-aae9-3b5e6900414c",
+    "name": "EvalReporterAgent",
+    "api_key": "mb_b48dd92079ba4c2fb75d97af95447c98",
+    "created_at": "2026-03-02T18:37:08.842913",
+    "last_seen": null,
+    "online": null
+  },
+  "RegistryAgent": {
+    "id": "5adac1d7-4b8e-4814-8bef-7df1f8e199de",
+    "name": "RegistryAgent",
+    "api_key": "mb_78672ac993844ac490f6b7a937e177fc",
+    "created_at": "2026-03-02T18:37:08.850086",
+    "last_seen": null,
+    "online": null
+  },
+  "DomainResearcher": {
+    "id": "f067293a-a5ef-403d-b41a-16af095c4e39",
+    "name": "DomainResearcher",
+    "api_key": "mb_078464cd727b4385b601b1d7ddb6441d",
+    "created_at": "2026-03-03T10:27:23.410092",
+    "last_seen": null,
+    "online": null
+  },
+  "TechStackSpecialist": {
+    "id": "0954b036-f7ad-4605-b240-68f8e60af5c7",
+    "name": "TechStackSpecialist",
+    "api_key": "mb_cf71ca75dc834f2aa2dff5e79594489c",
+    "created_at": "2026-03-03T10:27:23.427635",
+    "last_seen": null,
+    "online": null
+  },
+  "OrgArchitect": {
+    "id": "19558deb-935c-4bf3-bd12-18994414d036",
+    "name": "OrgArchitect",
+    "api_key": "mb_3a2d96d94ca5402ea378c28ab52c857f",
+    "created_at": "2026-03-03T10:27:23.438051",
+    "last_seen": null,
+    "online": null
+  },
+  "InputReviewer": {
+    "id": "dc2efaf3-b3db-4e62-89cb-8cd76a452584",
+    "name": "InputReviewer",
+    "api_key": "mb_37dc6ef75e6c400ba78f4686350cf072",
+    "created_at": "2026-03-03T10:27:23.448475",
+    "last_seen": null,
+    "online": null
+  },
+  "InputWriter": {
+    "id": "fc0ae9b9-14d5-4fb4-9526-1a021a7a37b9",
+    "name": "InputWriter",
+    "api_key": "mb_7a29ab4f46e5471ba364c1948e650b4a",
+    "created_at": "2026-03-03T10:27:23.458734",
+    "last_seen": null,
+    "online": null
+  },
+  "ExportAgent": {
+    "id": "1844ef63-39ff-4e13-acc9-d629d34a311e",
+    "name": "ExportAgent",
+    "api_key": "mb_407e5d12e5cc49c7a9daf1f645c4e5dc",
+    "created_at": "2026-03-03T12:20:49.993181",
+    "last_seen": null,
+    "online": null
+  }
+}

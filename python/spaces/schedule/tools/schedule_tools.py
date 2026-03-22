@@ -102,7 +102,7 @@ def create_scheduled_task(
         return {
             "success": False,
             "message": "No user_text provided",
-            "response_hint": "Ich habe keinen Text zum Planen erhalten. Bitte sag mir, was ich wann planen soll.",
+            "response_hint": "No planning text received. Please tell me what and when to schedule.",
         }
 
     # --- NLP parse ---
@@ -112,8 +112,8 @@ def create_scheduled_task(
             "success": False,
             "message": f"Could not parse time expression from: {user_text}",
             "response_hint": (
-                "Ich konnte keinen Zeitausdruck erkennen. "
-                "Versuch zum Beispiel 'in 5 Minuten', 'um 14 Uhr' oder 'jeden Montag um 9'."
+                "I couldn't recognize a time expression. "
+                "Try for example 'in 5 minutes', 'at 2 PM' or 'every Monday at 9'."
             ),
         }
 
@@ -164,14 +164,14 @@ def create_scheduled_task(
     })
 
     # --- Response ---
-    mode_hint = " (mit Minibook-Kollaboration)" if execution_mode == ExecutionMode.COMPLEX else ""
-    recurrence = "Wiederkehrend" if parsed.max_runs is None else "Einmalig"
+    mode_hint = " (with Minibook collaboration)" if execution_mode == ExecutionMode.COMPLEX else ""
+    recurrence = "Recurring" if parsed.max_runs is None else "One-time"
 
     return {
         "success": True,
         "message": f"Task '{task.title}' scheduled ({parsed.trigger_type})",
         "response_hint": (
-            f"Erledigt! Ich habe '{task.title}' geplant: {parsed.human_description}. "
+            f"Done! Scheduled '{task.title}': {parsed.human_description}. "
             f"{recurrence}{mode_hint}."
         ),
         "schedule_id": task.id,
@@ -198,6 +198,7 @@ def list_scheduled_tasks(
     Returns:
         Tool result with task list
     """
+    logger.debug("list_scheduled_tasks called: status=%s", status)
     repo = ScheduledTaskRepository()
 
     if status and status in (
@@ -212,7 +213,7 @@ def list_scheduled_tasks(
         return {
             "success": True,
             "message": "No scheduled tasks found",
-            "response_hint": "Du hast aktuell keine geplanten Aufgaben.",
+            "response_hint": "You currently have no scheduled tasks.",
             "tasks": [],
         }
 
@@ -229,12 +230,12 @@ def list_scheduled_tasks(
         lines.append(f"{i}. {status_icon} {t.title} ({t.trigger_type}, {t.status})")
 
     active_count = sum(1 for t in tasks if t.status == ScheduleStatus.ACTIVE)
-    summary = f"{len(tasks)} Aufgaben gefunden, davon {active_count} aktiv."
+    summary = f"{len(tasks)} tasks found, {active_count} active."
 
     return {
         "success": True,
         "message": f"Found {len(tasks)} scheduled tasks",
-        "response_hint": f"Hier sind deine geplanten Aufgaben: {summary}",
+        "response_hint": f"Here are your scheduled tasks: {summary}",
         "tasks": [t.to_dict() for t in tasks],
         "summary": summary,
         "task_lines": lines,
@@ -277,8 +278,8 @@ def cancel_scheduled_task(
             "success": False,
             "message": f"Task not found: id={task_id}, title={title}",
             "response_hint": (
-                "Ich konnte diese Aufgabe nicht finden. "
-                "Sag 'Zeig meine Erinnerungen' um alle zu sehen."
+                "I couldn't find this task. "
+                "Say 'Show my reminders' to see all."
             ),
         }
 
@@ -301,7 +302,7 @@ def cancel_scheduled_task(
     return {
         "success": True,
         "message": f"Task '{task.title}' cancelled",
-        "response_hint": f"Erledigt! '{task.title}' wurde abgesagt.",
+        "response_hint": f"Done! '{task.title}' was cancelled.",
         "schedule_id": task.id,
     }
 
@@ -345,7 +346,7 @@ def modify_scheduled_task(
         return {
             "success": False,
             "message": f"Task not found: id={task_id}, title={title}",
-            "response_hint": "Ich konnte diese Aufgabe nicht finden.",
+            "response_hint": "I couldn't find this task.",
         }
 
     changes = []
@@ -359,7 +360,7 @@ def modify_scheduled_task(
                 trigger_type=parsed.trigger_type,
                 trigger_config=parsed.trigger_config,
             )
-            changes.append(f"Zeit auf {parsed.human_description}")
+            changes.append(f"time to {parsed.human_description}")
 
             # Re-register with APScheduler
             if _schedule_worker:
@@ -374,7 +375,7 @@ def modify_scheduled_task(
             return {
                 "success": False,
                 "message": f"Could not parse new time: {new_time}",
-                "response_hint": "Ich konnte die neue Zeit nicht verstehen.",
+                "response_hint": "I couldn't understand the new time.",
             }
 
     # Update action if provided
@@ -383,20 +384,20 @@ def modify_scheduled_task(
             "UPDATE scheduled_tasks SET action_text = ?, updated_at = ? WHERE id = ?",
             (new_action, datetime.now().isoformat(), task.id),
         )
-        changes.append(f"Aktion auf '{new_action}'")
+        changes.append(f"action to '{new_action}'")
 
     if not changes:
         return {
             "success": False,
             "message": "No changes specified",
-            "response_hint": "Was moechtest du aendern? Sag mir die neue Zeit oder Aktion.",
+            "response_hint": "What would you like to change? Tell me the new time or action.",
         }
 
-    change_str = " und ".join(changes)
+    change_str = " and ".join(changes)
     return {
         "success": True,
         "message": f"Task '{task.title}' modified: {change_str}",
-        "response_hint": f"'{task.title}' wurde geaendert: {change_str}.",
+        "response_hint": f"'{task.title}' was modified: {change_str}.",
         "schedule_id": task.id,
         "changes": changes,
     }
@@ -413,6 +414,7 @@ def get_schedule_status(**kwargs) -> Dict[str, Any]:
     Returns:
         Tool result with counts and next upcoming task
     """
+    logger.debug("get_schedule_status called")
     repo = ScheduledTaskRepository()
     active = repo.count(ScheduleStatus.ACTIVE)
     paused = repo.count(ScheduleStatus.PAUSED)
@@ -430,7 +432,7 @@ def get_schedule_status(**kwargs) -> Dict[str, Any]:
 
     next_hint = ""
     if next_task:
-        next_hint = f" Naechste Aufgabe: '{next_task.title}'"
+        next_hint = f" Next task: '{next_task.title}'"
         if next_task.next_run_at:
             next_hint += f" um {next_task.next_run_at.strftime('%H:%M')}"
 
@@ -438,7 +440,7 @@ def get_schedule_status(**kwargs) -> Dict[str, Any]:
         "success": True,
         "message": f"Schedule: {active} active, {paused} paused, {completed} completed, {total} total",
         "response_hint": (
-            f"Dein Schedule: {active} aktiv, {paused} pausiert, {completed} erledigt.{next_hint}"
+            f"Your schedule: {active} active, {paused} paused, {completed} completed.{next_hint}"
         ),
         "active": active,
         "paused": paused,
@@ -504,7 +506,7 @@ def snooze_scheduled_task(
         return {
             "success": False,
             "message": "No task found to snooze",
-            "response_hint": "Ich konnte keine Aufgabe zum Snoozen finden.",
+            "response_hint": "Could not find a task to snooze.",
         }
 
     # Create new one-shot trigger
@@ -530,7 +532,7 @@ def snooze_scheduled_task(
     return {
         "success": True,
         "message": f"Task '{task.title}' snoozed for {minutes} minutes",
-        "response_hint": f"'{task.title}' wurde um {minutes} Minuten verschoben.",
+        "response_hint": f"'{task.title}' was snoozed for {minutes} minutes.",
         "schedule_id": task.id,
         "snooze_minutes": minutes,
         "new_run_at": new_run.isoformat(),

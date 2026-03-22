@@ -14,7 +14,7 @@ Stream hierarchy:
 """
 
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ class EventRouter:
 
     Maps event types to their target streams for proper
     message routing in the swarm architecture.
+
+    Supports dynamic routes loaded from the PluginManager
+    in addition to the static STREAM_MAPPING fallback.
     """
 
     # Stream names
@@ -37,6 +40,11 @@ class EventRouter:
     STREAM_TASKS_ZEROCLAW = "events:tasks:zeroclaw"
     STREAM_TASKS_MINIBOOK = "events:tasks:minibook"
     STREAM_TASKS_SCHEDULE = "events:tasks:schedule"
+    STREAM_TASKS_N8N = "events:tasks:n8n"
+    STREAM_TASKS_VIDEO = "events:tasks:video"
+    STREAM_TASKS_AGENTFARM = "events:tasks:agentfarm"
+    STREAM_TASKS_FLOWZEN = "events:tasks:flowzen"
+    STREAM_TASKS_MIROFISH = "events:tasks:mirofish_pred"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -118,6 +126,7 @@ class EventRouter:
         "idea.format_specs": STREAM_TASKS_IDEAS,
         "idea.convert_format": STREAM_TASKS_IDEAS,
         "idea.list_formats": STREAM_TASKS_IDEAS,
+        "idea.format_revert": STREAM_TASKS_IDEAS,
         # Idea Exploration (AI-Scientist Tree Search with Human-in-the-Loop)
         "idea.explore.start": STREAM_TASKS_IDEAS,
         "idea.explore.stop": STREAM_TASKS_IDEAS,
@@ -129,6 +138,8 @@ class EventRouter:
         "idea.explore.continue": STREAM_TASKS_IDEAS,
         "idea.explore.direction": STREAM_TASKS_IDEAS,
         "idea.explore.respond": STREAM_TASKS_IDEAS,
+        # Project documentation export
+        "idea.generate_doc": STREAM_TASKS_IDEAS,
 
         # Research tasks -> zeroclaw stream (ZeroClaw Web Research)
         "research.web": STREAM_TASKS_ZEROCLAW,
@@ -169,6 +180,56 @@ class EventRouter:
         "schedule.status": STREAM_TASKS_SCHEDULE,
         "schedule.snooze": STREAM_TASKS_SCHEDULE,
 
+        # n8n tasks -> n8n stream (Workflow Builder)
+        "n8n.generate": STREAM_TASKS_N8N,
+        "n8n.list": STREAM_TASKS_N8N,
+        "n8n.status": STREAM_TASKS_N8N,
+        "n8n.activate": STREAM_TASKS_N8N,
+        "n8n.deactivate": STREAM_TASKS_N8N,
+        "n8n.delete": STREAM_TASKS_N8N,
+        "n8n.execute": STREAM_TASKS_N8N,
+        "n8n.describe": STREAM_TASKS_N8N,
+
+        # agentfarm tasks -> agentfarm stream (Autogen team orchestration)
+        "agentfarm.create_team": STREAM_TASKS_AGENTFARM,
+        "agentfarm.run": STREAM_TASKS_AGENTFARM,
+        "agentfarm.status": STREAM_TASKS_AGENTFARM,
+        "agentfarm.list_teams": STREAM_TASKS_AGENTFARM,
+        "agentfarm.stop": STREAM_TASKS_AGENTFARM,
+        "agentfarm.results": STREAM_TASKS_AGENTFARM,
+        "agentfarm.list_templates": STREAM_TASKS_AGENTFARM,
+        "agentfarm.collaborate": STREAM_TASKS_AGENTFARM,
+
+        # Video events -> video stream
+        "video.status": STREAM_TASKS_VIDEO,
+        "video.team_status": STREAM_TASKS_VIDEO,
+        "video.team_run": STREAM_TASKS_VIDEO,
+        "video.vision": STREAM_TASKS_VIDEO,
+        "video.demo_analyze": STREAM_TASKS_VIDEO,
+        "video.demo_build": STREAM_TASKS_VIDEO,
+        "video.lipsync": STREAM_TASKS_VIDEO,
+        "video.lipsync_analyze": STREAM_TASKS_VIDEO,
+        "video.voice_clone": STREAM_TASKS_VIDEO,
+        "video.voice_tts": STREAM_TASKS_VIDEO,
+
+        # Flowzen (Blaue Rose) — only explicit user queries
+        "rose.recommend": STREAM_TASKS_FLOWZEN,
+        "rose.status": STREAM_TASKS_FLOWZEN,
+
+        # MiroFish (Prediction Engine) → mirofish stream
+        "mirofish.simulate": STREAM_TASKS_MIROFISH,
+        "mirofish.predict": STREAM_TASKS_MIROFISH,
+        "mirofish.graph.build": STREAM_TASKS_MIROFISH,
+        "mirofish.graph.search": STREAM_TASKS_MIROFISH,
+        "mirofish.list_projects": STREAM_TASKS_MIROFISH,
+        "mirofish.report.chat": STREAM_TASKS_MIROFISH,
+        "mirofish.interview": STREAM_TASKS_MIROFISH,
+        "mirofish.status": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.start": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.stop": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.restart": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.status": STREAM_TASKS_MIROFISH,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -179,9 +240,32 @@ class EventRouter:
         "task.cancelled": STREAM_STATUS,
     }
 
+    def __init__(self):
+        self._plugin_routes: Dict[str, str] = {}
+        self._plugin_routes_loaded = False
+
+    def _ensure_plugin_routes(self):
+        """Lazy-load plugin routes on first access."""
+        if self._plugin_routes_loaded:
+            return
+        try:
+            from plugins.plugin_manager import get_plugin_manager
+            pm = get_plugin_manager()
+            self._plugin_routes = pm.get_event_routes()
+            logger.info(f"EventRouter: loaded {len(self._plugin_routes)} routes from plugins")
+        except Exception as e:
+            logger.debug(f"EventRouter: plugin routes not available ({e}), using static mapping")
+        self._plugin_routes_loaded = True
+
+    def register_plugin_routes(self, routes: Dict[str, str]):
+        """Register additional routes at runtime (e.g. after plugin accept)."""
+        self._plugin_routes.update(routes)
+
     def get_stream(self, event_type: str) -> str:
         """
         Get target stream for an event type.
+
+        Checks plugin routes first, then falls back to static STREAM_MAPPING.
 
         Args:
             event_type: Event type (e.g., "code.generate")
@@ -189,6 +273,12 @@ class EventRouter:
         Returns:
             Stream name
         """
+        self._ensure_plugin_routes()
+
+        # Plugin routes take precedence
+        if event_type in self._plugin_routes:
+            return self._plugin_routes[event_type]
+
         stream = self.STREAM_MAPPING.get(event_type, self.STREAM_TASKS)
 
         if event_type not in self.STREAM_MAPPING:
@@ -200,14 +290,18 @@ class EventRouter:
         """
         Get all event types routed to a specific stream.
 
+        Includes both plugin routes and static mapping.
+
         Args:
             stream: Stream name
 
         Returns:
             List of event types
         """
+        self._ensure_plugin_routes()
+        all_routes = {**self.STREAM_MAPPING, **self._plugin_routes}
         return [
-            event_type for event_type, s in self.STREAM_MAPPING.items()
+            event_type for event_type, s in all_routes.items()
             if s == stream
         ]
 
@@ -239,6 +333,16 @@ class EventRouter:
             return "research"
         elif stream == self.STREAM_TASKS_MINIBOOK:
             return "minibook"
+        elif stream == self.STREAM_TASKS_N8N:
+            return "n8n"
+        elif stream == self.STREAM_TASKS_VIDEO:
+            return "video"
+        elif stream == self.STREAM_TASKS_AGENTFARM:
+            return "agentfarm"
+        elif stream == self.STREAM_TASKS_FLOWZEN:
+            return "flowzen"
+        elif stream == self.STREAM_TASKS_MIROFISH:
+            return "mirofish"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -257,6 +361,11 @@ class EventRouter:
             cls.STREAM_TASKS_ZEROCLAW,
             cls.STREAM_TASKS_MINIBOOK,
             cls.STREAM_TASKS_SCHEDULE,
+            cls.STREAM_TASKS_N8N,
+            cls.STREAM_TASKS_VIDEO,
+            cls.STREAM_TASKS_AGENTFARM,
+            cls.STREAM_TASKS_FLOWZEN,
+            cls.STREAM_TASKS_MIROFISH,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]

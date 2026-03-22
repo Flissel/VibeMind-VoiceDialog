@@ -5,6 +5,10 @@ Real implementation migrated to: spaces/desktop/tools/moire_tools.py
 This file re-exports for backward compatibility.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from spaces.desktop.tools.moire_tools import (
     moire_scan,
     moire_find_element,

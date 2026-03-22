@@ -5,12 +5,15 @@ Dieses Tool verarbeitet die Inhalte einer Bubble und generiert Requirements für
 """
 
 import json
+import logging
 import sys
 import os
 from typing import Dict, Any, List, Optional
 
 # Füge das python Verzeichnis zum Pfad hinzu
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+logger = logging.getLogger(__name__)
 
 from data import IdeasRepository, CanvasRepository
 
@@ -25,6 +28,7 @@ def process_bubble_requirements(bubble_id: str) -> Dict[str, Any]:
     Returns:
         Dict mit den verarbeiteten Requirements und Metadaten
     """
+    logger.debug("process_bubble_requirements called with bubble_id=%s", bubble_id)
     try:
         # Hole die Bubble
         ideas_repo = IdeasRepository()

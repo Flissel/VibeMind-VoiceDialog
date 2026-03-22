@@ -7,7 +7,7 @@ User Agents handle direct user interaction:
 - TTS output coordination
 
 Active agent:
-- Rachel: Ideas Space (bubbles, ideas, navigation) — the single ElevenLabs voice agent
+- Rachel: Ideas Space (bubbles, ideas, navigation) — the voice agent
 """
 
 # Eagerly import base classes (no circular dependency)

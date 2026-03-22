@@ -19,6 +19,8 @@ import concurrent.futures
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
+from llm_config import get_model
+
 from data.intent_rule_repository import (
     IntentRuleRepository,
     IntentRule,
@@ -121,6 +123,7 @@ Parameter-Referenz:
 - idea.format_table: {{"idea_name": "Name", "custom_columns": ["Spalte1", "Spalte2"]}}
 - idea.summarize: {{"idea_name": "Name", "style": "concise"}}
 - idea.whitepaper: {{"start_node": "Idee-Name"}}
+- idea.generate_doc: {{"bubble_name": "Name"}}
 - idea.expand: {{"idea_name": "Name", "count": 3}}
 - idea.classify: {{"idea_name": "Name"}}
 - idea.auto_link: {{}}
@@ -189,7 +192,7 @@ class RAGIntentClassifier:
         """
         self.rule_repo = rule_repo or get_intent_rule_repository()
         # Use env var for model, default to Claude Opus 4.5 (best quality)
-        self.model = model or os.getenv("RAG_CLASSIFIER_MODEL", "anthropic/claude-opus-4.5")
+        self.model = model or get_model("rag_classifier")
         self.top_k = top_k
 
         # LLM client (lazy init)
@@ -206,18 +209,18 @@ class RAGIntentClassifier:
                 from openai import OpenAI
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if api_key:
-                    print(f"[Python DEBUG] [RAG] Creating OpenRouter client (key={api_key[:20]}...)", file=_sys.stderr, flush=True)
+                    logger.debug(f"[RAG] Creating OpenRouter client (key={api_key[:20]}...)")
                     self._llm_client = OpenAI(
                         api_key=api_key,
                         base_url="https://openrouter.ai/api/v1",
-                        timeout=10.0,  # 10 second timeout for ElevenLabs compatibility
+                        timeout=10.0,  # 10 second timeout for voice compatibility
                     )
-                    print(f"[Python DEBUG] [RAG] OpenRouter client created successfully", file=_sys.stderr, flush=True)
+                    logger.debug("[RAG] OpenRouter client created successfully")
                 else:
-                    print(f"[Python DEBUG] [RAG] ERROR: OPENROUTER_API_KEY not set!", file=_sys.stderr, flush=True)
+                    logger.debug("[RAG] ERROR: OPENROUTER_API_KEY not set!")
                     logger.warning("[RAGIntentClassifier] OPENROUTER_API_KEY not set")
             except ImportError as e:
-                print(f"[Python DEBUG] [RAG] ERROR: OpenAI library not installed: {e}", file=_sys.stderr, flush=True)
+                logger.debug(f"[RAG] ERROR: OpenAI library not installed: {e}")
                 logger.error("[RAGIntentClassifier] OpenAI library not installed")
         return self._llm_client
 
@@ -242,40 +245,39 @@ class RAGIntentClassifier:
         Returns:
             RAGClassificationResult with event_type, confidence, etc.
         """
-        import sys as _sys
-        print(f"[Python DEBUG] [RAG] classify() called: {user_input[:50]}...", file=_sys.stderr, flush=True)
+        logger.debug(f"[RAG] classify() called: {user_input[:50]}...")
 
         # 1. Retrieve relevant rules from Supermemory
-        print(f"[Python DEBUG] [RAG] Step 1: Searching rules...", file=_sys.stderr, flush=True)
+        logger.debug("[RAG] Step 1: Searching rules...")
         relevant_rules = self.rule_repo.search_similar(user_input, top_k=self.top_k)
 
         if not relevant_rules:
-            print(f"[Python DEBUG] [RAG] No rules found - using fallback", file=_sys.stderr, flush=True)
+            logger.debug("[RAG] No rules found - using fallback")
             logger.warning(f"[RAGIntentClassifier] No rules found for: {user_input[:50]}...")
             return self._fallback_classification(user_input)
 
         # 2. Build context from rules
         rules_context = self._build_rules_context(relevant_rules)
         used_rule_types = [rule.intent_type for rule in relevant_rules]
-        print(f"[Python DEBUG] [RAG] Step 2: Found {len(relevant_rules)} rules: {used_rule_types}", file=_sys.stderr, flush=True)
+        logger.debug(f"[RAG] Step 2: Found {len(relevant_rules)} rules: {used_rule_types}")
 
         logger.info(f"[RAGIntentClassifier] Retrieved rules: {used_rule_types}")
 
         # 3. Call LLM with rules as context
-        print(f"[Python DEBUG] [RAG] Step 3: Calling LLM (model={self.model})...", file=_sys.stderr, flush=True)
+        logger.debug(f"[RAG] Step 3: Calling LLM (model={self.model})...")
         try:
             # Check LLM client availability
             if not self.llm_client:
-                print(f"[Python DEBUG] [RAG] ERROR: LLM client is None! Check OPENROUTER_API_KEY", file=_sys.stderr, flush=True)
+                logger.debug("[RAG] ERROR: LLM client is None! Check OPENROUTER_API_KEY")
                 raise ValueError("LLM client not available - check OPENROUTER_API_KEY")
 
             result = await self._call_llm(user_input, rules_context, bubble_context, system_state)
             result.used_rules = used_rule_types
             mode_info = f"mode={result.mode}" if result.mode == "direct_answer" else f"{result.event_type}"
-            print(f"[Python DEBUG] [RAG] Step 4: LLM returned: {mode_info} ({result.confidence:.0%})", file=_sys.stderr, flush=True)
+            logger.debug(f"[RAG] Step 4: LLM returned: {mode_info} ({result.confidence:.0%})")
             return result
         except Exception as e:
-            print(f"[Python DEBUG] [RAG] ERROR in LLM call: {type(e).__name__}: {e}", file=_sys.stderr, flush=True)
+            logger.debug(f"[RAG] ERROR in LLM call: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc(file=_sys.stderr)
             logger.error(f"[RAGIntentClassifier] LLM call failed: {e}")
@@ -363,7 +365,7 @@ class RAGIntentClassifier:
                     f"RAG classify: {user_input[:40]}...",
                     {"model": self.model}
                 )
-            print(f"[Python DEBUG] [RAG LLM] Calling {self.model}...", file=_sys.stderr, flush=True)
+            logger.debug(f"[RAG LLM] Calling {self.model}...")
             try:
                 result = self.llm_client.chat.completions.create(
                     model=self.model,
@@ -375,13 +377,13 @@ class RAGIntentClassifier:
                     max_tokens=2048,  # Sufficient for 30+ step multi-step responses
                 )
                 elapsed = _time.perf_counter() - start
-                print(f"[Python DEBUG] [RAG LLM] Completed in {elapsed:.2f}s", file=_sys.stderr, flush=True)
+                logger.debug(f"[RAG LLM] Completed in {elapsed:.2f}s")
                 if _monitor and op_id:
                     _monitor.complete_operation(op_id, success=True)
                 return result
             except Exception as e:
                 elapsed = _time.perf_counter() - start
-                print(f"[Python DEBUG] [RAG LLM] FAILED after {elapsed:.2f}s: {e}", file=_sys.stderr, flush=True)
+                logger.debug(f"[RAG LLM] FAILED after {elapsed:.2f}s: {e}")
                 if _monitor and op_id:
                     _monitor.complete_operation(op_id, success=False, error=str(e))
                 raise

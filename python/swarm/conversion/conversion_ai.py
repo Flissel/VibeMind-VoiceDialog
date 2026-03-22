@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 from swarm.analysis.user_context import UserContext
+from llm_config import get_model, get_client
 from swarm.analysis.intent_analysis_team import IntentHypothesis
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class ConversionAI:
         Args:
             model: LLM model to use (default: from env)
         """
-        self._model = model or os.getenv("CONVERSION_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("conversion")
         self._client = None
         self._personality: Optional[AIPersonality] = None
         self._db_repo = None
@@ -83,15 +84,7 @@ class ConversionAI:
         """Lazy-load OpenAI-compatible client."""
         if self._client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                self._client = get_client("conversion")
             except Exception as e:
                 logger.error(f"Failed to create conversion client: {e}")
                 raise
@@ -125,6 +118,7 @@ class ConversionAI:
         Returns:
             Loaded or newly created AIPersonality
         """
+        logger.debug("initialize called with user_id=%s", user_id)
         # Try to load existing personality
         if self.db_repo:
             try:
@@ -174,6 +168,7 @@ class ConversionAI:
         Returns:
             Enriched prompt for LLM
         """
+        logger.debug("build_prompt called with intent=%s", intent.event_type)
         p = self.personality
 
         # Build personality section
@@ -234,6 +229,7 @@ Sei natuerlich und verwende keine uebertriebene Foermlichkeit.
         Returns:
             Formatted response suitable for voice output
         """
+        logger.debug("format_response called with intent=%s", intent.event_type)
         prompt = f"""{self.build_prompt(intent, context, task_result)}
 
 Formatiere das Ergebnis fuer eine natuerliche Sprachausgabe.
@@ -271,6 +267,7 @@ Antworte NUR mit dem formatierten Text, keine Erklaerungen."""
         Returns:
             Introduction text for the AI
         """
+        logger.debug("introduce called")
         p = self.personality
 
         prompt = f"""Du bist {p.name}, eine VibeMind AI-Assistentin.
@@ -302,6 +299,7 @@ Stelle dich kurz (1-2 Saetze) vor. Sei freundlich aber nicht uebertrieben enthus
             preference: What preference to adapt
             value: New value for the preference
         """
+        logger.debug("adapt_to_user called with feedback=%s, preference=%s, value=%s", feedback, preference, value)
         if self._personality is None:
             return
 

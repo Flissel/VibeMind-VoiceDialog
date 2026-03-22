@@ -100,6 +100,28 @@ class ConversationMemoryService:
                 }
             )
             logger.debug(f"[ConversationMemory] Stored {len(messages)} messages for session {session_id}")
+
+            # Publish to Rowboat MongoDB (for Brain seeding)
+            try:
+                from publishing import get_ideas_publisher
+                pub = get_ideas_publisher()
+                if hasattr(pub, 'publish_supermemory_snapshot'):
+                    pub.publish_supermemory_snapshot(
+                        self.CONTAINER_TAG,
+                        [{
+                            "custom_id": f"session_{session_id}",
+                            "content": conversation_content,
+                            "type": "conversation",
+                            "metadata": {
+                                "agent": agent_name,
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "intent_type": "conversation",
+                            },
+                        }],
+                    )
+            except Exception:
+                pass
+
             return getattr(response, 'id', f"session_{session_id}")
         except Exception as e:
             logger.warning(f"[ConversationMemory] Failed to store conversation: {e}")
@@ -163,6 +185,7 @@ class ConversationMemoryService:
 
         Returns a formatted string suitable for injection into prompts.
         """
+        logger.debug("get_conversation_context: query=%s limit=%s", query, limit)
         results = await self.search_conversations(query, limit)
         if not results:
             return ""

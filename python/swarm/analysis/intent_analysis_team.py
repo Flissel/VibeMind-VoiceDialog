@@ -17,6 +17,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
+from llm_config import get_model, get_client
+
 # Load .env file if present
 try:
     from dotenv import load_dotenv
@@ -76,7 +78,7 @@ class IntentAnalysisTeam:
         Args:
             model: LLM model to use (default: from env or Claude Haiku)
         """
-        self._model = model or os.getenv("ANALYSIS_MODEL", "anthropic/claude-3.5-haiku")
+        self._model = model or get_model("analysis")
         self._client = None
         self._reasoning_agent = None
         self._context_agent = None
@@ -86,29 +88,21 @@ class IntentAnalysisTeam:
         """Lazy-load OpenAI client (AutoGen clients are not compatible with direct API calls)."""
         if self._client is None:
             try:
-                from openai import OpenAI
-                api_key = os.getenv("OPENROUTER_API_KEY")
-                if not api_key:
-                    raise ValueError("OPENROUTER_API_KEY not set")
-
-                self._client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
-                logger.info(f"IntentAnalysisTeam using OpenRouter: {self._model}")
+                self._client = get_client("analysis")
+                logger.info(f"IntentAnalysisTeam using model: {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create analysis client: {e}")
                 raise
         return self._client
 
-    async def analyze(self, user_input: str, context: UserContext, elevenlabs_input: Optional["ElevenLabsInput"] = None) -> List[IntentHypothesis]:
+    async def analyze(self, user_input: str, context: UserContext, audio_input: Optional["AudioMetadataInput"] = None) -> List[IntentHypothesis]:
         """
         Analyze user input with multiple agents in parallel.
 
         Args:
             user_input: Natural language user request
             context: User context from UserContextBuilder
-            elevenlabs_input: Optional ElevenLabs metadata for enhanced analysis
+            audio_input: Optional audio metadata for enhanced analysis
 
         Returns:
             List of IntentHypothesis sorted by confidence (highest first)
@@ -120,7 +114,7 @@ class IntentAnalysisTeam:
             self._reasoning_analysis(user_input),
             self._context_analysis(user_input, context),
             self._history_analysis(user_input, context),
-            self._semantic_analysis(user_input, context, elevenlabs_input),
+            self._semantic_analysis(user_input, context, audio_input),
         ]
 
         # Wait for all results (parallel)
@@ -245,17 +239,17 @@ class IntentAnalysisTeam:
 
         return hypotheses
 
-    async def _semantic_analysis(self, user_input: str, context: UserContext, elevenlabs_input: Optional["ElevenLabsInput"] = None) -> List[IntentHypothesis]:
+    async def _semantic_analysis(self, user_input: str, context: UserContext, audio_input: Optional["AudioMetadataInput"] = None) -> List[IntentHypothesis]:
         """
-        Semantic analysis with ElevenLabs metadata integration.
+        Semantic analysis with audio metadata integration.
 
-        Uses ElevenLabs transcript metadata and NLP analysis for enhanced intent detection.
+        Uses transcript metadata and NLP analysis for enhanced intent detection.
         """
         try:
             from swarm.analysis.semantic_agent import get_semantic_agent
 
             semantic_agent = get_semantic_agent()
-            return await semantic_agent.analyze(user_input, context, elevenlabs_input)
+            return await semantic_agent.analyze(user_input, context, audio_input)
         except ImportError:
             logger.debug("SemanticAgent not available")
             return []
