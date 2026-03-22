@@ -3613,15 +3613,74 @@ body {
     opacity: 1;
 }
 
-#vapi-frame {
+/* --- eyeTerm camera strip (top) --- */
+#eyeterm-strip {
+    position: relative;
+    height: 25%;
+    min-height: 160px;
+    max-height: 300px;
+    background: #060510;
+    border-bottom: 1px solid rgba(0, 217, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#eyeterm-feed {
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+#eyeterm-placeholder {
+    color: rgba(103, 232, 249, 0.4);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+#eyeterm-strip-label {
+    position: absolute;
+    top: 6px;
+    left: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #67e8f9;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
+}
+
+/* --- Desktop streams area (fills rest) --- */
+#desktop-streams-area {
     flex: 1;
+    position: relative;
+    min-height: 0;
+}
+
+#vapi-frame {
+    position: absolute;
+    inset: 0;
     width: 100%;
+    height: 100%;
     border: none;
     background: #0a0812;
 }
 
+#desktop-stream-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #0a0812;
+}
+
 #vapi-loading {
-    flex: 1;
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3642,4 +3701,194 @@ body {
 
 @keyframes vapiSpin {
     to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   FLOWZEN (BLAUE ROSE) PANEL
+   ============================================ */
+
+.flowzen-panel {
+    position: fixed;
+    right: 20px;
+    top: 80px;
+    width: 320px;
+    max-height: calc(100vh - 120px);
+    background: rgba(10, 12, 25, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(51, 102, 204, 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    z-index: 50;
+    overflow-y: auto;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.flowzen-panel.hidden {
+    display: none;
+}
+
+.flowzen-panel.fade-in {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.flowzen-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(51, 102, 204, 0.2);
+}
+
+.flowzen-icon {
+    font-size: 24px;
+}
+
+.flowzen-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #aaccff;
+    flex: 1;
+}
+
+.flowzen-state {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(51, 102, 204, 0.2);
+    color: #6699dd;
+}
+
+.flowzen-state.active {
+    background: rgba(51, 150, 204, 0.3);
+    color: #88ccff;
+}
+
+.flowzen-state.recommending {
+    background: rgba(85, 170, 255, 0.3);
+    color: #aaddff;
+    animation: fz-pulse 1.5s ease-in-out infinite;
+}
+
+.flowzen-state.rest {
+    background: rgba(100, 80, 120, 0.3);
+    color: #aa99bb;
+}
+
+@keyframes fz-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+.flowzen-status {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.flowzen-stat {
+    background: rgba(30, 35, 55, 0.6);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+}
+
+.flowzen-stat-label {
+    display: block;
+    font-size: 10px;
+    color: #667799;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.flowzen-stat-value {
+    display: block;
+    font-size: 13px;
+    color: #ccddff;
+    font-weight: 500;
+}
+
+.flowzen-recommend-btn {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, rgba(34, 85, 187, 0.4), rgba(51, 102, 204, 0.3));
+    border: 1px solid rgba(51, 102, 204, 0.4);
+    border-radius: 10px;
+    color: #aaccff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 16px;
+}
+
+.flowzen-recommend-btn:hover {
+    background: linear-gradient(135deg, rgba(34, 85, 187, 0.6), rgba(51, 102, 204, 0.5));
+    border-color: rgba(85, 170, 255, 0.5);
+    color: #ccddff;
+}
+
+.flowzen-recommend-btn:active {
+    transform: scale(0.98);
+}
+
+.flowzen-recommend-btn.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.flowzen-recommendations {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.flowzen-empty {
+    text-align: center;
+    color: #556677;
+    font-size: 12px;
+    padding: 20px 0;
+}
+
+.flowzen-rec-card {
+    background: rgba(25, 30, 50, 0.7);
+    border: 1px solid rgba(51, 102, 204, 0.15);
+    border-radius: 10px;
+    padding: 12px;
+    transition: border-color 0.2s;
+}
+
+.flowzen-rec-card:first-child {
+    border-color: rgba(85, 170, 255, 0.3);
+}
+
+.flowzen-rec-card .rec-time {
+    font-size: 10px;
+    color: #556677;
+    margin-bottom: 6px;
+}
+
+.flowzen-rec-card .rec-category {
+    font-size: 11px;
+    color: #6699dd;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.flowzen-rec-card .rec-reasoning {
+    font-size: 12px;
+    color: #99aabb;
+    line-height: 1.5;
+    margin-bottom: 6px;
+}
+
+.flowzen-rec-card .rec-suggestion {
+    font-size: 13px;
+    color: #aaccff;
+    font-weight: 500;
 }

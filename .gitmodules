@@ -31,3 +31,6 @@
 [submodule "external/Autogen_AgentFarm"]
 	path = external/Autogen_AgentFarm
 	url = https://github.com/Flissel/Autogen_AgentFarm.git
+[submodule "python/spaces/mirofish/mirofish"]
+	path = python/spaces/mirofish/mirofish
+	url = https://github.com/nikmcfly/MiroFish-Offline
