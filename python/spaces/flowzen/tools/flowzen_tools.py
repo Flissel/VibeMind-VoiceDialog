@@ -96,7 +96,34 @@ def recommend_task(mood: str = "", **kwargs) -> Dict[str, Any]:
         "category": category, "idea_title": title,
     })
 
-    return {
+    # Create diary entry for this manual recommendation
+    try:
+        import json as json_module
+        from data.flowzen_repository import FlowzenRepository as _FzRepo
+        from spaces.flowzen.activity_tracker import generate_diary_entry
+        import asyncio as _asyncio
+
+        diary_text = _asyncio.run(generate_diary_entry(
+            mood=mood, energy=5, time_window=time_window, hour=hour,
+            category=category, intent_count=status["intents_buffered"],
+            activity_summary=activity_summary,
+            brain_action="manual_request",
+            brain_reasoning=f"User fragte explizit nach Empfehlung",
+        ))
+        _repo = _FzRepo()
+        diary_entry = _repo.create_diary_entry(
+            entry_text=diary_text, mood=mood, energy=5,
+            time_window=time_window, hour=hour,
+            intent_count=status["intents_buffered"], category=category,
+            brain_action="manual_request", brain_reasoning="User fragte explizit",
+            raw_data=json_module.dumps({"recommendation": title, "category": category}),
+            source="manual",
+        )
+    except Exception as e:
+        logger.debug(f"Flowzen: diary for recommendation failed: {e}")
+        diary_entry = None
+
+    result = {
         "success": True,
         "message": f"Flowzen: {category} recommended ({mood}/{time_window})",
         "response_hint": hint,
@@ -109,6 +136,9 @@ def recommend_task(mood: str = "", **kwargs) -> Dict[str, Any]:
             "idea_id": getattr(idea, "id", "") if idea else "",
         },
     }
+    if diary_entry:
+        result["diary_entry"] = diary_entry.to_dict()
+    return result
 
 
 def _pick_best_idea(ideas: list, category: str):
