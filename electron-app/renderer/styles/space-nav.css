@@ -1,0 +1,320 @@
+/* ======================================================================== */
+/* SPACE NAVIGATION BAR - Multiverse Navigation                             */
+/* ======================================================================== */
+
+#space-nav {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: rgba(15, 18, 25, 0.98);
+    border-bottom: 1px solid rgba(100, 150, 255, 0.15);
+}
+
+.space-nav-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.space-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: rgba(180, 200, 230, 0.7);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.space-tab:hover {
+    background: rgba(var(--space-accent-rgb), 0.10);
+    color: rgba(200, 220, 255, 0.9);
+}
+
+.space-tab.active {
+    background: rgba(var(--space-accent-rgb), 0.15);
+    border-color: rgba(var(--space-accent-rgb), 0.35);
+    color: rgba(150, 200, 255, 1);
+}
+
+.space-icon {
+    font-size: 16px;
+}
+
+.space-name {
+    font-weight: 500;
+}
+
+/* Agent Status Display */
+.agent-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    background: rgba(30, 40, 60, 0.5);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.15);
+    border-radius: 20px;
+}
+
+.agent-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(100, 180, 255, 0.8);
+    box-shadow: 0 0 8px rgba(100, 180, 255, 0.4);
+    animation: agentPulse 2s infinite;
+}
+
+/* Per-space agent indicator colors (match 3D planet hex) */
+.agent-indicator.rachel,
+.agent-indicator.ideas {
+    background: #4488ff;
+    box-shadow: 0 0 8px rgba(68, 136, 255, 0.5);
+}
+
+.agent-indicator.coding,
+.agent-indicator.projects {
+    background: #44ff88;
+    box-shadow: 0 0 8px rgba(68, 255, 136, 0.5);
+}
+
+.agent-indicator.desktop {
+    background: #ff8844;
+    box-shadow: 0 0 8px rgba(255, 136, 68, 0.5);
+}
+
+.agent-indicator.roarboot {
+    background: #22ccaa;
+    box-shadow: 0 0 8px rgba(34, 204, 170, 0.5);
+}
+
+.agent-indicator.swedesign {
+    background: #ff6633;
+    box-shadow: 0 0 8px rgba(255, 102, 51, 0.5);
+}
+
+.agent-indicator.clawport {
+    background: #8866ff;
+    box-shadow: 0 0 8px rgba(136, 102, 255, 0.5);
+}
+
+.agent-indicator.agentfarm {
+    background: #88aa44;
+    box-shadow: 0 0 8px rgba(136, 170, 68, 0.5);
+}
+
+.agent-indicator.thebrain {
+    background: #ff66aa;
+    box-shadow: 0 0 8px rgba(255, 102, 170, 0.5);
+}
+
+@keyframes agentPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.9); }
+}
+
+.agent-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(200, 220, 255, 0.9);
+}
+
+/* Hand Gesture Indicator */
+.hand-gesture-indicator {
+    position: fixed;
+    bottom: 140px;
+    right: 20px;
+    padding: 8px 14px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(100, 255, 150, 0.3);
+    border-radius: 8px;
+    color: rgba(150, 255, 200, 0.9);
+    font-size: 12px;
+    backdrop-filter: blur(10px);
+    z-index: 99;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.hand-gesture-indicator.visible {
+    opacity: 1;
+}
+
+/* ======================================================================== */
+/* SPACE STATUS DISPLAY                                                     */
+/* ======================================================================== */
+
+/* Hand Tracking Status - hidden */
+#hand-status {
+    display: none;
+    position: absolute;
+    bottom: 140px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 10px 15px;
+    color: rgba(150, 200, 180, 0.9);
+    font-size: 12px;
+    border: 1px solid rgba(100, 150, 130, 0.3);
+    z-index: 100;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+#hand-status.active {
+    color: rgba(100, 255, 150, 1);
+    border-color: rgba(100, 255, 150, 0.5);
+    box-shadow: 0 0 15px rgba(100, 255, 150, 0.3);
+}
+
+#hand-status .gesture-icon {
+    font-size: 20px;
+}
+
+#gesture-name {
+    font-weight: 500;
+}
+
+/* Space Indicator - Top Right */
+#space-indicator {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(16, 14, 28, 0.80);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.25);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+    z-index: 50;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#space-indicator.hidden {
+    opacity: 0;
+    transform: translateX(20px);
+    pointer-events: none;
+}
+
+#current-space-icon {
+    font-size: 18px;
+}
+
+#current-space-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(200, 220, 255, 0.9);
+}
+
+/* ======================================================================== */
+/* PER-SPACE TAB ACCENTS — Each space glows with its planet color           */
+/* ======================================================================== */
+
+.space-tab[data-space="ideas"].active {
+    background: rgba(68, 136, 255, 0.2);
+    border-color: rgba(68, 136, 255, 0.4);
+    color: rgba(150, 190, 255, 1);
+}
+.space-tab[data-space="ideas"]:hover {
+    background: rgba(68, 136, 255, 0.1);
+    color: rgba(150, 190, 255, 0.9);
+}
+
+.space-tab[data-space="projects"].active {
+    background: rgba(68, 255, 136, 0.2);
+    border-color: rgba(68, 255, 136, 0.4);
+    color: rgba(150, 255, 200, 1);
+}
+.space-tab[data-space="projects"]:hover {
+    background: rgba(68, 255, 136, 0.1);
+    color: rgba(150, 255, 200, 0.9);
+}
+
+.space-tab[data-space="desktop"].active {
+    background: rgba(255, 136, 68, 0.2);
+    border-color: rgba(255, 136, 68, 0.4);
+    color: rgba(255, 200, 150, 1);
+}
+.space-tab[data-space="desktop"]:hover {
+    background: rgba(255, 136, 68, 0.1);
+    color: rgba(255, 200, 150, 0.9);
+}
+
+.space-tab[data-space="roarboot"].active {
+    background: rgba(34, 204, 170, 0.2);
+    border-color: rgba(34, 204, 170, 0.4);
+    color: rgba(150, 235, 215, 1);
+}
+.space-tab[data-space="roarboot"]:hover {
+    background: rgba(34, 204, 170, 0.1);
+    color: rgba(150, 235, 215, 0.9);
+}
+
+.space-tab[data-space="swedesign"].active {
+    background: rgba(255, 102, 51, 0.2);
+    border-color: rgba(255, 102, 51, 0.4);
+    color: rgba(255, 180, 130, 1);
+}
+.space-tab[data-space="swedesign"]:hover {
+    background: rgba(255, 102, 51, 0.1);
+    color: rgba(255, 180, 130, 0.9);
+}
+
+.space-tab[data-space="clawport"].active {
+    background: rgba(136, 102, 255, 0.2);
+    border-color: rgba(136, 102, 255, 0.4);
+    color: rgba(190, 170, 255, 1);
+}
+.space-tab[data-space="clawport"]:hover {
+    background: rgba(136, 102, 255, 0.1);
+    color: rgba(190, 170, 255, 0.9);
+}
+
+.space-tab[data-space="video"].active {
+    background: rgba(238, 68, 102, 0.2);
+    border-color: rgba(238, 68, 102, 0.4);
+    color: rgba(255, 150, 170, 1);
+}
+.space-tab[data-space="video"]:hover {
+    background: rgba(238, 68, 102, 0.1);
+    color: rgba(255, 150, 170, 0.9);
+}
+
+.space-tab[data-space="agentfarm"].active {
+    background: rgba(136, 170, 68, 0.2);
+    border-color: rgba(136, 170, 68, 0.4);
+    color: rgba(200, 225, 150, 1);
+}
+.space-tab[data-space="agentfarm"]:hover {
+    background: rgba(136, 170, 68, 0.1);
+    color: rgba(200, 225, 150, 0.9);
+}
+
+.space-tab[data-space="thebrain"].active {
+    background: rgba(255, 102, 170, 0.2);
+    border-color: rgba(255, 102, 170, 0.4);
+    color: rgba(255, 180, 215, 1);
+}
+.space-tab[data-space="thebrain"]:hover {
+    background: rgba(255, 102, 170, 0.1);
+    color: rgba(255, 180, 215, 0.9);
+}
+
+.space-tab[data-space="mirofish"].active {
+    background: rgba(0, 204, 187, 0.2);
+    border-color: rgba(0, 204, 187, 0.4);
+    color: rgba(100, 240, 220, 1);
+}
+.space-tab[data-space="mirofish"]:hover {
+    background: rgba(0, 204, 187, 0.1);
+    color: rgba(100, 240, 220, 0.9);
+}

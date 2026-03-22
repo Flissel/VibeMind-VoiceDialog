@@ -1,0 +1,208 @@
+/* ======================================================================== */
+/* FIGMA-INSPIRED FORMAT RENDERERS - Dark Theme Overrides                   */
+/* ======================================================================== */
+
+/* --- Kanban Board --- */
+.canvas-node .kanban-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+.canvas-node .kanban-content > div {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--space-accent-rgb), 0.25) transparent;
+}
+
+.canvas-node .kanban-content > div > div {
+    background: rgba(28, 24, 45, 0.80) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.canvas-node .kanban-content > div > div > div:last-child > div {
+    background: rgba(35, 30, 55, 0.90) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.canvas-node .kanban-content > div > div > div:last-child > div > div:first-child {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.canvas-node .kanban-content > div > div > div:last-child > div > div:nth-child(2) {
+    color: rgba(180, 200, 220, 0.7) !important;
+}
+
+/* --- Mind Map --- */
+.canvas-node .mindmap-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+.canvas-node .mindmap-content > div > div > div > span:last-child {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* --- SWOT Analysis --- */
+.canvas-node .swot-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+.canvas-node .swot-content > div:first-of-type > div {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Strengths quadrant (dark green) */
+.canvas-node .swot-content > div:first-of-type > div:nth-child(1) {
+    background: rgba(40, 167, 69, 0.15) !important;
+}
+
+.canvas-node .swot-content > div:first-of-type > div:nth-child(1) ul li {
+    color: rgba(150, 255, 180, 0.9) !important;
+}
+
+/* Weaknesses quadrant (dark red) */
+.canvas-node .swot-content > div:first-of-type > div:nth-child(2) {
+    background: rgba(220, 53, 69, 0.15) !important;
+}
+
+.canvas-node .swot-content > div:first-of-type > div:nth-child(2) ul li {
+    color: rgba(255, 180, 180, 0.9) !important;
+}
+
+/* Opportunities quadrant (dark blue) */
+.canvas-node .swot-content > div:first-of-type > div:nth-child(3) {
+    background: rgba(23, 162, 184, 0.15) !important;
+}
+
+.canvas-node .swot-content > div:first-of-type > div:nth-child(3) ul li {
+    color: rgba(180, 220, 255, 0.9) !important;
+}
+
+/* Threats quadrant (dark amber) */
+.canvas-node .swot-content > div:first-of-type > div:nth-child(4) {
+    background: rgba(255, 193, 7, 0.15) !important;
+}
+
+.canvas-node .swot-content > div:first-of-type > div:nth-child(4) ul li {
+    color: rgba(255, 230, 150, 0.9) !important;
+}
+
+/* SWOT summary */
+.canvas-node .swot-content > div:last-child {
+    background: rgba(35, 30, 55, 0.60) !important;
+    color: rgba(200, 210, 230, 0.85) !important;
+}
+
+.canvas-node .swot-content > div:last-child strong {
+    color: rgba(150, 200, 255, 0.95);
+}
+
+/* --- User Story --- */
+.canvas-node .user-story-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+.canvas-node .user-story-content > div:nth-child(2) {
+    color: rgba(180, 150, 255, 0.9) !important;
+}
+
+.canvas-node .user-story-content > div[style*="background"] {
+    background: rgba(28, 24, 48, 0.80) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.canvas-node .user-story-content > div[style*="background"] > div:nth-child(2) {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.canvas-node .user-story-content > div[style*="background"] > div:nth-child(2) span:last-child {
+    color: rgba(180, 200, 220, 0.7) !important;
+}
+
+.canvas-node .user-story-content > div[style*="background"] > div:last-child {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.canvas-node .user-story-content > div[style*="background"] > div:last-child > div:first-child {
+    color: rgba(180, 200, 220, 0.8) !important;
+}
+
+.canvas-node .user-story-content > div[style*="background"] > div:last-child > div:not(:first-child) {
+    color: rgba(150, 200, 150, 0.85) !important;
+}
+
+/* Personas section */
+.canvas-node .user-story-content > div[style*="e8f4fd"] {
+    background: rgba(23, 162, 184, 0.15) !important;
+    border: 1px solid rgba(23, 162, 184, 0.2);
+}
+
+.canvas-node .user-story-content > div[style*="e8f4fd"] > div {
+    color: rgba(180, 230, 255, 0.9) !important;
+}
+
+/* --- Flowchart --- */
+.canvas-node .flowchart-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+.canvas-node .flowchart-content > div:nth-child(2) {
+    color: rgba(180, 200, 220, 0.7) !important;
+}
+
+/* Process nodes in dark theme */
+.canvas-node .flowchart-content div[style*="e9ecef"] {
+    background: rgba(40, 50, 70, 0.8) !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    border-color: rgba(var(--space-accent-rgb), 0.25) !important;
+}
+
+/* Decision nodes in dark theme */
+.canvas-node .flowchart-content div[style*="fff3cd"] {
+    background: rgba(255, 193, 7, 0.15) !important;
+    color: rgba(255, 230, 150, 0.95) !important;
+    border-color: rgba(255, 193, 7, 0.4) !important;
+}
+
+/* Subprocess nodes in dark theme */
+.canvas-node .flowchart-content div[style*="d1ecf1"] {
+    background: rgba(23, 162, 184, 0.15) !important;
+    color: rgba(180, 230, 255, 0.95) !important;
+    border-color: rgba(23, 162, 184, 0.3) !important;
+}
+
+/* Connector lines */
+.canvas-node .flowchart-content div[style*="adb5bd"] {
+    background-color: rgba(var(--space-accent-rgb), 0.35) !important;
+}
+
+/* Edge labels */
+.canvas-node .flowchart-content div[style*="italic"] {
+    color: rgba(180, 200, 220, 0.6) !important;
+}
+
+/* Arrow */
+.canvas-node .flowchart-content div[style*="25BC"] {
+    color: rgba(var(--space-accent-rgb), 0.45) !important;
+}
+
+/* ======================================================================== */
+/* NODE TYPE ACCENTS - New format types                                     */
+/* ======================================================================== */
+
+.canvas-node[data-node-type="kanban"] {
+    border-left: 3px solid rgba(100, 150, 255, 0.7);
+}
+
+.canvas-node[data-node-type="mindmap"] {
+    border-left: 3px solid rgba(200, 100, 255, 0.7);
+}
+
+.canvas-node[data-node-type="swot"] {
+    border-left: 3px solid rgba(255, 200, 50, 0.7);
+}
+
+.canvas-node[data-node-type="user_story"] {
+    border-left: 3px solid rgba(100, 255, 200, 0.7);
+}
+
+.canvas-node[data-node-type="flowchart"] {
+    border-left: 3px solid rgba(255, 150, 100, 0.7);
+}

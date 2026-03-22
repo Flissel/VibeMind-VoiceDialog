@@ -1,0 +1,160 @@
+/* ======================================================================== */
+/* GAME CONSOLE CHAT OVERLAY — press backtick (`) to toggle                 */
+/* ======================================================================== */
+
+#game-console {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(600px, 90vw);
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: auto;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#game-console.hidden {
+    display: none !important;
+}
+
+/* --- Message history --- */
+.gc-messages {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 4px;
+    scrollbar-width: thin;
+}
+
+.gc-msg {
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    animation: gc-fade-in 0.2s ease;
+    transition: opacity 0.5s ease;
+    max-width: 85%;
+    line-height: 1.4;
+}
+
+.gc-msg.gc-user {
+    align-self: flex-end;
+    background: rgba(var(--space-accent-rgb), 0.18);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.30);
+    color: var(--vm-text-primary, #f0e8ff);
+}
+
+.gc-msg.gc-agent {
+    align-self: flex-start;
+    background: var(--vm-bg-elevated, rgba(30, 27, 48, 0.88));
+    border: 1px solid rgba(var(--space-accent-rgb), 0.15);
+    color: var(--vm-text-primary, #f0e8ff);
+}
+
+.gc-msg.gc-error {
+    align-self: flex-start;
+    background: rgba(255, 90, 110, 0.10);
+    border: 1px solid rgba(255, 90, 110, 0.35);
+    color: var(--vm-status-error, #ff5a6e);
+}
+
+.gc-msg.gc-fading {
+    opacity: 0;
+}
+
+@keyframes gc-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Input row --- */
+.gc-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--vm-panel-bg, rgba(16, 14, 28, 0.85));
+    border: 1px solid rgba(var(--space-accent-rgb), 0.25);
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 40px rgba(var(--space-accent-rgb), 0.08);
+}
+
+/* Agent badge */
+.gc-agent-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(var(--space-accent-rgb), 0.12);
+    border-radius: 12px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.gc-agent-icon {
+    font-size: 14px;
+}
+
+.gc-agent-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(var(--space-accent-rgb), 1);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Text input */
+.gc-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--vm-text-primary, #f0e8ff);
+    font-size: 14px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    caret-color: rgba(var(--space-accent-rgb), 0.9);
+}
+
+.gc-input::placeholder {
+    color: var(--vm-text-muted, rgba(200, 190, 220, 0.40));
+}
+
+/* Send button */
+.gc-send-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(var(--space-accent-rgb), 0.25);
+    color: rgba(var(--space-accent-rgb), 1);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s, transform 0.1s;
+    flex-shrink: 0;
+}
+
+.gc-send-btn:hover {
+    background: rgba(var(--space-accent-rgb), 0.4);
+    transform: scale(1.1);
+}
+
+/* Loading spinner — uses shared @keyframes spin from base.css */
+.gc-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(var(--space-accent-rgb), 0.2);
+    border-top-color: rgba(var(--space-accent-rgb), 0.8);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    flex-shrink: 0;
+}
+
+.gc-spinner.hidden {
+    display: none;
+}

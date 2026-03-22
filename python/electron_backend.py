@@ -1316,13 +1316,13 @@ class ElectronBackend:
         try:
             from spaces.flowzen.tools.flowzen_tools import recommend_task
             result = recommend_task()
-            self._send_to_electron({
+            self.send_message({
                 "type": "flowzen_recommend_result",
                 **result,
             })
         except Exception as e:
             logger.debug(f"flowzen_recommend failed: {e}")
-            self._send_to_electron({
+            self.send_message({
                 "type": "flowzen_recommend_result",
                 "success": False,
                 "recommendation": {"reasoning": f"Fehler: {e}", "category": "\u2014"},

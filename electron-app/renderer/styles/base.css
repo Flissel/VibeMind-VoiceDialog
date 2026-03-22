@@ -1,0 +1,61 @@
+/* === VibeMind Space Theme === */
+:root {
+    --space-accent-rgb: 68, 136, 255;
+    --space-accent: #4488ff;
+    --vm-bg-deep: #0a0812;
+    --vm-bg-mid: #12101e;
+    --vm-bg-surface: rgba(20, 18, 32, 0.92);
+    --vm-bg-elevated: rgba(30, 27, 48, 0.88);
+    --vm-text-primary: #f0e8ff;
+    --vm-text-secondary: rgba(230, 220, 245, 0.65);
+    --vm-text-muted: rgba(200, 190, 220, 0.40);
+    --vm-panel-bg: rgba(16, 14, 28, 0.85);
+    --vm-panel-border: rgba(var(--space-accent-rgb), 0.20);
+    --vm-glow-spread: 40px;
+    --vm-status-ok: #5eff8a;
+    --vm-status-warn: #ffc145;
+    --vm-status-error: #ff5a6e;
+    --vm-status-info: #6eb8ff;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--vm-bg-deep);
+    overflow: hidden;
+    color: var(--vm-text-primary);
+}
+
+/* Hidden class */
+.hidden {
+    display: none !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(30, 35, 50, 0.5);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(var(--space-accent-rgb), 0.35);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 150, 255, 0.6);
+}
+
+/* Shared spinner animation (consolidated from gc-spin, vncSpin, vapiSpin) */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

@@ -96,6 +96,18 @@ class IntentLogger:
         if classification.get("is_multi_step"):
             entry["classification"]["steps"] = classification.get("steps", [])
 
+        # HybridRouter routing info (if provided)
+        if context and "route" in context:
+            route = context["route"]
+            entry["routing"] = {
+                "space": route.get("space"),
+                "agent": route.get("agent"),
+                "tier": route.get("tier"),
+                "matched_by": route.get("matched_by"),
+                "cached": route.get("cached", False),
+                "route_ms": route.get("route_ms"),
+            }
+
         # Write to file
         try:
             log_file = self._get_log_file()

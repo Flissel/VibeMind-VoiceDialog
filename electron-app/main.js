@@ -37,6 +37,12 @@ const BrainManager = require('./brain-manager');
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
 
+// MiroFish Integration
+const MiroFishManager = require('./mirofish-manager');
+
+// Video Space Integration
+const VideoManager = require('./video-manager');
+
 // eyeTerm Camera Preview Integration
 const EyeTermManager = require('./eyeterm-manager');
 
@@ -73,6 +79,12 @@ let brainManager = null;
 
 // Agent Farm manager
 let agentfarmManager = null;
+
+// MiroFish manager
+let mirofishManager = null;
+
+// Video Space manager
+let videoManager = null;
 
 // eyeTerm camera preview manager
 let eyetermManager = null;
@@ -1587,6 +1599,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
             dashboardManager.show();
             console.log('[Main] Dashboard shown');
         }
@@ -1615,6 +1628,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
             rowboatManager.show();
             console.log('[Main] Rowboat shown');
         }
@@ -1657,6 +1671,7 @@ function setupIpcHandlers() {
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
             await sweDesignManager.show();
             console.log('[Main] SWE Design shown');
         }
@@ -1685,6 +1700,7 @@ function setupIpcHandlers() {
             if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
             clawportManager.show();
             console.log('[Main] ClawPort shown');
         }
@@ -1713,6 +1729,7 @@ function setupIpcHandlers() {
             if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
             await brainManager.show();
             console.log('[Main] Brain Dashboard shown');
         }
@@ -1741,6 +1758,7 @@ function setupIpcHandlers() {
             if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
             if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (videoManager && videoManager.getIsVisible()) videoManager.hide();
             agentfarmManager.show();
             console.log('[Main] Agent Farm shown');
         }
@@ -1751,6 +1769,60 @@ function setupIpcHandlers() {
             agentfarmManager.hide();
             console.log('[Main] Agent Farm hidden');
         }
+    });
+
+    // ========================================
+    // VIDEO SPACE VIEW CONTROL
+    // ========================================
+
+    ipcMain.on('show-video', () => {
+        if (videoManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            videoManager.show();
+            console.log('[Main] Video shown');
+        }
+    });
+
+    ipcMain.on('hide-video', () => {
+        if (videoManager) {
+            videoManager.hide();
+            console.log('[Main] Video hidden');
+        }
+    });
+
+    // ── MiroFish BrowserView ──────────────────────────────
+
+    ipcMain.on('show-mirofish', () => {
+        if (mirofishManager) {
+            // Mutual exclusion: hide all other BrowserViews
+            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+            if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+            mirofishManager.show();
+            console.log('[Main] MiroFish shown');
+        }
+    });
+
+    ipcMain.on('hide-mirofish', () => {
+        if (mirofishManager) {
+            mirofishManager.hide();
+            console.log('[Main] MiroFish hidden');
+        }
+    });
+
+    ipcMain.handle('is-mirofish-visible', () => {
+        return mirofishManager ? mirofishManager.getIsVisible() : false;
     });
 
     ipcMain.on('show-agentfarm-tab', (_event, tab) => {
@@ -2384,13 +2456,6 @@ function registerShortcuts() {
 
 // ============================================================================
 
-// Register custom protocol for serving local video files to BrowserViews
-// MUST be called before app.whenReady()
-protocol.registerSchemesAsPrivileged([{
-    scheme: 'vibemind-video',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
-}]);
-
 app.whenReady().then(async () => {
     // Initialize Sentry error tracking (requires app to be ready)
     sentry.initSentry();
@@ -2454,6 +2519,12 @@ app.whenReady().then(async () => {
     // Initialize Agent Farm Manager
     agentfarmManager = new AgentFarmManager(mainWindow);
 
+    // Initialize MiroFish Manager
+    mirofishManager = new MiroFishManager(mainWindow);
+
+    // Initialize Video Space Manager
+    videoManager = new VideoManager(mainWindow);
+
     // Initialize eyeTerm Camera Preview Manager
     eyetermManager = new EyeTermManager(mainWindow);
 
@@ -2480,6 +2551,32 @@ app.whenReady().then(async () => {
             );
         } else {
             console.warn('[Main] docker-compose.n8n.yml not found, skipping n8n auto-start');
+        }
+    }
+
+    // ========================================
+    // MIROFISH DOCKER AUTO-START
+    // ========================================
+    // Start MiroFish containers in background if MIROFISH_ENABLED=true
+    if (process.env.MIROFISH_ENABLED === 'true') {
+        const mirofishCompose = path.join(__dirname, '..', 'docker-compose.mirofish.yml');
+        if (fs.existsSync(mirofishCompose)) {
+            console.log('[Main] Starting MiroFish Docker containers...');
+            const { exec: execMf } = require('child_process');
+            execMf(
+                `docker compose -f "${mirofishCompose}" up -d`,
+                { cwd: path.join(__dirname, '..') },
+                (err, stdout, stderr) => {
+                    if (err) {
+                        console.warn('[Main] MiroFish Docker start failed:', err.message);
+                    } else {
+                        console.log('[Main] MiroFish Docker started successfully');
+                        if (stdout.trim()) console.log('[Main] MiroFish:', stdout.trim());
+                    }
+                }
+            );
+        } else {
+            console.warn('[Main] docker-compose.mirofish.yml not found, skipping MiroFish auto-start');
         }
     }
 

@@ -1,0 +1,85 @@
+/* Info Panel - Bubble hover tooltip */
+#info-panel {
+    position: absolute;
+    z-index: 200;
+    min-width: 100px;
+    max-width: 200px;
+    padding: 6px 10px;
+    background: rgba(16, 14, 28, 0.90);
+    border: 1px solid rgba(100, 150, 255, 0.35);
+    border-radius: 8px;
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+    text-align: center;
+    white-space: nowrap;
+}
+
+#bubble-info h3 {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(180, 210, 255, 0.95);
+    margin: 0;
+}
+
+#bubble-info p {
+    font-size: 9px;
+    color: rgba(150, 180, 210, 0.7);
+    margin: 2px 0 0;
+}
+
+#bubble-info p:empty {
+    display: none;
+}
+
+#enter-btn {
+    padding: 3px 8px;
+    background: linear-gradient(135deg, rgba(68, 255, 136, 0.3), rgba(68, 200, 255, 0.3));
+    border: 1px solid rgba(68, 255, 136, 0.5);
+    border-radius: 4px;
+    color: #aaffcc;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: block;
+    margin: 4px auto 0;
+}
+
+#enter-btn:hover {
+    background: linear-gradient(135deg, rgba(68, 255, 136, 0.5), rgba(68, 200, 255, 0.5));
+    transform: scale(1.05);
+}
+
+/* Transcript Panel */
+#transcript-panel {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 500px;
+    max-height: 200px;
+    padding: 16px;
+    background: rgba(16, 14, 28, 0.90);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.25);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    overflow-y: auto;
+}
+
+#transcript-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.transcript-entry {
+    font-size: 13px;
+    color: rgba(200, 220, 240, 0.9);
+    padding: 8px 12px;
+    background: rgba(40, 35, 65, 0.50);
+    border-radius: 6px;
+}
+
+.transcript-entry strong {
+    color: #88ccff;
+}

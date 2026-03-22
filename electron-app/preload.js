@@ -317,6 +317,15 @@ contextBridge.exposeInMainWorld('vibemind', {
     hideAgentFarm: () => ipcRenderer.send('hide-agentfarm'),
     isAgentFarmVisible: () => ipcRenderer.invoke('is-agentfarm-visible'),
 
+    // MiroFish BrowserView Control
+    showMiroFish: () => ipcRenderer.send('show-mirofish'),
+    hideMiroFish: () => ipcRenderer.send('hide-mirofish'),
+    isMiroFishVisible: () => ipcRenderer.invoke('is-mirofish-visible'),
+
+    // Video Space BrowserView Control
+    showVideo: () => ipcRenderer.send('show-video'),
+    hideVideo: () => ipcRenderer.send('hide-video'),
+
     // Docker Management (for Coding Engine containers)
     docker: {
         startEngine: () => ipcRenderer.invoke('docker:start-engine'),

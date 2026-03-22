@@ -62,6 +62,27 @@ timeout /t 2 /nobreak > nul
 :minibook_done
 
 REM ================================================
+REM Start MiroFish Docker (port 5001)
+REM ================================================
+echo.
+echo Checking MiroFish...
+
+netstat -an | findstr ":5001" | findstr "LISTENING" > nul
+if %errorlevel%==0 (
+    echo MiroFish already running on port 5001
+    goto :mirofish_done
+)
+if exist "%PROJECT_ROOT%\docker-compose.mirofish.yml" (
+    echo Starting MiroFish Docker containers...
+    start /B cmd /c "docker compose -f "%PROJECT_ROOT%\docker-compose.mirofish.yml" up -d 2>nul && echo MiroFish started || echo Warning: MiroFish Docker failed" > nul 2>&1
+    echo MiroFish starting in background (Flask :5001^)
+    timeout /t 2 /nobreak > nul
+) else (
+    echo docker-compose.mirofish.yml not found, skipping MiroFish
+)
+:mirofish_done
+
+REM ================================================
 REM Check Redis for Claude Orchestrator (port 6379)
 REM ================================================
 REM Check for port 6379 (works on English "LISTENING" and German "ABHÖREN")

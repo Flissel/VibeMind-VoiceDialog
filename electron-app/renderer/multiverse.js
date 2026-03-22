@@ -1756,7 +1756,6 @@ class MultiverseApp {
             transmission: 0.92,
             transparent: true,
             opacity: 0.25,
-            thickness: 0.3,
             clearcoat: 1.0,
             clearcoatRoughness: 0.1,
             side: THREE.DoubleSide,
@@ -1890,7 +1889,6 @@ class MultiverseApp {
             metalness: 0.0,
             roughness: 0.05,
             transmission: 0.92,
-            thickness: 0.5,
             transparent: true,
             opacity: 0.25,
             clearcoat: 1.0,
@@ -1995,9 +1993,10 @@ class MultiverseApp {
 
         // --- Metallic Base Stand ---
         const baseGeo = new THREE.CylinderGeometry(1.0, 1.2, 0.3, 32);
-        const baseMat = new THREE.MeshPhongMaterial({
+        const baseMat = new THREE.MeshStandardMaterial({
             color: 0x1a2a2e,
             metalness: 0.8,
+            roughness: 0.3,
             transparent: true,
             opacity: 0.9,
         });
@@ -2216,6 +2215,7 @@ class MultiverseApp {
             video:     '238,68,102',
             thebrain:  '255,102,170',
             flowzen:   '51,102,204',
+            mirofish:  '0,204,187',
         };
         const accentRgb = SPACE_ACCENT_RGB[targetSpace] || SPACE_ACCENT_RGB.ideas;
         document.documentElement.style.setProperty('--space-accent-rgb', accentRgb);
@@ -2273,12 +2273,27 @@ class MultiverseApp {
             }
         }
 
-        // Hide Agent Farm BrowserView when leaving agentfarm or video space
-        if ((this.currentSpace === 'agentfarm' || this.currentSpace === 'video') &&
-            targetSpace !== 'agentfarm' && targetSpace !== 'video') {
+        // Hide Agent Farm BrowserView when leaving agentfarm space
+        if (this.currentSpace === 'agentfarm' && targetSpace !== 'agentfarm') {
             if (window.vibemind && window.vibemind.hideAgentFarm) {
                 window.vibemind.hideAgentFarm();
                 console.log('[Multiverse] Hiding Agent Farm');
+            }
+        }
+
+        // Hide Video BrowserView when leaving video space
+        if (this.currentSpace === 'video' && targetSpace !== 'video') {
+            if (window.vibemind && window.vibemind.hideVideo) {
+                window.vibemind.hideVideo();
+                console.log('[Multiverse] Hiding Video Studio');
+            }
+        }
+
+        // Hide MiroFish BrowserView when leaving mirofish space
+        if (this.currentSpace === 'mirofish' && targetSpace !== 'mirofish') {
+            if (window.vibemind && window.vibemind.hideMiroFish) {
+                window.vibemind.hideMiroFish();
+                console.log('[Multiverse] Hiding MiroFish');
             }
         }
 
@@ -2352,11 +2367,19 @@ class MultiverseApp {
                 }
             }
 
-            // Show Agent Farm with Video tab when entering video space
+            // Show Video Studio BrowserView when entering video space
             if (targetSpace === 'video') {
-                if (window.vibemind && window.vibemind.showAgentFarmTab) {
-                    window.vibemind.showAgentFarmTab('video');
-                    console.log('[Multiverse] Showing Agent Farm (Video tab)');
+                if (window.vibemind && window.vibemind.showVideo) {
+                    window.vibemind.showVideo();
+                    console.log('[Multiverse] Showing Video Studio');
+                }
+            }
+
+            // Show MiroFish BrowserView when entering mirofish space
+            if (targetSpace === 'mirofish') {
+                if (window.vibemind && window.vibemind.showMiroFish) {
+                    window.vibemind.showMiroFish();
+                    console.log('[Multiverse] Showing MiroFish');
                 }
             }
 
@@ -3087,6 +3110,18 @@ class MultiverseApp {
             const roseHit = raycaster.intersectObjects(roseObjects);
             if (roseHit.length > 0) {
                 this.navigateToSpace('flowzen');
+                return;
+            }
+        }
+
+        // Check MiroFish click — navigate into MiroFish
+        if (this.spaces.mirofish?.objects[0] && this.currentSpace !== 'mirofish') {
+            const mfObjects = this.spaces.mirofish.objects[0].children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const mfHit = raycaster.intersectObjects(mfObjects);
+            if (mfHit.length > 0) {
+                this.navigateToSpace('mirofish');
                 return;
             }
         }
