@@ -720,6 +720,151 @@
         // Request initial bubbles from Python
         // NOTE: Shuttles are requested AFTER bubbles_sync is received (see bubbles_sync handler)
         window.vibemind.requestBubbles();
+
+        // ============================================
+        // FLOWZEN (BLAUE ROSE) — IPC + DIARY FUNCTIONS
+        // ============================================
+
+        function requestFlowzenStatus() {
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_status' });
+            }
+        }
+
+        function requestFlowzenDiaryEntries() {
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
+            }
+        }
+
+        function requestFlowzenRecommend() {
+            var btn = document.getElementById('fz-recommend-btn');
+            if (btn) { btn.classList.add('loading'); btn.textContent = 'Denke nach...'; }
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_recommend' });
+            }
+        }
+
+        function updateFlowzenPanel(data) {
+            var windowNames = {
+                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
+                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+            };
+            var el;
+            if (data.current_time_window) {
+                el = document.getElementById('fz-time-window');
+                if (el) el.textContent = windowNames[data.current_time_window] || data.current_time_window;
+            }
+            if (data.mood) {
+                el = document.getElementById('fz-mood');
+                if (el) el.textContent = data.mood;
+            }
+            if (data.category) {
+                el = document.getElementById('fz-category');
+                if (el) el.textContent = data.category;
+            }
+            if (data.state) {
+                el = document.getElementById('flowzen-state-badge');
+                if (el) { el.textContent = data.state; el.className = 'flowzen-state ' + data.state; }
+            }
+        }
+
+        function renderDiaryEntries(entries) {
+            var container = document.getElementById('fz-diary-journal');
+            var emptyEl = document.getElementById('fz-diary-empty');
+            if (!container) return;
+            container.querySelectorAll('.diary-entry').forEach(function(el) { el.remove(); });
+            if (!entries || entries.length === 0) {
+                if (emptyEl) emptyEl.style.display = '';
+                return;
+            }
+            if (emptyEl) emptyEl.style.display = 'none';
+            entries.forEach(function(entry) { container.appendChild(_buildDiaryCard(entry)); });
+        }
+
+        function addSingleDiaryEntry(entry) {
+            var container = document.getElementById('fz-diary-journal');
+            var emptyEl = document.getElementById('fz-diary-empty');
+            if (!container) return;
+            if (emptyEl) emptyEl.style.display = 'none';
+            container.insertBefore(_buildDiaryCard(entry), container.firstChild);
+            var all = container.querySelectorAll('.diary-entry');
+            if (all.length > 20) all[all.length - 1].remove();
+        }
+
+        function _buildDiaryCard(entry) {
+            var card = document.createElement('div');
+            card.className = 'diary-entry';
+            var windowNames = {
+                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
+                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+            };
+            var moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
+            var timeStr = '';
+            try { timeStr = new Date(entry.created_at).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}); }
+            catch(e) { timeStr = (entry.hour || 0) + ':00'; }
+
+            var header = document.createElement('div');
+            header.className = 'diary-entry-time';
+            header.textContent = timeStr + ' \u2014 ' + (windowNames[entry.time_window] || entry.time_window || '');
+            card.appendChild(header);
+
+            var meta = document.createElement('div');
+            meta.className = 'diary-entry-meta';
+            meta.textContent = (moodEmojis[entry.mood] || '') + ' ' + (entry.mood || '') + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivit\u00E4ten';
+            card.appendChild(meta);
+
+            var text = document.createElement('div');
+            text.className = 'diary-entry-text';
+            text.textContent = entry.entry_text || '';
+            card.appendChild(text);
+
+            if (entry.source === 'manual') {
+                var badge = document.createElement('div');
+                badge.className = 'diary-entry-source';
+                badge.textContent = '\uD83C\uDF39 Auf Anfrage';
+                card.appendChild(badge);
+            }
+            return card;
+        }
+
+        // Register Flowzen IPC handlers
+        window._messageHandlers['flowzen_rose_state'] = function(msg) {
+            if (window.multiverseApp && window.multiverseApp.spaces.flowzen) {
+                window.multiverseApp.spaces.flowzen.roseState = msg.state || 'idle';
+            }
+            updateFlowzenPanel({ state: msg.state });
+            if (msg.state === 'diary_new' && msg.diary_entry) {
+                addSingleDiaryEntry(msg.diary_entry);
+            }
+        };
+
+        window._messageHandlers['flowzen_status_result'] = function(msg) {
+            updateFlowzenPanel(msg);
+        };
+
+        window._messageHandlers['flowzen_recommend_result'] = function(msg) {
+            if (msg.recommendation) {
+                updateFlowzenPanel({
+                    mood: msg.recommendation.mood,
+                    category: msg.recommendation.category,
+                    current_time_window: msg.recommendation.time_window,
+                });
+            }
+            if (msg.diary_entry) {
+                addSingleDiaryEntry(msg.diary_entry);
+            }
+            var btn = document.getElementById('fz-recommend-btn');
+            if (btn) { btn.classList.remove('loading'); btn.textContent = 'Was soll ich machen?'; }
+        };
+
+        window._messageHandlers['flowzen_diary_entries_result'] = function(msg) {
+            renderDiaryEntries(msg.entries || []);
+        };
+
+        // Wire recommend button
+        var fzBtn = document.getElementById('fz-recommend-btn');
+        if (fzBtn) fzBtn.addEventListener('click', requestFlowzenRecommend);
     </script>
 </body>
 </html>
