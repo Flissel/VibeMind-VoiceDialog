@@ -40,7 +40,7 @@ class AgentFarmManager {
     // Development: built agentfarm in agentfarm/dist
     const devPath = path.join(__dirname, 'agentfarm', 'dist', 'index.html');
     // Production: extraResources
-    const prodPath = path.join(process.resourcesPath || '', 'agentfarm', 'index.html');
+    const prodPath = path.join(process.resourcesPath || '', 'agentfarm-ui', 'index.html');
 
     if (fs.existsSync(prodPath)) return prodPath;
     if (fs.existsSync(devPath)) return devPath;

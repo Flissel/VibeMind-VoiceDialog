@@ -236,3 +236,138 @@ def _load_template(template_id: str) -> Optional[Dict]:
             except (json.JSONDecodeError, OSError):
                 pass
     return None
+
+
+# ---------------------------------------------------------------------------
+# Pipeline State (module-level singleton for status tracking)
+# ---------------------------------------------------------------------------
+
+_active_pipeline: Optional[Dict[str, Any]] = None
+_active_forge: Optional[Dict[str, Any]] = None
+
+
+async def _ensure_minibook_setup() -> Dict[str, Any]:
+    """Register agents + create project at Minibook. Returns {agents, project_id}."""
+    import aiohttp
+    from spaces.autogen.swarm.api_client import register_agent, load_credentials, save_credentials, api_post
+    from spaces.autogen.swarm.knowledge import AGENT_ROLES
+
+    creds = load_credentials()
+    async with aiohttp.ClientSession() as session:
+        agents = {}
+        for name in AGENT_ROLES.keys():
+            agent = await register_agent(session, name, creds)
+            agents[name] = agent
+        save_credentials(creds)
+
+        # Create or find project
+        lead_key = list(agents.keys())[0]
+        lead_api_key = agents[lead_key].get("api_key", "")
+        project = await api_post(session, "/api/v1/projects", {
+            "name": f"pipeline-{uuid4().hex[:6]}",
+            "description": "Auto-created by VibeMind pipeline trigger",
+        }, api_key=lead_api_key)
+        project_id = project.get("id", project.get("project_id", ""))
+
+    return {"agents": agents, "project_id": project_id}
+
+
+def run_pipeline(task_description: str = "", **kwargs) -> Dict[str, Any]:
+    """Start the 11-agent SwarmPipeline for code generation.
+
+    Automatically registers agents at Minibook and creates a project.
+    Requires Minibook server running (docker compose -f docker-compose.minibook.yml up).
+    """
+    global _active_pipeline
+    if not task_description:
+        return {"success": False, "message": "task_description required — beschreibe was generiert werden soll."}
+
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+
+        # Step 1: Register agents + project at Minibook
+        setup = loop.run_until_complete(_ensure_minibook_setup())
+        agents = setup["agents"]
+        project_id = setup["project_id"]
+
+        # Step 2: Create and run pipeline with aiohttp session
+        from spaces.autogen.swarm.pipeline import SwarmPipeline
+
+        async def _run():
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                pipeline = SwarmPipeline(agents=agents, project_id=project_id, task_name=task_description[:80])
+                return await pipeline.run(session, task_description)
+
+        _active_pipeline = {"status": "running", "task": task_description, "project_id": project_id}
+        _broadcast_to_electron({"type": "agentfarm_pipeline_started", "task": task_description[:100], "project_id": project_id})
+
+        result = loop.run_until_complete(_run())
+        loop.close()
+
+        _active_pipeline = {"status": "completed", "task": task_description, "project_id": project_id, "result": str(result)[:500]}
+        _broadcast_to_electron({"type": "agentfarm_pipeline_completed", "project_id": project_id})
+
+        return {"success": True, "message": f"Pipeline completed for: {task_description[:100]}", "project_id": project_id, "result": str(result)[:500]}
+    except Exception as e:
+        _active_pipeline = {"status": "error", "error": str(e)}
+        logger.error(f"Pipeline failed: {e}")
+        return {"success": False, "message": f"Pipeline failed: {e}"}
+
+
+def get_pipeline_status(**kwargs) -> Dict[str, Any]:
+    """Get current pipeline run status."""
+    if _active_pipeline:
+        return {"success": True, **_active_pipeline, "message": f"Pipeline: {_active_pipeline.get('status', 'unknown')}"}
+    return {"success": True, "status": "idle", "message": "Keine Pipeline aktiv."}
+
+
+def start_forge(project_id: str = "", **kwargs) -> Dict[str, Any]:
+    """Start ForgeOrchestrator for continuous improvement.
+
+    Requires Minibook server running. Auto-registers agents if needed.
+    """
+    global _active_forge
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+
+        setup = loop.run_until_complete(_ensure_minibook_setup())
+        agents = setup["agents"]
+        pid = project_id or setup["project_id"]
+
+        from spaces.autogen.swarm.forge_orchestrator import ForgeOrchestrator
+        import threading
+
+        forge = ForgeOrchestrator(agents=agents, project_id=pid)
+
+        _active_forge = {"status": "running", "project_id": pid}
+        _broadcast_to_electron({"type": "agentfarm_forge_started", "project_id": pid})
+
+        # Forge runs its own web server — start in background thread
+        def _run_forge():
+            global _active_forge
+            try:
+                bg_loop = asyncio.new_event_loop()
+                bg_loop.run_until_complete(forge.start())
+            except Exception as e:
+                _active_forge = {"status": "error", "error": str(e)}
+                logger.error(f"Forge background error: {e}")
+
+        thread = threading.Thread(target=_run_forge, daemon=True, name="forge-server")
+        thread.start()
+        loop.close()
+
+        return {"success": True, "message": f"Forge gestartet auf Port 8890. Dashboard: http://localhost:8890/forge/status", "project_id": pid}
+    except Exception as e:
+        _active_forge = {"status": "error", "error": str(e)}
+        logger.error(f"Forge failed: {e}")
+        return {"success": False, "message": f"Forge failed: {e}"}
+
+
+def get_forge_status(**kwargs) -> Dict[str, Any]:
+    """Get ForgeOrchestrator status."""
+    if _active_forge:
+        return {"success": True, **_active_forge, "message": f"Forge: {_active_forge.get('status', 'unknown')}"}
+    return {"success": True, "status": "idle", "message": "Kein Forge aktiv."}

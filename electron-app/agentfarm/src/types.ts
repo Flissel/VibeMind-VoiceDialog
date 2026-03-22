@@ -40,7 +40,7 @@ export interface GenerationStatusResponse {
 
 // ── Sub-Tab ──
 
-export type AgentFarmTab = 'autogen' | 'n8n' | 'video'
+export type AgentFarmTab = 'autogen' | 'n8n'
 
 // ── Video ──
 
@@ -58,4 +58,20 @@ export interface VideoToolResult {
   stdout?: string
   stderr?: string
   exit_code?: number
+}
+
+export interface VideoFileInfo {
+  path: string
+  filename: string
+  size_bytes: number
+  size_human: string
+  category: string
+  modified: number
+  modified_iso: string
+}
+
+export interface VideoListResponse {
+  success: boolean
+  message: string
+  videos: VideoFileInfo[]
 }
