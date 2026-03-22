@@ -1873,6 +1873,126 @@ class MultiverseApp {
         console.log('[Multiverse] Flowzen Space (Blaue Rose) created');
     }
 
+    /**
+     * Zoom camera INTO the glass dome and show the diary journal overlay.
+     * Similar to Desktop dashboard zoom-in pattern.
+     */
+    _enterFlowzenRose() {
+        if (this.isNavigating || this._insideFlowzenRose) return;
+
+        this.isNavigating = true;
+        this._insideFlowzenRose = true;
+
+        // Get rose world position (center of the bloom)
+        const rosePos = this.spaces.flowzen.position.clone();
+        rosePos.y += 1.2; // bloom height
+
+        // Save camera state for exit
+        this._flowzenCamSave = {
+            position: this.camera.position.clone(),
+            target: this.controls.target.clone(),
+            space: this.currentSpace,
+        };
+
+        // Target: camera just outside the glass dome, looking at the rose
+        const targetPos = rosePos.clone();
+        targetPos.z += 2.5;
+        targetPos.y += 0.5;
+
+        const startPosition = this.camera.position.clone();
+        const startLookAt = this.controls.target.clone();
+        const duration = 800;
+        const startTime = Date.now();
+
+        const zoomIn = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            this.camera.position.lerpVectors(startPosition, targetPos, eased);
+            this.controls.target.lerpVectors(startLookAt, rosePos, eased);
+
+            if (progress < 1) {
+                requestAnimationFrame(zoomIn);
+            } else {
+                this.isNavigating = false;
+                this.currentSpace = 'flowzen';
+
+                // Show the diary panel
+                const fzPanel = document.getElementById('flowzen-panel');
+                if (fzPanel) {
+                    fzPanel.classList.remove('hidden');
+                    fzPanel.classList.add('visible');
+                    requestAnimationFrame(() => fzPanel.classList.add('fade-in'));
+                }
+
+                // Load diary entries
+                if (window.vibemind && window.vibemind.sendToPython) {
+                    window.vibemind.sendToPython({ type: 'flowzen_status' });
+                    window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
+                }
+
+                // Update tab active state
+                document.querySelectorAll('.space-tab').forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.space === 'flowzen');
+                });
+
+                console.log('[Multiverse] Entered Blaue Rose (inside glass dome)');
+            }
+        };
+        requestAnimationFrame(zoomIn);
+    }
+
+    /**
+     * Exit the Blaue Rose back to the multiverse view.
+     */
+    _exitFlowzenRose() {
+        if (!this._insideFlowzenRose) return;
+
+        // Hide panel
+        const fzPanel = document.getElementById('flowzen-panel');
+        if (fzPanel) {
+            fzPanel.classList.remove('fade-in');
+            setTimeout(() => {
+                fzPanel.classList.remove('visible');
+                fzPanel.classList.add('hidden');
+            }, 300);
+        }
+
+        // Restore camera
+        if (this._flowzenCamSave) {
+            this.isNavigating = true;
+            const targetPos = this._flowzenCamSave.position;
+            const targetLookAt = this._flowzenCamSave.target;
+            const startPosition = this.camera.position.clone();
+            const startLookAt = this.controls.target.clone();
+            const duration = 600;
+            const startTime = Date.now();
+
+            const zoomOut = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+
+                this.camera.position.lerpVectors(startPosition, targetPos, eased);
+                this.controls.target.lerpVectors(startLookAt, targetLookAt, eased);
+
+                if (progress < 1) {
+                    requestAnimationFrame(zoomOut);
+                } else {
+                    this.isNavigating = false;
+                    this.currentSpace = this._flowzenCamSave.space || 'ideas';
+                    this._insideFlowzenRose = false;
+                    this._flowzenCamSave = null;
+                    console.log('[Multiverse] Exited Blaue Rose');
+                }
+            };
+            requestAnimationFrame(zoomOut);
+        } else {
+            this._insideFlowzenRose = false;
+        }
+    }
+
     // ========================================================================
     // MIROFISH SPACE (Aquarium Sphere with Fish Swarm)
     // ========================================================================
@@ -2200,6 +2320,12 @@ class MultiverseApp {
             return;
         }
 
+        // Flowzen uses immersive zoom-into-rose instead of standard navigation
+        if (targetSpace === 'flowzen') {
+            this._enterFlowzenRose();
+            return;
+        }
+
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
 
@@ -2263,6 +2389,11 @@ class MultiverseApp {
                 window.vibemind.hideClawPort();
                 console.log('[Multiverse] Hiding ClawPort Dashboard');
             }
+        }
+
+        // Exit Blaue Rose when leaving flowzen space
+        if (this._insideFlowzenRose && targetSpace !== 'flowzen') {
+            this._exitFlowzenRose();
         }
 
         // Hide Brain Dashboard BrowserView when leaving thebrain space
@@ -2702,8 +2833,10 @@ class MultiverseApp {
                 this.enterCurrentSelection();
                 break;
             case 'Escape':
-                // Exit desktop dashboard or bubble view
-                if (this._insideDesktopDashboard) {
+                // Exit immersive views
+                if (this._insideFlowzenRose) {
+                    this._exitFlowzenRose();
+                } else if (this._insideDesktopDashboard) {
                     this.exitDesktopDashboard();
                 } else {
                     this.exitBubbleWithAnimation();
@@ -3102,14 +3235,14 @@ class MultiverseApp {
             }
         }
 
-        // Check Flowzen (Blaue Rose) click — navigate into Flowzen
+        // Check Flowzen (Blaue Rose) click — zoom INTO the glass dome
         if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
             const roseObjects = this.spaces.flowzen.group.children.flatMap(
                 c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
             );
             const roseHit = raycaster.intersectObjects(roseObjects);
             if (roseHit.length > 0) {
-                this.navigateToSpace('flowzen');
+                this._enterFlowzenRose();
                 return;
             }
         }
