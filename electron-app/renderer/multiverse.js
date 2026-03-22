@@ -121,6 +121,14 @@ class MultiverseApp {
                 name: 'Blaue Rose',
                 agent: { name: 'Flowzen', slug: 'flowzen', role: 'Circadian Intelligence' },
                 color: 0x3366cc
+            },
+            mirofish: {
+                objects: [],
+                position: new THREE.Vector3(20, 0, 18),
+                icon: '\u{1F41F}',
+                name: 'MiroFish',
+                agent: { name: 'MiroFish', slug: 'mirofish', role: 'Prediction Engine' },
+                color: 0x00ccbb
             }
         };
         
@@ -341,6 +349,7 @@ class MultiverseApp {
         this.createVideoSpace();
         this.createBrainSpace();
         this.createFlowzenSpace();
+        this.createMiroFishSpace();
         this.createEnvironment();
         this.createConnectionPaths();
 
@@ -1866,9 +1875,175 @@ class MultiverseApp {
     }
 
     // ========================================================================
+    // MIROFISH SPACE (Aquarium Sphere with Fish Swarm)
+    // ========================================================================
+
+    createMiroFishSpace() {
+        const pos = this.spaces.mirofish.position;
+        const group = new THREE.Group();
+        group.position.copy(pos);
+
+        // --- Glass Aquarium Sphere ---
+        const sphereGeo = new THREE.IcosahedronGeometry(2.2, 4);
+        const sphereMat = new THREE.MeshPhysicalMaterial({
+            color: 0x88ddee,
+            metalness: 0.0,
+            roughness: 0.05,
+            transmission: 0.92,
+            thickness: 0.5,
+            transparent: true,
+            opacity: 0.25,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.1,
+            envMapIntensity: 0.3,
+            side: THREE.DoubleSide,
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        group.add(sphere);
+        this.spaces.mirofish.dome = sphere;
+
+        // --- Water Surface Ring (equator shimmer) ---
+        const waterGeo = new THREE.TorusGeometry(2.2, 0.04, 8, 64);
+        const waterMat = new THREE.MeshBasicMaterial({
+            color: 0x44ddcc,
+            transparent: true,
+            opacity: 0.4,
+        });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = Math.PI / 2;
+        water.position.y = 0.3;
+        group.add(water);
+
+        // --- Fish Swarm (12 small cone-shaped fish) ---
+        const fishGroup = new THREE.Group();
+        const fishColors = [0x00eebb, 0x44ffcc, 0x00bbaa, 0x22ddff, 0x66ffdd, 0x00aacc];
+        const fish = [];
+
+        for (let i = 0; i < 12; i++) {
+            const fishMesh = new THREE.Group();
+
+            // Body (elongated cone — visible size)
+            const bodyGeo = new THREE.ConeGeometry(0.18, 0.55, 6);
+            bodyGeo.rotateX(Math.PI / 2);
+            const bodyMat = new THREE.MeshPhongMaterial({
+                color: fishColors[i % fishColors.length],
+                emissive: fishColors[i % fishColors.length],
+                emissiveIntensity: 0.6,
+                transparent: true,
+                opacity: 0.9,
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            fishMesh.add(body);
+
+            // Tail fin (visible triangle)
+            const tailGeo = new THREE.ConeGeometry(0.14, 0.2, 3);
+            tailGeo.rotateX(Math.PI / 2);
+            const tailMat = new THREE.MeshPhongMaterial({
+                color: fishColors[i % fishColors.length],
+                emissive: fishColors[i % fishColors.length],
+                emissiveIntensity: 0.5,
+                transparent: true,
+                opacity: 0.8,
+            });
+            const tail = new THREE.Mesh(tailGeo, tailMat);
+            tail.position.z = 0.35;
+            fishMesh.add(tail);
+
+            // Randomize orbit parameters
+            const angle = (i / 12) * Math.PI * 2;
+            const radius = 0.8 + Math.random() * 0.8;
+            const yOffset = (Math.random() - 0.5) * 1.2;
+            const speed = 0.4 + Math.random() * 0.4;
+            const phase = Math.random() * Math.PI * 2;
+
+            fishMesh.userData = {
+                angle, radius, yOffset, speed, phase,
+                yWobble: 0.1 + Math.random() * 0.15,
+                yWobbleSpeed: 1.5 + Math.random() * 1.5,
+            };
+
+            fishGroup.add(fishMesh);
+            fish.push(fishMesh);
+        }
+
+        group.add(fishGroup);
+        this.spaces.mirofish.fish = fish;
+        this.spaces.mirofish.fishGroup = fishGroup;
+
+        // --- Bubble Particles (rising air bubbles inside) ---
+        const bubbleCount = 30;
+        const bubblePositions = new Float32Array(bubbleCount * 3);
+        for (let i = 0; i < bubbleCount; i++) {
+            const r = Math.random() * 1.5;
+            const theta = Math.random() * Math.PI * 2;
+            bubblePositions[i * 3] = Math.cos(theta) * r * 0.3;
+            bubblePositions[i * 3 + 1] = (Math.random() - 0.5) * 3;
+            bubblePositions[i * 3 + 2] = Math.sin(theta) * r * 0.3;
+        }
+        const bubbleGeo = new THREE.BufferGeometry();
+        bubbleGeo.setAttribute('position', new THREE.BufferAttribute(bubblePositions, 3));
+        const bubbleMat = new THREE.PointsMaterial({
+            size: 0.12,
+            color: 0xaaffee,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+        });
+        const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+        group.add(bubbles);
+        this.spaces.mirofish.bubbles = bubbles;
+
+        // --- Metallic Base Stand ---
+        const baseGeo = new THREE.CylinderGeometry(1.0, 1.2, 0.3, 32);
+        const baseMat = new THREE.MeshPhongMaterial({
+            color: 0x1a2a2e,
+            metalness: 0.8,
+            transparent: true,
+            opacity: 0.9,
+        });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.y = -2.3;
+        group.add(base);
+
+        // --- Glow Light ---
+        const glowLight = new THREE.PointLight(0x00ccbb, 1.2, 18);
+        glowLight.position.set(0, 0, 0);
+        group.add(glowLight);
+        this.spaces.mirofish.glowLight = glowLight;
+
+        // --- Glow Sphere ---
+        const glowGeo = new THREE.IcosahedronGeometry(3.5, 2);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0x00ccbb,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.BackSide,
+        });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        group.add(glow);
+
+        // --- Base Marker Ring ---
+        const ringGeo = new THREE.TorusGeometry(2.8, 0.03, 8, 64);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x00ccbb,
+            transparent: true,
+            opacity: 0.15,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = -2;
+        group.add(ring);
+
+        this.spaces.mirofish.objects.push(group);
+        this.scene.add(group);
+
+        console.log('[Multiverse] MiroFish Space (Aquarium) created');
+    }
+
+    // ========================================================================
     // ENVIRONMENT
     // ========================================================================
-    
+
     createEnvironment() {
         // Stars
         const starCount = 2000;
@@ -1923,6 +2098,11 @@ class MultiverseApp {
         factoryLight.position.copy(this.spaces.swedesign.position);
         factoryLight.position.y += 2; // Above the building
         this.scene.add(factoryLight);
+
+        // Add light for MiroFish Space
+        const mirofishLight = new THREE.PointLight(0x00ccbb, 1, 20);
+        mirofishLight.position.copy(this.spaces.mirofish.position);
+        this.scene.add(mirofishLight);
     }
     
     createConnectionPaths() {
@@ -2035,6 +2215,7 @@ class MultiverseApp {
             agentfarm: '136,170,68',
             video:     '238,68,102',
             thebrain:  '255,102,170',
+            flowzen:   '51,102,204',
         };
         const accentRgb = SPACE_ACCENT_RGB[targetSpace] || SPACE_ACCENT_RGB.ideas;
         document.documentElement.style.setProperty('--space-accent-rgb', accentRgb);
@@ -2176,6 +2357,16 @@ class MultiverseApp {
                 if (window.vibemind && window.vibemind.showAgentFarmTab) {
                     window.vibemind.showAgentFarmTab('video');
                     console.log('[Multiverse] Showing Agent Farm (Video tab)');
+                }
+            }
+
+            // Show/hide Flowzen panel
+            const fzPanel = document.getElementById('flowzen-panel');
+            if (fzPanel) {
+                if (targetSpace === 'flowzen') {
+                    fzPanel.classList.remove('hidden');
+                } else {
+                    fzPanel.classList.add('hidden');
                 }
             }
 
@@ -2713,6 +2904,41 @@ class MultiverseApp {
             this.spaces.roarboot.ripple.material.opacity = 0.1 + Math.sin(elapsed * 0.6) * 0.05;
         }
 
+        // Animate MiroFish (fish swarm orbiting + rising bubbles)
+        if (this.spaces.mirofish.fish) {
+            this.spaces.mirofish.fish.forEach((f) => {
+                const d = f.userData;
+                d.angle += d.speed * delta;
+                const x = Math.cos(d.angle + d.phase) * d.radius;
+                const z = Math.sin(d.angle + d.phase) * d.radius;
+                const y = d.yOffset + Math.sin(elapsed * d.yWobbleSpeed + d.phase) * d.yWobble;
+                f.position.set(x, y, z);
+                // Face direction of movement
+                f.lookAt(
+                    x + Math.cos(d.angle + d.phase + 0.1) * d.radius,
+                    y,
+                    z + Math.sin(d.angle + d.phase + 0.1) * d.radius
+                );
+            });
+        }
+        if (this.spaces.mirofish.bubbles) {
+            const pos = this.spaces.mirofish.bubbles.geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                let y = pos.getY(i);
+                y += 0.008 + Math.random() * 0.003;
+                if (y > 1.8) y = -1.8;
+                pos.setY(i, y);
+                pos.setX(i, pos.getX(i) + Math.sin(elapsed + i) * 0.0005);
+            }
+            pos.needsUpdate = true;
+        }
+        if (this.spaces.mirofish.dome) {
+            this.spaces.mirofish.dome.rotation.y += 0.001;
+        }
+        if (this.spaces.mirofish.glowLight) {
+            this.spaces.mirofish.glowLight.intensity = 0.5 + Math.sin(elapsed * 0.7) * 0.15;
+        }
+
         // Animate Flowzen Rose (glow pulse + state-dependent effects)
         if (this.spaces.flowzen && this.spaces.flowzen.bloom) {
             const fz = this.spaces.flowzen;
@@ -2849,6 +3075,18 @@ class MultiverseApp {
             const videoHit = raycaster.intersectObjects(videoObjects);
             if (videoHit.length > 0) {
                 this.navigateToSpace('video');
+                return;
+            }
+        }
+
+        // Check Flowzen (Blaue Rose) click — navigate into Flowzen
+        if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
+            const roseObjects = this.spaces.flowzen.group.children.flatMap(
+                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
+            );
+            const roseHit = raycaster.intersectObjects(roseObjects);
+            if (roseHit.length > 0) {
+                this.navigateToSpace('flowzen');
                 return;
             }
         }

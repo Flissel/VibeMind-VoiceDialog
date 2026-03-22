@@ -1276,6 +1276,42 @@ class ElectronBackend:
         elif msg_type == "eyeterm_calibrate":
             asyncio.create_task(self._eyeterm.handle_eyeterm_calibrate())
 
+        # ── Flowzen (Blaue Rose) handlers ──
+        elif msg_type == "flowzen_status":
+            try:
+                from spaces.flowzen.tools.flowzen_tools import get_flowzen_status
+                result = get_flowzen_status()
+                self._send_to_electron({
+                    "type": "flowzen_status_result",
+                    **result.get("status", {}),
+                })
+            except Exception as e:
+                logger.debug(f"flowzen_status failed: {e}")
+
+        elif msg_type == "flowzen_recommend":
+            asyncio.create_task(self._handle_flowzen_recommend())
+
+    # ========================================================================
+    # FLOWZEN RECOMMEND HANDLER
+    # ========================================================================
+
+    async def _handle_flowzen_recommend(self):
+        """Handle flowzen_recommend IPC message — call recommend_task and send result."""
+        try:
+            from spaces.flowzen.tools.flowzen_tools import recommend_task
+            result = recommend_task()
+            self._send_to_electron({
+                "type": "flowzen_recommend_result",
+                **result,
+            })
+        except Exception as e:
+            logger.debug(f"flowzen_recommend failed: {e}")
+            self._send_to_electron({
+                "type": "flowzen_recommend_result",
+                "success": False,
+                "recommendation": {"reasoning": f"Fehler: {e}", "category": "\u2014"},
+            })
+
     # ========================================================================
     # ROWBOAT UPDATE CHECKER
     # ========================================================================

@@ -69,6 +69,14 @@
                 <span class="space-icon">&#x1F9E0;</span>
                 <span class="space-name">The Brain</span>
             </button>
+            <button class="space-tab" id="tab-flowzen" data-space="flowzen">
+                <span class="space-icon">&#x1F339;</span>
+                <span class="space-name">Blaue Rose</span>
+            </button>
+            <button class="space-tab" id="tab-mirofish" data-space="mirofish">
+                <span class="space-icon">&#x1F41F;</span>
+                <span class="space-name">MiroFish</span>
+            </button>
         </div>
         <div class="agent-status" id="agent-status">
             <span class="agent-indicator"></span>
@@ -233,6 +241,35 @@
                     frameborder="0"
                     style="width: 100%; height: 100%; border: none;">
                 </iframe>
+            </div>
+        </div>
+
+        <!-- Flowzen (Blaue Rose) Recommendation Panel -->
+        <div id="flowzen-panel" class="flowzen-panel hidden">
+            <div class="flowzen-header">
+                <span class="flowzen-icon">🌹</span>
+                <span class="flowzen-title">Blaue Rose</span>
+                <span class="flowzen-state" id="flowzen-state-badge">idle</span>
+            </div>
+            <div class="flowzen-status" id="flowzen-status">
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Tageszeit</span>
+                    <span class="flowzen-stat-value" id="fz-time-window">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Stimmung</span>
+                    <span class="flowzen-stat-value" id="fz-mood">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Kategorie</span>
+                    <span class="flowzen-stat-value" id="fz-category">—</span>
+                </div>
+            </div>
+            <button class="flowzen-recommend-btn" id="fz-recommend-btn">
+                Was soll ich machen?
+            </button>
+            <div class="flowzen-recommendations" id="fz-recommendations">
+                <div class="flowzen-empty">Noch keine Empfehlungen</div>
             </div>
         </div>
 
@@ -1803,6 +1840,28 @@
                         window.multiverseApp.spaces.flowzen.roseState = message.state || 'idle';
                         console.log('[Flowzen] Rose state:', message.state);
                     }
+                    updateFlowzenPanel({ state: message.state });
+                    break;
+
+                case 'flowzen_status_result':
+                    updateFlowzenPanel(message);
+                    break;
+
+                case 'flowzen_recommend_result':
+                    if (message.recommendation) {
+                        addFlowzenRecommendation({
+                            category: message.recommendation.category,
+                            reasoning: message.recommendation.reasoning,
+                            idea_title: message.recommendation.idea_title,
+                            mood: message.recommendation.mood,
+                            time: new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}),
+                        });
+                        updateFlowzenPanel({
+                            mood: message.recommendation.mood,
+                            category: message.recommendation.category,
+                            current_time_window: message.recommendation.time_window,
+                        });
+                    }
                     break;
 
                 // Rowboat update auto-applied
@@ -3286,6 +3345,13 @@
             };
         }
 
+        const tabFlowzen = document.getElementById('tab-flowzen');
+        if (tabFlowzen) {
+            tabFlowzen.onclick = () => {
+                switchSpace('flowzen');
+            };
+        }
+
         async function switchSpace(spaceId) {
             if (spaceId === currentSpace) return;
             
@@ -3361,6 +3427,17 @@
             } else if (spaceId === 'ideas') {
                 if (projectInfo) projectInfo.classList.add('hidden');
             }
+
+            // Show/hide Flowzen panel
+            const fzPanel = document.getElementById('flowzen-panel');
+            if (fzPanel) {
+                if (spaceId === 'flowzen') {
+                    fzPanel.classList.remove('hidden');
+                    requestFlowzenStatus();
+                } else {
+                    fzPanel.classList.add('hidden');
+                }
+            }
         }
         
         function updateAgentDisplay(agentName) {
@@ -3374,6 +3451,102 @@
                 indicator.className = 'agent-indicator ' + agentName.toLowerCase();
             }
         }
+
+        // ============================================
+        // FLOWZEN (BLAUE ROSE) PANEL
+        // ============================================
+
+        const fzRecommendations = [];
+
+        function requestFlowzenStatus() {
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_status' });
+            }
+        }
+
+        function requestFlowzenRecommend() {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) {
+                btn.classList.add('loading');
+                btn.textContent = 'Denke nach...';
+            }
+            if (window.vibemind && window.vibemind.sendToPython) {
+                window.vibemind.sendToPython({ type: 'flowzen_recommend' });
+            }
+        }
+
+        function updateFlowzenPanel(data) {
+            const timeEl = document.getElementById('fz-time-window');
+            const moodEl = document.getElementById('fz-mood');
+            const catEl = document.getElementById('fz-category');
+            const stateEl = document.getElementById('flowzen-state-badge');
+
+            if (timeEl && data.current_time_window) {
+                const windowNames = {
+                    early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
+                    afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+                };
+                timeEl.textContent = windowNames[data.current_time_window] || data.current_time_window;
+            }
+            if (moodEl && data.mood) moodEl.textContent = data.mood;
+            if (catEl && data.category) catEl.textContent = data.category;
+            if (stateEl && data.state !== undefined) {
+                const state = data.state || 'idle';
+                stateEl.textContent = state;
+                stateEl.className = 'flowzen-state ' + state;
+            }
+        }
+
+        function _buildRecCard(r) {
+            const card = document.createElement('div');
+            card.className = 'flowzen-rec-card';
+
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'rec-time';
+            timeDiv.textContent = r.time || new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+            card.appendChild(timeDiv);
+
+            const catDiv = document.createElement('div');
+            catDiv.className = 'rec-category';
+            catDiv.textContent = r.category || '\u2014';
+            card.appendChild(catDiv);
+
+            const reasonDiv = document.createElement('div');
+            reasonDiv.className = 'rec-reasoning';
+            reasonDiv.textContent = r.reasoning || '';
+            card.appendChild(reasonDiv);
+
+            if (r.idea_title) {
+                const suggDiv = document.createElement('div');
+                suggDiv.className = 'rec-suggestion';
+                suggDiv.textContent = '\u2192 ' + r.idea_title;
+                card.appendChild(suggDiv);
+            }
+            return card;
+        }
+
+        function addFlowzenRecommendation(rec) {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) {
+                btn.classList.remove('loading');
+                btn.textContent = 'Was soll ich machen?';
+            }
+
+            fzRecommendations.unshift(rec);
+            if (fzRecommendations.length > 10) fzRecommendations.pop();
+
+            const container = document.getElementById('fz-recommendations');
+            if (!container) return;
+
+            while (container.firstChild) { container.removeChild(container.firstChild); }
+            fzRecommendations.forEach(function(r) { container.appendChild(_buildRecCard(r)); });
+        }
+
+        // Wire up Flowzen recommend button
+        (function() {
+            const btn = document.getElementById('fz-recommend-btn');
+            if (btn) { btn.addEventListener('click', requestFlowzenRecommend); }
+        })();
 
         // ========================================
         // SUMMARIES PANEL
