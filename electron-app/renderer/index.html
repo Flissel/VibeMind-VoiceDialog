@@ -276,30 +276,30 @@
                 <div class="fz-journal-wrap">
                     <div class="fz-journal-header">
                         <span class="fz-journal-icon">🌹</span>
-                        <h2 class="fz-journal-title">Blaue Rose — Tagebuch</h2>
+                        <h2 class="fz-journal-title">Blue Rose — Journal</h2>
                         <span class="flowzen-state" id="flowzen-state-badge">idle</span>
                     </div>
                     <div class="fz-journal-stats">
                         <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Tageszeit</span>
+                            <span class="flowzen-stat-label">Time</span>
                             <span class="flowzen-stat-value" id="fz-time-window">—</span>
                         </div>
                         <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Stimmung</span>
+                            <span class="flowzen-stat-label">Mood</span>
                             <span class="flowzen-stat-value" id="fz-mood">—</span>
                         </div>
                         <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Kategorie</span>
+                            <span class="flowzen-stat-label">Category</span>
                             <span class="flowzen-stat-value" id="fz-category">—</span>
                         </div>
                     </div>
                     <button class="flowzen-recommend-btn" id="fz-recommend-btn">
-                        Was soll ich machen?
+                        What should I do next?
                     </button>
                     <div class="flowzen-diary-journal" id="fz-diary-journal">
                         <div class="flowzen-diary-empty" id="fz-diary-empty">
                             <span class="diary-empty-icon">📖</span>
-                            <span>Noch keine Eintraege...</span>
+                            <span>No entries yet...</span>
                         </div>
                     </div>
                 </div>
@@ -739,7 +739,7 @@
 
         function requestFlowzenRecommend() {
             var btn = document.getElementById('fz-recommend-btn');
-            if (btn) { btn.classList.add('loading'); btn.textContent = 'Denke nach...'; }
+            if (btn) { btn.classList.add('loading'); btn.textContent = 'Thinking...'; }
             if (window.vibemind && window.vibemind.sendToPython) {
                 window.vibemind.sendToPython({ type: 'flowzen_recommend' });
             }
@@ -747,8 +747,8 @@
 
         function updateFlowzenPanel(data) {
             var windowNames = {
-                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
-                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
+                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
             };
             var el;
             if (data.current_time_window) {
@@ -796,8 +796,8 @@
             var card = document.createElement('div');
             card.className = 'diary-entry';
             var windowNames = {
-                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
-                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
+                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
             };
             var moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
             var timeStr = '';
@@ -811,7 +811,7 @@
 
             var meta = document.createElement('div');
             meta.className = 'diary-entry-meta';
-            meta.textContent = (moodEmojis[entry.mood] || '') + ' ' + (entry.mood || '') + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivit\u00E4ten';
+            meta.textContent = (moodEmojis[entry.mood] || '') + ' ' + (entry.mood || '') + ' \u00B7 energy ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' activities';
             card.appendChild(meta);
 
             var text = document.createElement('div');
@@ -822,7 +822,7 @@
             if (entry.source === 'manual') {
                 var badge = document.createElement('div');
                 badge.className = 'diary-entry-source';
-                badge.textContent = '\uD83C\uDF39 Auf Anfrage';
+                badge.textContent = '\uD83C\uDF39 On request';
                 card.appendChild(badge);
             }
             return card;
@@ -855,7 +855,7 @@
                 addSingleDiaryEntry(msg.diary_entry);
             }
             var btn = document.getElementById('fz-recommend-btn');
-            if (btn) { btn.classList.remove('loading'); btn.textContent = 'Was soll ich machen?'; }
+            if (btn) { btn.classList.remove('loading'); btn.textContent = 'What should I do next?'; }
         };
 
         window._messageHandlers['flowzen_diary_entries_result'] = function(msg) {

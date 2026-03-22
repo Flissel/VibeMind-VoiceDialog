@@ -1281,7 +1281,7 @@ class ElectronBackend:
             try:
                 from spaces.flowzen.tools.flowzen_tools import get_flowzen_status
                 result = get_flowzen_status()
-                self._send_to_electron({
+                self.send_message({
                     "type": "flowzen_status_result",
                     **result.get("status", {}),
                 })
@@ -1296,13 +1296,13 @@ class ElectronBackend:
                 from data.flowzen_repository import FlowzenRepository
                 repo = FlowzenRepository()
                 entries = repo.get_recent_diary_entries(limit=10)
-                self._send_to_electron({
+                self.send_message({
                     "type": "flowzen_diary_entries_result",
                     "entries": [e.to_dict() for e in entries],
                 })
             except Exception as e:
                 logger.debug(f"flowzen_diary_entries failed: {e}")
-                self._send_to_electron({
+                self.send_message({
                     "type": "flowzen_diary_entries_result",
                     "entries": [],
                 })
