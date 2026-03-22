@@ -522,6 +522,7 @@ class VoiceManager:
             # Wire Rose <-> Brain callbacks
             bridge.set_rose_callback(tracker.on_brain_response)
             tracker.set_brain_callback(lambda summary: asyncio.ensure_future(bridge.process_summary(summary)))
+            tracker.set_brain_bridge(bridge)
 
             # Set Electron IPC sender if available
             if hasattr(self, 'backend') and hasattr(self.backend, '_send_to_electron'):
@@ -545,7 +546,7 @@ class VoiceManager:
         while True:
             await _asyncio.sleep(interval)
             try:
-                tracker.send_periodic_summary()
+                await tracker.send_periodic_summary_async()
             except Exception as e:
                 debug_log(f"Flowzen: periodic summary error: {e}")
 

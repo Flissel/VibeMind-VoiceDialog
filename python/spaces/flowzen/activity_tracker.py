@@ -97,6 +97,77 @@ REASONING_USER_TEMPLATE = """Situation:
 Generiere eine neurowissenschaftliche Empfehlung (2-3 Saetze, deutsch)."""
 
 
+# --- Diary Entry Generator ---
+
+DIARY_SYSTEM_PROMPT = """Du bist die Blaue Rose — das stille, warme Tagebuch im VibeMind System.
+Deine Aufgabe: Schreibe einen kurzen, persoenlichen Tagebucheintrag (max 150 Woerter)
+im Stil eines handgeschriebenen Taschenbuches.
+
+Regeln:
+- Sprich den User warm und direkt an (du-Form)
+- Beschreibe was er/sie in den letzten 30 Minuten getan hat
+- Deute vorsichtig die Stimmung/Energie an (nie klinisch, immer menschlich)
+- Erwaehne die Empfehlung die gegeben wurde (falls vorhanden)
+- Beende mit einem ermutigenden oder nachdenklichen Satz
+- Schreibe auf Deutsch
+- Kein Markdown, keine Aufzaehlungen — fliessender Text wie handgeschrieben
+- Jeder Eintrag soll einzigartig sein, keine Wiederholungen
+- Wenn keine Aktivitaet war, schreibe trotzdem etwas Warmes ueber die Stille"""
+
+DIARY_USER_TEMPLATE = """Zeitpunkt: {time_window} ({hour}:00 Uhr)
+Stimmung: {mood} (Energie: {energy}/10)
+Aktivitaet letzte 30 Min: {activity_summary}
+Anzahl Intents: {intent_count}
+Empfohlene Kategorie: {category} ({category_description})
+Brain-Entscheidung: {brain_action} — {brain_reasoning}
+
+Schreibe einen warmen Tagebucheintrag (max 150 Woerter, deutsch, fliessender Text)."""
+
+
+async def generate_diary_entry(
+    mood: str, energy: int, time_window: str, hour: int,
+    category: str, intent_count: int, activity_summary: str,
+    brain_action: str = "", brain_reasoning: str = "",
+) -> str:
+    """Generate a warm diary entry via LLM."""
+    try:
+        from llm_config import get_model, get_async_client
+
+        client = get_async_client("flowzen_reasoning")
+        model = get_model("flowzen_reasoning")
+
+        user_msg = DIARY_USER_TEMPLATE.format(
+            mood=mood, energy=energy,
+            time_window=time_window, hour=hour,
+            activity_summary=activity_summary or "keine Aktivitaet",
+            intent_count=intent_count,
+            category=category,
+            category_description=CATEGORY_DESCRIPTIONS.get(category, category),
+            brain_action=brain_action or "do_nothing",
+            brain_reasoning=brain_reasoning or "Alles ruhig",
+        )
+
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": DIARY_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            max_completion_tokens=300,
+            temperature=0.8,
+        )
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        logger.warning(f"Flowzen: diary generation failed: {e}")
+        # Warm fallback text
+        desc = CATEGORY_DESCRIPTIONS.get(category, "")
+        if intent_count > 0:
+            return f"Die letzten dreissig Minuten waren bewegt — {intent_count} Aktionen, {desc.lower()} stand im Fokus. Die Rose beobachtet still."
+        else:
+            return "Eine ruhige halbe Stunde. Manchmal braucht es genau das — Stille, in der Gedanken reifen koennen."
+
+
 async def generate_reasoning(
     mood: str, time_window: str, hour: int, category: str,
     activity_summary: str = "",
@@ -176,6 +247,7 @@ class ActivityTracker:
         self._intent_buffer: list = []
         self._brain_callback: Optional[Callable] = None
         self._electron_sender: Optional[Callable[[dict], None]] = None
+        self._brain_bridge = None
         self._lock = threading.Lock()
 
     def set_brain_callback(self, callback: Callable):
@@ -185,6 +257,10 @@ class ActivityTracker:
     def set_electron_sender(self, sender: Callable[[dict], None]):
         """Set Electron IPC sender for 3D rose state updates."""
         self._electron_sender = sender
+
+    def set_brain_bridge(self, bridge):
+        """Set direct reference to BrainBridge for async diary generation."""
+        self._brain_bridge = bridge
 
     def on_intent(self, event_type: str, payload: Dict[str, Any] = None):
         """
@@ -258,6 +334,91 @@ class ActivityTracker:
                 )
             except Exception as e:
                 logger.warning(f"Flowzen: Brain callback failed: {e}")
+
+    async def send_periodic_summary_async(self):
+        """
+        Async version of send_periodic_summary.
+        Builds summary, gets Brain decision, generates diary entry, persists.
+        """
+        import json as json_module
+        now = datetime.now()
+
+        if self._last_summary_sent:
+            elapsed = now - self._last_summary_sent
+            if elapsed < self._interval:
+                return
+
+        summary = self._build_summary()
+
+        # Determine mood from recent checkins
+        try:
+            from data.flowzen_repository import FlowzenRepository
+            repo = FlowzenRepository()
+            recent = repo.get_recent_checkins(limit=1)
+            mood = recent[0].mood if recent else "calm"
+            energy = recent[0].energy if recent else 5
+        except Exception:
+            mood = "calm"
+            energy = 5
+
+        time_window = summary["time_window"]
+        hour = summary["hour"]
+        category = get_circadian_category(mood, time_window)
+
+        activity_str = ", ".join(
+            f"{et}:{count}" for et, count in summary["event_types"].items()
+        ) or "keine Aktivitaet"
+
+        # 1. Generate LLM reasoning (existing)
+        reasoning = await generate_reasoning(
+            mood=mood, time_window=time_window, hour=hour,
+            category=category, activity_summary=activity_str,
+        )
+        summary["llm_reasoning"] = reasoning
+
+        # 2. Get Brain decision
+        decision = {"action": "do_nothing", "reasoning": ""}
+        if self._brain_bridge:
+            try:
+                decision = await self._brain_bridge.process_summary(summary)
+            except Exception as e:
+                logger.debug(f"Flowzen: brain decision failed: {e}")
+
+        # 3. Generate warm diary entry
+        try:
+            diary_text = await generate_diary_entry(
+                mood=mood, energy=energy, time_window=time_window, hour=hour,
+                category=category, intent_count=summary["intent_count"],
+                activity_summary=activity_str,
+                brain_action=decision.get("action", ""),
+                brain_reasoning=decision.get("reasoning", ""),
+            )
+
+            from data.flowzen_repository import FlowzenRepository
+            repo = FlowzenRepository()
+            entry = repo.create_diary_entry(
+                entry_text=diary_text, mood=mood, energy=energy,
+                time_window=time_window, hour=hour,
+                intent_count=summary["intent_count"], category=category,
+                brain_action=decision.get("action", ""),
+                brain_reasoning=decision.get("reasoning", ""),
+                raw_data=json_module.dumps(summary, ensure_ascii=False),
+                source="periodic",
+            )
+
+            # Broadcast new diary entry to Electron
+            self._broadcast_rose_state("diary_new", diary_entry=entry.to_dict())
+            logger.info(f"Flowzen: diary entry created ({mood}/{time_window}, {summary['intent_count']} intents)")
+        except Exception as e:
+            logger.warning(f"Flowzen: diary entry creation failed: {e}")
+
+        # 4. Handle Brain response (rose state animation)
+        if decision.get("action") != "do_nothing":
+            self.on_brain_response(decision)
+
+        with self._lock:
+            self._last_summary_sent = now
+            self._intent_buffer.clear()
 
     def _build_summary(self) -> Dict[str, Any]:
         """Build situation summary from buffered observations."""
