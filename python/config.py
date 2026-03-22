@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,7 +136,7 @@ class ConfigManager:
         )
 
         # OpenAI Realtime settings
-        openai_realtime_model = os.getenv('OPENAI_REALTIME_MODEL', 'gpt-4o-realtime-preview')
+        openai_realtime_model = get_model("voice")
         openai_realtime_voice = os.getenv('OPENAI_REALTIME_VOICE', 'alloy')
 
         return VoiceConfig(
