@@ -467,16 +467,15 @@
 
 .flowzen-panel {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(600px, 90vw);
-    max-height: 80vh;
+    top: 60px;
+    right: 16px;
+    width: 340px;
+    max-height: calc(100vh - 80px);
     background: rgba(10, 8, 22, 0.95);
     border: 1px solid rgba(51, 102, 204, 0.25);
-    border-radius: 18px;
-    box-shadow: 0 0 80px rgba(30, 60, 140, 0.15), 0 20px 60px rgba(0, 0, 20, 0.7);
-    backdrop-filter: blur(20px);
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0, 0, 20, 0.6);
+    backdrop-filter: blur(16px);
     z-index: 800;
     display: flex;
     flex-direction: column;
@@ -490,13 +489,11 @@
 .flowzen-panel.visible {
     display: flex;
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.95);
-    transition: opacity 0.4s ease, transform 0.4s ease;
+    transition: opacity 0.3s ease;
 }
 
 .flowzen-panel.fade-in {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
 }
 
 .flowzen-header {

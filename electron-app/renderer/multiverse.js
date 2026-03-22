@@ -2320,12 +2320,6 @@ class MultiverseApp {
             return;
         }
 
-        // Flowzen uses immersive zoom-into-rose instead of standard navigation
-        if (targetSpace === 'flowzen') {
-            this._enterFlowzenRose();
-            return;
-        }
-
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
 
@@ -2514,11 +2508,15 @@ class MultiverseApp {
                 }
             }
 
-            // Show/hide Flowzen panel
+            // Show/hide Flowzen panel + load diary on enter
             const fzPanel = document.getElementById('flowzen-panel');
             if (fzPanel) {
                 if (targetSpace === 'flowzen') {
                     fzPanel.classList.remove('hidden');
+                    if (window.vibemind && window.vibemind.sendToPython) {
+                        window.vibemind.sendToPython({ type: 'flowzen_status' });
+                        window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
+                    }
                 } else {
                     fzPanel.classList.add('hidden');
                 }
@@ -3235,14 +3233,14 @@ class MultiverseApp {
             }
         }
 
-        // Check Flowzen (Blaue Rose) click — zoom INTO the glass dome
+        // Check Flowzen (Blaue Rose) click — navigate into Flowzen space
         if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
             const roseObjects = this.spaces.flowzen.group.children.flatMap(
                 c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
             );
             const roseHit = raycaster.intersectObjects(roseObjects);
             if (roseHit.length > 0) {
-                this._enterFlowzenRose();
+                this.navigateToSpace('flowzen');
                 return;
             }
         }
