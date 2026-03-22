@@ -29,17 +29,6 @@
     <script defer src="space-navigator.js"></script>
     <!-- Extracted modules (Tier 4 — heavy coupling) -->
     <script defer src="bubble-navigation.js"></script>
-    <!-- Utilities -->
-    <script defer src="transcript-utils.js"></script>
-    <script defer src="voice-controller.js"></script>
-    <!-- Message Handlers (registry pattern) -->
-    <script defer src="handlers/project-handlers.js"></script>
-    <script defer src="handlers/bubble-handlers.js"></script>
-    <script defer src="handlers/voice-handlers.js"></script>
-    <script defer src="handlers/canvas-handlers.js"></script>
-    <script defer src="handlers/navigation-handlers.js"></script>
-    <script defer src="handlers/shuttle-handlers.js"></script>
-    <script defer src="handlers/dashboard-handlers.js"></script>
 </head>
 <body>
     <!-- Custom Titlebar -->
@@ -78,10 +67,6 @@
                 <span class="space-icon">&#x1F6A3;</span>
                 <span class="space-name">Rowboat</span>
             </button>
-            <button class="space-tab" id="tab-mirofish" data-space="mirofish">
-                <span class="space-icon">&#x1F41F;</span>
-                <span class="space-name">MiroFish</span>
-            </button>
             <button class="space-tab" id="tab-clawport" data-space="clawport">
                 <span class="space-icon">&#x1F4CA;</span>
                 <span class="space-name">Dashboard</span>
@@ -101,6 +86,10 @@
             <button class="space-tab" id="tab-flowzen" data-space="flowzen">
                 <span class="space-icon">&#x1F339;</span>
                 <span class="space-name">Blaue Rose</span>
+            </button>
+            <button class="space-tab" id="tab-mirofish" data-space="mirofish">
+                <span class="space-icon">&#x1F41F;</span>
+                <span class="space-name">MiroFish</span>
             </button>
         </div>
         <div class="agent-status" id="agent-status">
@@ -269,39 +258,34 @@
             </div>
         </div>
 
-        <!-- Flowzen (Blaue Rose) Fullscreen Diary Canvas -->
-        <div id="flowzen-panel" class="flowzen-canvas hidden">
-            <div class="fz-canvas-inner">
-                <!-- Left: Rose 3D stays visible behind. Right: Journal -->
-                <div class="fz-journal-wrap">
-                    <div class="fz-journal-header">
-                        <span class="fz-journal-icon">🌹</span>
-                        <h2 class="fz-journal-title">Blue Rose — Journal</h2>
-                        <span class="flowzen-state" id="flowzen-state-badge">idle</span>
-                    </div>
-                    <div class="fz-journal-stats">
-                        <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Time</span>
-                            <span class="flowzen-stat-value" id="fz-time-window">—</span>
-                        </div>
-                        <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Mood</span>
-                            <span class="flowzen-stat-value" id="fz-mood">—</span>
-                        </div>
-                        <div class="flowzen-stat">
-                            <span class="flowzen-stat-label">Category</span>
-                            <span class="flowzen-stat-value" id="fz-category">—</span>
-                        </div>
-                    </div>
-                    <button class="flowzen-recommend-btn" id="fz-recommend-btn">
-                        What should I do next?
-                    </button>
-                    <div class="flowzen-diary-journal" id="fz-diary-journal">
-                        <div class="flowzen-diary-empty" id="fz-diary-empty">
-                            <span class="diary-empty-icon">📖</span>
-                            <span>No entries yet...</span>
-                        </div>
-                    </div>
+        <!-- Flowzen (Blaue Rose) Diary Journal Panel -->
+        <div id="flowzen-panel" class="flowzen-panel hidden">
+            <div class="flowzen-header">
+                <span class="flowzen-icon">🌹</span>
+                <span class="flowzen-title">Blue Rose — Journal</span>
+                <span class="flowzen-state" id="flowzen-state-badge">idle</span>
+            </div>
+            <div class="flowzen-status" id="flowzen-status">
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Time</span>
+                    <span class="flowzen-stat-value" id="fz-time-window">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Mood</span>
+                    <span class="flowzen-stat-value" id="fz-mood">—</span>
+                </div>
+                <div class="flowzen-stat">
+                    <span class="flowzen-stat-label">Category</span>
+                    <span class="flowzen-stat-value" id="fz-category">—</span>
+                </div>
+            </div>
+            <button class="flowzen-recommend-btn" id="fz-recommend-btn">
+                What should I do next?
+            </button>
+            <div class="flowzen-diary-journal" id="fz-diary-journal">
+                <div class="flowzen-diary-empty" id="fz-diary-empty">
+                    <span class="diary-empty-icon">📖</span>
+                    <span>No entries yet...</span>
                 </div>
             </div>
         </div>
@@ -689,182 +673,1127 @@
         // ========================================
         // MULTIVERSE INITIALIZATION
         // ========================================
+
         // MultiverseApp instance is created by glass_bubbles.js DOMContentLoaded
+        // (which also attaches RoarbootChat and updateRoarbootStatus)
 
         // Window controls
         document.getElementById('minimize-btn').onclick = () => window.vibemind.minimize();
         document.getElementById('maximize-btn').onclick = () => window.vibemind.maximize();
         document.getElementById('close-btn').onclick = () => window.vibemind.close();
 
-        // Voice controls — now in voice-controller.js
-        // Bubble Navigation — now in bubble-navigation.js
-        // Transcript — now in transcript-utils.js
+        // Voice controls
+        let voiceActive = false;
+        const voiceBtn = document.getElementById('voice-btn');
+        const voiceIndicator = document.getElementById('voice-indicator');
+        const voiceStatus = document.getElementById('voice-status');
 
-
-        // ========================================
-        // MESSAGE HANDLER DISPATCHER (Registry Pattern)
-        // ========================================
-        // Handlers registered by: handlers/*.js modules
-        window._messageHandlers = window._messageHandlers || {};
-
-        window.vibemind.onPythonMessage(function(message) {
-            console.log('[Python]', message);
-            var handler = window._messageHandlers[message.type];
-            if (handler) {
-                handler(message);
+        let voiceConnecting = false;  // Debounce flag
+        let voiceConnectTimer = null;  // Safety timeout
+        voiceBtn.onclick = () => {
+            if (voiceConnecting) return;  // Ignore clicks during connection
+            if (voiceActive) {
+                window.vibemind.stopVoice();
+                voiceActive = false;
+                voiceIndicator.className = 'inactive';
+                voiceStatus.textContent = 'Voice: Inactive';
+                voiceBtn.textContent = 'Start Voice';
             } else {
-                console.warn('[Python] Unhandled message type:', message.type);
+                voiceConnecting = true;
+                window.vibemind.startVoice();
+                voiceIndicator.className = 'connecting';
+                voiceStatus.textContent = 'Verbinde... (bis zu 30s beim ersten Mal)';
+                voiceBtn.textContent = 'Verbinde...';
+                voiceBtn.style.opacity = '0.6';
+                // Safety net: reset voiceConnecting after 35s if no response
+                if (voiceConnectTimer) clearTimeout(voiceConnectTimer);
+                voiceConnectTimer = setTimeout(() => {
+                    if (voiceConnecting) {
+                        console.warn('[Voice] Connection timeout — resetting button');
+                        voiceConnecting = false;
+                        voiceBtn.textContent = 'Start Voice';
+                        voiceBtn.style.opacity = '1';
+                        voiceIndicator.className = 'inactive';
+                        voiceStatus.textContent = 'Voice: Timeout';
+                    }
+                }, 35000);
+            }
+        };
+
+        // Bubble Navigation — now in bubble-navigation.js
+        // (enterSpace, exitSpace, enter/back buttons, spaceCanvas state)
+        // State is shared via window.spaceCanvas, window.isEnteringBubble, window.pendingBubbleContent
+
+
+        // Listen for Python messages
+        window.vibemind.onPythonMessage((message) => {
+            console.log('[Python]', message);
+
+            switch (message.type) {
+                case 'bubbles_sync':
+                    // Update bubbles from Python
+                    if (window.multiverseApp && message.bubbles) {
+                        window.multiverseApp.syncBubbles(message.bubbles);
+                        // Request shuttles AFTER bubbles are synced
+                        // This ensures bubble meshes exist for shuttle position lookup
+                        console.log('[UI] Bubbles synced, now requesting shuttles...');
+                        setTimeout(() => {
+                            window.vibemind.requestShuttles();
+                        }, 100); // Small delay to ensure bubbles are fully rendered
+                    }
+                    break;
+
+                // NEW: Project sync messages
+                case 'projects_sync':
+                    // Update projects from Python
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'generated_projects_list':
+                    // Response to get_generated_projects request
+                    if (window.multiverseApp && message.projects) {
+                        console.log('[UI] Got generated projects:', message.projects.length);
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'project_created':
+                    // New project created from shuttle or voice
+                    console.log('[UI] Project created:', message.project);
+                    if (message.success && message.project) {
+                        // Show success notification
+                        const projectName = message.project.name || 'New Project';
+                        const score = message.project.score ? ` (score: ${(message.project.score * 100).toFixed(0)}%)` : '';
+                        showTranscript('System', `✅ Project created: ${projectName}${score}`);
+
+                        // Request projects refresh
+                        if (window.vibemind?.sendToPython) {
+                            window.vibemind.sendToPython({ type: 'get_generated_projects' });
+                        }
+                    } else if (!message.success) {
+                        showTranscript('System', `❌ Failed to create project: ${message.error || 'Unknown error'}`);
+                    }
+                    break;
+
+                case 'project_updated':
+                    // Project was updated
+                    console.log('[UI] Project updated:', message.project_id);
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'project_deleted':
+                    // Project was deleted
+                    console.log('[UI] Project deleted:', message.project_id);
+                    if (window.multiverseApp && message.projects) {
+                        window.multiverseApp.syncProjects(message.projects);
+                    }
+                    break;
+
+                case 'enter_project':
+                    // Voice command to enter project details
+                    console.log('[UI] Enter project:', message.project_id);
+                    // Could open a project canvas or detail view
+                    break;
+
+                case 'project_issue_detected':
+                    // Live issue detected during code generation
+                    if (message.issue) {
+                        const severity = message.issue.severity || 'medium';
+                        const issueIcon = severity === 'critical' ? '🔴' :
+                                          severity === 'high' ? '🟠' : '🟡';
+                        const issueTitle = message.issue.title || 'Issue detected';
+                        const issueCategory = message.issue.category ? ` [${message.issue.category}]` : '';
+                        showTranscript('Quality', `${issueIcon} ${issueTitle}${issueCategory}`);
+                        console.log('[UI] Issue detected:', severity, issueTitle);
+                    }
+                    break;
+
+                case 'project_quality_update':
+                    // Quality summary updated during/after generation
+                    if (message.summary) {
+                        const total = message.summary.total_issues || 0;
+                        const bySev = message.summary.by_severity || {};
+                        const critical = bySev.critical || 0;
+                        const high = bySev.high || 0;
+                        const medium = bySev.medium || 0;
+                        const low = bySev.low || 0;
+                        const autoFixed = message.summary.auto_fixed || 0;
+                        const qualityMsg = `📊 Quality: ${total} issues (${critical} critical, ${high} high, ${medium} medium, ${low} low) — ${autoFixed} auto-fixed`;
+                        showTranscript('Quality', qualityMsg);
+                        console.log('[UI] Quality update:', message.summary);
+                    }
+                    break;
+
+                // ============================================
+                // PROJECT LIVE PREVIEW MESSAGES (NEW)
+                // ============================================
+                
+                case 'project-preview_starting':
+                    // Show loading state
+                    console.log('[UI] Project preview starting:', message.project_id);
+                    window.vncPreview.showVncLoading(true, message.project_title || 'Project');
+                    window.vncPreview.updateVncLoadingDetails('Starting sandbox container...');
+                    break;
+                    
+                case 'project-preview-ready':
+                    // VNC stream is ready - load in iframe
+                    console.log('[UI] Project preview ready:', message.vnc_url);
+                    window.vncPreview.showVncPreview(message.vnc_url, message.project_title, message.project_id);
+                    showTranscript('System', `Live Preview ready for ${message.project_title || 'project'}`);
+                    break;
+                    
+                case 'project-preview-error':
+                    // Preview failed
+                    console.error('[UI] Project preview error:', message.error);
+                    window.vncPreview.hideVncPreview();
+                    showTranscript('System', `Preview failed: ${message.error}`);
+                    break;
+                    
+                case 'project-preview-stopped':
+                    // Preview was stopped
+                    console.log('[UI] Project preview stopped:', message.project_id);
+                    window.vncPreview.hideVncPreview();
+                    break;
+                    
+                case 'sandbox_cycle_complete':
+                    // Continuous sandbox test cycle completed
+                    console.log('[UI] Sandbox cycle:', message.cycle_number, 'Success:', message.success);
+                    if (message.success) {
+                        window.vncPreview.updateVncStatus('Running ✓');
+                    } else {
+                        window.vncPreview.updateVncStatus('Error ✗');
+                    }
+                    break;
+
+                case 'bubble_created':
+                    // New bubble created via voice - add to 3D view
+                    if (window.multiverseApp && message.bubble) {
+                        const b = message.bubble;
+                        // Generate random position for new bubble
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = 2 + Math.random() * 2;
+                        const bubbleData = {
+                            id: b.id,           // Use DB UUID as main ID
+                            db_id: b.id,        // Also store as db_id for compatibility
+                            title: b.title,
+                            color: { r: 0.3 + Math.random() * 0.4, g: 0.5 + Math.random() * 0.3, b: 0.8 + Math.random() * 0.2 },
+                            position: {
+                                x: Math.cos(angle) * radius,
+                                y: -0.5 + Math.random() * 1,
+                                z: Math.sin(angle) * radius
+                            },
+                            radius: 0.6 + Math.random() * 0.3
+                        };
+                        window.multiverseApp.addBubble(bubbleData);
+                        console.log('[UI] Added new bubble:', b.title, 'id:', b.id);
+                    }
+                    break;
+
+                case 'bubble_updated':
+                    // Bubble renamed/updated via voice
+                    if (window.multiverseApp && message.bubble) {
+                        const b = message.bubble;
+                        window.multiverseApp.updateBubble(b.id, { title: b.title });
+                        console.log('[UI] Updated bubble:', b.old_title, '->', b.title);
+                        showTranscript('System', `Space umbenannt: "${b.old_title}" -> "${b.title}"`);
+
+                        // Update space title if we're currently in this space
+                        const spaceTitle = document.getElementById('space-title');
+                        if (spaceTitle && spaceTitle.textContent === b.old_title) {
+                            spaceTitle.textContent = b.title;
+                        }
+                    }
+                    break;
+
+                case 'bubbles_listed':
+                    // Update bubbles with index numbers for voice reference
+                    if (window.multiverseApp && message.bubbles) {
+                        console.log('[UI] Bubbles listed with indices:', message.bubbles.length);
+                        // Update each bubble's numbered_title based on the index
+                        message.bubbles.forEach(b => {
+                            window.multiverseApp.updateBubble(b.id, {
+                                numbered_title: `${b.index}. ${b.title}`,
+                                voice_index: b.index
+                            });
+                        });
+                        // Show notification with quick reference
+                        const indexList = message.bubbles.slice(0, 5).map(b => `${b.index}. ${b.title}`).join(', ');
+                        showTranscript('System', `Spaces: ${indexList}${message.total > 5 ? '...' : ''} - Sag "geh in [Nummer]" zum Navigieren.`);
+                    }
+                    break;
+
+                case 'ideas_listed':
+                    // Update canvas with index numbers for voice reference
+                    if (message.ideas && message.bubble_id) {
+                        console.log('[UI] Ideas listed with indices:', message.ideas.length, 'in bubble', message.bubble_id);
+                        // Store the index mapping for the current space view
+                        window.currentIdeaIndices = message.ideas;
+                        // If universe canvas is active, update node labels
+                        if (window.universeCanvas && window.universeCanvas.updateNodeIndices) {
+                            window.universeCanvas.updateNodeIndices(message.ideas);
+                        }
+                        // Show notification
+                        const indexList = message.ideas.slice(0, 5).map(i => `${i.index}. ${i.title}`).join(', ');
+                        showTranscript('System', `Ideen: ${indexList}${message.total > 5 ? '...' : ''} - Nutze Nummern: "verbinde 1 und 2"`);
+                    }
+                    break;
+
+                case 'user_transcript':
+                    showTranscript('You', message.text);
+                    break;
+
+                case 'agent_response':
+                    showTranscript('Agent', message.text);
+                    break;
+
+                case 'navigate_to_bubble':
+                    // Voice command to navigate
+                    if (window.multiverseApp) {
+                        window.multiverseApp.focusBubble(message.bubble_id);
+                    }
+                    break;
+
+                case 'enter_bubble':
+                    // Voice command to enter
+                    window.bubbleNavigation.enterSpace(message.bubble_id);
+                    break;
+
+                case 'exit_bubble':
+                    console.log('[Python] Received exit_bubble message');
+                    window.bubbleNavigation.exitSpace();
+                    break;
+
+                case 'voice_status':
+                    // Connection progress feedback (e.g. "Verbinde mit OpenAI Realtime...")
+                    voiceIndicator.className = 'connecting';
+                    voiceStatus.textContent = message.message || 'Verbinde...';
+                    voiceBtn.textContent = 'Verbinde...';
+                    break;
+
+                case 'voice_started':
+                    voiceActive = true;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
+                    voiceIndicator.className = 'active';
+                    voiceStatus.textContent = 'Voice: Listening...';
+                    voiceBtn.textContent = 'Stop Voice';
+                    voiceBtn.style.opacity = '1';
+                    break;
+
+                case 'voice_stopped':
+                    voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
+                    voiceIndicator.className = 'inactive';
+                    voiceStatus.textContent = 'Voice: Inactive';
+                    voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
+                    break;
+
+                case 'voice_error':
+                    voiceActive = false;
+                    voiceConnecting = false;
+                    if (voiceConnectTimer) { clearTimeout(voiceConnectTimer); voiceConnectTimer = null; }
+                    voiceIndicator.className = 'inactive';
+                    voiceStatus.textContent = 'Voice: Error';
+                    voiceBtn.textContent = 'Start Voice';
+                    voiceBtn.style.opacity = '1';
+                    break;
+
+                // Canvas events
+                case 'entered_bubble':
+                    // Hide bubble tooltip
+                    const ipanel = document.getElementById('info-panel');
+                    if (ipanel) ipanel.classList.add('hidden');
+                    if (window.multiverseApp) {
+                        window.multiverseApp.tooltipPinned = false;
+                        window.multiverseApp.hoveredBubbleIndex = -1;
+                    }
+
+                    // If enterSpace() already started the transition, store content for later
+                    if (window.isEnteringBubble) {
+                        console.log('[Python] entered_bubble - storing content for enterSpace() to load:', message.content?.length, 'nodes');
+                        // Store content - enterSpace() callback will load it when spaceCanvas is ready
+                        if (message.content) {
+                            window.pendingBubbleContent = {
+                                content: message.content,
+                                edges: message.edges || []
+                            };
+                        }
+                        break;
+                    }
+
+                    // First switch views if not already in space view
+                    if (spaceView.classList.contains('hidden')) {
+                        console.log('[Python] entered_bubble - switching to space view');
+                        const bubbleTitle = message.bubble_title || 'Space';
+                        document.getElementById('space-title').textContent = bubbleTitle;
+                        // Show space name in titlebar
+                        const tbSpace = document.getElementById('titlebar-space');
+                        if (tbSpace) tbSpace.textContent = '› ' + bubbleTitle;
+
+                        // Get bubble index for animation (if available)
+                        const bubbleIndex = window.multiverseApp?.getBubbleIndexById(message.bubble_id);
+
+                        if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
+                            // Use animated entry
+                            window.multiverseApp.enterBubbleWithAnimation(bubbleIndex, () => {
+                                canvasContainer.classList.add('hidden');
+                                spaceView.classList.remove('hidden');
+
+                                if (!window.spaceCanvas) {
+                                    window.spaceCanvas = new UniverseCanvas('space-canvas');
+                                }
+                                if (message.content) {
+                                    window.spaceCanvas.loadNodes(message.content, message.edges || []);
+                                }
+
+                                setTimeout(() => {
+                                    const overlay = document.getElementById('transition-overlay');
+                                    if (overlay) overlay.classList.remove('active');
+                                }, 100);
+                            });
+                        } else {
+                            // Fallback: immediate switch
+                            canvasContainer.classList.add('hidden');
+                            spaceView.classList.remove('hidden');
+
+                            if (!window.spaceCanvas) {
+                                window.spaceCanvas = new UniverseCanvas('space-canvas');
+                            }
+                            if (message.content) {
+                                window.spaceCanvas.loadNodes(message.content, message.edges || []);
+                            }
+                        }
+                    } else {
+                        // Already in space view, just load nodes
+                        if (window.spaceCanvas && message.content) {
+                            window.spaceCanvas.loadNodes(message.content, message.edges || []);
+                        }
+                    }
+                    break;
+
+                case 'node_added':
+                    if (window.spaceCanvas) {
+                        window.spaceCanvas.onNodeAdded(message.node);
+                    }
+                    break;
+
+                case 'node_updated':
+                    if (window.spaceCanvas) {
+                        window.spaceCanvas.onNodeUpdated(message.node_id, message.updates);
+                    }
+                    break;
+
+                case 'node_deleted':
+                    if (window.spaceCanvas) {
+                        window.spaceCanvas.onNodeDeleted(message.node_id);
+                    }
+                    break;
+
+                // BUG 3 FIX: Handle edge_added event for visual feedback
+                case 'edge_added':
+                    if (window.spaceCanvas && message.edge) {
+                        window.spaceCanvas.onEdgeAdded(message.edge);
+                        showTranscript('System', `Linked ideas together`);
+                    }
+                    break;
+
+                // Handle exited_bubble from Python backend
+                case 'exited_bubble':
+                    console.log('[Python] Received exited_bubble message');
+                    window.bubbleNavigation.exitSpace(true);  // Pass true to indicate this came from Python
+                    break;
+
+                // ============================================
+                // Tool-initiated messages (from voice commands)
+                // ============================================
+
+                case 'agent_switching':
+                    // Visual feedback when switching agents
+                    console.log('[Agent] Switching to:', message.bubble_title);
+                    showTranscript('System', `Switching to ${message.bubble_title}...`);
+                    break;
+
+                case 'tool_add_node':
+                    // Voice tool added a node to a bubble
+                    console.log('[Tool] Add node to bubble:', message.bubble_name || message.bubble_id);
+                    if (window.spaceCanvas && message.node) {
+                        window.spaceCanvas.onNodeAdded(message.node);
+                    }
+                    break;
+
+                case 'tool_update_node':
+                    // Voice tool updated a node
+                    console.log('[Tool] Update node:', message.node_id);
+                    if (window.spaceCanvas && message.updates) {
+                        window.spaceCanvas.onNodeUpdated(message.node_id, message.updates);
+                    }
+                    break;
+
+                case 'tool_delete_node':
+                    // Voice tool deleted a node
+                    console.log('[Tool] Delete node:', message.node_id);
+                    if (window.spaceCanvas) {
+                        window.spaceCanvas.onNodeDeleted(message.node_id);
+                    }
+                    break;
+
+                case 'node_structured_update':
+                    // Structured content update (table, action_list, etc.)
+                    const structuredContent = message.content || message.structured_content;
+                    console.log('[Tool] Structured content update:', message.node_id, structuredContent);
+                    if (window.spaceCanvas && message.node_id && structuredContent) {
+                        window.spaceCanvas.onNodeStructuredUpdate(message.node_id, structuredContent);
+                    }
+                    break;
+
+                case 'bubble_scored':
+                    // Bubble was scored via voice
+                    console.log('[Tool] Bubble scored:', message.bubble_id, 'Score:', message.score);
+                    showTranscript('System', `Scored ${message.score}/100`);
+                    break;
+
+                case 'bubble_promoted':
+                    // Bubble was promoted to project
+                    console.log('[Tool] Bubble promoted:', message.bubble_id, '->', message.project_name);
+                    showTranscript('System', `Promoted to project: ${message.project_name}`);
+                    break;
+
+                case 'bubble_deleted':
+                    // Bubble was deleted via voice
+                    console.log('[Tool] Bubble deleted:', message.bubble_id, 'title:', message.title);
+                    if (window.multiverseApp) {
+                        // Try to remove by ID first, then by title as fallback
+                        let removed = window.multiverseApp.removeBubble(message.bubble_id);
+                        if (!removed && message.title) {
+                            console.log('[Tool] Trying to remove by title:', message.title);
+                            removed = window.multiverseApp.removeBubble(message.title);
+                        }
+                        if (!removed) {
+                            console.warn('[Tool] Could not find bubble to remove:', message.bubble_id, message.title);
+                        }
+                    }
+                    break;
+
+                case 'canvas_refresh':
+                    // Refresh canvas from database
+                    console.log('[Tool] Canvas refresh requested');
+                    if (window.spaceCanvas) {
+                        window.spaceCanvas.refresh();
+                    }
+                    break;
+
+                case 'idea_summarized':
+                    // Handle idea summarization result
+                    console.log('[Tool] Idea summarized:', message);
+                    if (typeof addSummary === 'function') {
+                        window.summariesPanel.addSummary(
+                            message.idea_title || 'Untitled',
+                            message.summary || '',
+                            message.style || 'concise',
+                            message.node_count || 0
+                        );
+                    }
+                    break;
+
+                case 'white_paper_generated':
+                    // Handle White Paper generation result
+                    console.log('[Tool] White Paper generated:', message);
+                    if (window.whitepaperPanel) {
+                        window.whitepaperPanel.displayWhitePaper(
+                            message.title || 'White Paper',
+                            message.content || '',
+                            message.node_count || 0,
+                            message.max_depth_reached || 0
+                        );
+                    }
+                    showTranscript('System', `White Paper "${message.title}" generated with ${message.node_count} ideas`);
+                    break;
+
+                // ============================================
+                // SPACE NAVIGATION & AGENT SWITCH MESSAGES
+                // ============================================
+                
+                case 'agent_switched':
+                    // Agent was switched via transfer tool
+                    console.log('[Agent] Switched from', message.from_agent, 'to', message.to_agent);
+                    window.spaceNavigator.updateAgentDisplay(message.to_agent);
+                    showTranscript('System', `Agent switched to ${message.to_agent}`);
+                    
+                    // AUTO-NAVIGATE: If target_space is different, MultiverseApp will animate
+                    if (message.auto_navigate && message.target_space) {
+                        console.log('[Agent] Auto-navigating to space:', message.target_space);
+                        // The space_changed message will follow and trigger switchSpace()
+                    }
+                    break;
+                    
+                case 'calibration_target': {
+                    const calOverlay = document.getElementById('calibration-overlay');
+                    if (calOverlay) {
+                        calOverlay.classList.add('active');
+                        while (calOverlay.firstChild) calOverlay.removeChild(calOverlay.firstChild);
+                        const dot = document.createElement('div');
+                        dot.className = 'calibration-dot';
+                        dot.style.left = message.x + 'px';
+                        dot.style.top = message.y + 'px';
+                        calOverlay.appendChild(dot);
+                        const info = document.createElement('div');
+                        info.className = 'calibration-info';
+                        info.textContent = 'Kalibrierung: Punkt ' + (message.index + 1) + '/' + message.total;
+                        calOverlay.appendChild(info);
+                    }
+                    break;
+                }
+                case 'calibration_done': {
+                    const calOverlay2 = document.getElementById('calibration-overlay');
+                    if (calOverlay2) {
+                        calOverlay2.classList.remove('active');
+                        while (calOverlay2.firstChild) calOverlay2.removeChild(calOverlay2.firstChild);
+                    }
+                    break;
+                }
+
+                case 'space_changed':
+                    // Space was changed (from backend, keyboard shortcut, or agent transfer)
+                    console.log('[Space] Changed to:', message.space);
+                    
+                    // Only animate if space is actually different
+                    if (message.space !== window.currentSpace) {
+                        window.currentSpace = message.space;
+                        
+                        // Update UI tabs
+                        document.querySelectorAll('.space-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.dataset.space === message.space);
+                        });
+                        
+                        // Update Space Indicator (bottom center)
+                        const spaceIcon = document.getElementById('current-space-icon');
+                        const spaceName = document.getElementById('current-space-name');
+                        const spaceConfig = {
+                            'ideas': { icon: '💭', name: 'Ideas Universe' },
+                            'projects': { icon: '🧬', name: 'Project Space' },
+                            'desktop': { icon: '🌟', name: 'Desktop Automation' },
+                            'swedesign': { icon: '\u{1F3ED}', name: 'SWE Design' },
+                            'roarboot': { icon: '\u{1F6A3}', name: 'Rowboat' }
+                        };
+                        const cfg = spaceConfig[message.space] || { icon: '❓', name: message.space };
+                        if (spaceIcon) spaceIcon.textContent = cfg.icon;
+                        if (spaceName) spaceName.textContent = cfg.name;
+                        
+                        // TRIGGER ANIMATED NAVIGATION in MultiverseApp
+                        if (window.multiverseApp) {
+                            console.log('[Space] Triggering animated navigation to:', message.space);
+                            window.multiverseApp.navigateToSpace(message.space);
+                        }
+
+                        // Show/hide Brain Dashboard BrowserView
+                        if (message.space === 'thebrain' && window.vibemind && window.vibemind.showBrain) {
+                            window.vibemind.showBrain();
+                            console.log('[Space] Showing Brain Dashboard');
+                        }
+
+                        // Show reason if provided (e.g., from agent transfer)
+                        if (message.reason) {
+                            showTranscript('System', message.reason);
+                        }
+                    } else {
+                        console.log('[Space] Already in space:', message.space);
+
+                        // Ensure Brain Dashboard is shown even if already in space
+                        if (message.space === 'thebrain' && window.vibemind && window.vibemind.showBrain) {
+                            window.vibemind.showBrain();
+                            console.log('[Space] Showing Brain Dashboard (already in space)');
+                        }
+                    }
+                    break;
+                    
+                case 'space_suggestion':
+                    // Agent suggests switching to a different space
+                    console.log('[Space] Suggestion:', message.suggested_space);
+                    showTranscript('System', `Suggestion: Switch to ${message.suggested_space} space`);
+                    // Optional: Auto-switch or ask user
+                    // switchSpace(message.suggested_space);
+                    break;
+
+                // ============================================
+                // VOICE NAVIGATION COMMANDS (from navigation_tools.py)
+                // ============================================
+                
+                case 'navigate_space':
+                    // Voice command: navigate to space
+                    console.log('[Voice Nav] Navigate to space:', message.space);
+                    if (message.space && window.multiverseApp) {
+                        window.multiverseApp.navigateToSpace(message.space);
+                        window.currentSpace = message.space;
+                        // Update UI tabs
+                        document.querySelectorAll('.space-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.dataset.space === message.space);
+                        });
+                    }
+                    break;
+                    
+                case 'select_item':
+                    // Voice command: select next/previous item
+                    console.log('[Voice Nav] Select item:', message.direction, message.item_type);
+                    if (window.multiverseApp) {
+                        const direction = message.direction || 1;
+                        if (message.item_type === 'project' || window.currentSpace === 'projects') {
+                            window.multiverseApp.selectNextProject(direction);
+                        } else {
+                            window.multiverseApp.selectNextBubble(direction);
+                        }
+                    }
+                    break;
+                    
+                case 'select_by_name':
+                    // Voice command: select item by name
+                    console.log('[Voice Nav] Select by name:', message.name);
+                    if (window.multiverseApp && message.name) {
+                        // Find and select bubble/project by name
+                        const bubbleIndex = window.multiverseApp.getBubbleIndexById(message.name);
+                        if (bubbleIndex >= 0) {
+                            window.multiverseApp.selectBubble(bubbleIndex);
+                        }
+                    }
+                    break;
+                    
+                case 'select_by_index':
+                    // Voice command: select item by index
+                    console.log('[Voice Nav] Select by index:', message.index);
+                    if (window.multiverseApp && message.index !== undefined) {
+                        if (window.currentSpace === 'projects') {
+                            window.multiverseApp.selectProject(message.index);
+                        } else {
+                            window.multiverseApp.selectBubble(message.index);
+                        }
+                    }
+                    break;
+                    
+                case 'enter_selection':
+                    // Voice command: enter currently selected item
+                    console.log('[Voice Nav] Enter selection');
+                    if (window.multiverseApp) {
+                        window.multiverseApp.enterCurrentSelection();
+                    }
+                    break;
+                    
+                case 'exit_view':
+                    // Voice command: exit current view
+                    console.log('[Voice Nav] Exit view');
+                    window.bubbleNavigation.exitSpace(true);  // Exit bubble view
+                    break;
+
+                // ============================================
+                // SHUTTLE VOICE NAVIGATION
+                // ============================================
+
+                case 'enter_shuttle':
+                    // Voice command: enter selected shuttle
+                    console.log('[Voice Nav] Enter shuttle');
+                    if (window.multiverseApp?.shuttleManager) {
+                        const selectedShuttle = window.multiverseApp.shuttleManager.getSelectedShuttle();
+                        if (selectedShuttle) {
+                            window.enterShuttleFromClick(selectedShuttle.id);
+                        } else {
+                            showTranscript('System', 'No shuttle selected. Say "select shuttle" first.');
+                        }
+                    }
+                    break;
+
+                case 'enter_shuttle_by_name':
+                    // Voice command: enter shuttle by name
+                    console.log('[Voice Nav] Enter shuttle by name:', message.name);
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttle = window.multiverseApp.shuttleManager.findShuttleByName(message.name);
+                        if (shuttle) {
+                            window.enterShuttleFromClick(shuttle.id);
+                        } else {
+                            showTranscript('System', `Shuttle "${message.name}" not found.`);
+                        }
+                    }
+                    break;
+
+                case 'exit_shuttle':
+                    // Voice command: exit shuttle view
+                    console.log('[Voice Nav] Exit shuttle');
+                    if (window.multiverseApp?.shuttleManager) {
+                        window.multiverseApp.shuttleManager.exitCurrentShuttle();
+                    }
+                    break;
+
+                case 'select_shuttle':
+                    // Voice command: select next/previous shuttle
+                    console.log('[Voice Nav] Select shuttle, direction:', message.direction);
+                    if (window.multiverseApp?.shuttleManager) {
+                        window.multiverseApp.shuttleManager.selectShuttle(message.direction || 1);
+                    }
+                    break;
+
+                case 'select_shuttle_by_name':
+                    // Voice command: select shuttle by name
+                    console.log('[Voice Nav] Select shuttle by name:', message.name);
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttle = window.multiverseApp.shuttleManager.findShuttleByName(message.name);
+                        if (shuttle) {
+                            window.multiverseApp.shuttleManager.setSelectedShuttle(shuttle.id);
+                            showTranscript('System', `Selected shuttle: ${shuttle.bubbleName}`);
+                        } else {
+                            showTranscript('System', `Shuttle "${message.name}" not found.`);
+                        }
+                    }
+                    break;
+
+                case 'list_shuttles':
+                    // Voice command: list available shuttles
+                    console.log('[Voice Nav] List shuttles');
+                    if (window.multiverseApp?.shuttleManager) {
+                        const shuttles = window.multiverseApp.shuttleManager.getShuttleList();
+                        if (shuttles.length > 0) {
+                            const names = shuttles.map(s => s.bubbleName).join(', ');
+                            showTranscript('System', `Active shuttles: ${names}`);
+                        } else {
+                            showTranscript('System', 'No active shuttles.');
+                        }
+                    }
+                    break;
+
+                case 'shuttle_continue_to_project':
+                    // Voice command: continue to project from shuttle
+                    console.log('[Voice Nav] Continue to project');
+                    document.getElementById('shuttle-continue-to-project')?.click();
+                    break;
+
+                case 'hand_gesture':
+                    // Hand gesture detected from MediaPipe
+                    console.log('[Hand] Gesture:', message.gesture, 'Position:', message.position);
+                    // Could trigger visual feedback or actions
+                    if (message.gesture === 'POINTING' && window.currentSpace === 'desktop') {
+                        // Pointing gesture in desktop space
+                        showTranscript('Hand', `Pointing at ${Math.round(message.position?.x * 100)}%, ${Math.round(message.position?.y * 100)}%`);
+                    }
+                    break;
+
+                // ============================================
+                // REQUIREMENT SHUTTLE MESSAGES
+                // ============================================
+
+                case 'shuttle_launched':
+                    // New requirement shuttle launched from bubble
+                    console.log('[Shuttle] Launched:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.createShuttle({
+                            id: message.shuttle_id || `shuttle-${Date.now()}`,
+                            bubbleName: message.bubble_name,
+                            bubbleId: message.bubble_id,  // Pass bubble ID for position lookup
+                            startPosition: message.start_position,  // Use stored bubble position
+                            totalRequirements: message.total_requirements,
+                            batchCount: message.batch_count
+                        });
+                    }
+                    showTranscript('System', `Shuttle launched: ${message.total_requirements} requirements from "${message.bubble_name}"`);
+                    break;
+
+                case 'batch_progress':
+                    // Batch processing progress update
+                    console.log('[Shuttle] Batch progress:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateBatchProgress(
+                            message.shuttle_id,
+                            message.batch_index,
+                            message.results
+                        );
+                    }
+                    break;
+
+                case 'shuttle_complete':
+                    // Shuttle evaluation complete
+                    console.log('[Shuttle] Complete:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateShuttleComplete(
+                            message.shuttle_id,
+                            {
+                                score: message.score,
+                                passed: message.passed,
+                                failed: message.failed
+                            }
+                        );
+                    }
+                    showTranscript('System', `Shuttle complete: Score ${(message.score * 100).toFixed(0)}% (${message.passed} passed, ${message.failed} need work)`);
+                    break;
+
+                case 'shuttles_sync':
+                    // Restore persisted shuttles from database on startup
+                    console.log('[Shuttle] Restoring', message.shuttles?.length || 0, 'shuttles from database');
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        (message.shuttles || []).forEach(shuttleData => {
+                            window.multiverseApp.shuttleManager.createShuttle({
+                                id: shuttleData.shuttle_id,
+                                bubbleName: shuttleData.bubble_name,
+                                bubbleId: shuttleData.bubble_id,  // Pass bubble ID for position lookup
+                                startPosition: shuttleData.start_position,  // Use stored bubble position
+                                totalRequirements: shuttleData.total_count,
+                                batchCount: 4, // DNA stages (4 checkpoints)
+                                score: shuttleData.score,
+                                passed: shuttleData.passed_count,
+                                failed: shuttleData.failed_count,
+                                status: shuttleData.status,
+                                currentStage: shuttleData.current_stage || 'mining'
+                            });
+                        });
+                    }
+                    break;
+
+                case 'shuttle_stage_update':
+                    // Real-time update when shuttle progresses to a new DNA stage
+                    console.log('[Shuttle] Stage update:', message.shuttle_id, '->', message.stage);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.updateShuttleStage(
+                            message.shuttle_id,
+                            message.stage
+                        );
+                        // Show transcript notification
+                        const stageNames = {
+                            'mining': '⛏️ Mining',
+                            'requirements': '📄 Requirements',
+                            'validation': '✓ Validation',
+                            'knowledge_graph': '✳️ Knowledge Graph',
+                            'techstack': '🚀 TechStack'
+                        };
+                        const stageName = stageNames[message.stage] || message.stage;
+                        showTranscript('System', `Shuttle: ${stageName} stage`);
+                    }
+                    break;
+
+                case 'shuttle_synced':
+                    // Shuttle synced from req-orchestrator API (real progress)
+                    console.log('[Shuttle] Synced from orchestrator:', message);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        const existingShuttle = window.multiverseApp.shuttleManager.getShuttle(message.shuttle_id);
+                        if (existingShuttle) {
+                            // Update existing shuttle position/stage
+                            window.multiverseApp.shuttleManager.updateShuttleStage(
+                                message.shuttle_id,
+                                message.current_stage
+                            );
+                        } else {
+                            // Create new shuttle at synced position
+                            window.multiverseApp.shuttleManager.createShuttle({
+                                id: message.shuttle_id,
+                                bubbleName: message.bubble_name,
+                                bubbleId: message.bubble_id,  // Pass bubble ID for position lookup
+                                totalRequirements: message.total,
+                                batchCount: 4, // DNA stages (4 checkpoints)
+                                score: message.score,
+                                passed: message.passed,
+                                failed: message.failed,
+                                status: message.score >= 0.7 ? 'arrived' : 'in_transit',
+                                currentStage: message.current_stage
+                            });
+                        }
+                    }
+                    const progressPct = Math.round((message.progress || 0.2) * 100);
+                    showTranscript('System', `Shuttle synced: "${message.bubble_name}" at ${progressPct}% (${message.current_stage})`);
+                    break;
+
+                case 'stage_shuttle_created':
+                    // PHASE 13: Stage-specific shuttle created (parked at checkpoint)
+                    console.log('[Shuttle] Stage shuttle created:', message.stage_type, 'for', message.bubble_name);
+                    if (window.multiverseApp && window.multiverseApp.shuttleManager) {
+                        window.multiverseApp.shuttleManager.createStageShuttle({
+                            shuttle_id: message.shuttle_id,
+                            bubble_id: message.bubble_id,
+                            bubble_name: message.bubble_name,
+                            stage_type: message.stage_type,
+                            stage_data: message.stage_data
+                        });
+
+                        // Show notification based on stage type
+                        const stageIconsP13 = {
+                            'mining': '🏭',
+                            'validation': '⚖️',
+                            'knowledge_graph': '🔗',
+                            'techstack': '📁'
+                        };
+                        const stageNamesP13 = {
+                            'mining': 'Mining',
+                            'validation': 'Validation',
+                            'knowledge_graph': 'Knowledge Graph',
+                            'techstack': 'TechStack'
+                        };
+                        const iconP13 = stageIconsP13[message.stage_type] || '🚀';
+                        const stageNameP13 = stageNamesP13[message.stage_type] || message.stage_type;
+
+                        // Build info string based on stage
+                        let infoP13 = '';
+                        if (message.stage_type === 'mining') {
+                            infoP13 = `${message.total || 0} requirements`;
+                        } else if (message.stage_type === 'validation') {
+                            infoP13 = `${message.passed || 0}/${(message.passed || 0) + (message.failed || 0)} passed`;
+                        } else if (message.stage_type === 'knowledge_graph') {
+                            infoP13 = `${message.entities || 0} entities`;
+                        } else if (message.stage_type === 'techstack') {
+                            infoP13 = message.recommended_stack || 'analyzing...';
+                        }
+
+                        showTranscript('System', `${iconP13} ${stageNameP13} shuttle: ${message.bubble_name} (${infoP13})`);
+                    }
+                    break;
+
+                // ============================================
+                // WIZARD RESPONSES (from Python wizard_handler)
+                // ============================================
+                case 'wizard_initialized':
+                case 'wizard_state':
+                case 'wizard_step_saved':
+                case 'wizard_agent_result':
+                case 'wizard_finalized':
+                case 'wizard_suggestion_resolved':
+                    // Dispatch to wizard controller via custom event
+                    window.dispatchEvent(new CustomEvent('message-from-python', { detail: message }));
+                    break;
+
+                // Roarboot status (tab dot only — BrowserView handles its own UI)
+                case 'roarboot_status':
+                    if (window.multiverseApp && window.multiverseApp.updateRoarbootStatus) {
+                        window.multiverseApp.updateRoarbootStatus(message.status);
+                    }
+                    break;
+
+                // Rowboat BrowserView load status (from rowboat-manager.js)
+                case 'rowboat_view_status':
+                    if (window.multiverseApp && window.multiverseApp.updateRoarbootStatus) {
+                        window.multiverseApp.updateRoarbootStatus(message.status);
+                    }
+                    break;
+
+                case 'roarboot_open_webview':
+                    if (window.multiverseApp) {
+                        window.multiverseApp.navigateToSpace('roarboot');
+                    }
+                    break;
+
+                // Rowboat update available (from Python update_checker)
+                case 'rowboat_update_available':
+                    console.log(`[UI] Rowboat update available: ${message.current_version} → ${message.latest_version}`);
+                    // Show update badge on Roarboot tab
+                    {
+                        const rTab = document.getElementById('tab-roarboot');
+                        if (rTab) {
+                            const nameSpan = rTab.querySelector('.space-name');
+                            if (nameSpan && !nameSpan.textContent.includes('Update')) {
+                                nameSpan.textContent = 'Rowboat \ud83d\udd34 Update';
+                            }
+                        }
+                    }
+                    // Store for BrowserView update banner
+                    window._rowboatUpdateInfo = message;
+                    break;
+
+                // ============================================
+                // FLOWZEN (BLAUE ROSE) MESSAGES
+                // ============================================
+
+                case 'flowzen_rose_state':
+                    if (window.multiverseApp && window.multiverseApp.spaces.flowzen) {
+                        window.multiverseApp.spaces.flowzen.roseState = message.state || 'idle';
+                        console.log('[Flowzen] Rose state:', message.state);
+                    }
+                    window.flowzenPanel.updateFlowzenPanel({ state: message.state });
+                    // Handle live diary push
+                    if (message.state === 'diary_new' && message.diary_entry) {
+                        window.flowzenPanel.addSingleDiaryEntry(message.diary_entry);
+                    }
+                    break;
+
+                case 'flowzen_status_result':
+                    window.flowzenPanel.updateFlowzenPanel(message);
+                    break;
+
+                case 'flowzen_recommend_result':
+                    if (message.recommendation) {
+                        window.flowzenPanel.updateFlowzenPanel({
+                            mood: message.recommendation.mood,
+                            category: message.recommendation.category,
+                            current_time_window: message.recommendation.time_window,
+                        });
+                    }
+                    // Add diary entry if included
+                    if (message.diary_entry) {
+                        window.flowzenPanel.addSingleDiaryEntry(message.diary_entry);
+                    }
+                    // Reset button
+                    var fzBtn = document.getElementById('fz-recommend-btn');
+                    if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich machen?'; }
+                    break;
+
+                case 'flowzen_diary_entries_result':
+                    window.flowzenPanel.renderDiaryEntries(message.entries || []);
+                    break;
+
+                // Rowboat update auto-applied
+                case 'rowboat_update_applied':
+                    console.log(`[UI] Rowboat auto-updated: ${message.old_version} -> ${message.new_version}`);
+                    {
+                        const rTab = document.getElementById('tab-roarboot');
+                        if (rTab) {
+                            const nameSpan = rTab.querySelector('.space-name');
+                            if (nameSpan) {
+                                nameSpan.textContent = 'Rowboat \u2705 Updated';
+                                setTimeout(() => { nameSpan.textContent = 'Rowboat'; }, 10000);
+                            }
+                        }
+                    }
+                    break;
             }
         });
 
+        function showTranscript(speaker, text) {
+            const panel = document.getElementById('transcript-panel');
+            const content = document.getElementById('transcript-content');
+            panel.classList.remove('hidden');
+
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry';
+            const strong = document.createElement('strong');
+            strong.textContent = speaker + ':';
+            entry.appendChild(strong);
+            entry.appendChild(document.createTextNode(' ' + text));
+            content.appendChild(entry);
+            content.scrollTop = content.scrollHeight;
+
+            // Auto-hide after 5 seconds if no new messages
+            clearTimeout(window.transcriptTimeout);
+            window.transcriptTimeout = setTimeout(() => {
+                panel.classList.add('hidden');
+            }, 5000);
+        }
+        // Expose showTranscript for extracted modules (whitepaper-panel.js, etc.)
+        window.showTranscript = showTranscript;
+
         // Request initial bubbles from Python
         // NOTE: Shuttles are requested AFTER bubbles_sync is received (see bubbles_sync handler)
+        // This ensures bubble meshes exist before shuttles try to find their positions
         window.vibemind.requestBubbles();
 
-        // ============================================
-        // FLOWZEN (BLAUE ROSE) — IPC + DIARY FUNCTIONS
-        // ============================================
-
-        function requestFlowzenStatus() {
-            if (window.vibemind && window.vibemind.sendToPython) {
-                window.vibemind.sendToPython({ type: 'flowzen_status' });
-            }
-        }
-
-        function requestFlowzenDiaryEntries() {
-            if (window.vibemind && window.vibemind.sendToPython) {
-                window.vibemind.sendToPython({ type: 'flowzen_diary_entries' });
-            }
-        }
-
-        function requestFlowzenRecommend() {
-            var btn = document.getElementById('fz-recommend-btn');
-            if (btn) { btn.classList.add('loading'); btn.textContent = 'Thinking...'; }
-            if (window.vibemind && window.vibemind.sendToPython) {
-                window.vibemind.sendToPython({ type: 'flowzen_recommend' });
-            }
-        }
-
-        function updateFlowzenPanel(data) {
-            var windowNames = {
-                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
-                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
-            };
-            var el;
-            if (data.current_time_window) {
-                el = document.getElementById('fz-time-window');
-                if (el) el.textContent = windowNames[data.current_time_window] || data.current_time_window;
-            }
-            if (data.mood) {
-                el = document.getElementById('fz-mood');
-                if (el) el.textContent = data.mood;
-            }
-            if (data.category) {
-                el = document.getElementById('fz-category');
-                if (el) el.textContent = data.category;
-            }
-            if (data.state) {
-                el = document.getElementById('flowzen-state-badge');
-                if (el) { el.textContent = data.state; el.className = 'flowzen-state ' + data.state; }
-            }
-        }
-
-        function renderDiaryEntries(entries) {
-            var container = document.getElementById('fz-diary-journal');
-            var emptyEl = document.getElementById('fz-diary-empty');
-            if (!container) return;
-            container.querySelectorAll('.diary-entry').forEach(function(el) { el.remove(); });
-            if (!entries || entries.length === 0) {
-                if (emptyEl) emptyEl.style.display = '';
-                return;
-            }
-            if (emptyEl) emptyEl.style.display = 'none';
-            entries.forEach(function(entry) { container.appendChild(_buildDiaryCard(entry)); });
-        }
-
-        function addSingleDiaryEntry(entry) {
-            var container = document.getElementById('fz-diary-journal');
-            var emptyEl = document.getElementById('fz-diary-empty');
-            if (!container) return;
-            if (emptyEl) emptyEl.style.display = 'none';
-            container.insertBefore(_buildDiaryCard(entry), container.firstChild);
-            var all = container.querySelectorAll('.diary-entry');
-            if (all.length > 20) all[all.length - 1].remove();
-        }
-
-        function _buildDiaryCard(entry) {
-            var card = document.createElement('div');
-            card.className = 'diary-entry';
-            var windowNames = {
-                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
-                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
-            };
-            var moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
-            var timeStr = '';
-            try { timeStr = new Date(entry.created_at).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}); }
-            catch(e) { timeStr = (entry.hour || 0) + ':00'; }
-
-            var header = document.createElement('div');
-            header.className = 'diary-entry-time';
-            header.textContent = timeStr + ' \u2014 ' + (windowNames[entry.time_window] || entry.time_window || '');
-            card.appendChild(header);
-
-            var meta = document.createElement('div');
-            meta.className = 'diary-entry-meta';
-            meta.textContent = (moodEmojis[entry.mood] || '') + ' ' + (entry.mood || '') + ' \u00B7 energy ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' activities';
-            card.appendChild(meta);
-
-            var text = document.createElement('div');
-            text.className = 'diary-entry-text';
-            text.textContent = entry.entry_text || '';
-            card.appendChild(text);
-
-            if (entry.source === 'manual') {
-                var badge = document.createElement('div');
-                badge.className = 'diary-entry-source';
-                badge.textContent = '\uD83C\uDF39 On request';
-                card.appendChild(badge);
-            }
-            return card;
-        }
-
-        // Register Flowzen IPC handlers
-        window._messageHandlers['flowzen_rose_state'] = function(msg) {
-            if (window.multiverseApp && window.multiverseApp.spaces.flowzen) {
-                window.multiverseApp.spaces.flowzen.roseState = msg.state || 'idle';
-            }
-            updateFlowzenPanel({ state: msg.state });
-            if (msg.state === 'diary_new' && msg.diary_entry) {
-                addSingleDiaryEntry(msg.diary_entry);
-            }
-        };
-
-        window._messageHandlers['flowzen_status_result'] = function(msg) {
-            updateFlowzenPanel(msg);
-        };
-
-        window._messageHandlers['flowzen_recommend_result'] = function(msg) {
-            if (msg.recommendation) {
-                updateFlowzenPanel({
-                    mood: msg.recommendation.mood,
-                    category: msg.recommendation.category,
-                    current_time_window: msg.recommendation.time_window,
-                });
-            }
-            if (msg.diary_entry) {
-                addSingleDiaryEntry(msg.diary_entry);
-            }
-            var btn = document.getElementById('fz-recommend-btn');
-            if (btn) { btn.classList.remove('loading'); btn.textContent = 'What should I do next?'; }
-        };
-
-        window._messageHandlers['flowzen_diary_entries_result'] = function(msg) {
-            renderDiaryEntries(msg.entries || []);
-        };
-
-        // Wire recommend button
-        var fzBtn = document.getElementById('fz-recommend-btn');
-        if (fzBtn) fzBtn.addEventListener('click', requestFlowzenRecommend);
+        // VNC Preview — now in vnc-preview.js
+        // Claude Code Runner — now in claude-runner.js
+        // Shuttle Info Panel — now in shuttle-interior.js
+        // Shuttle Interior View — now in shuttle-interior.js
+        // Checkpoint Tabs — now in shuttle-interior.js
+        // Shuttle Wizard Controller — now in shuttle-wizard.js
+        // Stage Renderers — now in stage-renderers.js
+        // Enter Shuttle From Click — now in shuttle-interior.js
+        // Orchestrator Panel — now in shuttle-interior.js
+        // Space Navigation — now in space-navigator.js
+        
+        // Flowzen Panel — now in flowzen-panel.js
+        // Summaries Panel — now in summaries-panel.js
+        // White Paper Panel — now in whitepaper-panel.js
     </script>
 </body>
 </html>

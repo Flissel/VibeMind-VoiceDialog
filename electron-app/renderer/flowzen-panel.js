@@ -23,7 +23,7 @@
         var btn = document.getElementById('fz-recommend-btn');
         if (btn) {
             btn.classList.add('loading');
-            btn.textContent = 'Denke nach...';
+            btn.textContent = 'Thinking...';
         }
         if (window.vibemind && window.vibemind.sendToPython) {
             window.vibemind.sendToPython({ type: 'flowzen_recommend' });
@@ -38,8 +38,8 @@
 
         if (timeEl && data.current_time_window) {
             var windowNames = {
-                early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
-                afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
+                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
             };
             timeEl.textContent = windowNames[data.current_time_window] || data.current_time_window;
         }
@@ -113,7 +113,7 @@
         meta.className = 'diary-entry-meta';
         var moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
         var emoji = moodEmojis[entry.mood] || '';
-        meta.textContent = emoji + ' ' + (entry.mood || '') + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivit\u00E4ten';
+        meta.textContent = emoji + ' ' + (entry.mood || '') + ' \u00B7 energy ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' activities';
         card.appendChild(meta);
 
         // Diary text (the warm LLM-generated text)
@@ -126,7 +126,7 @@
         if (entry.source === 'manual') {
             var badge = document.createElement('div');
             badge.className = 'diary-entry-source';
-            badge.textContent = '\uD83C\uDF39 Auf Anfrage';
+            badge.textContent = '\uD83C\uDF39 On request';
             card.appendChild(badge);
         }
 
