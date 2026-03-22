@@ -1,6 +1,3 @@
-[submodule "python/spaces/desktop/Automation_ui"]
-	path = python/spaces/desktop/Automation_ui
-	url = https://github.com/Flissel/Automation_ui.git
 [submodule "python/spaces/rowboat/rowboat"]
 	path = python/spaces/rowboat/rowboat
 	url = https://github.com/rowboatlabs/rowboat.git

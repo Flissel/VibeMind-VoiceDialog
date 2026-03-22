@@ -92,7 +92,7 @@ class MultiverseApp {
             },
             agentfarm: {
                 objects: [],
-                position: new THREE.Vector3(-14, 0, 18),
+                position: new THREE.Vector3(-2, 0, 18),
                 icon: '\u{1F3E1}',
                 name: 'Agent Farm',
                 agent: { name: 'Farmer', slug: 'agentfarm', role: 'Agent Orchestrator' },
@@ -108,7 +108,7 @@ class MultiverseApp {
             },
             video: {
                 objects: [],
-                position: new THREE.Vector3(-20, 0, 24),
+                position: new THREE.Vector3(-10, 0, 24),
                 icon: '\u{1F3AC}',
                 name: 'Video Studio',
                 agent: { name: 'Director', slug: 'video', role: 'Video Producer' },
@@ -124,7 +124,7 @@ class MultiverseApp {
             },
             mirofish: {
                 objects: [],
-                position: new THREE.Vector3(20, 0, 18),
+                position: new THREE.Vector3(-20, 0, -14),
                 icon: '\u{1F41F}',
                 name: 'MiroFish',
                 agent: { name: 'MiroFish', slug: 'mirofish', role: 'Prediction Engine' },
@@ -2315,6 +2315,10 @@ class MultiverseApp {
     // NAVIGATION
     // ========================================================================
     
+    getSpaceInfo(spaceId) {
+        return this.spaces[spaceId] || null;
+    }
+
     navigateToSpace(targetSpace) {
         if (this.isNavigating || targetSpace === this.currentSpace) {
             return;
@@ -3468,7 +3472,7 @@ class MultiverseApp {
             const fetchFrame = async () => {
                 if (!_desktopStreamActive) return;
                 try {
-                    const r = await fetch('http://localhost:8007/api/desktop/screenshot', {
+                    const r = await fetch('http://localhost:8009/api/desktop/screenshot', {
                         signal: AbortSignal.timeout(3000),
                     });
                     if (r.ok) {
@@ -3491,12 +3495,12 @@ class MultiverseApp {
                 if (_desktopStreamActive) setTimeout(fetchFrame, 140);
             };
             // Start after health check
-            fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+            fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
                 .then(r => { if (r.ok || r.status === 503) fetchFrame(); })
                 .catch(() => {
                     // Retry health check every 3s
                     const retryHealth = setInterval(() => {
-                        fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                        fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
                             .then(r => { if (r.ok || r.status === 503) { clearInterval(retryHealth); fetchFrame(); } })
                             .catch(() => {});
                     }, 3000);
