@@ -89,6 +89,8 @@
             'agentfarm':  { icon: '\uD83C\uDFE1', name: 'Agent Farm' },
             'thebrain':   { icon: '\uD83E\uDDE0', name: 'The Brain' },
             'mirofish':   { icon: '\uD83D\uDC1F', name: 'MiroFish' },
+            'flowzen':    { icon: '\uD83C\uDF39', name: 'Blue Rose' },
+            'video':      { icon: '\uD83C\uDFAC', name: 'Video Studio' },
         };
 
         var info = spaceInfo[spaceId];
