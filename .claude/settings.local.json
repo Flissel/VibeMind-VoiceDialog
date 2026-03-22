@@ -11,7 +11,7 @@
       "WebFetch(domain:elevenlabs.io)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "Bash(export OPENAI_API_KEY=\"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\")",
+      "Bash(export OPENAI_API_KEY=:*)",
       "Bash(taskkill:*)",
       "Bash(tasklist)",
       "Bash(findstr:*)",
@@ -132,7 +132,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git -C \"c:/Users/User/Desktop/Voice_dialog_vibemind/VibeMind-VoiceDialog\" submodule status)",
       "Bash(bash scripts/build-rowboat.sh)",
-      "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")"
+      "Bash(docker ps -a --filter \"name=project-re\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "WebFetch(domain:developers.openai.com)"
     ],
     "deny": [],
     "ask": []
