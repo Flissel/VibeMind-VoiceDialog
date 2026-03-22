@@ -44,6 +44,7 @@ class EventRouter:
     STREAM_TASKS_VIDEO = "events:tasks:video"
     STREAM_TASKS_AGENTFARM = "events:tasks:agentfarm"
     STREAM_TASKS_FLOWZEN = "events:tasks:flowzen"
+    STREAM_TASKS_MIROFISH = "events:tasks:mirofish_pred"
     STREAM_STATUS = "events:status"
     STREAM_JOBS = "events:jobs"
 
@@ -215,6 +216,20 @@ class EventRouter:
         "rose.recommend": STREAM_TASKS_FLOWZEN,
         "rose.status": STREAM_TASKS_FLOWZEN,
 
+        # MiroFish (Prediction Engine) → mirofish stream
+        "mirofish.simulate": STREAM_TASKS_MIROFISH,
+        "mirofish.predict": STREAM_TASKS_MIROFISH,
+        "mirofish.graph.build": STREAM_TASKS_MIROFISH,
+        "mirofish.graph.search": STREAM_TASKS_MIROFISH,
+        "mirofish.list_projects": STREAM_TASKS_MIROFISH,
+        "mirofish.report.chat": STREAM_TASKS_MIROFISH,
+        "mirofish.interview": STREAM_TASKS_MIROFISH,
+        "mirofish.status": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.start": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.stop": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.restart": STREAM_TASKS_MIROFISH,
+        "mirofish.docker.status": STREAM_TASKS_MIROFISH,
+
         # Status events -> status stream
         "task.started": STREAM_STATUS,
         "task.progress": STREAM_STATUS,
@@ -326,6 +341,8 @@ class EventRouter:
             return "agentfarm"
         elif stream == self.STREAM_TASKS_FLOWZEN:
             return "flowzen"
+        elif stream == self.STREAM_TASKS_MIROFISH:
+            return "mirofish"
         elif stream == self.STREAM_STATUS:
             return "status"
         else:
@@ -348,6 +365,7 @@ class EventRouter:
             cls.STREAM_TASKS_VIDEO,
             cls.STREAM_TASKS_AGENTFARM,
             cls.STREAM_TASKS_FLOWZEN,
+            cls.STREAM_TASKS_MIROFISH,
             cls.STREAM_STATUS,
             cls.STREAM_JOBS,
         ]
