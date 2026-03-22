@@ -147,6 +147,15 @@ def get_flowzen_agent():
     return _get()
 
 
+def get_mirofish_agent():
+    """Get MiroFishAgent singleton (lazy import)."""
+    agent = get_agent("mirofish")
+    if agent:
+        return agent
+    from spaces.mirofish.agents.mirofish_agent import get_mirofish_agent as _get
+    return _get()
+
+
 # For backward compatibility, also provide the classes via __getattr__
 def __getattr__(name):
     """Lazy load agent classes to avoid circular imports."""
@@ -186,6 +195,9 @@ def __getattr__(name):
     elif name == "FlowzenAgent":
         from spaces.flowzen.agents.flowzen_agent import FlowzenAgent
         return FlowzenAgent
+    elif name == "MiroFishBackendAgent":
+        from spaces.mirofish.agents.mirofish_agent import MiroFishBackendAgent
+        return MiroFishBackendAgent
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -216,4 +228,6 @@ __all__ = [
     "get_agentfarm_agent",
     "FlowzenAgent",
     "get_flowzen_agent",
+    "MiroFishBackendAgent",
+    "get_mirofish_agent",
 ]
