@@ -34,3 +34,6 @@
 [submodule "python/spaces/mirofish/mirofish"]
 	path = python/spaces/mirofish/mirofish
 	url = https://github.com/nikmcfly/MiroFish-Offline
+[submodule "python/spaces/autogen/farm"]
+	path = python/spaces/autogen/farm
+	url = https://github.com/Flissel/Autogen_AgentFarm.git
