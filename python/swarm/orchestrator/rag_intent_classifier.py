@@ -19,6 +19,8 @@ import concurrent.futures
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
+from llm_config import get_model
+
 from data.intent_rule_repository import (
     IntentRuleRepository,
     IntentRule,
@@ -190,7 +192,7 @@ class RAGIntentClassifier:
         """
         self.rule_repo = rule_repo or get_intent_rule_repository()
         # Use env var for model, default to Claude Opus 4.5 (best quality)
-        self.model = model or os.getenv("RAG_CLASSIFIER_MODEL", "anthropic/claude-opus-4.5")
+        self.model = model or get_model("rag_classifier")
         self.top_k = top_k
 
         # LLM client (lazy init)
