@@ -17,8 +17,8 @@ class EyeTermManager {
     this.isVisible = false;
 
     // Panel size and position
-    this.panelWidth = 320;
-    this.panelHeight = 240;
+    this.panelWidth = 400;
+    this.panelHeight = 300;
     this.margin = 12;
 
     // MJPEG stream URL (Python camera_server.py)
@@ -141,9 +141,9 @@ class EyeTermManager {
       <button class="header-btn" onclick="window.vibemindEyeterm.toggle()" title="Close">✕</button>
     </div>
     <img id="feed" src="${this.streamUrl}/stream"
-         onerror="this.style.display='none';document.getElementById('offline').style.display='flex'"
-         onload="this.style.display='block';document.getElementById('offline').style.display='none'">
-    <div id="offline" class="offline" style="display:none">Camera offline</div>
+         onerror="this.style.display='none';document.getElementById('offline').style.display='flex';clearTimeout(window._retryTimer);window._retryTimer=setTimeout(()=>{this.src='${this.streamUrl}/stream?t='+Date.now()},3000)"
+         onload="this.style.display='block';document.getElementById('offline').style.display='none';document.getElementById('status').textContent='● LIVE';document.getElementById('status').style.color='#0f0'">
+    <div id="offline" class="offline" style="display:none">Camera offline — reconnecting...</div>
     <div class="status" id="status">● LIVE</div>
   </div>
 </body>

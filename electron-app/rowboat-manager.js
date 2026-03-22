@@ -109,8 +109,6 @@ class RowboatManager {
       }
       console.log('[RowboatManager] Renderer loaded');
 
-      // Inject Claude Code Max badge into Settings dialog when token is available
-      this._injectClaudeCodeBadge();
     });
 
     this.rowboatView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -217,96 +215,6 @@ class RowboatManager {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Inject a "Connected via Claude Code Max" badge into the Rowboat
-   * Settings dialog. Uses a MutationObserver to detect when the dialog
-   * opens and prepends a status banner — no submodule files are modified.
-   * All DOM construction uses safe createElement/textContent methods.
-   */
-  _injectClaudeCodeBadge() {
-    if (!this.rowboatView || this.rowboatView.webContents.isDestroyed()) return;
-
-    if (!this._isClaudeCodeAvailable()) {
-      console.log('[RowboatManager] No Claude Code token — skipping badge injection');
-      return;
-    }
-
-    this.rowboatView.webContents.executeJavaScript(`
-      (function() {
-        if (window.__claudeCodeBadgeObserver) return;
-
-        var BADGE_ID = 'claude-code-badge';
-
-        function injectBadge() {
-          var dialog = document.querySelector('[role="dialog"], [data-testid="settings-dialog"], .settings-modal');
-          if (!dialog) return;
-          if (document.getElementById(BADGE_ID)) return;
-
-          var badge = document.createElement('div');
-          badge.id = BADGE_ID;
-          badge.style.cssText = [
-            'background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
-            'color: white',
-            'padding: 10px 16px',
-            'border-radius: 8px',
-            'margin: 0 0 16px 0',
-            'font-size: 13px',
-            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            'display: flex',
-            'align-items: center',
-            'gap: 10px',
-            'box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3)',
-            'line-height: 1.4'
-          ].join(';');
-
-          var checkmark = document.createElement('span');
-          checkmark.style.cssText = 'font-size: 18px; flex-shrink: 0;';
-          checkmark.textContent = String.fromCharCode(0x2713);
-
-          var textWrap = document.createElement('span');
-
-          var titleLine = document.createElement('strong');
-          titleLine.textContent = 'Claude Code Max';
-
-          var connText = document.createTextNode(' connected');
-
-          var br = document.createElement('br');
-
-          var subLine = document.createElement('span');
-          subLine.style.cssText = 'opacity: 0.85; font-size: 12px;';
-          subLine.textContent = 'OAuth token auto-injected \\u2014 no API key needed';
-
-          textWrap.appendChild(titleLine);
-          textWrap.appendChild(connText);
-          textWrap.appendChild(br);
-          textWrap.appendChild(subLine);
-
-          badge.appendChild(checkmark);
-          badge.appendChild(textWrap);
-
-          var content = dialog.querySelector('.space-y-6, .space-y-4, .overflow-y-auto, form')
-                     || dialog.firstElementChild;
-          if (content) {
-            content.prepend(badge);
-            console.log('[VibeMind] Claude Code Max badge injected into Settings');
-          }
-        }
-
-        var observer = new MutationObserver(function() {
-          injectBadge();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        window.__claudeCodeBadgeObserver = observer;
-
-        injectBadge();
-      })();
-    `).catch(function(err) {
-      console.warn('[RowboatManager] Badge injection failed:', err.message);
-    });
-
-    console.log('[RowboatManager] Claude Code Max badge observer injected');
   }
 
   /**

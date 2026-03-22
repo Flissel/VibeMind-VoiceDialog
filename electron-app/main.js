@@ -8,7 +8,7 @@
 // Sentry error tracking (lazy-init after app.whenReady)
 const sentry = require('./sentry');
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net } = require('electron');
 const { spawn } = require('child_process');
 
 const path = require('path');
@@ -231,7 +231,32 @@ function createWindow() {
 
 // ============================================================================
 
+function killZombiePythonProcesses() {
+    // Kill stale Python processes on ports we need (8099=eyeTerm, 8007=AutomationUI)
+    if (process.platform !== 'win32') return;
+    const { execFileSync } = require('child_process');
+    for (const port of [8099]) {
+        try {
+            const out = execFileSync('netstat', ['-ano'], { timeout: 3000, encoding: 'utf8' });
+            const lines = out.split('\n').filter(l => l.includes(`:${port}`) && l.includes('LISTEN'));
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                const pid = parseInt(parts[parts.length - 1], 10);
+                if (pid > 0 && pid !== process.pid) {
+                    console.log(`[Main] Killing zombie process on port ${port} (PID ${pid})`);
+                    try {
+                        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 3000 });
+                    } catch (_) { /* may already be dead */ }
+                }
+            }
+        } catch (_) { /* netstat may fail — ignore */ }
+    }
+}
+
 function startPythonBackend() {
+    // Kill leftover Python processes from previous sessions
+    killZombiePythonProcesses();
+
     // Use venv Python 3.12 to ensure MediaPipe and all dependencies are available
     const pythonPath = process.platform === 'win32'
         ? path.join(__dirname, '..', '.venv312', 'Scripts', 'python.exe')
@@ -1738,7 +1763,7 @@ function setupIpcHandlers() {
             if (brainManager && brainManager.getIsVisible()) brainManager.hide();
             agentfarmManager.show();
             // Send tab switch to the AgentFarm BrowserView
-            const view = agentfarmManager.getBrowserView?.() || agentfarmManager.view;
+            const view = agentfarmManager.agentfarmView;
             if (view && view.webContents) {
                 view.webContents.send('agentfarm-switch-tab', { tab });
             }
@@ -1932,6 +1957,14 @@ function setupIpcHandlers() {
             return await sendToPythonAndWait({ type: 'video_voice_tts', person }, 'video_voice_tts_result', 120000);
         } catch (e) {
             return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:video-list', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_list' }, 'video_list_result', 15000);
+        } catch (e) {
+            return { success: false, message: e.message, videos: [] };
         }
     });
 
@@ -2351,9 +2384,33 @@ function registerShortcuts() {
 
 // ============================================================================
 
+// Register custom protocol for serving local video files to BrowserViews
+// MUST be called before app.whenReady()
+protocol.registerSchemesAsPrivileged([{
+    scheme: 'vibemind-video',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+}]);
+
 app.whenReady().then(async () => {
     // Initialize Sentry error tracking (requires app to be ready)
     sentry.initSentry();
+
+    // Register vibemind-video:// protocol handler for video playback
+    protocol.handle('vibemind-video', (request) => {
+        const url = new URL(request.url);
+        let filePath = decodeURIComponent(url.pathname);
+        // Remove leading slash on Windows (e.g., /C:/... -> C:/...)
+        if (process.platform === 'win32' && filePath.startsWith('/')) {
+            filePath = filePath.slice(1);
+        }
+        // Security: only allow .mp4 from vibevideo directories
+        const normalized = path.resolve(filePath);
+        const allowedBase = path.resolve(__dirname, '..', 'python', 'spaces', 'video');
+        if (!normalized.startsWith(allowedBase) || !normalized.endsWith('.mp4')) {
+            return new Response('Forbidden', { status: 403 });
+        }
+        return net.fetch(`file:///${normalized.replace(/\\/g, '/')}`);
+    });
 
     // Initialize Coding Engine managers
     dockerManager = new DockerManager();
@@ -2559,24 +2616,32 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
-    // Safety net: if Python hasn't exited 15s after stdin close, force kill
+    // Kill Python process tree (main + all child threads/subprocesses)
     if (pythonProcess) {
-        const killTimer = setTimeout(() => {
-            if (pythonProcess) {
-                console.warn('[Main] Python did not exit within 15s, force killing');
-                try { pythonProcess.kill(); } catch (e) { /* ignore */ }
-            }
-        }, 15000);
+        const pid = pythonProcess.pid;
+        console.log(`[Main] Killing Python process tree (PID ${pid})`);
 
-        pythonProcess.on('close', () => {
-            clearTimeout(killTimer);
-            console.log('[Main] Python exited cleanly');
-        });
-
-        // If stdin wasn't closed yet (e.g. quit without window-all-closed), close it now
+        // If stdin wasn't closed yet, close it first (graceful signal)
         if (pythonProcess.stdin && !pythonProcess.stdin.destroyed) {
             try { pythonProcess.stdin.end(); } catch (e) { /* ignore */ }
         }
+
+        // taskkill /T kills the entire process tree on Windows
+        const { execFileSync } = require('child_process');
+        try {
+            if (process.platform === 'win32') {
+                execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
+            } else {
+                // POSIX: kill process group
+                process.kill(-pid, 'SIGKILL');
+            }
+            console.log('[Main] Python process tree killed');
+        } catch (e) {
+            console.warn('[Main] Process tree kill failed:', e.message);
+            // Fallback: kill just the main process
+            try { pythonProcess.kill('SIGKILL'); } catch (_) { /* ignore */ }
+        }
+        pythonProcess = null;
     }
 
     // Stop Rowboat watchers (guard: may never have been started)
