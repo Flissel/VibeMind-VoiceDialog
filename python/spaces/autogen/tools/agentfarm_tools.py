@@ -244,80 +244,161 @@ def _load_template(template_id: str) -> Optional[Dict]:
 
 _active_pipeline: Optional[Dict[str, Any]] = None
 _active_forge: Optional[Dict[str, Any]] = None
+_hybrid_pipeline = None  # HybridPipeline instance (for status tracking)
 
 
 async def _ensure_minibook_setup() -> Dict[str, Any]:
-    """Register agents + create project at Minibook. Returns {agents, project_id}."""
-    import aiohttp
-    from spaces.autogen.swarm.api_client import register_agent, load_credentials, save_credentials, api_post
-    from spaces.autogen.swarm.knowledge import AGENT_ROLES
+    """Register agents + create project at Minibook. Returns {agents, project_id}.
 
-    creds = load_credentials()
+    Uses VibeMind's MINIBOOK_URL (default: localhost:3480) directly,
+    bypassing the submodule's hardcoded URL.
+    """
+    import aiohttp
+
+    minibook_url = os.getenv("MINIBOOK_URL", "http://localhost:3480")
+    from spaces.autogen.wrapper import AGENT_ROLES
+
+    creds_path = Path(__file__).resolve().parents[1] / "config" / "swarm_agents.json"
+    creds = json.loads(creds_path.read_text()) if creds_path.exists() else {}
+
     async with aiohttp.ClientSession() as session:
         agents = {}
-        for name in AGENT_ROLES.keys():
-            agent = await register_agent(session, name, creds)
-            agents[name] = agent
-        save_credentials(creds)
 
-        # Create or find project
+        for name in AGENT_ROLES.keys():
+            # Check cached credentials
+            if name in creds:
+                agents[name] = creds[name]
+                continue
+
+            # Register new agent
+            async with session.post(
+                f"{minibook_url}/api/v1/agents",
+                json={"name": name},
+                headers={"Content-Type": "application/json"},
+            ) as resp:
+                if resp.status >= 400:
+                    body = await resp.text()
+                    if "already taken" in body:
+                        raise Exception(f"Agent {name} exists but no saved key. Delete swarm_agents.json.")
+                    raise Exception(f"Register {name} failed: {resp.status} {body}")
+                result = await resp.json()
+                agents[name] = result
+                creds[name] = result
+
+        # Save credentials
+        creds_path.write_text(json.dumps(creds, indent=2))
+
+        # Create project
         lead_key = list(agents.keys())[0]
         lead_api_key = agents[lead_key].get("api_key", "")
-        project = await api_post(session, "/api/v1/projects", {
-            "name": f"pipeline-{uuid4().hex[:6]}",
-            "description": "Auto-created by VibeMind pipeline trigger",
-        }, api_key=lead_api_key)
-        project_id = project.get("id", project.get("project_id", ""))
+
+        async with session.post(
+            f"{minibook_url}/api/v1/projects",
+            json={"name": f"pipeline-{uuid4().hex[:6]}", "description": "VibeMind HybridPipeline"},
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {lead_api_key}"},
+        ) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                raise Exception(f"Create project failed: {resp.status} {body}")
+            project = await resp.json()
+            project_id = project.get("id", project.get("project_id", ""))
 
     return {"agents": agents, "project_id": project_id}
 
 
-def run_pipeline(task_description: str = "", **kwargs) -> Dict[str, Any]:
-    """Start the 11-agent SwarmPipeline for code generation.
+def run_pipeline(task_description: str = "", channel: str = "", session_id: str = "", **kwargs) -> Dict[str, Any]:
+    """Start the 13-step HybridPipeline (OpenClaw + Swarm + Claude CLI).
 
-    Automatically registers agents at Minibook and creates a project.
-    Requires Minibook server running (docker compose -f docker-compose.minibook.yml up).
+    If the task description is too short, starts a multi-turn enrichment dialog
+    (Rachel asks clarifying questions about data sources, output format, tools).
+    Once enriched, starts the pipeline in background.
+
+    Routes each step to the best orchestrator:
+    - Swarm: LLM reasoning (Spec, Review, Report)
+    - OpenClaw: Docker sandbox + user communication (no timeout!)
+    - Claude CLI: Code generation via ACP (no truncation)
     """
-    global _active_pipeline
+    global _active_pipeline, _hybrid_pipeline
     if not task_description:
         return {"success": False, "message": "task_description required — beschreibe was generiert werden soll."}
 
+    # --- Pre-Pipeline Enrichment (multi-turn voice dialog) ---
+    from spaces.autogen.orchestrator.pipeline_enrichment import get_pipeline_enrichment
+    enrichment = get_pipeline_enrichment()
+    sid = session_id or "default"
+
+    result = enrichment.start_session(sid, task_description)
+
+    if result["action"] == "ask":
+        # Need more info — Rachel asks a question, pipeline waits
+        return {
+            "success": True,
+            "message": result["question"],
+            "response_hint": result["question"],
+            "enrichment_active": True,
+            "question_id": result.get("question_id"),
+        }
+
+    if result["action"] == "confirm":
+        # Got enough info — ask for confirmation
+        return {
+            "success": True,
+            "message": result["confirmation"],
+            "response_hint": result["confirmation"],
+            "enrichment_active": True,
+            "awaiting_confirmation": True,
+        }
+
+    # action == "ready" — task is detailed enough, start pipeline
+    task_description = result.get("enriched_task", task_description)
+
     try:
         import asyncio
-        loop = asyncio.new_event_loop()
+        import threading
 
-        # Step 1: Register agents + project at Minibook
-        setup = loop.run_until_complete(_ensure_minibook_setup())
-        agents = setup["agents"]
-        project_id = setup["project_id"]
+        from spaces.autogen.orchestrator.hybrid_pipeline import HybridPipeline
 
-        # Step 2: Create and run pipeline with aiohttp session
-        from spaces.autogen.swarm.pipeline import SwarmPipeline
+        _hybrid_pipeline = HybridPipeline()
+        _active_pipeline = {"status": "starting", "task": task_description}
+        _broadcast_to_electron({"type": "agentfarm_pipeline_started", "task": task_description[:100]})
 
-        async def _run():
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                pipeline = SwarmPipeline(agents=agents, project_id=project_id, task_name=task_description[:80])
-                return await pipeline.run(session, task_description)
+        # Run in background thread (HybridPipeline is async, may wait for user)
+        def _run_hybrid():
+            global _active_pipeline
+            try:
+                loop = asyncio.new_event_loop()
+                result = loop.run_until_complete(
+                    _hybrid_pipeline.run(task_description, channel=channel or None)
+                )
+                loop.close()
+                _active_pipeline = {
+                    "status": "completed",
+                    "task": task_description,
+                    "result": str(result)[:500],
+                }
+            except Exception as e:
+                _active_pipeline = {"status": "error", "error": str(e)}
+                logger.error(f"HybridPipeline failed: {e}")
 
-        _active_pipeline = {"status": "running", "task": task_description, "project_id": project_id}
-        _broadcast_to_electron({"type": "agentfarm_pipeline_started", "task": task_description[:100], "project_id": project_id})
+        thread = threading.Thread(target=_run_hybrid, daemon=True, name="hybrid-pipeline")
+        thread.start()
 
-        result = loop.run_until_complete(_run())
-        loop.close()
-
-        _active_pipeline = {"status": "completed", "task": task_description, "project_id": project_id, "result": str(result)[:500]}
-        _broadcast_to_electron({"type": "agentfarm_pipeline_completed", "project_id": project_id})
-
-        return {"success": True, "message": f"Pipeline completed for: {task_description[:100]}", "project_id": project_id, "result": str(result)[:500]}
+        return {
+            "success": True,
+            "message": f"HybridPipeline gestartet fuer: {task_description[:100]}. Updates kommen via Channel.",
+            "response_hint": f"Pipeline gestartet. Du bekommst Updates via {channel or 'Electron UI'}.",
+        }
     except Exception as e:
         _active_pipeline = {"status": "error", "error": str(e)}
-        logger.error(f"Pipeline failed: {e}")
+        logger.error(f"Pipeline start failed: {e}")
         return {"success": False, "message": f"Pipeline failed: {e}"}
 
 
 def get_pipeline_status(**kwargs) -> Dict[str, Any]:
-    """Get current pipeline run status."""
+    """Get current HybridPipeline status with per-step details."""
+    if _hybrid_pipeline:
+        status = _hybrid_pipeline.get_status()
+        return {"success": True, **status, "message": f"Pipeline: {status.get('status', 'unknown')}"}
     if _active_pipeline:
         return {"success": True, **_active_pipeline, "message": f"Pipeline: {_active_pipeline.get('status', 'unknown')}"}
     return {"success": True, "status": "idle", "message": "Keine Pipeline aktiv."}
@@ -326,26 +407,26 @@ def get_pipeline_status(**kwargs) -> Dict[str, Any]:
 def start_forge(project_id: str = "", **kwargs) -> Dict[str, Any]:
     """Start ForgeOrchestrator for continuous improvement.
 
-    Requires Minibook server running. Auto-registers agents if needed.
+    Runs as background daemon via OpenClaw sandbox (or local fallback).
+    Requires Minibook server running.
     """
     global _active_forge
     try:
         import asyncio
-        loop = asyncio.new_event_loop()
+        import threading
 
+        loop = asyncio.new_event_loop()
         setup = loop.run_until_complete(_ensure_minibook_setup())
         agents = setup["agents"]
         pid = project_id or setup["project_id"]
 
-        from spaces.autogen.swarm.forge_orchestrator import ForgeOrchestrator
-        import threading
+        from spaces.autogen.wrapper import ForgeOrchestrator
 
         forge = ForgeOrchestrator(agents=agents, project_id=pid)
 
         _active_forge = {"status": "running", "project_id": pid}
         _broadcast_to_electron({"type": "agentfarm_forge_started", "project_id": pid})
 
-        # Forge runs its own web server — start in background thread
         def _run_forge():
             global _active_forge
             try:
@@ -359,7 +440,12 @@ def start_forge(project_id: str = "", **kwargs) -> Dict[str, Any]:
         thread.start()
         loop.close()
 
-        return {"success": True, "message": f"Forge gestartet auf Port 8890. Dashboard: http://localhost:8890/forge/status", "project_id": pid}
+        return {
+            "success": True,
+            "message": f"Forge gestartet auf Port 8890. Dashboard: http://localhost:8890/forge/status",
+            "project_id": pid,
+            "response_hint": "Forge-Orchestrator laeuft im Hintergrund.",
+        }
     except Exception as e:
         _active_forge = {"status": "error", "error": str(e)}
         logger.error(f"Forge failed: {e}")
@@ -371,3 +457,54 @@ def get_forge_status(**kwargs) -> Dict[str, Any]:
     if _active_forge:
         return {"success": True, **_active_forge, "message": f"Forge: {_active_forge.get('status', 'unknown')}"}
     return {"success": True, "status": "idle", "message": "Kein Forge aktiv."}
+
+
+def pipeline_answer(answer: str = "", session_id: str = "", **kwargs) -> Dict[str, Any]:
+    """Answer a pipeline enrichment question (Rachel follow-up).
+
+    Called when user responds to Rachel's clarifying questions
+    during pre-pipeline enrichment.
+    """
+    from spaces.autogen.orchestrator.pipeline_enrichment import get_pipeline_enrichment
+    enrichment = get_pipeline_enrichment()
+    sid = session_id or "default"
+
+    # Check for confirmation responses
+    if answer.lower() in ("ja", "yes", "ok", "los", "start", "loslegen", "go"):
+        result = enrichment.confirm(sid, confirmed=True)
+        if result["action"] == "ready":
+            # Start pipeline with enriched task
+            return run_pipeline(
+                task_description=result["enriched_task"],
+                session_id=sid,
+            )
+        return {"success": False, "message": "Keine aktive Enrichment-Session."}
+
+    if answer.lower() in ("nein", "no", "stop", "abbruch", "cancel"):
+        enrichment.cancel(sid)
+        return {"success": True, "message": "Pipeline abgebrochen.", "response_hint": "Pipeline abgebrochen."}
+
+    # Process answer to current question
+    result = enrichment.answer(sid, answer)
+
+    if result["action"] == "ask":
+        return {
+            "success": True,
+            "message": result["question"],
+            "response_hint": result["question"],
+            "enrichment_active": True,
+        }
+
+    if result["action"] == "confirm":
+        return {
+            "success": True,
+            "message": result["confirmation"],
+            "response_hint": result["confirmation"],
+            "enrichment_active": True,
+            "awaiting_confirmation": True,
+        }
+
+    if result["action"] == "ready":
+        return run_pipeline(task_description=result["enriched_task"], session_id=sid)
+
+    return {"success": False, "message": result.get("message", "Unknown state")}

@@ -23,9 +23,10 @@ class MiroFishConfig:
     neo4j_user: str = "neo4j"
     neo4j_password: str = "mirofish"
 
-    # LLM (MiroFish uses OpenAI-compatible API)
-    llm_base_url: str = "http://localhost:11434/v1"
-    llm_model_name: str = "qwen2.5:32b"
+    # LLM (OpenRouter free model, or any OpenAI-compatible API)
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_model_name: str = "meta-llama/llama-3.3-70b-instruct:free"
+    llm_api_key: str = ""
 
     # Docker
     docker_compose_path: str = ""
@@ -55,8 +56,9 @@ class MiroFishConfig:
             neo4j_password=os.getenv("MIROFISH_NEO4J_PASSWORD", "mirofish"),
 
             # LLM
-            llm_base_url=os.getenv("MIROFISH_LLM_BASE_URL", "http://localhost:11434/v1"),
-            llm_model_name=os.getenv("MIROFISH_LLM_MODEL", "qwen2.5:32b"),
+            llm_base_url=os.getenv("MIROFISH_LLM_BASE_URL", "https://openrouter.ai/api/v1"),
+            llm_model_name=os.getenv("MIROFISH_LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
+            llm_api_key=os.getenv("MIROFISH_LLM_API_KEY", os.getenv("OPENROUTER_API_KEY", "")),
 
             # Docker
             docker_compose_path=os.getenv(

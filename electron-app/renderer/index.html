@@ -5,13 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VibeMind - Multiverse</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Renderer log interceptor (writes console.log/warn/error to file) -->
+    <script>
+    (function() {
+        var _origLog = console.log, _origWarn = console.warn, _origError = console.error;
+        function sendLog(level, args) {
+            try {
+                if (window.vibemind && window.vibemind.writeLog) {
+                    window.vibemind.writeLog(level, ...Array.from(args).map(function(a) {
+                        return typeof a === 'object' ? JSON.stringify(a) : String(a);
+                    }));
+                }
+            } catch(e) {}
+        }
+        console.log = function() { _origLog.apply(console, arguments); sendLog('LOG', arguments); };
+        console.warn = function() { _origWarn.apply(console, arguments); sendLog('WARN', arguments); };
+        console.error = function() { _origError.apply(console, arguments); sendLog('ERROR', arguments); };
+    })();
+    </script>
     <!-- Three.js from local lib folder -->
     <script defer src="lib/three.min.js"></script>
     <script defer src="lib/OrbitControls.js"></script>
     <script defer src="shuttle_manager.js"></script>
     <script defer src="multiverse.js"></script>
-    <script defer src="universe_canvas.js"></script>
     <script defer src="rich_content_renderer.js"></script>
+    <script defer src="universe_canvas.js"></script>
     <script defer src="glass_bubbles.js"></script>
     <!-- AI-Scientist Exploration Dialogs -->
     <script defer src="exploration_dialog.js"></script>
@@ -1711,7 +1729,8 @@
                     break;
 
                 case 'flowzen_status_result':
-                    window.flowzenPanel.updateFlowzenPanel(message);
+                    console.log('[Flowzen] Status received:', message.current_time_window, message.mood);
+                    if (window.flowzenPanel) window.flowzenPanel.updateFlowzenPanel(message);
                     break;
 
                 case 'flowzen_recommend_result':
@@ -1732,7 +1751,12 @@
                     break;
 
                 case 'flowzen_diary_entries_result':
-                    window.flowzenPanel.renderDiaryEntries(message.entries || []);
+                    console.log('[Flowzen] Diary entries received:', (message.entries || []).length);
+                    if (window.flowzenPanel) {
+                        window.flowzenPanel.renderDiaryEntries(message.entries || []);
+                    } else {
+                        console.error('[Flowzen] flowzenPanel not loaded!');
+                    }
                     break;
 
                 // Rowboat update auto-applied

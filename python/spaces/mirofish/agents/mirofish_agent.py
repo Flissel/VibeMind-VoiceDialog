@@ -33,6 +33,7 @@ class MiroFishBackendAgent(BaseBackendAgent):
         # Core prediction
         "mirofish.simulate": "simulate",
         "mirofish.predict": "simulate",  # alias
+        "mirofish.predict_from_knowledge": "predict_from_knowledge",
 
         # Graph operations
         "mirofish.graph.build": "build_graph",
@@ -52,6 +53,9 @@ class MiroFishBackendAgent(BaseBackendAgent):
         "mirofish.docker.stop": "stop_docker",
         "mirofish.docker.restart": "restart_docker",
         "mirofish.docker.status": "docker_status",
+
+        # Bubble Evaluation
+        "mirofish.evaluate": "evaluate_bubble_readiness",
 
         # System
         "mirofish.status": "get_status",
@@ -80,6 +84,16 @@ class MiroFishBackendAgent(BaseBackendAgent):
             "was": "requirement",
             "text": "text",
         },
+        "mirofish.predict_from_knowledge": {
+            "anforderung": "requirement",
+            "beschreibung": "requirement",
+            "description": "requirement",
+            "was": "requirement",
+            "suche": "query",
+            "suchbegriff": "query",
+            "agenten": "agent_count",
+            "runden": "rounds",
+        },
         "mirofish.graph.build": {
             "anforderung": "requirement",
             "beschreibung": "requirement",
@@ -104,6 +118,13 @@ class MiroFishBackendAgent(BaseBackendAgent):
             "frage": "question",
             "question": "question",
             "simulation": "simulation_id",
+        },
+        "mirofish.evaluate": {
+            "name": "bubble_name",
+            "bubble": "bubble_name",
+            "title": "bubble_name",
+            "titel": "bubble_name",
+            "space": "bubble_name",
         },
     }
 
@@ -132,6 +153,8 @@ class MiroFishBackendAgent(BaseBackendAgent):
                 list_projects,
                 chat_report,
                 interview_agent,
+                predict_from_knowledge,
+                evaluate_bubble_readiness,
             )
 
             tools.update({
@@ -142,6 +165,8 @@ class MiroFishBackendAgent(BaseBackendAgent):
                 "list_projects": list_projects,
                 "chat_report": chat_report,
                 "interview_agent": interview_agent,
+                "predict_from_knowledge": predict_from_knowledge,
+                "evaluate_bubble_readiness": evaluate_bubble_readiness,
             })
             logger.info(f"{self.name}: Loaded {len(tools)} prediction/graph tools")
 

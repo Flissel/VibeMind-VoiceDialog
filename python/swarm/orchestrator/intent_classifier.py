@@ -428,10 +428,14 @@ Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Team
 **Schluesselwoerter:** agent team, agentfarm, autogen, multi-agent, team erstellen, team starten, zusammenarbeit, collaboration, agenten
 
 **Event-Types:**
-- agentfarm.create_team: Neues Agent-Team erstellen
-  → "Erstelle ein Agent-Team fuer Customer Support", "Neues Team mit 3 Agenten"
+- agentfarm.pipeline.start: BEVORZUGT wenn User ein Agent-Team BESCHREIBT (mit Datenquellen, Tools, Use-Case). Startet die volle 13-Step Code-Generierung-Pipeline.
+  → "Baue ein Agent-Team mit Salesforce API und PostgreSQL", "Erstelle Agents fuer Datenanalyse mit PDF-Report"
+  → "Baue ein Team das Kundendaten analysiert", "Agent-Team fuer Content-Erstellung"
+  → payload: {"task_description": "..."}
+- agentfarm.create_team: NUR wenn User ein Team aus einem TEMPLATE erstellen will (kein Code generieren)
+  → "Erstelle ein Team aus dem Template customer-support", "Neues Team aus Vorlage"
   → payload: {"template_id": "...", "team_name": "..."}
-- agentfarm.run: Team-Run starten mit einer Aufgabe
+- agentfarm.run: Team-Run starten mit einer Aufgabe (Team existiert bereits)
   → "Starte das Team mit der Aufgabe FAQ erstellen", "Lass das Team X arbeiten an Y"
   → payload: {"team_id": "...", "task": "..."}
 - agentfarm.status: AgentFarm Uebersicht aller Teams und Runs
@@ -453,6 +457,7 @@ Der Bereich fuer Autogen Multi-Agent Teams. Erstellt, startet und verwaltet Team
   → "Starte die Pipeline fuer einen Chat-Bot"
   → payload: {"task_description": "..."}
 - agentfarm.pipeline.status: Pipeline-Fortschritt abfragen
+- agentfarm.pipeline.answer: Antwort auf Pipeline-Rueckfrage (z.B. "API und Datenbank", "Ja, loslegen")
   → "Wie ist der Pipeline-Status?"
 - agentfarm.forge.start: Starte kontinuierliche Verbesserung (Forge)
   → "Starte den Forge-Prozess fuer Projekt X"
@@ -487,9 +492,14 @@ Multi-Agent Simulation und Vorhersage-Engine. Nimmt Seed-Daten, baut einen Knowl
 **Schluesselwoerter:** mirofish, vorhersage, prediction, simulation, simulieren, agenten-simulation, predict, swarm intelligence
 
 **Event-Types:**
-- mirofish.simulate: Vorhersage-Simulation starten (End-to-End Pipeline)
-  → "Simuliere die Reaktion auf unser neues Produkt", "Starte eine MiroFish Vorhersage"
-  → "Sage vorher wie der Markt auf X reagiert", "Prediction fuer Y"
+- mirofish.predict_from_knowledge: Vorhersage basierend auf Rowboat-Wissen (BEVORZUGT)
+  → "Sage vorher wie der Markt auf X reagiert", "Prediction basierend auf unserem Wissen"
+  → "Analysiere mit MiroFish was passiert wenn...", "Vorhersage aus Knowledge Graph"
+  → Holt automatisch Kontext aus Rowboat und fuettert MiroFish
+  → payload: {"requirement": "...", "query": "optional rowboat search"}
+- mirofish.simulate: Vorhersage-Simulation mit eigenen Seed-Daten starten
+  → "Starte eine MiroFish Simulation mit diesem Text", "MiroFish Simulation mit Datei"
+  → NUR wenn der Nutzer explizit eigene Daten/Dateien angeben will
   → payload: {"requirement": "...", "text": "...", "agent_count": 100, "rounds": 10}
 - mirofish.graph.build: Knowledge Graph aus Seed-Daten aufbauen (ohne Simulation)
   → "Erstelle einen MiroFish Graph aus diesem Text"
@@ -505,6 +515,11 @@ Multi-Agent Simulation und Vorhersage-Engine. Nimmt Seed-Daten, baut einen Knowl
 - mirofish.interview: Simulierten Agenten interviewen
   → "Interview den Agenten Max aus der Simulation"
   → payload: {"simulation_id": "...", "agent_name": "...", "question": "..."}
+- mirofish.evaluate: Bubble-Readiness bewerten (Multi-Agenten Evaluation)
+  → "Bewerte ob Bubble X bereit ist", "Ist Marketing code-ready?"
+  → "Go/No-Go fuer Bubble X", "Pruefe Bubble-Readiness"
+  → "Evaluiere die Bubble X", "Wie weit ist Bubble X?"
+  → payload: {"bubble_name": "..."}
 - mirofish.status: MiroFish Verbindungsstatus pruefen
   → "MiroFish Status", "Ist MiroFish verbunden?"
 - mirofish.docker.start: MiroFish Docker starten
@@ -1225,7 +1240,7 @@ class IntentClassifier:
             format_keywords = ["formatiere", "formatiert", "konvertiere", "wandele", "format"]
             has_format = any(kw in text_lower for kw in format_keywords)
 
-            if has_format or intent in format_intents:
+            if (has_format or intent in format_intents) and result["event_type"] != "mirofish.evaluate":
                 # Determine specific format sub-type from text
                 if "notiz" in text_lower or "note" in text_lower:
                     result["event_type"] = "idea.format_note"
@@ -1402,6 +1417,32 @@ class IntentClassifier:
                 self._applied_rules.append("rule_27_multi_step_structure")
                 logger.debug(f"Post-process: multi-step -> idea.structure")
                 return result
+
+        # Rule FINAL: MiroFish bubble evaluation - LAST rule, overrides everything
+        # "Bewerte Bubble X", "Evaluate Bubble X", "Go/No-Go Bubble X"
+        mirofish_eval_phrases = [
+            "bewerte bubble", "evaluate bubble", "bubble readiness",
+            "go/no-go", "go no go", "code-ready", "code ready",
+            "pruefe bubble", "prüfe bubble", "bubble bewerten",
+            "ist bubble", "ist die bubble",
+        ]
+        if any(p in text_lower for p in mirofish_eval_phrases):
+            import re
+            bubble_name = ""
+            match = re.search(r'bubble\s+["\']?([^"\']+?)["\']?\s*(?:bereit|ready|$)', text_lower)
+            if match:
+                bubble_name = match.group(1).strip()
+            else:
+                match = re.search(r'bubble\s+(.+)', text_lower)
+                if match:
+                    bubble_name = match.group(1).strip()
+                    for suffix in ["bereit", "ready", "bewerten", "evaluieren", "prüfen", "pruefe"]:
+                        bubble_name = bubble_name.replace(suffix, "").strip()
+
+            result["event_type"] = "mirofish.evaluate"
+            result["payload"] = {"bubble_name": bubble_name} if bubble_name else {}
+            self._applied_rules.append("rule_final_mirofish_evaluate")
+            logger.debug(f"Post-process FINAL: -> mirofish.evaluate (bubble='{bubble_name}')")
 
         return result
 

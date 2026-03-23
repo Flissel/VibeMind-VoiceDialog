@@ -574,7 +574,7 @@ class ElectronBackend:
             debug_log(f"Rowboat update checker init error: {e}")
 
         # Automation_ui auto-start (Vapi Voice Control + MCP + Clawdbot)
-        # Starts the FastAPI backend at localhost:8007 if server.py exists
+        # Starts the FastAPI backend at localhost:8009 if server.py exists
         self._automation_ui_proc = None
         def _autostart_automation_ui():
             import time
@@ -678,7 +678,7 @@ class ElectronBackend:
                     for attempt in range(15):
                         time.sleep(2)
                         try:
-                            r = httpx.get("http://localhost:8007/api/health/health", timeout=2)
+                            r = httpx.get("http://localhost:8009/api/health/health", timeout=2)
                             if r.status_code == 200:
                                 debug_log("Automation_ui backend is healthy")
                                 self.send_message({"type": "automation_ui_status", "status": "running"})

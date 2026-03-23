@@ -219,11 +219,13 @@ class EventRouter:
         # MiroFish (Prediction Engine) → mirofish stream
         "mirofish.simulate": STREAM_TASKS_MIROFISH,
         "mirofish.predict": STREAM_TASKS_MIROFISH,
+        "mirofish.predict_from_knowledge": STREAM_TASKS_MIROFISH,
         "mirofish.graph.build": STREAM_TASKS_MIROFISH,
         "mirofish.graph.search": STREAM_TASKS_MIROFISH,
         "mirofish.list_projects": STREAM_TASKS_MIROFISH,
         "mirofish.report.chat": STREAM_TASKS_MIROFISH,
         "mirofish.interview": STREAM_TASKS_MIROFISH,
+        "mirofish.evaluate": STREAM_TASKS_MIROFISH,
         "mirofish.status": STREAM_TASKS_MIROFISH,
         "mirofish.docker.start": STREAM_TASKS_MIROFISH,
         "mirofish.docker.stop": STREAM_TASKS_MIROFISH,

@@ -108,3 +108,17 @@
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
+
+/* --- Desktop click interaction overlay --- */
+#desktop-interact-overlay {
+    cursor: crosshair;
+}
+#desktop-interact-overlay:active {
+    cursor: none;
+}
+
+/* Click ripple animation */
+@keyframes clickRipple {
+    0% { transform: scale(0.5); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+}

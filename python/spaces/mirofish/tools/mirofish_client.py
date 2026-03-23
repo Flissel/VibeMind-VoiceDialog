@@ -138,7 +138,7 @@ class MiroFishClient:
                 f"{self._url}/api/graph/ontology/generate",
                 files=files,
                 data=data,
-                timeout=120,
+                timeout=600,  # LLM ontology generation can take 5+ minutes
             )
 
             # Close file handles
@@ -147,11 +147,15 @@ class MiroFishClient:
 
             if resp.status_code == 200:
                 result = resp.json()
+                # API returns {data: {project_id, ontology, ...}, success: true}
+                data = result.get("data", result)
+                project_id = data.get("project_id") or result.get("project_id")
+                ontology = data.get("ontology") or result.get("ontology")
                 return {
                     "success": True,
-                    "project_id": result.get("project_id"),
-                    "ontology": result.get("ontology"),
-                    "message": f"Ontologie erstellt. Projekt: {result.get('project_id')}",
+                    "project_id": project_id,
+                    "ontology": ontology,
+                    "message": f"Ontologie erstellt. Projekt: {project_id}",
                 }
             return {
                 "success": False,
@@ -181,14 +185,16 @@ class MiroFishClient:
             )
             if resp.status_code == 200:
                 result = resp.json()
+                data = result.get("data", result)
+                task_id = data.get("task_id") or result.get("task_id")
                 return {
                     "success": True,
-                    "task_id": result.get("task_id"),
+                    "task_id": task_id,
                     "message": "Graph-Aufbau gestartet.",
                 }
             return {
                 "success": False,
-                "error": f"HTTP {resp.status_code}",
+                "error": f"HTTP {resp.status_code}: {resp.text[:200]}",
                 "message": f"Graph-Aufbau fehlgeschlagen: HTTP {resp.status_code}",
             }
         except Exception as e:
@@ -392,6 +398,145 @@ class MiroFishClient:
             return {"success": False, "error": f"HTTP {resp.status_code}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Graph-Only Pipeline (no simulation)
+    # -------------------------------------------------------------------------
+
+    def build_graph_from_text(
+        self,
+        requirement: str,
+        text_content: str,
+        project_name: str = None,
+        poll_interval: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        Build a knowledge graph from raw text (no simulation, no report).
+
+        Steps:
+        1. generate_ontology(requirement, text_content)
+        2. build_graph(project_id)
+        3. Poll until complete
+        4. Return graph_id + summary
+
+        Args:
+            requirement: Description of what the graph represents
+            text_content: Raw text content to build graph from
+            project_name: Optional project name
+            poll_interval: Seconds between polls
+
+        Returns:
+            Dict with project_id, graph_id, summary
+        """
+        # Step 1: Generate ontology
+        ontology_result = self.generate_ontology(
+            requirement=requirement,
+            text_content=text_content,
+            project_name=project_name,
+        )
+        if not ontology_result.get("success"):
+            return ontology_result
+
+        project_id = ontology_result["project_id"]
+        if not project_id:
+            return {
+                "success": False,
+                "message": "Ontologie erstellt, aber keine project_id erhalten.",
+            }
+
+        # Step 2: Build graph
+        build_result = self.build_graph(project_id)
+        if not build_result.get("success"):
+            return build_result
+
+        task_id = build_result.get("task_id")
+        if not task_id:
+            return {
+                "success": False,
+                "message": "Graph-Build gestartet, aber keine task_id erhalten.",
+            }
+
+        # Step 3: Poll build progress
+        from spaces.mirofish.config import get_config
+        config = get_config()
+        deadline = time.time() + config.build_timeout
+
+        graph_id = None
+        while time.time() < deadline:
+            poll = self.poll_build(task_id)
+            if poll.get("status") == "completed":
+                graph_id = poll.get("graph_id")
+                break
+            if poll.get("status") == "failed":
+                return {"success": False, "message": "Graph-Aufbau fehlgeschlagen."}
+            time.sleep(poll_interval)
+
+        if not graph_id:
+            return {"success": False, "message": "Graph-Aufbau Timeout."}
+
+        # Step 4: Get summary
+        summary = self.get_graph_summary(graph_id)
+
+        return {
+            "success": True,
+            "project_id": project_id,
+            "graph_id": graph_id,
+            "summary": summary,
+            "message": f"Knowledge Graph erstellt: {graph_id}",
+        }
+
+    def get_graph_summary(self, graph_id: str) -> str:
+        """
+        Get a compact text summary of a graph (entities, relations, counts).
+
+        Args:
+            graph_id: Graph to summarize
+
+        Returns:
+            Human-readable summary string
+        """
+        try:
+            result = self.get_graph_data(graph_id)
+            if not result.get("success"):
+                return ""
+
+            data = result.get("data", {})
+            nodes = data.get("nodes", [])
+            edges = data.get("edges", [])
+
+            # Extract entity names and types
+            entity_names = []
+            entity_types = set()
+            for node in nodes[:50]:  # limit
+                name = node.get("name") or node.get("label", "")
+                ntype = node.get("type") or node.get("entity_type", "")
+                if name:
+                    entity_names.append(f"{name} ({ntype})" if ntype else name)
+                if ntype:
+                    entity_types.add(ntype)
+
+            # Extract relation types
+            relation_types = set()
+            for edge in edges[:50]:
+                rtype = edge.get("type") or edge.get("relation_type", "")
+                if rtype:
+                    relation_types.add(rtype)
+
+            parts = [
+                f"Graph {graph_id}: {len(nodes)} Entities, {len(edges)} Relations",
+            ]
+            if entity_types:
+                parts.append(f"Entity-Typen: {', '.join(sorted(entity_types))}")
+            if relation_types:
+                parts.append(f"Relation-Typen: {', '.join(sorted(relation_types))}")
+            if entity_names:
+                parts.append(f"Entities: {', '.join(entity_names[:20])}")
+
+            return "\n".join(parts)
+
+        except Exception as e:
+            logger.warning(f"MiroFishClient: graph summary error: {e}")
+            return ""
 
     # -------------------------------------------------------------------------
     # End-to-End Pipeline

@@ -1611,3 +1611,8 @@ class RichContentRenderer {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = RichContentRenderer;
 }
+
+// Also expose on window for use by universe_canvas.js
+if (typeof window !== 'undefined') {
+    window.RichContentRenderer = RichContentRenderer;
+}

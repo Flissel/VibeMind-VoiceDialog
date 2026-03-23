@@ -18,6 +18,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field
 
+# Load .env from project root (two levels up from python/debug/)
+try:
+    from dotenv import load_dotenv
+    _project_root = Path(__file__).resolve().parent.parent.parent
+    load_dotenv(_project_root / ".env")
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 # AutoGen 0.7.x imports
@@ -315,6 +323,8 @@ SUPPRESS_PATTERNS = (
     "Forwarded to renderer:",
     '"objectId"',
     '"className": "Object"',
+    "Electron Security Warning (Insecure Content-Security-Policy)",
+    "This warning will not show up",
 )
 
 
@@ -520,12 +530,32 @@ Recent errors:
         # Create tools
         analyze_tool = FunctionTool(analyze_logs, description="Analyze debug logs for patterns or issues")
         stats_tool = FunctionTool(get_stats, description="Get current debugging statistics")
-        
-        # Create agent
-        model_client = OpenAIChatCompletionClient(
-            model="gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY", "")
-        )
+
+        # Create model client: prefer OpenRouter, fallback to OpenAI
+        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+
+        if openrouter_key:
+            model_client = OpenAIChatCompletionClient(
+                model="openai/gpt-4o-mini",
+                api_key=openrouter_key,
+                base_url="https://openrouter.ai/api/v1",
+                model_info={
+                    "vision": False,
+                    "function_calling": True,
+                    "json_output": True,
+                    "structured_output": False,
+                    "family": "gpt-4o-mini",
+                },
+            )
+        elif openai_key:
+            model_client = OpenAIChatCompletionClient(
+                model="gpt-4o-mini",
+                api_key=openai_key,
+            )
+        else:
+            print("WARNING: No API key found for debug analysis (set OPENROUTER_API_KEY or OPENAI_API_KEY)")
+            return
         
         self.autogen_agent = AssistantAgent(
             name="ElectronDebugger",

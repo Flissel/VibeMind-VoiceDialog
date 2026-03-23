@@ -353,6 +353,19 @@ class CanvasManager:
                             },
                             "connections": []
                         }
+
+                        # Include structured content if available
+                        if db_node.content_json:
+                            try:
+                                import json
+                                cj = db_node.content_json
+                                if isinstance(cj, str):
+                                    cj = json.loads(cj)
+                                node["content_json"] = cj
+                                node["format_type"] = cj.get("type", db_node.node_type)
+                            except Exception:
+                                pass
+
                         bubble_nodes.append(node)
 
                 logger.info(f"Loaded {len(bubble_nodes)} nodes for bubble {db_bubble_id}")

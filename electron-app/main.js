@@ -253,7 +253,7 @@ function killZombiePythonProcesses() {
     // Kill stale Python processes on ports we need (8099=eyeTerm, 8009=AutomationUI)
     if (process.platform !== 'win32') return;
     const { execFileSync } = require('child_process');
-    for (const port of [8099]) {
+    for (const port of [8099, 8009]) {
         try {
             const out = execFileSync('netstat', ['-ano'], { timeout: 3000, encoding: 'utf8' });
             const lines = out.split('\n').filter(l => l.includes(`:${port}`) && l.includes('LISTEN'));

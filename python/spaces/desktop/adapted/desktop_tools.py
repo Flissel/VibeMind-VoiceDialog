@@ -2,7 +2,7 @@
 Adapted Desktop Tools for AutoGen Swarm
 
 Typed wrappers that route desktop automation through the Automation_ui
-FastAPI backend (localhost:8007). Simple actions (type, key, scroll) use
+FastAPI backend (localhost:8009). Simple actions (type, key, scroll) use
 direct REST endpoints; vision-based actions (click_element, execute_task,
 moire_scan) use the agentic LLM intent endpoint.
 
@@ -36,7 +36,7 @@ def execute_desktop_task(task_description: str = None) -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8009."
 
     try:
         result = client.llm_intent(task_description)
@@ -66,7 +66,7 @@ def click_element(element_description: str = None) -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8009."
 
     try:
         result = client.llm_intent(f"Klicke auf: {element_description}")
@@ -90,7 +90,7 @@ def take_screenshot() -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8009."
 
     try:
         result = client.llm_intent("Beschreibe was aktuell auf dem Bildschirm zu sehen ist.")
@@ -114,7 +114,7 @@ def moire_scan() -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8009."
 
     try:
         result = client.llm_intent("Lies den gesamten Bildschirminhalt mit OCR und liste alle sichtbaren UI-Elemente auf.")
@@ -144,7 +144,7 @@ def moire_find_element(element_description: str = None) -> str:
 
     client = get_automation_client()
     if not client.is_available():
-        return "Desktop automation not available. Automation_ui backend is not running on port 8007."
+        return "Desktop automation not available. Automation_ui backend is not running on port 8009."
 
     try:
         result = client.llm_intent(f"Finde das UI-Element: {element_description}")

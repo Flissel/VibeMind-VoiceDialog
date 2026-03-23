@@ -66,13 +66,26 @@ class GazeEstimator:
 
     def __init__(self, min_confidence: float = 0.8) -> None:
         self._min_confidence = min_confidence
-        self._face_mesh = mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
+        self._frame_ts = 0  # monotonic timestamp counter for VIDEO mode
+
+        # mediapipe >= 0.10.30 removed mp.solutions; use Task API (FaceLandmarker)
+        import pathlib
+        model_path = pathlib.Path(__file__).parent.parent / "models" / "face_landmarker.task"
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"FaceLandmarker model not found at {model_path}. "
+                "Download from: https://storage.googleapis.com/mediapipe-models/"
+                "face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
+            )
+
+        options = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(model_path)),
+            num_faces=1,
+            min_face_detection_confidence=0.5,
             min_tracking_confidence=0.5,
+            running_mode=mp.tasks.vision.RunningMode.VIDEO,
         )
+        self._landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
 
     # ------------------------------------------------------------------
     # Public API
@@ -84,11 +97,13 @@ class GazeEstimator:
         ``frame_rgb`` must be an RGB image (not BGR).
         """
         logger.debug("estimate called: frame shape=%s", frame_rgb.shape)
-        results = self._face_mesh.process(frame_rgb)
-        if not results.multi_face_landmarks:
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+        self._frame_ts += 33  # ~30fps timestamp increment (ms)
+        results = self._landmarker.detect_for_video(mp_image, self._frame_ts)
+        if not results.face_landmarks:
             return None
 
-        lms = results.multi_face_landmarks[0].landmark
+        lms = results.face_landmarks[0]  # list of NormalizedLandmark
 
         # -- Confidence gate: check eye geometry is plausible -----------
         # If eye corners are too close (< threshold of image width),
@@ -136,8 +151,8 @@ class GazeEstimator:
         return GazeResult(x=gaze_x, y=gaze_y, head_x=head_x, head_y=head_y, landmarks=lms)
 
     def close(self) -> None:
-        """Release the MediaPipe FaceMesh resources."""
-        self._face_mesh.close()
+        """Release the MediaPipe FaceLandmarker resources."""
+        self._landmarker.close()
 
     # ------------------------------------------------------------------
     # Internal helpers

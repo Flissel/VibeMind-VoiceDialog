@@ -65,6 +65,7 @@ class EyeTermHeadless:
         self._residual_grid = None     # Click-learning correction grid
         self._accuracy_gate = None     # Phase-based cursor gate
         self._click_collector = None   # Windows mouse hook
+        self._ga_calibrator = None     # Genetic algorithm calibration
         self._focus_router = None
         self._wink = None
         self._cursor_driver = None
@@ -357,6 +358,25 @@ class EyeTermHeadless:
             self._click_collector.start()
             self._log("ClickCollector + ResidualGrid + AccuracyGate initialized")
 
+            # --- GeneticCalibrator (background affine matrix evolution) ---
+            from .cursor.ga_calibrator import GeneticCalibrator
+            self._ga_calibrator = GeneticCalibrator(
+                screen_w=sw, screen_h=sh,
+                pop_size=80,
+                min_samples=8,
+                evolve_interval=2.0,
+                improvement_threshold=5.0,
+            )
+
+            def _on_ga_improved(matrix: "np.ndarray", residual: float) -> None:
+                self._screen_mapper.set_calibration(matrix)
+                if self._residual_grid:
+                    self._residual_grid.reset()
+                self._log(f"GA calibration applied (residual={residual:.1f}px, gen={self._ga_calibrator.generation})")
+
+            self._ga_calibrator.start(on_improved=_on_ga_improved)
+            self._log("GeneticCalibrator started (background evolution)")
+
             self._focus_router = FocusRouter(
                 num_panes=1,
                 dwell_ms=self._config.gaze.dwell_ms,
@@ -639,6 +659,12 @@ class EyeTermHeadless:
                                     sample.predicted_x, sample.predicted_y,
                                     sample.click_x, sample.click_y,
                                 )
+                                # Feed GA with smoothed gaze input → actual click
+                                if self._ga_calibrator:
+                                    self._ga_calibrator.add_sample(
+                                        smooth_x, smooth_y,
+                                        sample.click_x, sample.click_y,
+                                    )
 
                         # Accuracy gate + drift check ONLY when new clicks arrived
                         if had_new and self._accuracy_gate:
@@ -784,12 +810,15 @@ class EyeTermHeadless:
                         })
                 if dots:
                     try:
-                        self._broadcast_fn({
+                        payload = {
                             "type": "eyeterm_click_dots",
                             "dots": dots,
                             "screen_w": self._screen_width or 1920,
                             "screen_h": self._screen_height or 1080,
-                        })
+                        }
+                        if self._ga_calibrator:
+                            payload["ga"] = self._ga_calibrator.status()
+                        self._broadcast_fn(payload)
                     except Exception:
                         pass
 
@@ -910,6 +939,11 @@ class EyeTermHeadless:
             self._current_element = None
 
     def _cleanup(self):
+        if hasattr(self, '_ga_calibrator') and self._ga_calibrator:
+            try:
+                self._ga_calibrator.stop()
+            except Exception:
+                pass
         if hasattr(self, '_click_collector') and self._click_collector:
             try:
                 self._click_collector.stop()

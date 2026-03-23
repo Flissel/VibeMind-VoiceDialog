@@ -595,6 +595,7 @@ class ToolRegistry:
                 create_team, run_team, get_farm_status, list_teams,
                 stop_run, get_run_results, list_templates, start_collaboration,
                 run_pipeline, get_pipeline_status, start_forge, get_forge_status,
+                pipeline_answer,
             )
 
             def _fmt_af(result):
@@ -634,6 +635,7 @@ class ToolRegistry:
                 )),
                 "agentfarm.pipeline.start": lambda p: run_pipeline(**p),
                 "agentfarm.pipeline.status": lambda p: get_pipeline_status(**p),
+                "agentfarm.pipeline.answer": lambda p: pipeline_answer(**p),
                 "agentfarm.forge.start": lambda p: start_forge(**p),
                 "agentfarm.forge.status": lambda p: get_forge_status(**p),
             })

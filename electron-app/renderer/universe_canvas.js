@@ -274,13 +274,26 @@ class UniverseCanvas {
         el.style.top = y + 'px';
 
         // Header with drag handle and delete button
+        const formatType = data.content_json?.type || data.format_type || null;
         const header = document.createElement('div');
         header.className = 'node-header';
-        header.innerHTML = `
-            <span class="node-type-icon">${this.getTypeIcon(data.type)}</span>
-            <span class="node-title">${this.getNodeTitle(data)}</span>
-            <button class="node-delete" title="Delete">×</button>
-        `;
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'node-type-icon';
+        iconSpan.textContent = this.getTypeIcon(data.type, formatType);
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'node-title';
+        titleSpan.textContent = this.getNodeTitle(data);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'node-delete';
+        deleteBtn.title = 'Delete';
+        deleteBtn.textContent = '×';
+
+        header.appendChild(iconSpan);
+        header.appendChild(titleSpan);
+        header.appendChild(deleteBtn);
         el.appendChild(header);
 
         // Content area (type-specific)
@@ -296,7 +309,7 @@ class UniverseCanvas {
             }
         });
 
-        header.querySelector('.node-delete').addEventListener('click', (e) => {
+        deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.deleteNode(data.id);
         });
@@ -320,12 +333,54 @@ class UniverseCanvas {
         this.nodesContainer.appendChild(el);
         this.nodes.set(data.id, { element: el, data: data });
 
+        // Render structured content (content_json) if available from DB
+        console.log('[UniverseCanvas] renderNode content_json:', data.id, data.content_json?.type, 'RichRenderer:', !!window.RichContentRenderer);
+        if (data.content_json && data.content_json.type) {
+            // Set format type for CSS targeting
+            el.dataset.formatType = data.content_json.type;
+
+            // Use RichContentRenderer if available
+            if (window.RichContentRenderer) {
+                const renderer = new window.RichContentRenderer(content);
+                const contentType = data.content_json.type;
+                if (renderer.contentTypes && renderer.contentTypes[contentType]) {
+                    // Clear default content safely using DOM methods
+                    while (content.firstChild) {
+                        content.removeChild(content.firstChild);
+                    }
+                    const rendered = renderer.contentTypes[contentType](data.content_json);
+                    if (rendered) {
+                        rendered.classList.add('structured-content');
+                        content.appendChild(rendered);
+                    }
+                }
+            }
+        }
+
         return el;
     }
 
-    getTypeIcon(type) {
+    getTypeIcon(type, formatType) {
+        // Check format type first (structured content type)
+        const ft = formatType || type;
+        switch (ft) {
+            case 'action_list': return '☐';
+            case 'table': return '📊';
+            case 'simple_table': return '📊';
+            case 'pros_cons_table': return '⚖️';
+            case 'pros_cons': return '⚖️';
+            case 'hierarchy': return '🌳';
+            case 'kanban': return '📋';
+            case 'mindmap': return '🧠';
+            case 'swot': return '🔲';
+            case 'user_story': return '👤';
+            case 'flowchart': return '🔀';
+            case 'technical_specs': return '🔧';
+            case 'specs': return '🔧';
+            default: break;
+        }
         switch (type) {
-            case 'note': return '📝';
+            case 'note': return '✏️';
             case 'link': return '🔗';
             case 'image': return '🖼️';
             case 'idea': return '💡';
@@ -1163,6 +1218,16 @@ class UniverseCanvas {
                 table.appendChild(tbody);
 
                 contentContainer.appendChild(table);
+            }
+        }
+
+        // Set format type as data attribute for CSS targeting
+        if (structuredContent.type) {
+            node.element.dataset.formatType = structuredContent.type;
+            // Update icon to match new format
+            const iconEl = node.element.querySelector('.node-type-icon');
+            if (iconEl) {
+                iconEl.textContent = this.getTypeIcon(node.data.type, structuredContent.type);
             }
         }
 

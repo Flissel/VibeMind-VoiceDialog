@@ -187,22 +187,438 @@
 /* NODE TYPE ACCENTS - New format types                                     */
 /* ======================================================================== */
 
-.canvas-node[data-node-type="kanban"] {
+.canvas-node[data-node-type="kanban"],
+.canvas-node[data-format-type="kanban"] {
     border-left: 3px solid rgba(100, 150, 255, 0.7);
 }
 
-.canvas-node[data-node-type="mindmap"] {
+.canvas-node[data-node-type="mindmap"],
+.canvas-node[data-format-type="mindmap"] {
     border-left: 3px solid rgba(200, 100, 255, 0.7);
 }
 
-.canvas-node[data-node-type="swot"] {
+.canvas-node[data-node-type="swot"],
+.canvas-node[data-format-type="swot"] {
     border-left: 3px solid rgba(255, 200, 50, 0.7);
 }
 
-.canvas-node[data-node-type="user_story"] {
+.canvas-node[data-node-type="user_story"],
+.canvas-node[data-format-type="user_story"] {
     border-left: 3px solid rgba(100, 255, 200, 0.7);
 }
 
-.canvas-node[data-node-type="flowchart"] {
+.canvas-node[data-node-type="flowchart"],
+.canvas-node[data-format-type="flowchart"] {
     border-left: 3px solid rgba(255, 150, 100, 0.7);
+}
+
+/* ======================================================================== */
+/* ACTION LIST / TODO — Red accent design                                   */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="action_list"],
+.canvas-node[data-node-type="action_list"] {
+    background: rgba(25, 15, 18, 0.95) !important;
+    border: 1px solid rgba(255, 80, 80, 0.25) !important;
+    border-left: 4px solid #ff4444 !important;
+    box-shadow: 0 4px 24px rgba(255, 50, 50, 0.12), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.canvas-node[data-format-type="action_list"] .node-header,
+.canvas-node[data-node-type="action_list"] .node-header {
+    background: rgba(60, 20, 25, 0.70) !important;
+    border-bottom: 1px solid rgba(255, 80, 80, 0.15) !important;
+}
+
+.canvas-node[data-format-type="action_list"] .node-title,
+.canvas-node[data-node-type="action_list"] .node-title {
+    color: #ff8888 !important;
+    font-weight: 600;
+}
+
+.canvas-node[data-format-type="action_list"] .action-list-content h4,
+.canvas-node[data-node-type="action_list"] .action-list-content h4 {
+    color: #ff8888 !important;
+}
+
+.canvas-node[data-format-type="action_list"] .action-list-content li,
+.canvas-node[data-node-type="action_list"] .action-list-content li {
+    border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+    padding: 7px 0 !important;
+}
+
+.canvas-node[data-format-type="action_list"] .action-list-content input[type="checkbox"],
+.canvas-node[data-node-type="action_list"] .action-list-content input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 100, 100, 0.5);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.canvas-node[data-format-type="action_list"] .action-list-content input[type="checkbox"]:checked,
+.canvas-node[data-node-type="action_list"] .action-list-content input[type="checkbox"]:checked {
+    background: rgba(100, 255, 150, 0.2);
+    border-color: rgba(100, 255, 150, 0.5);
+}
+
+.canvas-node[data-format-type="action_list"] .action-list-content input[type="checkbox"]:checked::after,
+.canvas-node[data-node-type="action_list"] .action-list-content input[type="checkbox"]:checked::after {
+    content: "✓";
+    color: #66ff99;
+    font-size: 12px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* ======================================================================== */
+/* NOTE — White paper / notepad design                                      */
+/* Only applies to nodes with format_type="note" OR node_type="note"        */
+/* that have NO other format type set (to avoid styling kanban/swot/etc.)   */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="note"],
+.canvas-node[data-node-type="note"]:not([data-format-type]) {
+    background: linear-gradient(170deg, #faf8f4 0%, #f5f0e8 50%, #efe8db 100%) !important;
+    border: none !important;
+    border-radius: 3px !important;
+    box-shadow:
+        2px 3px 12px rgba(0, 0, 0, 0.35),
+        0 1px 4px rgba(0, 0, 0, 0.2),
+        inset 0 0 60px rgba(255, 250, 240, 0.15) !important;
+    position: relative;
+}
+
+/* Lined paper effect */
+.canvas-node[data-format-type="note"] .node-content,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-content {
+    background: repeating-linear-gradient(
+        transparent, transparent 27px,
+        rgba(180, 200, 220, 0.25) 27px, rgba(180, 200, 220, 0.25) 28px
+    );
+}
+
+.canvas-node[data-format-type="note"] .node-header,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-header {
+    background: transparent !important;
+    border-bottom: 2px solid rgba(200, 80, 80, 0.35) !important;
+    margin: 0 12px;
+    padding: 10px 4px 6px !important;
+}
+
+.canvas-node[data-format-type="note"] .node-title,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-title {
+    color: #3a3530 !important;
+    font-weight: 600;
+}
+
+.canvas-node[data-format-type="note"] .node-type-icon,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-type-icon {
+    filter: grayscale(0.3);
+}
+
+.canvas-node[data-format-type="note"] .node-delete,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-delete {
+    color: rgba(100, 80, 60, 0.4) !important;
+}
+
+.canvas-node[data-format-type="note"] .node-delete:hover,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-delete:hover {
+    color: rgba(200, 60, 60, 0.9) !important;
+    background: rgba(200, 60, 60, 0.1) !important;
+}
+
+.canvas-node[data-format-type="note"] .node-content,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-content {
+    color: #4a4540 !important;
+}
+
+.canvas-node[data-format-type="note"] .node-text,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .node-text {
+    color: #4a4540 !important;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.75 !important;
+}
+
+.canvas-node[data-format-type="note"] textarea,
+.canvas-node[data-node-type="note"]:not([data-format-type]) textarea {
+    color: #3a3530 !important;
+    background: transparent !important;
+    border: none !important;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.75 !important;
+    font-size: 14px !important;
+}
+
+.canvas-node[data-format-type="note"] textarea::placeholder,
+.canvas-node[data-node-type="note"]:not([data-format-type]) textarea::placeholder {
+    color: rgba(100, 90, 80, 0.4) !important;
+}
+
+.canvas-node[data-format-type="note"] .note-content,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .note-content {
+    color: #4a4540 !important;
+}
+
+.canvas-node[data-format-type="note"] .note-content h4,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .note-content h4 {
+    color: #3a3530 !important;
+}
+
+.canvas-node[data-format-type="note"] .note-content p,
+.canvas-node[data-node-type="note"]:not([data-format-type]) .note-content p {
+    color: #4a4540 !important;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.75;
+}
+
+/* Note tags on paper */
+.canvas-node[data-format-type="note"] .note-content span[style*="background"],
+.canvas-node[data-node-type="note"]:not([data-format-type]) .note-content span[style*="background"] {
+    background: rgba(180, 160, 120, 0.2) !important;
+    color: #6a5f50 !important;
+}
+
+/* Paper fold corner */
+.canvas-node[data-format-type="note"]::after,
+.canvas-node[data-node-type="note"]:not([data-format-type])::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, #efe8db 50%, #d8d0c0 50%);
+    border-top-left-radius: 4px;
+    pointer-events: none;
+}
+
+/* Note hover - paper lift effect */
+.canvas-node[data-format-type="note"]:hover,
+.canvas-node[data-node-type="note"]:not([data-format-type]):hover {
+    box-shadow:
+        3px 5px 18px rgba(0, 0, 0, 0.4),
+        0 2px 6px rgba(0, 0, 0, 0.25) !important;
+    transform: translateY(-2px) rotate(-0.5deg);
+}
+
+/* Note selected */
+.canvas-node[data-format-type="note"].selected,
+.canvas-node[data-node-type="note"]:not([data-format-type]).selected {
+    box-shadow:
+        0 0 0 2px rgba(100, 150, 255, 0.5),
+        3px 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* TODO hover - red glow */
+.canvas-node[data-format-type="action_list"]:hover,
+.canvas-node[data-node-type="action_list"]:hover {
+    box-shadow: 0 6px 30px rgba(255, 50, 50, 0.18), 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Whitepaper hover - blue glow */
+.canvas-node[data-format-type="whitepaper"]:hover,
+.canvas-node[data-node-type="whitepaper"]:hover {
+    box-shadow: 0 8px 35px rgba(0, 0, 0, 0.5), 0 0 15px rgba(100, 160, 255, 0.15) !important;
+}
+
+/* Table hover - green glow */
+.canvas-node[data-format-type="table"]:hover,
+.canvas-node[data-format-type="simple_table"]:hover {
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4), 0 0 12px rgba(60, 180, 120, 0.12) !important;
+}
+
+/* ======================================================================== */
+/* WHITEPAPER — Academic / research document design                         */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="whitepaper"],
+.canvas-node[data-node-type="whitepaper"] {
+    background: linear-gradient(180deg, rgba(15, 20, 35, 0.97) 0%, rgba(12, 16, 28, 0.98) 100%) !important;
+    border: 1px solid rgba(100, 140, 220, 0.2) !important;
+    border-top: 3px solid rgba(100, 160, 255, 0.5) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(100, 160, 255, 0.1) !important;
+}
+
+.canvas-node[data-format-type="whitepaper"] .node-header,
+.canvas-node[data-node-type="whitepaper"] .node-header {
+    background: transparent !important;
+    border-bottom: none !important;
+    padding: 14px 18px 4px !important;
+}
+
+.canvas-node[data-format-type="whitepaper"] .node-title,
+.canvas-node[data-node-type="whitepaper"] .node-title {
+    color: rgba(220, 230, 255, 0.95) !important;
+    font-size: 15px !important;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.canvas-node[data-format-type="whitepaper"] .node-content,
+.canvas-node[data-node-type="whitepaper"] .node-content {
+    color: rgba(200, 210, 230, 0.8) !important;
+    padding: 4px 18px 16px !important;
+}
+
+.canvas-node[data-format-type="whitepaper"] .whitepaper-preview,
+.canvas-node[data-node-type="whitepaper"] .whitepaper-preview {
+    color: rgba(200, 210, 230, 0.8) !important;
+    font-size: 13px;
+    line-height: 1.65;
+    border-left: 2px solid rgba(100, 160, 255, 0.3);
+    padding-left: 12px;
+    font-style: italic;
+}
+
+/* ======================================================================== */
+/* TABLE — Spreadsheet / data grid design                                   */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="table"],
+.canvas-node[data-format-type="simple_table"] {
+    background: rgba(12, 16, 24, 0.97) !important;
+    border: 1px solid rgba(60, 180, 120, 0.2) !important;
+    border-left: 4px solid rgba(60, 180, 120, 0.6) !important;
+    border-radius: 6px !important;
+}
+
+.canvas-node[data-format-type="table"] .node-header,
+.canvas-node[data-format-type="simple_table"] .node-header {
+    background: rgba(20, 40, 30, 0.70) !important;
+    border-bottom: 1px solid rgba(60, 180, 120, 0.15) !important;
+}
+
+.canvas-node[data-format-type="table"] .node-title,
+.canvas-node[data-format-type="simple_table"] .node-title {
+    color: rgba(140, 230, 180, 0.9) !important;
+    font-weight: 600;
+}
+
+/* Table header cells */
+.canvas-node[data-format-type="table"] table th,
+.canvas-node[data-format-type="simple_table"] table th,
+.canvas-node .table-content table th,
+.canvas-node .structured-table th {
+    background: rgba(30, 60, 45, 0.8) !important;
+    color: rgba(160, 240, 200, 0.95) !important;
+    border: 1px solid rgba(60, 180, 120, 0.2) !important;
+    padding: 6px 10px !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Table data cells */
+.canvas-node[data-format-type="table"] table td,
+.canvas-node[data-format-type="simple_table"] table td,
+.canvas-node .table-content table td,
+.canvas-node .structured-table td {
+    background: transparent !important;
+    color: rgba(220, 230, 240, 0.85) !important;
+    border: 1px solid rgba(60, 180, 120, 0.1) !important;
+    padding: 5px 10px !important;
+    font-size: 13px !important;
+}
+
+/* Alternating row colors */
+.canvas-node[data-format-type="table"] table tbody tr:nth-child(even),
+.canvas-node[data-format-type="simple_table"] table tbody tr:nth-child(even),
+.canvas-node .table-content table tbody tr:nth-child(even),
+.canvas-node .structured-table tbody tr:nth-child(even) {
+    background: rgba(60, 180, 120, 0.04) !important;
+}
+
+.canvas-node[data-format-type="table"] table tbody tr:hover,
+.canvas-node[data-format-type="simple_table"] table tbody tr:hover,
+.canvas-node .table-content table tbody tr:hover,
+.canvas-node .structured-table tbody tr:hover {
+    background: rgba(60, 180, 120, 0.08) !important;
+}
+
+/* ======================================================================== */
+/* TECHNICAL SPECS — Blueprint design                                       */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="technical_specs"],
+.canvas-node[data-format-type="specs"] {
+    border-left: 3px solid rgba(255, 150, 50, 0.7);
+}
+
+.canvas-node .technical-specs-content h4,
+.canvas-node .specs-content h4 {
+    color: rgba(200, 220, 255, 0.95);
+}
+
+/* ======================================================================== */
+/* PROS & CONS — Dark theme override for inline styles                      */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="pros_cons_table"],
+.canvas-node[data-format-type="pros_cons"] {
+    border-left: 3px solid rgba(255, 200, 50, 0.7);
+}
+
+.canvas-node .pros-cons-content div[style*="d4edda"] {
+    background: rgba(40, 167, 69, 0.15) !important;
+    border-radius: 8px;
+}
+
+.canvas-node .pros-cons-content div[style*="d4edda"] h5 {
+    color: rgba(150, 255, 180, 0.9) !important;
+}
+
+.canvas-node .pros-cons-content div[style*="d4edda"] li {
+    color: rgba(150, 255, 180, 0.85) !important;
+}
+
+.canvas-node .pros-cons-content div[style*="f8d7da"] {
+    background: rgba(220, 53, 69, 0.15) !important;
+    border-radius: 8px;
+}
+
+.canvas-node .pros-cons-content div[style*="f8d7da"] h5 {
+    color: rgba(255, 180, 180, 0.9) !important;
+}
+
+.canvas-node .pros-cons-content div[style*="f8d7da"] li {
+    color: rgba(255, 180, 180, 0.85) !important;
+}
+
+.canvas-node .pros-cons-content div[style*="e9ecef"] {
+    background: rgba(35, 30, 55, 0.60) !important;
+    color: rgba(200, 210, 230, 0.85) !important;
+}
+
+.canvas-node .pros-cons-content div[style*="e9ecef"] strong {
+    color: rgba(150, 200, 255, 0.95) !important;
+}
+
+/* ======================================================================== */
+/* HIERARCHY — Tree structure styling                                       */
+/* ======================================================================== */
+
+.canvas-node[data-format-type="hierarchy"] {
+    border-left: 3px solid rgba(180, 140, 255, 0.7);
+}
+
+.canvas-node .hierarchy-content h4 {
+    color: rgba(200, 220, 255, 0.95) !important;
+}
+
+.canvas-node .hierarchy-content strong {
+    color: rgba(220, 200, 255, 0.9) !important;
+}
+
+.canvas-node .hierarchy-content span[style*="6c757d"] {
+    color: rgba(180, 200, 220, 0.6) !important;
 }

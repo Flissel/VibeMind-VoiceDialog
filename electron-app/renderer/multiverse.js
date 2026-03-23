@@ -3552,16 +3552,19 @@ class MultiverseApp {
             overlay.addEventListener('contextmenu', (e) => handleClick(e, 'right'));
             wrapper.appendChild(overlay);
 
+            // Per-monitor click-dot canvas for eyeTerm calibration visualization
+            const dotCanvas = document.createElement('canvas');
+            dotCanvas.className = 'click-dot-canvas';
+            dotCanvas.dataset.monitor = monitorIdx;
+            dotCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11';
+            wrapper.appendChild(dotCanvas);
+
             return wrapper;
         };
 
         streamsArea.appendChild(monitorGrid);
 
-        // Click-dot visualization canvas (eyeTerm dots — rendered above interaction layer)
-        const clickCanvas = document.createElement('canvas');
-        clickCanvas.id = 'click-overlay';
-        clickCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11';
-        streamsArea.appendChild(clickCanvas);
+        // Click-dot canvases are now per-monitor (inside each monitor-panel)
         panel.appendChild(streamsArea);
 
         document.body.appendChild(panel);
@@ -3650,25 +3653,78 @@ class MultiverseApp {
         };
         setTimeout(startDesktopStream, 1000);
 
-        // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on canvas
+        // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on per-monitor canvases
         if (window.vibemind && window.vibemind.onPythonMessage) {
             window.vibemind.onPythonMessage((msg) => {
                 if (msg.type !== 'eyeterm_click_dots') return;
-                const canvas = document.getElementById('click-overlay');
-                if (!canvas) return;
-                const rect = canvas.parentElement.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                const sw = msg.screen_w || 1920;
-                const sh = msg.screen_h || 1080;
+                const grid = document.getElementById('monitor-grid');
+                if (!grid) return;
+
+                // Collect all monitor panels with their geometries
+                const panels = grid.querySelectorAll('.monitor-panel');
+                const monitorInfos = [];
+                panels.forEach(p => {
+                    const canvas = p.querySelector('.click-dot-canvas');
+                    const img = p.querySelector('.desktop-stream-img');
+                    if (!canvas || !img) return;
+                    monitorInfos.push({
+                        offsetX: parseInt(p.dataset.offsetX || '0', 10),
+                        offsetY: parseInt(p.dataset.offsetY || '0', 10),
+                        width: img.naturalWidth || 1920,
+                        height: img.naturalHeight || 1080,
+                        canvas, img,
+                    });
+                });
+
+                // Clear all canvases
+                monitorInfos.forEach(m => {
+                    const rect = m.canvas.parentElement.getBoundingClientRect();
+                    m.canvas.width = rect.width;
+                    m.canvas.height = rect.height;
+                    m.ctx = m.canvas.getContext('2d');
+                    m.ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
+
+                    // Compute rendered image area (object-fit:contain letterbox)
+                    const imgAspect = m.width / m.height;
+                    const elemAspect = rect.width / rect.height;
+                    if (imgAspect > elemAspect) {
+                        m.renderW = rect.width;
+                        m.renderH = rect.width / imgAspect;
+                        m.padX = 0;
+                        m.padY = (rect.height - m.renderH) / 2;
+                    } else {
+                        m.renderH = rect.height;
+                        m.renderW = rect.height * imgAspect;
+                        m.padX = (rect.width - m.renderW) / 2;
+                        m.padY = 0;
+                    }
+                });
+
+                // Draw each dot on the correct monitor canvas
                 for (const d of msg.dots) {
                     const alpha = Math.max(0.15, 1.0 - d.age / 10.0);
-                    const cx = (d.cx / sw) * canvas.width;
-                    const cy = (d.cy / sh) * canvas.height;
-                    const px = (d.px / sw) * canvas.width;
-                    const py = (d.py / sh) * canvas.height;
+
+                    // Find which monitor this dot belongs to (by absolute screen coords)
+                    const m = monitorInfos.find(mi =>
+                        d.cx >= mi.offsetX && d.cx < mi.offsetX + mi.width &&
+                        d.cy >= mi.offsetY && d.cy < mi.offsetY + mi.height
+                    );
+                    if (!m) continue;
+
+                    // Convert absolute screen coords to monitor-local pixel coords
+                    const localCx = d.cx - m.offsetX;
+                    const localCy = d.cy - m.offsetY;
+                    const localPx = d.px - m.offsetX;
+                    const localPy = d.py - m.offsetY;
+
+                    // Map to canvas coords (accounting for letterbox padding)
+                    const cx = m.padX + (localCx / m.width) * m.renderW;
+                    const cy = m.padY + (localCy / m.height) * m.renderH;
+                    const px = m.padX + (localPx / m.width) * m.renderW;
+                    const py = m.padY + (localPy / m.height) * m.renderH;
+
+                    const ctx = m.ctx;
+
                     // Error line (yellow)
                     ctx.strokeStyle = `rgba(255,200,0,${alpha})`;
                     ctx.lineWidth = 1;
@@ -3692,6 +3748,20 @@ class MultiverseApp {
                         ctx.font = '11px monospace';
                         ctx.fillText(d.r + 'px', cx + 9, cy - 3);
                     }
+                }
+
+                // GA status overlay (bottom-left of first monitor)
+                if (msg.ga && monitorInfos.length > 0) {
+                    const m0 = monitorInfos[0];
+                    const ctx0 = m0.ctx;
+                    const ga = msg.ga;
+                    ctx0.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx0.fillRect(4, m0.canvas.height - 44, 220, 40);
+                    ctx0.fillStyle = '#0f0';
+                    ctx0.font = '11px monospace';
+                    ctx0.fillText(`GA gen=${ga.generation} samples=${ga.samples}`, 8, m0.canvas.height - 28);
+                    const res = ga.best_residual_px != null ? ga.best_residual_px + 'px' : '—';
+                    ctx0.fillText(`best=${res}  applied=${ga.applied_residual_px || '—'}px`, 8, m0.canvas.height - 12);
                 }
             });
         }

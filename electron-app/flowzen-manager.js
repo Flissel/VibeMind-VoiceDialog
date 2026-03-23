@@ -65,8 +65,11 @@ class FlowzenManager {
       }
     });
 
+    this._loaded = false;
+
     // Notify VibeMind renderer of load status
     this.flowzenView.webContents.on('did-finish-load', () => {
+      this._loaded = true;
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'flowzen_view_status',
@@ -74,6 +77,12 @@ class FlowzenManager {
         });
       }
       console.log('[FlowzenManager] Diary loaded');
+
+      // Send pending data request now that page is ready
+      if (this.isVisible && this.sendToPython) {
+        this.sendToPython({ type: 'flowzen_status' });
+        this.sendToPython({ type: 'flowzen_diary_entries' });
+      }
     });
 
     this.flowzenView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -104,13 +113,13 @@ class FlowzenManager {
       this.createView();
     }
 
-    this.mainWindow.setBrowserView(this.flowzenView);
+    this.mainWindow.addBrowserView(this.flowzenView);
     this.updateBounds();
     this.isVisible = true;
     console.log('[FlowzenManager] Diary shown');
 
-    // Request fresh diary data from Python backend
-    if (this.sendToPython) {
+    // Request fresh diary data (only if page already loaded, otherwise did-finish-load handles it)
+    if (this._loaded && this.sendToPython) {
       this.sendToPython({ type: 'flowzen_status' });
       this.sendToPython({ type: 'flowzen_diary_entries' });
     }
@@ -122,7 +131,7 @@ class FlowzenManager {
   hide() {
     if (!this.mainWindow || !this.flowzenView) return;
 
-    this.mainWindow.setBrowserView(null);
+    this.mainWindow.removeBrowserView(this.flowzenView);
     this.isVisible = false;
     console.log('[FlowzenManager] Diary hidden');
   }
