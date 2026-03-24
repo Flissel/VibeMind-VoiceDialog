@@ -1,4 +1,3 @@
-"""Flowzen tools."""
-from spaces.flowzen.tools.flowzen_tools import recommend_task, get_flowzen_status
-
-__all__ = ["recommend_task", "get_flowzen_status"]
+# Proxy → submodule
+from spaces.flowzen.flowzen.tools import *  # noqa: F401,F403
+from spaces.flowzen.flowzen.tools import recommend_task, get_flowzen_status

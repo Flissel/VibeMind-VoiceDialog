@@ -19,5 +19,6 @@ def test_tools_load():
     agent = FlowzenAgent()
     tools = agent._load_tools()
     assert "recommend_task" in tools
+    assert "accept_recommendation" in tools
     assert "get_flowzen_status" in tools
-    assert len(tools) == 2
+    assert len(tools) == 3

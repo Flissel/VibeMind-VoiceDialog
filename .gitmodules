@@ -37,3 +37,6 @@
 [submodule "external/openclaw"]
 	path = external/openclaw
 	url = https://github.com/Flissel/openclaw.git
+[submodule "python/spaces/flowzen/flowzen"]
+	path = python/spaces/flowzen/flowzen
+	url = https://github.com/Flissel/flowzen.git

@@ -103,6 +103,79 @@ class FlowzenRepository:
         )
         return [FlowzenDiaryEntry.from_dict(dict(r)) for r in rows]
 
+    # --- Recommendation Tracking (ported from Flowzen MCP) ---
+
+    def log_recommendation(self, task_id: str = "", task_title: str = "",
+                           mood: str = "", time_window: str = "", hour: int = 0,
+                           category: str = "", reason_text: str = "") -> str:
+        """Log a recommendation event. Returns the log entry ID."""
+        rec_id = generate_id()
+        self.db.execute(
+            """INSERT INTO flowzen_recommendation_log
+               (id, recommended_task_id, recommended_title, mood, time_window, hour, category, reason_text)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (rec_id, task_id, task_title, mood, time_window, hour, category, reason_text),
+        )
+        return rec_id
+
+    def track_acceptance(self, recommendation_id: str):
+        """Mark a recommendation as accepted by the user."""
+        self.db.execute(
+            "UPDATE flowzen_recommendation_log SET was_accepted = 1, accepted_at = ? WHERE id = ?",
+            (datetime.now().isoformat(), recommendation_id),
+        )
+
+    def get_acceptance_rate(self, limit: int = 50) -> dict:
+        """Calculate acceptance rate from recent recommendations."""
+        rows = self.db.fetch_all(
+            "SELECT was_accepted FROM flowzen_recommendation_log ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        if not rows:
+            return {"total": 0, "accepted": 0, "rate": 0.0}
+        total = len(rows)
+        accepted = sum(1 for r in rows if r["was_accepted"])
+        return {"total": total, "accepted": accepted, "rate": accepted / total}
+
+    # --- User Preference Learning (ported from Flowzen MCP) ---
+
+    def save_preference(self, key: str, value: str):
+        """Save or update a user preference (JSON string)."""
+        self.db.execute(
+            """INSERT INTO flowzen_user_preferences (key, value, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?""",
+            (key, value, datetime.now().isoformat(), value, datetime.now().isoformat()),
+        )
+
+    def get_preference(self, key: str, default: str = "{}") -> str:
+        """Get a user preference value."""
+        row = self.db.fetch_one(
+            "SELECT value FROM flowzen_user_preferences WHERE key = ?", (key,)
+        )
+        return row["value"] if row else default
+
+    def learn_best_time_windows(self) -> list:
+        """Analyze recommendation acceptance patterns to find best time windows.
+        Returns sorted list of (time_window, acceptance_rate) tuples."""
+        import json
+        rows = self.db.fetch_all(
+            """SELECT time_window, COUNT(*) as total,
+                      SUM(CASE WHEN was_accepted = 1 THEN 1 ELSE 0 END) as accepted
+               FROM flowzen_recommendation_log
+               WHERE time_window != ''
+               GROUP BY time_window
+               HAVING total >= 3
+               ORDER BY (CAST(accepted AS FLOAT) / total) DESC""",
+        )
+        results = [(r["time_window"], r["accepted"] / r["total"]) for r in rows]
+        # Save learned preferences
+        if results:
+            self.save_preference("best_time_windows", json.dumps(
+                [{"window": w, "rate": round(r, 2)} for w, r in results]
+            ))
+        return results
+
     @staticmethod
     def _hour_to_window(hour: int) -> str:
         if 5 <= hour < 8:
