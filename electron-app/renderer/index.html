@@ -102,8 +102,8 @@
                 <span class="space-name">The Brain</span>
             </button>
             <button class="space-tab" id="tab-flowzen" data-space="flowzen">
-                <span class="space-icon">&#x1F339;</span>
-                <span class="space-name">Blaue Rose</span>
+                <span class="space-icon" style="filter: hue-rotate(200deg) saturate(1.5) brightness(1.2);">&#x1F339;</span>
+                <span class="space-name">Blue Rose</span>
             </button>
             <button class="space-tab" id="tab-mirofish" data-space="mirofish">
                 <span class="space-icon">&#x1F41F;</span>
@@ -1725,6 +1725,14 @@
                     // Handle live diary push
                     if (message.state === 'diary_new' && message.diary_entry) {
                         window.flowzenPanel.addSingleDiaryEntry(message.diary_entry);
+                    }
+                    // Rachel proactive nudge (Blue Rose detected idle + Brain suggests task)
+                    if (message.state === 'rachel_nudge' && message.message) {
+                        console.log('[Flowzen] Rachel nudge:', message.message);
+                        // Show as notification in game console
+                        if (window.addGameConsoleMessage) {
+                            window.addGameConsoleMessage('rachel', message.message);
+                        }
                     }
                     break;
 

@@ -30,7 +30,7 @@
             font-weight: 600;
             color: #c9d1d9;
         }
-        .journal-title .rose { color: #e63946; margin-right: 8px; }
+        .journal-title .rose { margin-right: 8px; filter: hue-rotate(200deg) saturate(1.5) brightness(1.2); }
         .journal-stats {
             display: flex;
             gap: 24px;
@@ -136,6 +136,31 @@
         }
         .page-text::-webkit-scrollbar { width: 4px; }
         .page-text::-webkit-scrollbar-thumb { background: rgba(44,36,25,0.2); border-radius: 2px; }
+        .page-accept {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        .accept-btn, .skip-btn {
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid rgba(44,36,25,0.2);
+            background: rgba(44,36,25,0.05);
+            color: #5a4a3a;
+            font-family: 'SF Pro Text', -apple-system, sans-serif;
+            transition: all 0.2s;
+        }
+        .accept-btn:hover { background: rgba(51,102,204,0.1); border-color: #3366cc; color: #3366cc; }
+        .skip-btn:hover { background: rgba(44,36,25,0.08); }
+        .accept-btn.accepted {
+            background: rgba(51,102,204,0.12);
+            border-color: #3366cc;
+            color: #3366cc;
+            cursor: default;
+        }
         .page-source {
             text-align: right;
             font-size: 11px;
@@ -328,9 +353,45 @@
             pageNum.className = 'page-number';
             pageNum.textContent = (index + 1) + ' / ' + total;
 
+            // Acceptance buttons for manual recommendations
+            var acceptDiv = null;
+            if (entry.source === 'manual' && entry.raw_data) {
+                acceptDiv = document.createElement('div');
+                acceptDiv.className = 'page-accept';
+
+                var logId = '';
+                try { var rd = JSON.parse(entry.raw_data); logId = rd.recommendation_log_id || ''; } catch(e) {}
+
+                if (logId) {
+                    var acceptBtn = document.createElement('button');
+                    acceptBtn.className = 'accept-btn';
+                    acceptBtn.textContent = '\u2713 I did this';
+                    acceptBtn.onclick = function() {
+                        if (window.flowzenBridge) {
+                            window.flowzenBridge.sendToPython({ type: 'flowzen_accept', recommendation_log_id: logId });
+                        }
+                        acceptBtn.disabled = true;
+                        acceptBtn.textContent = '\u2713 Accepted';
+                        acceptBtn.classList.add('accepted');
+                        if (skipBtn) skipBtn.style.display = 'none';
+                    };
+
+                    var skipBtn = document.createElement('button');
+                    skipBtn.className = 'skip-btn';
+                    skipBtn.textContent = '\u2192 Skip';
+                    skipBtn.onclick = function() {
+                        acceptDiv.style.display = 'none';
+                    };
+
+                    acceptDiv.appendChild(acceptBtn);
+                    acceptDiv.appendChild(skipBtn);
+                }
+            }
+
             page.appendChild(header);
             page.appendChild(moodLine);
             page.appendChild(textDiv);
+            if (acceptDiv) page.appendChild(acceptDiv);
             page.appendChild(sourceDiv);
             page.appendChild(pageNum);
 
@@ -429,39 +490,41 @@
             if (window.flowzenDiary) window.flowzenDiary.recommend();
         });
 
-        // Public API (called from preload)
-        window._flowzenDiary = {
-            setEntries: function(data) {
-                entries = data || [];
-                renderPages();
-            },
-            addEntry: function(entry) {
-                entries.unshift(entry);
-                renderPages();
-            },
-            updateStatus: function(data) {
-                var timeEl = document.getElementById('stat-time');
-                var moodEl = document.getElementById('stat-mood');
-                var catEl = document.getElementById('stat-category');
-                var badge = document.getElementById('state-badge');
+        // Register handlers via contextBridge (contextIsolation-safe)
+        if (window.flowzenDiary && window.flowzenDiary.register) {
+            window.flowzenDiary.register({
+                setEntries: function(data) {
+                    entries = data || [];
+                    renderPages();
+                },
+                addEntry: function(entry) {
+                    entries.unshift(entry);
+                    renderPages();
+                },
+                updateStatus: function(data) {
+                    var timeEl = document.getElementById('stat-time');
+                    var moodEl = document.getElementById('stat-mood');
+                    var catEl = document.getElementById('stat-category');
+                    var badge = document.getElementById('state-badge');
 
-                if (timeEl && data.current_time_window) timeEl.textContent = WINDOW_NAMES[data.current_time_window] || data.current_time_window;
-                if (moodEl && data.mood) moodEl.textContent = data.mood;
-                if (catEl && data.category) catEl.textContent = data.category;
-                if (badge && data.state) { badge.textContent = data.state; badge.className = 'state-badge ' + data.state; }
-            },
-            recommendDone: function(data) {
-                var btn = document.getElementById('recommend-btn');
-                if (btn) { btn.classList.remove('loading'); btn.textContent = 'What should I do next?'; }
-                if (data && data.recommendation) {
-                    this.updateStatus({
-                        mood: data.recommendation.mood,
-                        category: data.recommendation.category,
-                        current_time_window: data.recommendation.time_window,
-                    });
+                    if (timeEl && data.current_time_window) timeEl.textContent = WINDOW_NAMES[data.current_time_window] || data.current_time_window;
+                    if (moodEl && data.mood) moodEl.textContent = data.mood;
+                    if (catEl && data.category) catEl.textContent = data.category;
+                    if (badge && data.state) { badge.textContent = data.state; badge.className = 'state-badge ' + data.state; }
+                },
+                recommendDone: function(data) {
+                    var btn = document.getElementById('recommend-btn');
+                    if (btn) { btn.classList.remove('loading'); btn.textContent = 'What should I do next?'; }
+                    if (data && data.recommendation) {
+                        this.updateStatus({
+                            mood: data.recommendation.mood,
+                            category: data.recommendation.category,
+                            current_time_window: data.recommendation.time_window,
+                        });
+                    }
                 }
-            }
-        };
+            });
+        }
 
         // Initial render
         renderPages();

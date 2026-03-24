@@ -110,6 +110,36 @@ setup_space_logging()
 logger = logging.getLogger(__name__)
 
 
+# ==============================================================================
+# COLORED PRINT HELPER (for startup/bootstrap logs before SpaceLogger applies)
+# ==============================================================================
+# Maps [Tag] prefixes to ANSI colors so raw print() calls match SpaceLogger colors.
+from swarm.logging.space_logger import SpaceColors
+
+_TAG_COLORS = {
+    "[Automation_ui]": SpaceColors.DESKTOP,    # Bright Magenta — Desktop space
+    "[eyeTerm]":       SpaceColors.DESKTOP,    # Bright Magenta — Desktop space
+    "[Coding Engine]": SpaceColors.CODING,     # Bright Yellow
+    "[GraphBuilder]":  SpaceColors.ROWBOAT,    # Blue
+    "[Rowboat]":       SpaceColors.ROWBOAT,    # Blue
+    "[Brain-Server]":  SpaceColors.BRAIN,      # Dark Green
+    "[BrainManager]":  SpaceColors.BRAIN,      # Dark Green
+    "[Minibook]":      SpaceColors.MINIBOOK,   # White Bold
+    "[Schedule]":      SpaceColors.SCHEDULE,   # Cyan
+    "[Research]":      SpaceColors.RESEARCH,   # Red
+    "[AgentFarm]":     SpaceColors.CODING,     # Bright Yellow
+    "[Python]":        SpaceColors.DEFAULT,    # Dim — system
+}
+
+def _cprint(msg: str, **kwargs):
+    """Colored print: auto-detects [Tag] prefix and applies ANSI color."""
+    for tag, color in _TAG_COLORS.items():
+        if msg.startswith(tag) or (isinstance(msg, str) and tag in msg[:30]):
+            print(f"{color}{msg}{SpaceColors.RESET}", **kwargs)
+            return
+    print(msg, **kwargs)
+
+
 # Try to import data layer for persistence
 try:
     from data import CanvasRepository, CanvasNode as DBCanvasNode, CanvasEdge as DBCanvasEdge, IdeasRepository, ShuttlesRepository
@@ -578,15 +608,15 @@ class ElectronBackend:
         self._automation_ui_proc = None
         def _autostart_automation_ui():
             import time
-            print("[Automation_ui] Autostart thread: sleeping 2s...", file=sys.stderr, flush=True)
+            _cprint("[Automation_ui] Autostart thread: sleeping 2s...", file=sys.stderr, flush=True)
             time.sleep(2)
             try:
-                print("[Automation_ui] Calling _start_automation_ui_backend()...", file=sys.stderr, flush=True)
+                _cprint("[Automation_ui] Calling _start_automation_ui_backend()...", file=sys.stderr, flush=True)
                 result = self._start_automation_ui_backend()
-                print(f"[Automation_ui] _start_automation_ui_backend returned: {result}", file=sys.stderr, flush=True)
+                _cprint(f"[Automation_ui] _start_automation_ui_backend returned: {result}", file=sys.stderr, flush=True)
             except Exception as e:
                 import traceback
-                print(f"[Automation_ui] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
+                _cprint(f"[Automation_ui] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
                 print(traceback.format_exc(), file=sys.stderr, flush=True)
                 debug_log(f"Automation_ui: auto-start error: {e}")
         threading.Thread(target=_autostart_automation_ui, daemon=True, name="automation-ui-autostart").start()
@@ -596,27 +626,27 @@ class ElectronBackend:
         _eyeterm_env = os.environ.get("EYETERM_ENABLED", "false")
         # Log via debug_log (structured JSON) + plain stderr for double visibility
         debug_log(f"eyeTerm: EYETERM_ENABLED={_eyeterm_env!r}")
-        print(f"[eyeTerm] EYETERM_ENABLED={_eyeterm_env!r}", file=sys.stderr, flush=True)
+        _cprint(f"[eyeTerm] EYETERM_ENABLED={_eyeterm_env!r}", file=sys.stderr, flush=True)
         if _eyeterm_env.lower() == "true":
             def _autostart_eyeterm():
                 import time
                 # Short delay to let Electron window settle — eyeTerm is
                 # independent of Automation_ui and doesn't need to wait for it.
-                print("[eyeTerm] Starting in 5s...", file=sys.stderr, flush=True)
+                _cprint("[eyeTerm] Starting in 5s...", file=sys.stderr, flush=True)
                 time.sleep(5)
                 try:
-                    print("[eyeTerm] Calling _start_eyeterm()...", file=sys.stderr, flush=True)
+                    _cprint("[eyeTerm] Calling _start_eyeterm()...", file=sys.stderr, flush=True)
                     self._start_eyeterm()
-                    print("[eyeTerm] _start_eyeterm() completed OK", file=sys.stderr, flush=True)
+                    _cprint("[eyeTerm] _start_eyeterm() completed OK", file=sys.stderr, flush=True)
                 except Exception as e:
                     import traceback
-                    print(f"[eyeTerm] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
+                    _cprint(f"[eyeTerm] AUTO-START ERROR: {e}", file=sys.stderr, flush=True)
                     print(traceback.format_exc(), file=sys.stderr, flush=True)
             threading.Thread(target=_autostart_eyeterm, daemon=True, name="eyeterm-autostart").start()
             debug_log("eyeTerm: autostart thread launched")
         else:
             debug_log("eyeTerm: DISABLED (EYETERM_ENABLED != true)")
-            print("[eyeTerm] DISABLED (EYETERM_ENABLED != true)", file=sys.stderr, flush=True)
+            _cprint("[eyeTerm] DISABLED (EYETERM_ENABLED != true)", file=sys.stderr, flush=True)
 
         # SWE Design server lifecycle is now handled by Electron-side embed.js
         # (swe-design-manager.js → requirements_engineer/electron/embed.js)
@@ -630,11 +660,11 @@ class ElectronBackend:
             self.send_message({"type": "automation_ui_status", "status": "running"})
             return True
 
-        print("[Automation_ui] _start_automation_ui_backend called", file=sys.stderr, flush=True)
+        _cprint("[Automation_ui] _start_automation_ui_backend called", file=sys.stderr, flush=True)
         debug_log("Starting Automation_ui backend...")
         try:
             server_path = Path(__file__).parent / "spaces" / "desktop" / "Automation_ui" / "backend" / "server.py"
-            print(f"[Automation_ui] server_path={server_path}, exists={server_path.exists()}", file=sys.stderr, flush=True)
+            _cprint(f"[Automation_ui] server_path={server_path}, exists={server_path.exists()}", file=sys.stderr, flush=True)
             if server_path.exists():
                 # Build env: inherit current env + set SQLite DB + non-debug mode
                 env = os.environ.copy()
@@ -709,10 +739,10 @@ class ElectronBackend:
         """Start eyeTerm headless gaze/cursor controller."""
         try:
             debug_log("eyeTerm: importing EyeTermHeadless...")
-            print("[eyeTerm] Importing EyeTermHeadless...", file=sys.stderr, flush=True)
+            _cprint("[eyeTerm] Importing EyeTermHeadless...", file=sys.stderr, flush=True)
             from spaces.desktop.eyeterm.headless import EyeTermHeadless
             debug_log("eyeTerm: import OK, creating instance")
-            print("[eyeTerm] Import OK, creating instance...", file=sys.stderr, flush=True)
+            _cprint("[eyeTerm] Import OK, creating instance...", file=sys.stderr, flush=True)
 
             def _on_voice_command(transcript, gaze_context):
                 """Forward eyeTerm voice commands to the Moire Voice chat."""
@@ -723,16 +753,16 @@ class ElectronBackend:
                 on_voice_command=_on_voice_command,
                 broadcast_fn=self.send_message,
             )
-            print("[eyeTerm] Calling .start()...", file=sys.stderr, flush=True)
+            _cprint("[eyeTerm] Calling .start()...", file=sys.stderr, flush=True)
             self._eyeterm_headless.start()
             debug_log("eyeTerm: STARTED OK — MJPEG on port 8099")
-            print("[eyeTerm] STARTED OK — MJPEG on port 8099", file=sys.stderr, flush=True)
+            _cprint("[eyeTerm] STARTED OK — MJPEG on port 8099", file=sys.stderr, flush=True)
             self.send_message({"type": "eyeterm_status", "status": "running"})
         except ImportError as e:
-            print(f"[eyeTerm] IMPORT ERROR: {e}", file=sys.stderr, flush=True)
+            _cprint(f"[eyeTerm] IMPORT ERROR: {e}", file=sys.stderr, flush=True)
         except Exception as e:
             import traceback
-            print(f"[eyeTerm] START ERROR: {e}", file=sys.stderr, flush=True)
+            _cprint(f"[eyeTerm] START ERROR: {e}", file=sys.stderr, flush=True)
             print(traceback.format_exc(), file=sys.stderr, flush=True)
 
     # ── Canvas methods moved to ipc/canvas_manager.py ──
@@ -1262,6 +1292,22 @@ class ElectronBackend:
         elif msg_type == "video_list":
             asyncio.create_task(self._handle_video_tool("scan_video_outputs", "video_list_result"))
 
+        # ── Video Project handlers ──
+        elif msg_type == "video_project_create":
+            asyncio.create_task(self._handle_video_tool("create_video_project", "video_project_create_result", message))
+        elif msg_type == "video_project_add_person":
+            asyncio.create_task(self._handle_video_tool("add_project_person", "video_project_add_person_result", message))
+        elif msg_type == "video_project_list":
+            asyncio.create_task(self._handle_video_tool("list_video_projects", "video_project_list_result"))
+        elif msg_type == "video_project_pipeline":
+            asyncio.create_task(self._handle_video_tool("get_project_pipeline", "video_project_pipeline_result", message))
+        elif msg_type == "video_project_run_step":
+            asyncio.create_task(self._handle_video_tool("run_pipeline_step", "video_project_run_step_result", message))
+        elif msg_type == "video_reference_pipeline":
+            asyncio.create_task(self._handle_video_tool("get_reference_pipeline", "video_reference_pipeline_result"))
+        elif msg_type == "video_publish_rowboat":
+            asyncio.create_task(self._handle_video_tool("publish_videos_to_rowboat", "video_publish_rowboat_result"))
+
         # ── Rowboat update checker ──
         elif msg_type == "check_rowboat_update":
             self._handle_check_rowboat_update()
@@ -1306,6 +1352,15 @@ class ElectronBackend:
                     "type": "flowzen_diary_entries_result",
                     "entries": [],
                 })
+
+        elif msg_type == "flowzen_accept":
+            try:
+                from spaces.flowzen.tools.flowzen_tools import accept_recommendation
+                log_id = message.get("recommendation_log_id", "")
+                result = accept_recommendation(recommendation_log_id=log_id)
+                self.send_message({"type": "flowzen_accept_result", **result})
+            except Exception as e:
+                logger.debug(f"flowzen_accept failed: {e}")
 
     # ========================================================================
     # FLOWZEN RECOMMEND HANDLER
