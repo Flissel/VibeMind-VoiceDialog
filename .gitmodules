@@ -3,7 +3,7 @@
 	url = https://github.com/rowboatlabs/rowboat.git
 [submodule "python/spaces/coding/Coding_engine"]
 	path = python/spaces/coding/Coding_engine
-	url = https://github.com/Flissel/Coding_engine.git
+	url = https://github.com/Flissel/DaveFelix-Coding-Engine.git
 [submodule "python/spaces/shuttles/swe_desgine"]
 	path = python/spaces/shuttles/swe_desgine
 	url = https://github.com/Flissel/swe_desgine.git
