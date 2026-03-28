@@ -200,7 +200,7 @@ class EnrichmentPipeline:
 def create_enrichment_pipeline(
     classifier: Any,
     rachel_interface: Optional[Any] = None,
-    enrichment_model: str = "openai/gpt-4o-mini",
+    enrichment_model: Optional[str] = None,
     use_llm_routing: bool = True,
 ) -> EnrichmentPipeline:
     """
@@ -215,18 +215,39 @@ def create_enrichment_pipeline(
     Returns:
         Configured EnrichmentPipeline instance
     """
+    from llm_config import get_model
+    if enrichment_model is None:
+        enrichment_model = get_model("space_router")
     _logger.debug("create_enrichment_pipeline called: model=%s, llm_routing=%s", enrichment_model, use_llm_routing)
     context_gather = ContextGather(rachel_interface=rachel_interface)
     space_router = SpaceRouter(
         enrichment_model=enrichment_model,
         use_llm=use_llm_routing,
     )
+
+    # Wrap SpaceRouter with BrainRouter if brain server is available
+    try:
+        import os
+        brain_enabled = os.environ.get('USE_BRAIN_ROUTER', 'true').lower() == 'true'
+        if brain_enabled:
+            from spaces.minibook.enrichment.brain_router import BrainRouter
+            router = BrainRouter(
+                brain_url=os.environ.get('BRAIN_URL', 'http://localhost:5000'),
+                fallback_router=space_router,
+            )
+            _logger.info("BrainRouter wrapping SpaceRouter (brain fast-path enabled)")
+        else:
+            router = space_router
+    except Exception as e:
+        _logger.warning(f"BrainRouter init failed, using SpaceRouter only: {e}")
+        router = space_router
+
     task_enricher = TaskEnricher()
 
     pipeline = EnrichmentPipeline(
         context_gather=context_gather,
         classifier=classifier,
-        space_router=space_router,
+        space_router=router,
         task_enricher=task_enricher,
     )
 

@@ -203,6 +203,21 @@ class RachelInterface:
             success=success,
         ))
 
+        # Brain reward: send routing outcome to SpaceRoutingHead
+        routing_id = getattr(task, 'routing_id', None) or (
+            task.metadata.get('routing_id') if hasattr(task, 'metadata') and task.metadata else None
+        )
+        if routing_id:
+            try:
+                import requests as _req
+                _req.post(
+                    "http://localhost:5000/api/cortex/route/reward",
+                    json={"routing_id": routing_id, "success": success},
+                    timeout=1,
+                )
+            except Exception:
+                pass
+
     def timeout_task(self, task_id: str) -> None:
         """Mark a task as timed out."""
         task = self._active_tasks.pop(task_id, None)
