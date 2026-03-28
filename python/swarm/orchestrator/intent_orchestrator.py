@@ -460,6 +460,15 @@ class IntentOrchestrator:
             except Exception as e:
                 logger.warning(f"HybridRouter init failed, using MinibookHub only: {e}")
 
+        # Brain Shadow Observer — watches routing decisions, trains SpaceRoutingHead
+        self._brain_shadow = None
+        try:
+            from swarm.routing.brain_shadow import BrainShadowObserver
+            self._brain_shadow = BrainShadowObserver()
+            logger.info("BrainShadowObserver enabled (shadow mode)")
+        except Exception as e:
+            logger.warning(f"BrainShadowObserver not available: {e}")
+
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
         from swarm.orchestrator.tool_registry import ToolRegistry
@@ -690,6 +699,14 @@ class IntentOrchestrator:
                                 if asyncio.iscoroutine(result):
                                     result = await result
                                 response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                # Shadow: Brain observes this routing decision
+                                if self._brain_shadow:
+                                    asyncio.create_task(self._brain_shadow.observe(
+                                        user_text=intent_text,
+                                        event_type=route_result.event_type,
+                                        actual_space=route_result.space,
+                                        success=True,
+                                    ))
                                 return OrchestrationResult(
                                     job_id="",
                                     event_type=route_result.event_type,
