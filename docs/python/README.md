@@ -8,7 +8,7 @@ Overview of the `python/` directory structure.
 |-----------|---------|------|
 | `data/` | SQLite database, models, repository pattern | [data/](data/) |
 | `memory/` | Supermemory services (task, conversation, user profile) | [memory/](memory/) |
-| `spaces/` | 8 domain spaces (ideas, coding, desktop, rowboat, research, minibook, schedule, shuttles) | [spaces/](spaces/) |
+| `spaces/` | 15 domain spaces (ideas, coding, desktop, rowboat, research, minibook, schedule, shuttles, n8n, autogen, video, mirofish, flowzen, brain, roarboot) | [spaces/](spaces/) |
 | `swarm/` | Orchestrator, backend agents, event routing, 20 subsystems | [swarm/](swarm/) |
 | `tools/` | 22 shared tool modules (cross-space utilities) | [tools/](tools/) |
 | `tests/` | Test suites | See [testing guide](../development/testing-guide.md) |
@@ -33,7 +33,7 @@ spaces/<name>/
     __init__.py
 ```
 
-The 8 spaces and their roles:
+The 15 spaces and their roles:
 
 | Space | Purpose | Has Agent? |
 |-------|---------|------------|
@@ -44,7 +44,14 @@ The 8 spaces and their roles:
 | `research/` | ZeroClaw deep research sessions | Yes (ZeroClawResearchAgent) |
 | `minibook/` | MinibookHub execution and enrichment pipeline | Yes (MinibookAgent) |
 | `schedule/` | Scheduled task execution (cron, interval, one-shot) | Yes (ScheduleAgent) |
-| `shuttles/` | Requirements pipeline (bubble -> project) | No (tools only) |
+| `n8n/` | N8n workflow automation with AutoGen society | Yes (N8nBackendAgent) |
+| `autogen/` | AgentFarm multi-agent orchestration (AutoGen 0.4) | Yes (AgentFarmBackendAgent) |
+| `video/` | Video production, lip sync, voice cloning, Sora vision | Yes (VideoBackendAgent) |
+| `mirofish/` | AI prediction engine, knowledge graphs, simulations | Yes (MiroFishBackendAgent) |
+| `flowzen/` | Circadian activity tracking, diary, Brain integration | Yes (FlowzenAgent via submodule) |
+| `brain/` | Tahlamus cognitive system (standalone microservices) | No (standalone) |
+| `shuttles/` | Requirements pipeline (bubble -> project) | No (SWE Design submodule) |
+| `roarboot/` | Git submodule container for Rowboat | No (references rowboat/) |
 
 ## Execution Modes
 

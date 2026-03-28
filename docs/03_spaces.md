@@ -16,6 +16,13 @@ VibeMind organisiert Funktionalitaet in modulare **Spaces**. Jeder Space hat eig
 | 6 | Minibook | `minibook/` | Aktiv |
 | 7 | Shuttles/SWE Design | `shuttles/` | Integration laeuft |
 | 8 | Roarboot (Submodul) | `roarboot/` | Nur Git-Submodul-Container |
+| 9 | N8n | `n8n/` | Produktionsreif |
+| 10 | Schedule | `schedule/` | Aktiv |
+| 11 | AgentFarm | `autogen/` | Produktionsreif |
+| 12 | Video | `video/` | Aktiv |
+| 13 | MiroFish | `mirofish/` | Aktiv |
+| 14 | Flowzen (Blaue Rose) | `flowzen/` | Aktiv |
+| 15 | Brain (Tahlamus) | `brain/` | Standalone Microservices |
 
 **SpaceType Enum** (`python/spaces/__init__.py`) definiert zusaetzlich:
 
@@ -37,6 +44,13 @@ VibeMind organisiert Funktionalitaet in modulare **Spaces**. Jeder Space hat eig
 | 5 | Research | `python/spaces/research/` | — | `research.*` | — |
 | 6 | Minibook | `python/spaces/minibook/` | Hellblau (0x00aaff) | `minibook.*` | nebula |
 | 7 | SWE Design Factory | `python/spaces/shuttles/` | Orange-Rot (0xff6633) | `shuttle.*` | factory |
+| 8 | N8n | `python/spaces/n8n/` | — | `n8n.*` | — |
+| 9 | Schedule | `python/spaces/schedule/` | — | `schedule.*` | — |
+| 10 | AgentFarm | `python/spaces/autogen/` | — | `agentfarm.*` | — |
+| 11 | Video | `python/spaces/video/` | — | `video.*` | — |
+| 12 | MiroFish | `python/spaces/mirofish/` | — | `mirofish.*` | — |
+| 13 | Flowzen | `python/spaces/flowzen/` | — | `flowzen.*` | — |
+| 14 | Brain | `python/spaces/brain/` | — | — | — |
 
 ---
 

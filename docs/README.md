@@ -29,7 +29,7 @@ These docs mirror the actual filesystem — find the doc for any source file:
 | `python/swarm/` | [docs/python/swarm/](python/swarm/) — 20 swarm subsystems |
 | `python/swarm/orchestrator/` | [docs/python/swarm/orchestrator/](python/swarm/orchestrator/) — 10 orchestrator files |
 | `python/swarm/backend_agents/` | [docs/python/swarm/backend-agents/](python/swarm/backend-agents/) — Agent pattern |
-| `python/spaces/` | [docs/python/spaces/](python/spaces/) — All 8 spaces |
+| `python/spaces/` | [docs/python/spaces/](python/spaces/) — All 15 spaces |
 | `python/spaces/ideas/` | [docs/python/spaces/ideas/](python/spaces/ideas/) |
 | `python/spaces/coding/` | [docs/python/spaces/coding/](python/spaces/coding/) |
 | `python/spaces/desktop/` | [docs/python/spaces/desktop/](python/spaces/desktop/) |
@@ -38,6 +38,10 @@ These docs mirror the actual filesystem — find the doc for any source file:
 | `python/spaces/minibook/` | [docs/python/spaces/minibook/](python/spaces/minibook/) |
 | `python/spaces/schedule/` | [docs/python/spaces/schedule/](python/spaces/schedule/) |
 | `python/spaces/shuttles/` | [docs/python/spaces/shuttles/](python/spaces/shuttles/) |
+| `python/spaces/autogen/` | [docs/python/spaces/autogen/](python/spaces/autogen/) — AgentFarm |
+| `python/spaces/video/` | [docs/python/spaces/video/](python/spaces/video/) — Video Production |
+| `python/spaces/mirofish/` | [docs/python/spaces/mirofish/](python/spaces/mirofish/) — Prediction Engine |
+| `python/spaces/flowzen/` | [docs/python/spaces/flowzen/](python/spaces/flowzen/) — Circadian Tracking |
 | `electron-app/` | [docs/electron-app/](electron-app/) — Electron structure |
 | Git submodules | [docs/submodules/](submodules/) — All 6 submodules |
 
@@ -49,7 +53,7 @@ These docs mirror the actual filesystem — find the doc for any source file:
 | [Voice Layer](architecture/voice-layer.md) | Dual provider (OpenAI Realtime + ElevenLabs) |
 | [Intent Pipeline](architecture/intent-pipeline.md) | Classification, enhancement, routing |
 | [Swarm Backend](architecture/swarm-backend.md) | Agent pattern, sync/async modes |
-| [Spaces](architecture/spaces.md) | All 8 domain spaces |
+| [Spaces](architecture/spaces.md) | All 15 domain spaces |
 | [Electron IPC](architecture/electron-ipc.md) | stdin/stdout JSON protocol |
 | [Database](architecture/database.md) | SQLite schema v14 |
 | [Memory System](architecture/memory-system.md) | Supermemory integration |

@@ -30,30 +30,58 @@ class OpenClawBridge:
         self._ws = None
         self._connected = False
         self._request_id = 0
-        self._pending: Dict[int, asyncio.Future] = {}
+        self._pending: Dict[str, asyncio.Future] = {}
+        self._agent_response_future: Optional[asyncio.Future] = None
 
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
 
     async def connect(self) -> bool:
-        """Connect to OpenClaw Gateway via WebSocket."""
+        """Connect to OpenClaw Gateway via WebSocket Protocol 3."""
         try:
             import websockets
-            self._ws = await websockets.connect(self._url)
+            self._ws = await asyncio.wait_for(
+                websockets.connect(self._url), timeout=5.0
+            )
+            # 1. Wait for connect.challenge
+            challenge_raw = await asyncio.wait_for(self._ws.recv(), timeout=5.0)
+            challenge = json.loads(challenge_raw)
+            logger.debug(f"OpenClaw challenge: {challenge.get('event', '?')}")
+
+            # 2. Send Protocol 3 connect request
+            self._request_id += 1
             connect_msg = {
-                "type": "connect",
-                "role": "client",
-                "device": {"family": "vibemind", "platform": "win32"},
+                "type": "req",
+                "id": str(self._request_id),
+                "method": "connect",
+                "params": {
+                    "minProtocol": 3,
+                    "maxProtocol": 3,
+                    "client": {
+                        "id": "cli",
+                        "version": "1.0.0",
+                        "platform": "windows",
+                        "mode": "cli",
+                    },
+                    "role": "operator",
+                    "scopes": ["operator.read", "operator.write", "operator.admin"],
+                    "auth": {"token": self._token} if self._token else {},
+                },
             }
-            if self._token:
-                connect_msg["token"] = self._token
             await self._ws.send(json.dumps(connect_msg))
-            resp = json.loads(await self._ws.recv())
+
+            # 3. Wait for hello-ok response
+            resp = json.loads(await asyncio.wait_for(self._ws.recv(), timeout=5.0))
             self._connected = resp.get("ok", False)
             if self._connected:
-                logger.info(f"OpenClaw connected at {self._url}")
+                proto = resp.get("payload", {}).get("protocol", "?")
+                conn_id = resp.get("payload", {}).get("server", {}).get("connId", "?")[:12]
+                logger.info(f"OpenClaw connected (proto={proto}, conn={conn_id})")
                 asyncio.create_task(self._listen())
+            else:
+                err = resp.get("error", {})
+                logger.warning(f"OpenClaw connect rejected: {err}")
             return self._connected
         except Exception as e:
             logger.warning(f"OpenClaw not available: {e}")
@@ -67,8 +95,19 @@ class OpenClawBridge:
                 data = json.loads(msg)
                 if data.get("type") == "res":
                     req_id = data.get("id")
-                    if req_id in self._pending:
+                    if str(req_id) in self._pending:
+                        self._pending[str(req_id)].set_result(data)
+                    elif req_id in self._pending:
                         self._pending[req_id].set_result(data)
+                elif data.get("type") == "event":
+                    event_name = data.get("event", "")
+                    payload = data.get("payload", {})
+                    # Collect agent text responses
+                    if event_name in ("chat", "agent"):
+                        text = payload.get("text", payload.get("message", ""))
+                        if text and self._agent_response_future and not self._agent_response_future.done():
+                            self._agent_response_future.set_result(text)
+                    logger.debug(f"OpenClaw event: {event_name}")
         except Exception as e:
             logger.warning(f"OpenClaw listener ended: {e}")
             self._connected = False
@@ -80,7 +119,7 @@ class OpenClawBridge:
             raise ConnectionError("OpenClaw not connected")
 
         self._request_id += 1
-        req_id = self._request_id
+        req_id = str(self._request_id)
         msg = {"type": "req", "id": req_id, "method": method, "params": params or {}}
 
         future = asyncio.get_event_loop().create_future()
@@ -111,15 +150,15 @@ class OpenClawBridge:
             logger.warning("OpenClaw not connected, skipping user question")
             return ""
 
+        import uuid
         message = question
         if options:
             message += "\n" + "\n".join(f"{i+1}. {o}" for i, o in enumerate(options))
 
-        params = {"message": message, "waitForReply": True}
-        if channel:
-            params["channel"] = channel
-
-        result = await self._request("send", params, timeout=None)
+        result = await self._request("send", {
+            "message": message,
+            "idempotencyKey": f"ask-{uuid.uuid4().hex[:12]}",
+        }, timeout=None)  # No timeout — wait for user
         return result.get("reply", result.get("text", ""))
 
     async def send_status(self, message: str, channel: str = None):
@@ -180,22 +219,42 @@ class OpenClawBridge:
     async def delegate_to_claude_cli(self, task: str,
                                      files: List[str] = None,
                                      timeout: float = 300.0) -> Dict[str, Any]:
-        """Delegate task to Claude CLI via OpenClaw ACP."""
-        if not self._connected:
-            return await self._local_claude_cli(task, timeout)
+        """Delegate task to Claude CLI via OpenClaw embedded agent or direct CLI.
 
-        result = await self._request("agent", {
-            "task": task,
-            "runtime": "acp",
-            "agentId": "claude",
-            "mode": "session",
-        }, timeout=timeout)
+        Priority:
+        1. OpenClaw CLI --local (embedded agent, no gateway pairing needed)
+        2. Direct Claude CLI (claude.cmd)
+        """
+        import uuid
+        idem_key = f"vibemind-{uuid.uuid4().hex[:12]}"
 
-        return {
-            "success": result.get("ok", False),
-            "output": result.get("output", result.get("text", "")),
-            "session_id": result.get("sessionId"),
-        }
+        # Strategy 1: OpenClaw embedded agent (--local, no gateway needed)
+        openclaw_cli = shutil.which("openclaw.cmd") or shutil.which("openclaw")
+        if openclaw_cli:
+            try:
+                env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+                result = subprocess.run(
+                    [openclaw_cli, "agent", "--local", "--agent", "main",
+                     "--message", task, "--json", "--timeout", str(int(timeout))],
+                    capture_output=True, text=True, timeout=timeout + 10,
+                    shell=(os.name == "nt"), env=env,
+                )
+                if result.returncode == 0:
+                    try:
+                        data = json.loads(result.stdout)
+                        text = data.get("payloads", [{}])[0].get("text", "")
+                        return {"success": True, "output": text, "run_id": idem_key}
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        return {"success": True, "output": result.stdout.strip(), "run_id": idem_key}
+                else:
+                    logger.warning(f"OpenClaw agent failed: {result.stderr[:200]}")
+            except subprocess.TimeoutExpired:
+                logger.warning("OpenClaw agent timeout")
+            except Exception as e:
+                logger.warning(f"OpenClaw agent error: {e}")
+
+        # Strategy 2: Direct Claude CLI fallback
+        return await self._local_claude_cli(task, timeout)
 
     # ------------------------------------------------------------------
     # Local Fallbacks
@@ -222,14 +281,19 @@ class OpenClawBridge:
     async def _local_claude_cli(self, task: str,
                                 timeout: float = 300.0) -> Dict[str, Any]:
         """Fallback: run Claude CLI directly (no shell injection)."""
-        claude_path = shutil.which("claude")
+        # Windows: prefer claude.cmd over bare claude (node wrapper)
+        claude_path = shutil.which("claude.cmd") or shutil.which("claude")
         if not claude_path:
             return {"success": False, "output": "Claude CLI not found"}
 
         try:
+            # Remove CLAUDECODE env var to allow nested sessions
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             result = subprocess.run(
                 [claude_path, "--print", "--output-format", "text", "-p", task],
                 capture_output=True, text=True, timeout=timeout,
+                shell=(os.name == "nt"),  # Windows needs shell=True for .cmd
+                env=env,
             )
             return {
                 "success": result.returncode == 0,

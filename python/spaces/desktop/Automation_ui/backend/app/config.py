@@ -79,9 +79,24 @@ class Settings(BaseSettings):
     remote_frame_max_age_ms: int = Field(default=2000, env="REMOTE_FRAME_MAX_AGE_MS")
 
     # LLM Model Configuration (OpenRouter)
-    llm_model: str = Field(default="anthropic/claude-opus-4", env="LLM_MODEL")
+    llm_model: str = Field(default=None, env="LLM_MODEL")
     vision_model: str = Field(default="nvidia/nemotron-nano-12b-v2-vl:free", env="VISION_MODEL")
-    compaction_model: str = Field(default="anthropic/claude-sonnet-4", env="COMPACTION_MODEL")
+    compaction_model: str = Field(default=None, env="COMPACTION_MODEL")
+
+    @validator("llm_model", pre=True, always=True)
+    def _default_llm_model(cls, v):
+        if v is None:
+            from llm_config import get_model as _get_model
+            return _get_model("desktop_reasoning")
+        return v
+
+    @validator("compaction_model", pre=True, always=True)
+    def _default_compaction_model(cls, v):
+        if v is None:
+            from llm_config import get_model as _get_model
+            return _get_model("desktop_reasoning")
+        return v
+
     video_agent_default: bool = Field(default=True, env="VIDEO_AGENT_DEFAULT")
 
     # OCR Settings

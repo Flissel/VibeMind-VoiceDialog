@@ -27,12 +27,15 @@ def generate_workflow(description: str, **kwargs) -> Dict[str, Any]:
     """
     Generate an n8n workflow from a natural language description and push it to n8n.
 
-    This is the main tool — takes a description like:
-    "AI Agent mit Webhook, DB und Think Tool der Datev-Daten ausliest"
-    and produces a working n8n workflow.
+    Supports two modes:
+    1. With checklist context (from VibeCoder) — enriched description + structured data
+    2. Without checklist — triggers clarification questions via response_hint
 
     Args:
         description: Natural language workflow description
+        **kwargs: Optional checklist data:
+            - checklist: Dict with trigger_type, data_sources, ai_model, output
+            - session_id: VibeCoder session ID (skip clarification if present)
 
     Returns:
         Dict with success, workflow_id, workflow_url, message
@@ -45,14 +48,68 @@ def generate_workflow(description: str, **kwargs) -> Dict[str, Any]:
 
     logger.info(f"Generating workflow from description: {description[:100]}...")
 
+    # ── Check for VibeCoder checklist context ──
+    checklist = kwargs.get("checklist")
+    session_id = kwargs.get("session_id")
+
+    # If no checklist and description is short, start VibeCoder session + broadcast
+    if not checklist and not session_id and len(description.split()) < 12:
+        try:
+            from spaces.n8n.tools.workflow_chat import get_workflow_chat_manager, CHECKLIST_ITEMS
+            mgr = get_workflow_chat_manager()
+            session = mgr.create_session(description)
+            vibecoder_session_id = session.get("session_id", "")
+
+            # Broadcast to Electron so UI can show checklist
+            _broadcast_to_electron({
+                "type": "n8n_vibecoder_checklist_needed",
+                "session_id": vibecoder_session_id,
+                "description": description,
+                "checklist_items": CHECKLIST_ITEMS,
+            })
+
+            return {
+                "success": True,
+                "message": (
+                    "Ich brauche noch ein paar Details bevor ich den Workflow baue. "
+                    "Welcher Trigger (Chat, Webhook, Schedule)? "
+                    "Welche Datenquellen (PostgreSQL, API, CSV)? "
+                    "Welches AI Model (GPT-4o, GPT-5.4, Claude)? "
+                    "Was soll der Output sein?"
+                ),
+                "response_hint": (
+                    "Ich brauche noch ein paar Details: "
+                    "Welcher Trigger? Welche Datenquellen? Welches AI Model? Was ist der Output?"
+                ),
+                "needs_checklist": True,
+                "vibecoder_session_id": vibecoder_session_id,
+                "description": description,
+            }
+        except Exception as e:
+            logger.warning(f"VibeCoder session creation failed: {e}, proceeding without checklist")
+            # Fall through to generation without checklist
+
+    # Build enriched description from checklist
+    enriched_description = description
+    if checklist:
+        parts = [description]
+        if checklist.get("trigger_type"):
+            parts.append(f"Trigger: {checklist['trigger_type']}")
+        if checklist.get("data_sources"):
+            parts.append(f"Datenquellen: {checklist['data_sources']}")
+        if checklist.get("ai_model"):
+            parts.append(f"AI Model: {checklist['ai_model']}")
+        if checklist.get("output"):
+            parts.append(f"Output: {checklist['output']}")
+        enriched_description = ". ".join(parts)
+        logger.info(f"Enriched description from checklist: {enriched_description[:150]}...")
+
     # Minibook collaboration path (when enabled)
     use_minibook = os.getenv("USE_MINIBOOK_HUB", "false").lower() == "true"
     if use_minibook:
         try:
             from spaces.minibook.minibook_hub import MinibookHub
             logger.info("Delegating workflow generation to MinibookHub for multi-space collaboration")
-            # MinibookHub dispatch is handled at orchestrator level —
-            # if we're here, we're already in direct execution mode
         except ImportError:
             pass
 
@@ -60,7 +117,7 @@ def generate_workflow(description: str, **kwargs) -> Dict[str, Any]:
     use_society = os.getenv("N8N_USE_SOCIETY", "false").lower() == "true"
     if use_society:
         logger.info("Using Society of Mind for workflow generation")
-        result = generate_workflow_json_society(description)
+        result = generate_workflow_json_society(enriched_description)
 
         # Society deploys directly to n8n — check if it returned a workflow_id
         if result.get("success") and result.get("workflow_id"):
@@ -95,7 +152,7 @@ def generate_workflow(description: str, **kwargs) -> Dict[str, Any]:
 
     # ── 2-Phase path (LLM plan + template assembly + API push) ──
     if not use_society or 'workflow_json' not in dir():
-        result = generate_workflow_json(description)
+        result = generate_workflow_json(enriched_description)
         if not result["success"]:
             return {
                 "success": False,

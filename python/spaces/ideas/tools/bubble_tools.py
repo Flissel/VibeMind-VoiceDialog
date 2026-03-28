@@ -13,12 +13,14 @@ Architecture:
 MIGRATED FROM: tools/bubble_tools.py
 """
 
+import re
 import sys
 import os
 import requests
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
+from llm_config import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +200,7 @@ def list_bubbles(params: Dict[str, Any]) -> str:
     logger.info("=" * 50)
 
     repo = _get_ideas_repo()
-    ideas = repo.list(limit=20, order_by="score DESC")
+    ideas = repo.list(limit=100, order_by="score DESC")
 
     logger.info(f"    Total bubbles found: {len(ideas)}")
     for idea in ideas[:5]:
@@ -210,12 +212,12 @@ def list_bubbles(params: Dict[str, Any]) -> str:
 
     # Store mapping for index-based voice referencing
     from tools.index_mapping import set_bubble_mapping
-    set_bubble_mapping(ideas[:10])
+    set_bubble_mapping(ideas)
 
     # Format with numbers for voice reference (1. Title, 2. Title...)
     titles = []
     indexed_bubbles = []
-    for i, idea in enumerate(ideas[:10], 1):
+    for i, idea in enumerate(ideas, 1):
         score_str = f" (score: {idea.score:.0f})" if idea.score > 0 else ""
         titles.append(f"{i}. {idea.title}{score_str}")
         indexed_bubbles.append({
@@ -690,17 +692,50 @@ def promote_bubble(params: Dict[str, Any]) -> str:
     project = promote_idea_to_project(idea.id)
 
     if project:
-        # Broadcast
+        _publish_bubble(idea.id)
+
+        # Create shuttle (= wizard session) and init from bubble
+        shuttle_id = None
+        init_result = {}
+        try:
+            import time
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+
+            slug = re.sub(r"[^a-z0-9]+", "-", (idea.title or "bubble").lower()).strip("-")
+            shuttle_id = f"shuttle-{slug}-{int(time.time())}"
+
+            # Create shuttle in DB if repository available
+            try:
+                from data import ShuttlesRepository
+                ShuttlesRepository().create(
+                    shuttle_id=shuttle_id,
+                    bubble_id=idea.id,
+                    bubble_name=idea.title,
+                    project_id=project.id,
+                )
+            except Exception as e:
+                logger.debug(f"Shuttle DB create skipped: {e}")
+
+            # Init wizard from bubble (includes MiroFish eval if available)
+            handler = get_wizard_handler()
+            init_result = handler.init_from_bubble(shuttle_id, idea.id)
+            logger.info(f"Wizard initialized for '{idea.title}' (shuttle={shuttle_id})")
+        except Exception as e:
+            logger.warning(f"Wizard init skipped: {e}")
+
+        # Broadcast with open_wizard signal
         _broadcast_to_electron({
             "type": "bubble_promoted",
             "bubble_id": idea.id,
             "project_id": project.id,
-            "project_name": project.name
+            "project_name": project.name,
+            "shuttle_id": shuttle_id,
+            "open_wizard": True,
+            "mirofish_score": (init_result.get("mirofish_result") or {}).get("total_score"),
         })
-        _publish_bubble(idea.id)
 
         logger.info(f"Promoted bubble '{idea.title}' to project '{project.name}'")
-        return f"'{idea.title}' is now a project! Ready to take action."
+        return f"'{idea.title}' is now a project! SWE Design Wizard is opening."
 
     return "Failed to promote to project"
 
@@ -1315,7 +1350,7 @@ def evaluate_bubble_evolution(params: Dict[str, Any]) -> str:
         return f"'{title}' has no content to evaluate yet. Add some notes first!"
 
     # Call OpenRouter for AI evaluation
-    model = os.getenv("OPENROUTER_EVAL_MODEL", "openai/gpt-4o-mini")
+    model = get_model("bubble_eval")
 
     system_prompt = """You are an idea evolution evaluator. Analyze the content and score it on 4 dimensions (0-10 each):
 

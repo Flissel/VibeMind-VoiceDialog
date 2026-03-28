@@ -80,13 +80,20 @@ logger = logging.getLogger(__name__)
 class ExecutionWorkerConfig:
     """Konfiguration für den Execution Worker."""
     worker_id: str = "execution_worker"
-    model: str = "google/gemini-2.0-flash-001"
+    model: str = None
     max_validation_rounds: int = 3
     validation_threshold: float = 0.02  # 2% Änderung für Erfolg
     validation_timeout: float = 5.0  # Sekunden
     validation_check_interval: float = 0.3  # Sekunden
     enable_llm_planning: bool = True
     enable_screenshots: bool = True
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        if self.model is None:
+            from llm_config import get_model as _get_model
+            self.model = _get_model("desktop_worker")
 
 
 class ExecutionWorker:

@@ -9,6 +9,8 @@ all scores and determines the winner.
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
+from llm_config import get_model
+
 
 @dataclass
 class EvalContext:
@@ -52,7 +54,7 @@ class ConfidenceDistribution:
 @dataclass
 class StreamListenerConfig:
     """Configuration for the StreamListener system."""
-    model: str = "openai/gpt-4o-mini"
+    model: str = field(default_factory=lambda: get_model("stream_listener"))
     timeout_seconds: float = 8.0  # Per-listener LLM timeout (generous for cold starts)
     min_confidence: float = 0.3
     ambiguity_threshold: float = 0.15

@@ -82,6 +82,7 @@ class SyncExecutor:
         sm_task_memory=None,
         sm_user_profile=None,
         use_broadcast_mode: bool = False,
+        param_mappings: Optional[Dict[str, Dict[str, str]]] = None,
     ):
         self._tool_executors = tool_executors
         self.task_memory = task_memory
@@ -90,6 +91,28 @@ class SyncExecutor:
         self.sm_task_memory = sm_task_memory
         self.sm_user_profile = sm_user_profile
         self._use_broadcast_mode = use_broadcast_mode
+        self._param_mappings = param_mappings or {}
+
+    def _normalize_params(self, event_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize parameter names using PARAM_MAPPINGs from backend agents.
+
+        Maps classifier output names to tool expected names.
+        E.g., {"title": "X"} -> {"bubble_name": "X"} for bubble.delete
+        """
+        mapping = self._param_mappings.get(event_type, {})
+        if not mapping:
+            return params
+
+        normalized = {}
+        for key, value in params.items():
+            new_key = mapping.get(key, key)
+            if new_key not in normalized:
+                normalized[new_key] = value
+            elif key not in mapping:
+                normalized[key] = value
+
+        return normalized
 
     async def process_sync(
         self,
@@ -163,6 +186,10 @@ class SyncExecutor:
                 logger.debug(f"Created task {task_id} for {event_type}")
             except Exception as e:
                 logger.warning(f"Could not create task in TaskMemory: {e}")
+
+        # Normalize params (e.g., "title" -> "bubble_name" for bubble.delete)
+        if payload:
+            payload = self._normalize_params(event_type, payload)
 
         if executor:
             try:
@@ -436,6 +463,9 @@ class SyncExecutor:
         for i, step in enumerate(ordered_steps):
             event_type = step.get("event_type", "")
             payload = step.get("payload", {}).copy()  # Copy to avoid modifying original
+
+            # Normalize params (e.g., "title" -> "bubble_name" for bubble.delete)
+            payload = self._normalize_params(event_type, payload)
 
             # Enrich payload with created entities from previous steps
             # e.g., if bubble.create created "Businessplan", bubble.enter should use it

@@ -650,7 +650,7 @@ def _generate_white_paper_content(title: str, task: str, hierarchical_content: s
         return None
 
     # Use GPT-4o for better document generation
-    model = os.getenv("OPENROUTER_WHITEPAPER_MODEL", "openai/gpt-4o-mini")
+    model = get_model("whitepaper")
 
     system_prompt = """You are a professional technical writer. Your task is to create well-structured documents from interconnected ideas.
 
@@ -836,7 +836,7 @@ def _call_project_structuring(title: str, content: str) -> Optional[Dict[str, An
         logger.error("OpenRouter client not available")
         return None
 
-    model = os.getenv("OPENROUTER_STRUCTURE_MODEL", "openai/gpt-4o-mini")
+    model = get_model("structure_analysis")
 
     system_prompt = """You are a project analyst and requirements engineer. Your task is to analyze idea documents and extract structured project information.
 
@@ -1092,7 +1092,7 @@ def _generate_feature_document(
     if not client:
         return None
 
-    model = os.getenv("OPENROUTER_FEATURE_MODEL", "openai/gpt-4o-mini")
+    model = get_model("feature_extraction")
 
     # Build requirements context
     req_context = ""
@@ -2577,7 +2577,7 @@ def _synthesize_project_doc(title: str, input_text: str, stats: Dict[str, int]) 
         logger.error("OpenRouter client not available for doc synthesis")
         return None
 
-    model = os.getenv("OPENROUTER_DOC_MODEL", "openai/gpt-4o")
+    model = get_model("doc_generation")
 
     system_prompt = """Du bist ein professioneller technischer Redakteur. Deine Aufgabe ist es,
 aus fragmentierten Ideen, Notizen und strukturierten Inhalten ein kohaerentes, professionelles

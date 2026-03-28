@@ -1553,15 +1553,14 @@ class IntentClassifier:
             except Exception:
                 pass  # Plugin system not available
 
-            # GPT-5+ uses max_completion_tokens, older models use max_tokens
-            token_param = "max_completion_tokens" if "gpt-5" in self._model or "o1" in self._model else "max_tokens"
+            from llm_config import token_kwargs
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
-                **{token_param: 500},
+                **token_kwargs(self._model, 500),
             )
 
             content = response.choices[0].message.content.strip()

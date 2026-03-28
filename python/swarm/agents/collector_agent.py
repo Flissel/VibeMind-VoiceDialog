@@ -18,6 +18,8 @@ import time
 import logging
 import os
 from dataclasses import dataclass, field
+
+from llm_config import token_kwargs
 from typing import Optional, List, Callable, Any
 from enum import Enum
 
@@ -183,8 +185,8 @@ Reply ONLY with: COMPLETE or INCOMPLETE"""
                     "role": "user",
                     "content": text
                 }],
-                max_tokens=10,
-                temperature=0
+                temperature=0,
+                **token_kwargs(self.config.llm_model, 10)
             )
             result = response.choices[0].message.content.strip().upper()
             is_complete = result == "COMPLETE"

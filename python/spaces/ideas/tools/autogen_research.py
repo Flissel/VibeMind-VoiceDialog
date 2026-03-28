@@ -23,6 +23,8 @@ except ImportError as e:
     logging.error(f"AutoGen import failed: {e}")
     raise ImportError(f"AutoGen nicht installiert. Installiere mit: pip install 'autogen-ext[grpc]'")
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,12 +33,18 @@ def _get_model_client():
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY nicht gesetzt")
-    
+
     # Erstelle OpenAIChatCompletionClient für OpenRouter
     return OpenAIChatCompletionClient(
-        model="gpt-4",
+        model=get_model("ideas_research"),
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
+        model_info={
+            "vision": False,
+            "function_calling": True,
+            "json_output": True,
+            "family": "unknown",
+        },
     )
 
 

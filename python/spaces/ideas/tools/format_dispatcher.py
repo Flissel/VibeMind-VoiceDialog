@@ -28,6 +28,7 @@ from data.format_schemas import (
 )
 from data.repository import CanvasRepository, IdeasRepository
 from data.models import CanvasNode
+from llm_config import get_model, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +37,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 def _get_llm_client():
-    """Get OpenRouter LLM client."""
-    from openai import OpenAI
-
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY not set")
-
-    return OpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1"
-    )
+    """Get LLM client via central config."""
+    return get_client("format_dispatcher")
 
 
 def _call_format_agent_sync(prompt: str, target_format: str) -> Dict[str, Any]:
@@ -54,7 +46,7 @@ def _call_format_agent_sync(prompt: str, target_format: str) -> Dict[str, Any]:
     client = _get_llm_client()
 
     response = client.chat.completions.create(
-        model="anthropic/claude-sonnet-4-5",
+        model=get_model("format_dispatcher"),
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=3000,

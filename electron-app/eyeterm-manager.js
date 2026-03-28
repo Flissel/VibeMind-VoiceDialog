@@ -10,6 +10,9 @@
 const { BrowserView } = require('electron');
 const path = require('path');
 
+const _ET_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (Desktop)
+function _etLog(...a) { process.stdout.write(`${_ET_C}[EyeTermManager] ${a.join(' ')}${_RST}\n`); }
+
 class EyeTermManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -55,7 +58,7 @@ class EyeTermManager {
     this.eyetermView.webContents.loadURL(html);
 
     this.eyetermView.webContents.on('did-finish-load', () => {
-      console.log('[EyeTermManager] Camera preview loaded');
+      _etLog('Camera preview loaded');
     });
 
     return this.eyetermView;
@@ -166,7 +169,7 @@ class EyeTermManager {
     this.mainWindow.addBrowserView(this.eyetermView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[EyeTermManager] Camera preview shown');
+    _etLog('Camera preview shown');
   }
 
   /**
@@ -177,7 +180,7 @@ class EyeTermManager {
 
     this.mainWindow.removeBrowserView(this.eyetermView);
     this.isVisible = false;
-    console.log('[EyeTermManager] Camera preview hidden');
+    _etLog('Camera preview hidden');
   }
 
   /**

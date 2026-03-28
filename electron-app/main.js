@@ -128,13 +128,16 @@ async function autoConfigureRowboatModels() {
         let desiredConfig = null;
         let source = '';
 
+        // Check for global model override (takes precedence over provider-specific defaults)
+        const rowboatModelOverride = process.env.LLM_MODEL_ROWBOAT || process.env.ROWBOAT_MODEL;
+
         // 1. Explicit Anthropic API key from .env
         {
             const anthropicKey = process.env.ANTHROPIC_API_KEY;
             if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
                 desiredConfig = {
                     provider: { flavor: 'anthropic', apiKey: anthropicKey },
-                    model: process.env.ROWBOAT_MODEL || 'claude-sonnet-4-20250514',
+                    model: rowboatModelOverride || 'claude-sonnet-4-20250514',
                 };
                 source = 'Anthropic';
             }
@@ -144,7 +147,7 @@ async function autoConfigureRowboatModels() {
         if (!desiredConfig && process.env.OPENROUTER_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
-                model: process.env.ROWBOAT_MODEL || 'anthropic/claude-sonnet-4',
+                model: rowboatModelOverride || 'anthropic/claude-sonnet-4',
             };
             source = 'OpenRouter';
         }
@@ -153,7 +156,7 @@ async function autoConfigureRowboatModels() {
         if (!desiredConfig && process.env.OPENAI_API_KEY) {
             desiredConfig = {
                 provider: { flavor: 'openai', apiKey: process.env.OPENAI_API_KEY },
-                model: process.env.ROWBOAT_MODEL || 'gpt-4.1',
+                model: rowboatModelOverride || 'gpt-4.1',
             };
             source = 'OpenAI';
         }
@@ -179,6 +182,95 @@ async function autoConfigureRowboatModels() {
         console.warn('[Main] Could not auto-configure Rowboat models:', e.message);
     }
 }
+
+// =============================================================================
+// COLORED CONSOLE.LOG — colorize [Tag] prefixed messages globally
+// =============================================================================
+const _origLog = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _RST = '\x1b[0m';
+const _GLOBAL_TAG_COLORS = {
+    // Rowboat (Blue)
+    '[GraphBuilder]':  '\x1b[94m',
+    '[Rowboat]':       '\x1b[94m',
+    '[Fireflies]':     '\x1b[94m',
+    '[Granola]':       '\x1b[94m',
+    // SWE Design (Bright Cyan)
+    '[SWE-Server]':       '\x1b[96m',
+    '[SweDesignManager]': '\x1b[96m',
+    '[DASHBOARD]':        '\x1b[96m',
+    '[SERVER]':           '\x1b[96m',
+    '[WS]':               '\x1b[96m',
+    // AgentFarm (Bright Yellow — same family as Coding)
+    '[AgentFarmManager]': '\x1b[93m',
+    '[AgentFarm]':        '\x1b[93m',
+    // Coding (Yellow)
+    '[EpicGen]':          '\x1b[93m',
+    '[Coding Engine]':    '\x1b[93m',
+    // Brain (Green)
+    '[BrainManager]':  '\x1b[32m',
+    '[Brain-Server]':  '\x1b[32m',
+    // Desktop (Magenta)
+    '[eyeTerm]':          '\x1b[95m',
+    '[Automation_ui]':    '\x1b[95m',
+    '[EyeTermManager]':   '\x1b[95m',
+    // Minibook (White Bold)
+    '[ClawPortManager]':  '\x1b[97m',
+    '[DashboardManager]': '\x1b[97m',
+    // Rowboat managers
+    '[RowboatManager]':   '\x1b[94m',
+    // MiroFish (Bright Magenta — similar to Desktop)
+    '[MiroFishManager]':  '\x1b[95m',
+    // Flowzen (Bright Green — Ideas family)
+    '[FlowzenManager]':   '\x1b[92m',
+    // Video (Cyan)
+    '[VideoManager]':     '\x1b[36m',
+    // System (Dim)
+    '[Main]':             '\x1b[2m',
+    '[DEBUG]':            '\x1b[2m',
+    '[DockerManager]':    '\x1b[2m',
+    '[PortAllocator]':    '\x1b[2m',
+};
+// Services that log without [Tag] prefix — match by content keywords
+const _CONTENT_PATTERN_COLORS = [
+    { pattern: 'Google OAuth',    color: '\x1b[94m' },  // Rowboat
+    { pattern: 'Sleeping for',    color: '\x1b[94m' },  // Rowboat
+];
+
+function _colorizedLog(origFn, ...args) {
+    if (args.length > 0 && typeof args[0] === 'string') {
+        // Check [Tag] prefixed messages
+        for (const [tag, color] of Object.entries(_GLOBAL_TAG_COLORS)) {
+            if (args[0].startsWith(tag) || args[0].includes(tag)) {
+                args[0] = `${color}${args[0]}`;
+                const lastIdx = args.length - 1;
+                if (typeof args[lastIdx] === 'string') {
+                    args[lastIdx] = `${args[lastIdx]}${_RST}`;
+                } else {
+                    args.push(_RST);
+                }
+                return origFn(...args);
+            }
+        }
+        // Check content patterns (no [Tag] prefix)
+        for (const { pattern, color } of _CONTENT_PATTERN_COLORS) {
+            if (args[0].includes(pattern)) {
+                args[0] = `${color}${args[0]}`;
+                const lastIdx = args.length - 1;
+                if (typeof args[lastIdx] === 'string') {
+                    args[lastIdx] = `${args[lastIdx]}${_RST}`;
+                } else {
+                    args.push(_RST);
+                }
+                return origFn(...args);
+            }
+        }
+    }
+    return origFn(...args);
+}
+
+console.log = (...args) => _colorizedLog(_origLog, ...args);
+console.warn = (...args) => _colorizedLog(_origWarn, ...args);
 
 // Current space tracking
 let currentSpace = 'ideas';  // 'ideas', 'desktop', or 'projects'
@@ -318,8 +410,13 @@ function startPythonBackend() {
                 sentry.addBreadcrumb({ category: 'ipc.python', message: `<- ${message.type}`, level: 'info' });
 
                 // Log IPC as structured JSON so CDP Debug Agent can color it
-                // Emit in renderer context so CDP Debug Agent sees it
-                if (mainWindow?.webContents) {
+                // Skip high-frequency eyeterm messages to avoid log spam
+                const _skipIpcLog = new Set([
+                    'eyeterm_gaze_cursor', 'eyeterm_click_dots',
+                    'eyeterm_fatigue', 'eyeterm_status',
+                    'desktop_screenshot', 'video_frame', 'frame_update',
+                ]);
+                if (mainWindow?.webContents && !_skipIpcLog.has(message.type)) {
                     const j = JSON.stringify({__ipc_log: true, dir: '\u2192', type: message.type, preview: JSON.stringify(message).substring(0, 150)});
                     mainWindow.webContents.executeJavaScript(`console.log(${JSON.stringify(j)})`).catch(() => {});
                 }
@@ -384,6 +481,37 @@ function startPythonBackend() {
                     }
                 }
 
+                // Auto-open AgentFarm VibeCoder when n8n workflow needs checklist
+                if (message.type === 'n8n_vibecoder_checklist_needed' && agentfarmManager) {
+                    console.log('[Main] VibeCoder checklist needed → opening AgentFarm Workflow Builder');
+                    if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+                    if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+                    agentfarmManager.show().then(() => {
+                        const view = agentfarmManager.agentfarmView;
+                        if (view && view.webContents) {
+                            view.webContents.send('agentfarm-switch-tab', { tab: 'n8n' });
+                            // Forward the checklist message so WorkflowBuilder picks up the session
+                            view.webContents.send('agentfarm-message', message);
+                        }
+                    }).catch(err => {
+                        console.error('[Main] Failed to open AgentFarm:', err.message);
+                    });
+                }
+
+                // Auto-open SWE Design wizard when bubble is promoted
+                if (message.type === 'bubble_promoted' && message.open_wizard) {
+                    console.log('[Main] Bubble promoted → opening SWE Design wizard');
+                    // Mutual exclusion: hide other BrowserViews
+                    if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+                    if (rowboatManager && rowboatManager.getIsVisible()) rowboatManager.hide();
+                    if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+                    if (sweDesignManager) {
+                        sweDesignManager.show().catch(err => {
+                            console.error('[Main] Failed to open SWE Design:', err.message);
+                        });
+                    }
+                }
+
                 // Forward to renderer
                 if (mainWindow && mainWindow.webContents) {
                     mainWindow.webContents.send('python-message', message);
@@ -414,6 +542,8 @@ function startPythonBackend() {
         voice:        '\x1b[33m',  // Dark Yellow
         orchestrator: '\x1b[35m',  // Dark Magenta
         brain:        '\x1b[32m',  // Dark Green
+        agentfarm:    '\x1b[38;5;208m',  // Orange
+        n8n:          '\x1b[38;5;99m',   // Purple
         system:       '\x1b[2m',   // Dim
     };
     const LEVEL_ANSI = {
@@ -429,6 +559,35 @@ function startPythonBackend() {
         minibook: '[MINIBOOK]', schedule: '[SCHEDULE]', voice: '[VOICE]',
         orchestrator: '[ORCH]', brain: '[BRAIN]', system: '[SYSTEM]',
     };
+
+    // Map [Tag] prefixes in plain-text logs to space colors
+    const TAG_TO_COLOR = {
+        '[Automation_ui]': SPACE_ANSI.desktop,
+        '[eyeTerm]':       SPACE_ANSI.desktop,
+        '[Coding Engine]': SPACE_ANSI.coding,
+        '[GraphBuilder]':  SPACE_ANSI.rowboat,
+        '[Rowboat]':       SPACE_ANSI.rowboat,
+        '[Brain-Server]':  SPACE_ANSI.brain,
+        '[BrainManager]':  SPACE_ANSI.brain,
+        '[Sensory]':       SPACE_ANSI.brain,
+        '[AgentLoop]':     SPACE_ANSI.brain,
+        '[Minibook]':      SPACE_ANSI.minibook,
+        '[Schedule]':      SPACE_ANSI.schedule,
+        '[Research]':      SPACE_ANSI.research,
+        '[AgentFarm]':     SPACE_ANSI.coding,
+        '[N8n]':           SPACE_ANSI.schedule,
+        '[EpicGen]':       SPACE_ANSI.coding,
+        '[Main]':          SPACE_ANSI.system,
+        '[DockerManager]': SPACE_ANSI.system,
+        '[Python]':        SPACE_ANSI.system,
+    };
+
+    function detectTagColor(text) {
+        for (const [tag, color] of Object.entries(TAG_TO_COLOR)) {
+            if (text.startsWith(tag) || text.includes(tag)) return color;
+        }
+        return null;
+    }
 
     let stderrBuffer = '';
     pythonProcess.stderr.on('data', (data) => {
@@ -449,7 +608,7 @@ function startPythonBackend() {
                     const levelPad = (log.l || '').padEnd(5);
                     const dimTs = '\x1b[2m';
 
-                    const colored = `${spaceColor}${tag}${RST} ${levelColor}${levelPad}${RST} ${dimTs}[${log.t}]${RST} ${log.m}`;
+                    const colored = `${spaceColor}${tag} ${levelColor}${levelPad}${RST} ${dimTs}[${log.t}]${RST} ${spaceColor}${log.m}${RST}`;
 
                     if (log.l === 'ERROR' || log.l === 'CRITICAL') {
                         process.stderr.write(colored + '\n');
@@ -473,8 +632,13 @@ function startPythonBackend() {
             } catch (e) {
                 // Not JSON — fall through
             }
-            // Plain text fallback — print to terminal AND emit in renderer
-            process.stdout.write(`[Python] ${trimmed}\n`);
+            // Plain text fallback — detect [Tag] prefix and colorize
+            const tagColor = detectTagColor(trimmed);
+            if (tagColor) {
+                process.stdout.write(`${tagColor}[Python] ${trimmed}${RST}\n`);
+            } else {
+                process.stdout.write(`${SPACE_ANSI.system}[Python] ${trimmed}${RST}\n`);
+            }
             if (mainWindow?.webContents) {
                 mainWindow.webContents.executeJavaScript(
                     `console.log('[Python stderr]: ' + ${JSON.stringify(trimmed)})`
@@ -1985,6 +2149,58 @@ function setupIpcHandlers() {
         }
     });
 
+    // ── VibeCoder Chat (iterative n8n workflow builder) ─────────
+    ipcMain.handle('agentfarm:n8n-chat-start', async (_event, { description }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_chat_start', description: description || '' }, 'n8n_chat_start_result', 10000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-chat-checklist', async (_event, { sessionId, action, itemId, value }) => {
+        try {
+            return await sendToPythonAndWait({
+                type: 'n8n_chat_checklist', session_id: sessionId,
+                action: action || 'answer', item_id: itemId, value: value || '',
+            }, 'n8n_chat_checklist_result', 15000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-chat-message', async (_event, { sessionId, text }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_chat_message', session_id: sessionId, text }, 'n8n_chat_message_result', 90000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-chat-deploy', async (_event, { sessionId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_chat_deploy', session_id: sessionId }, 'n8n_chat_deploy_result', 15000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-chat-history', async (_event, { sessionId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_chat_history', session_id: sessionId }, 'n8n_chat_history_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-chat-sessions', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_chat_sessions' }, 'n8n_chat_sessions_result');
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
     // ── AgentFarm Autogen Handlers ──────────────────────────────
     ipcMain.handle('agentfarm:create-team', async (_, templateId, config) => {
         return await sendToPythonAndWait(
@@ -2005,6 +2221,37 @@ function setupIpcHandlers() {
             { type: 'agentfarm_status' },
             'agentfarm_status_result'
         );
+    });
+
+    // Pipeline Runs from Minibook (direct HTTP, no Python round-trip needed)
+    ipcMain.handle('agentfarm:pipeline-runs', async () => {
+        try {
+            const minibook = process.env.MINIBOOK_URL || 'http://localhost:3480';
+            const resp = await fetch(`${minibook}/api/v1/projects`);
+            const projects = await resp.json();
+            const pipelineProjects = projects.filter(p => p.name?.startsWith('pipeline-'));
+
+            const runs = [];
+            for (const p of pipelineProjects.slice(-10)) {
+                try {
+                    const postsResp = await fetch(`${minibook}/api/v1/projects/${p.id}/posts`);
+                    const postsData = await postsResp.json();
+                    const posts = Array.isArray(postsData) ? postsData : (postsData.posts || []);
+                    runs.push({
+                        id: p.id,
+                        name: p.name,
+                        post_count: posts.length,
+                        last_agent: posts[posts.length - 1]?.author_name || null,
+                        last_title: (posts[posts.length - 1]?.title || '').slice(0, 60),
+                    });
+                } catch {
+                    runs.push({ id: p.id, name: p.name, post_count: 0 });
+                }
+            }
+            return { success: true, runs: runs.reverse(), total: pipelineProjects.length };
+        } catch (e) {
+            return { success: false, runs: [], error: String(e) };
+        }
     });
 
     ipcMain.handle('agentfarm:list-teams', async () => {
@@ -2110,6 +2357,48 @@ function setupIpcHandlers() {
         } catch (e) {
             return { success: false, message: e.message, videos: [] };
         }
+    });
+
+    // ── Video Project IPC ──
+    ipcMain.handle('video:project-create', async (_e, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_project_create', ...params }, 'video_project_create_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:project-add-person', async (_e, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_project_add_person', ...params }, 'video_project_add_person_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:project-list', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_project_list' }, 'video_project_list_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:project-pipeline', async (_e, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_project_pipeline', ...params }, 'video_project_pipeline_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:project-run-step', async (_e, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_project_run_step', ...params }, 'video_project_run_step_result', 600000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:reference-pipeline', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_reference_pipeline' }, 'video_reference_pipeline_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:publish-rowboat', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_publish_rowboat' }, 'video_publish_rowboat_result', 30000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
+    ipcMain.handle('video:delete', async (_event, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_delete', ...params }, 'video_delete_result', 15000);
+        } catch (e) { return { success: false, message: e.message }; }
     });
 
     // ========================================
@@ -2272,6 +2561,87 @@ function setupIpcHandlers() {
         } catch (e) {
             return { success: false, error: e.message };
         }
+    });
+
+    // ── Models Config ──
+
+    ipcMain.handle('clawport:get-models-config', async () => {
+        try {
+            return await sendToPythonAndWait({ type: 'get_models_config' }, 'models_config');
+        } catch (e) {
+            return { type: 'models_config', providers: [], models: [], error: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:update-model-role', async (_event, { role, provider, model, maxTokens }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'update_model_role', role, provider, model, max_tokens: maxTokens },
+                'model_update_result'
+            );
+        } catch (e) {
+            return { type: 'model_update_result', success: false, role, error: e.message };
+        }
+    });
+
+    ipcMain.handle('clawport:test-model-connection', async (_event, { role }) => {
+        try {
+            return await sendToPythonAndWait(
+                { type: 'test_model_connection', role },
+                'model_test_result',
+                15000
+            );
+        } catch (e) {
+            return { type: 'model_test_result', success: false, role, error: e.message };
+        }
+    });
+
+    // ── n8n Editor (auto-login BrowserWindow) ──
+
+    let n8nWindow = null;
+    ipcMain.handle('clawport:open-n8n-editor', async (_event, opts) => {
+        const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
+        const workflowId = opts?.workflowId;
+        if (n8nWindow && !n8nWindow.isDestroyed()) {
+            if (workflowId) {
+                n8nWindow.loadURL(`${n8nUrl}/workflow/${workflowId}`);
+            }
+            n8nWindow.focus();
+            return { success: true };
+        }
+        n8nWindow = new BrowserWindow({
+            width: 1400, height: 900,
+            title: 'n8n Workflow Editor',
+            autoHideMenuBar: true,
+            webPreferences: { nodeIntegration: false, contextIsolation: true },
+        });
+        n8nWindow.on('closed', () => { n8nWindow = null; });
+
+        // Auto-login: load signin, inject fetch login, redirect to target page
+        const targetPath = workflowId ? `/workflow/${workflowId}` : '/';
+        n8nWindow.loadURL(`${n8nUrl}/signin`);
+        n8nWindow.webContents.on('did-navigate', (_event, url) => {
+            if (!n8nWindow || n8nWindow.isDestroyed()) return;
+            if (!url.includes('/signin')) return;
+            console.log('[Main] n8n signin detected, auto-login → ' + targetPath);
+            setTimeout(() => {
+                if (!n8nWindow || n8nWindow.isDestroyed()) return;
+                n8nWindow.webContents.executeJavaScript(`
+                    fetch('${n8nUrl}/rest/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            emailOrLdapLoginId: 'admin@vibemind.local',
+                            password: 'Vibemind1'
+                        })
+                    }).then(r => {
+                        if (r.ok) window.location.href = '${targetPath}';
+                    }).catch(() => {});
+                `).catch(() => {});
+            }, 1500);
+        });
+        return { success: true };
     });
 
     // ── n8n Workflow Builder ──
@@ -2536,14 +2906,25 @@ app.whenReady().then(async () => {
     protocol.handle('vibemind-video', (request) => {
         const url = new URL(request.url);
         let filePath = decodeURIComponent(url.pathname);
+        // Strip the host-like segment from URL (e.g., //video/C:/... -> /C:/...)
+        // URL parses vibemind-video://video/C:/... as host="video", pathname="/C:/..."
+        // but some builds give pathname="//video/C:/..." — handle both.
+        filePath = filePath.replace(/^\/+video\//, '/');
         // Remove leading slash on Windows (e.g., /C:/... -> C:/...)
         if (process.platform === 'win32' && filePath.startsWith('/')) {
             filePath = filePath.slice(1);
         }
-        // Security: only allow .mp4 from vibevideo directories
+        // Security: only allow video files from known directories
         const normalized = path.resolve(filePath);
-        const allowedBase = path.resolve(__dirname, '..', 'python', 'spaces', 'video');
-        if (!normalized.startsWith(allowedBase) || !normalized.endsWith('.mp4')) {
+        const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+        const hasVideoExt = videoExts.some(ext => normalized.toLowerCase().endsWith(ext));
+        const allowedBases = [
+            path.resolve(__dirname, '..', 'python', 'spaces', 'video'),
+            path.resolve(require('os').homedir(), '.rowboat', 'Videos'),
+        ];
+        const isAllowed = allowedBases.some(base => normalized.startsWith(base));
+        if (!isAllowed || !hasVideoExt) {
+            console.warn(`[vibemind-video] Blocked: ${normalized}`);
             return new Response('Forbidden', { status: 403 });
         }
         return net.fetch(`file:///${normalized.replace(/\\/g, '/')}`);
@@ -2621,6 +3002,46 @@ app.whenReady().then(async () => {
                     } else {
                         console.log('[Main] n8n Docker started successfully');
                         if (stdout.trim()) console.log('[Main] n8n:', stdout.trim());
+                        // Auto-provision owner account with retry (n8n needs time to boot)
+                        const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
+                        let provisionAttempts = 0;
+                        const provisionOwner = () => {
+                            provisionAttempts++;
+                            const http = require('http');
+                            const url = new URL(`${n8nUrl}/rest/owner/setup`);
+                            const body = JSON.stringify({
+                                email: 'admin@vibemind.local',
+                                password: 'Vibemind1',
+                                firstName: 'VibeMind',
+                                lastName: 'Admin',
+                            });
+                            const req = http.request({
+                                hostname: url.hostname,
+                                port: url.port,
+                                path: url.pathname,
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+                            }, (res) => {
+                                if (res.statusCode === 200) {
+                                    console.log('[Main] n8n owner account provisioned');
+                                } else {
+                                    console.log('[Main] n8n owner already exists or setup skipped (status ' + res.statusCode + ')');
+                                }
+                                res.resume();
+                            });
+                            req.on('error', () => {
+                                if (provisionAttempts < 6) {
+                                    console.log(`[Main] n8n not ready yet, retry ${provisionAttempts}/6...`);
+                                    setTimeout(provisionOwner, 5000);
+                                } else {
+                                    console.warn('[Main] n8n owner provision gave up after 6 attempts');
+                                }
+                            });
+                            req.write(body);
+                            req.end();
+                        };
+                        // Wait for n8n to be fully ready before provisioning
+                        setTimeout(provisionOwner, 5000);
                     }
                 }
             );

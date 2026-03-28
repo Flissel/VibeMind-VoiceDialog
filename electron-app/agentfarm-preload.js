@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
     ipcRenderer.invoke('agentfarm:get-project-status', { projectId, jobId }),
 
   // ── n8n Workflows (n8n tab) ──
+  openN8nEditor: (workflowId) =>
+    ipcRenderer.invoke('clawport:open-n8n-editor', { workflowId }),
+
   n8nStatus: () =>
     ipcRenderer.invoke('agentfarm:n8n-status'),
 
@@ -33,6 +36,25 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
 
   n8nDelete: (workflowId) =>
     ipcRenderer.invoke('agentfarm:n8n-delete', { workflowId }),
+
+  // ── VibeCoder Chat (iterative workflow builder) ──
+  n8nChatStart: (description) =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-start', { description: description || '' }),
+
+  n8nChatChecklist: (sessionId, action, itemId, value) =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-checklist', { sessionId, action, itemId, value }),
+
+  n8nChatMessage: (sessionId, text) =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-message', { sessionId, text }),
+
+  n8nChatDeploy: (sessionId) =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-deploy', { sessionId }),
+
+  n8nChatHistory: (sessionId) =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-history', { sessionId }),
+
+  n8nChatSessions: () =>
+    ipcRenderer.invoke('agentfarm:n8n-chat-sessions'),
 
   // ── Video Production (Video tab) ──
   videoStatus: () =>
@@ -73,6 +95,9 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
   listTeams: () => ipcRenderer.invoke('agentfarm:list-teams'),
   stopRun: (runId) => ipcRenderer.invoke('agentfarm:stop-run', runId),
   getRunResults: (runId) => ipcRenderer.invoke('agentfarm:run-results', runId),
+
+  // ── Pipeline Runs (from Minibook) ──
+  getPipelineRuns: () => ipcRenderer.invoke('agentfarm:pipeline-runs'),
 
   // ── Python message push events ──
   onMessage: (callback) => {

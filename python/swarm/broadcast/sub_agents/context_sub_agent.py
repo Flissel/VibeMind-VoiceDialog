@@ -151,11 +151,12 @@ class ContextSubAgent:
                 "Return a compressed summary (max 500 words, German or English)."
             )
 
+            from llm_config import token_kwargs
             response = await client.chat.completions.create(
                 model=CONTEXT_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
-                max_tokens=800,
+                **token_kwargs(CONTEXT_MODEL, 800),
             )
 
             compressed = response.choices[0].message.content.strip()

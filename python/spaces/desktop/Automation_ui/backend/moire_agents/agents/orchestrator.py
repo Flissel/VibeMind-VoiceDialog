@@ -321,9 +321,11 @@ class OrchestratorAgent:
         self.agents: Dict[str, Any] = {}
         
         # LLM Config für AutoGen - OpenRouter Support
+        from llm_config import get_model as _get_model
+        _orch_model = _get_model("desktop_orchestrator")
         if self.openrouter_api_key:
             self.llm_config = {
-                "model": "anthropic/claude-3.5-sonnet",  # OpenRouter Model
+                "model": _orch_model,
                 "api_key": self.openrouter_api_key,
                 "base_url": "https://openrouter.ai/api/v1",
                 "temperature": 0.3
@@ -331,7 +333,7 @@ class OrchestratorAgent:
             logger.info("Using OpenRouter API for LLM")
         elif self.openai_api_key:
             self.llm_config = {
-                "model": "gpt-4o-mini",
+                "model": _orch_model,
                 "api_key": self.openai_api_key,
                 "temperature": 0.3
             }

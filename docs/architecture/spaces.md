@@ -1,6 +1,6 @@
 # Spaces
 
-VibeMind organizes functionality into 8 domain spaces. Each space has its own backend agent, tools, and event types.
+VibeMind organizes functionality into 15 domain spaces. Each space has its own backend agent, tools, and event types.
 
 ## Space Summary
 
@@ -13,8 +13,14 @@ VibeMind organizes functionality into 8 domain spaces. Each space has its own ba
 | Rowboat | `events:tasks:roarboot` | RoarbootBackendAgent | `roarboot.*` | Beta |
 | Research | `events:tasks:zeroclaw` | ZeroClawResearchAgent | `research.*` | Beta |
 | Minibook | `events:tasks:minibook` | MinibookBackendAgent | `minibook.*` | Beta |
-| Shuttles | N/A | None (SWE Design submodule only) | N/A | Submodule only |
 | Schedule | `events:tasks:schedule` | ScheduleBackendAgent | `schedule.*` | Beta |
+| N8n | `events:tasks:n8n` | N8nBackendAgent | `n8n.*` | Stable |
+| AgentFarm | `events:tasks:agentfarm` | AgentFarmBackendAgent | `agentfarm.*` | Stable |
+| Video | `events:tasks:video` | VideoBackendAgent | `video.*` | Beta |
+| MiroFish | `events:tasks:mirofish_pred` | MiroFishBackendAgent | `mirofish.*` | Beta |
+| Flowzen | via submodule | FlowzenAgent | `flowzen.*` | Beta |
+| Brain | — (standalone) | — | — | Stable |
+| Shuttles | N/A | None (SWE Design submodule only) | N/A | Submodule only |
 
 ## Ideas Space
 
@@ -95,6 +101,75 @@ APScheduler-based task scheduling — reminders, alarms, recurring tasks.
 **Enable:** `SCHEDULE_ENABLED=true`
 
 **Files:** `python/spaces/schedule/`
+
+## AgentFarm Space
+
+Multi-agent team orchestration using AutoGen 0.4.
+
+**Key Tools:**
+- `create_team` — Create agent team from template or config
+- `run_team` — Start async team task execution
+- `list_teams`, `stop_run`, `get_run_results` — Team lifecycle
+- `start_collaboration` — Multi-space collaboration via Minibook
+
+**Subsystems:** TeamRunner (async execution), MCP Server (Claude integration), HybridPipeline (multi-space), OpenClaw Bridge
+
+**Files:** `python/spaces/autogen/`
+
+## Video Space
+
+Video production pipeline with team videos, product demos, vision (Sora AI), lip sync, and voice cloning.
+
+**Key Tools:**
+- `team_run_step` — Execute team video pipeline (analyze → backgrounds → composite → build → split → final)
+- `vision_generate` — Her-style vision video via Sora AI
+- `demo_analyze` / `demo_build` — Product demo production
+- `lipsync_run` / `lipsync_analyze` — MuseTalk lip sync
+- `voice_clone` / `voice_tts` — Chatterbox voice cloning + TTS
+- `publish_videos_to_rowboat` — Publish to knowledge graph
+
+**Submodules:** `vibevideo` (team + demo + vision), `vibevideo_deepfake` (lipsync + voice)
+
+**Files:** `python/spaces/video/`
+
+## MiroFish Space
+
+Offline AI prediction engine with multi-agent simulations and knowledge graphs.
+
+**Key Tools:**
+- `simulate` — End-to-end prediction (upload → graph → simulation → report)
+- `build_graph` / `search_graph` — Knowledge graph operations
+- `chat_report` — Interactive chat with report agent
+- `interview_agent` — Query simulated agents
+- Docker management (start, stop, restart, status)
+
+**Backend:** Flask + Vue app in Docker (localhost:5001), Neo4j graph database, Ollama for local LLM
+
+**Files:** `python/spaces/mirofish/`
+
+## Flowzen Space (Blaue Rose)
+
+Circadian-aware activity tracking, daily journaling, and Brain integration.
+
+**Key Tools:**
+- `recommend_task` — Circadian-aware activity recommendation
+- `accept_recommendation` — Log recommended activity
+- `get_flowzen_status` — Current activity state
+
+**Integration:** Brain space via `FlowzenBrainBridge`, circadian matrix for time-of-day awareness
+
+**Files:** `python/spaces/flowzen/` (proxy to submodule)
+
+## N8n Space
+
+Workflow automation via N8n with AI-generated workflows.
+
+**Key Tools:**
+- `n8n_generate` — AI-generated workflow from description (6-agent AutoGen Society)
+- `n8n_list`, `n8n_status`, `n8n_activate`, `n8n_deactivate`, `n8n_delete`
+- `n8n_execute`, `n8n_describe`
+
+**Files:** `python/spaces/n8n/`
 
 ## Adding a New Space
 

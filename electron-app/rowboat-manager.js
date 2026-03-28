@@ -14,6 +14,9 @@ const { BrowserView } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const _RB_C = '\x1b[94m', _RST = '\x1b[0m'; // Blue (Rowboat)
+function _rbLog(...args) { process.stdout.write(`${_RB_C}[RowboatManager] ${args.join(' ')}${_RST}\n`); }
+
 class RowboatManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -70,11 +73,11 @@ class RowboatManager {
 
     // Load renderer
     if (this.isDev) {
-      console.log('[RowboatManager] Loading from dev server:', process.env.ROWBOAT_DEV_URL);
+      _rbLog('Loading from dev server:', process.env.ROWBOAT_DEV_URL);
       this.rowboatView.webContents.loadURL(process.env.ROWBOAT_DEV_URL);
     } else {
       const rendererPath = this._resolveRendererPath();
-      console.log('[RowboatManager] Loading from file:', rendererPath);
+      _rbLog('Loading from file:', rendererPath);
       this.rowboatView.webContents.loadFile(rendererPath);
     }
 
@@ -107,7 +110,7 @@ class RowboatManager {
           status: 'ready',
         });
       }
-      console.log('[RowboatManager] Renderer loaded');
+      _rbLog('Renderer loaded');
 
     });
 
@@ -141,7 +144,7 @@ class RowboatManager {
     this.mainWindow.setBrowserView(this.rowboatView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[RowboatManager] Rowboat shown');
+    _rbLog('Rowboat shown');
   }
 
   /**
@@ -152,7 +155,7 @@ class RowboatManager {
 
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[RowboatManager] Rowboat hidden');
+    _rbLog('Rowboat hidden');
   }
 
   /**

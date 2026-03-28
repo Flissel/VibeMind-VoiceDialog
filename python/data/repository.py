@@ -23,6 +23,8 @@ from .shuttles_repository import ShuttlesRepository
 from .mermaid_repository import MermaidDiagramsRepository
 from .schedule_repository import ScheduledTaskRepository
 from .flowzen_repository import FlowzenRepository
+from .video_repository import VideoRepository
+from .video_project_repository import VideoProjectRepository
 
 __all__ = [
     "generate_id",
@@ -36,5 +38,7 @@ __all__ = [
     "MermaidDiagramsRepository",
     "ScheduledTaskRepository",
     "FlowzenRepository",
+    "VideoRepository",
+    "VideoProjectRepository",
     "promote_idea_to_project",
 ]

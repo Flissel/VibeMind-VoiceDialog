@@ -19,7 +19,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 
-from llm_config import get_model
+from llm_config import get_model, token_kwargs
 from typing import Dict, Any, List, Optional, Callable
 
 from .models import (
@@ -218,7 +218,7 @@ class BaseSpaceAgent(ABC):
                 tools=self._tools,
                 tool_choice="auto",
                 temperature=0.1,
-                max_tokens=1500,
+                **token_kwargs(self.model, 1500),
             )
 
         loop = asyncio.get_event_loop()

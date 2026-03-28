@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { VideoStatusResponse, VideoToolResult, VideoFileInfo, VideoListResponse } from '../types'
+import type {
+  VideoStatusResponse, VideoToolResult, VideoFileInfo, VideoListResponse,
+  VideoProject, PipelineMatrix, PipelineStepInfo, PipelineStepStatus, ReferencePipeline,
+} from '../types'
 
 const api = () => (window as any).vibemindVideo
 
+/** Convert a local file path to a playable video URL */
+const toVideoURL = (filePath: string) => {
+  const a = api()
+  if (a?.toVideoURL) return a.toVideoURL(filePath)
+  // Fallback: custom protocol
+  return `vibemind-video://video/${filePath.replace(/\\/g, '/')}`
+}
+
 // ── Wizard Configuration ──────────────────────────────────────
 
-type WizardId = 'team' | 'vision' | 'demo' | 'lipsync' | 'voice'
+type WizardId = 'team' | 'vision' | 'demo' | 'lipsync' | 'voice' | 'project'
 type StepType = 'choice' | 'dropzone' | 'input' | 'progress' | 'done'
 
 interface StepConfig {
@@ -123,6 +134,18 @@ const WIZARDS: Record<WizardId, WizardConfig> = {
       { label: 'Fertig', type: 'done' },
     ],
   },
+  project: {
+    title: 'Neues Projekt',
+    icon: '\u{1F4C1}',
+    desc: 'Video-Projekt erstellen',
+    color: '#22cc88',
+    requires: 'vibevideo',
+    steps: [
+      { label: 'Projekt-Name', type: 'input', dataKey: 'projectName', placeholder: 'z.B. Team Intro 2025' },
+      { label: 'Projekt wird erstellt...', type: 'progress' },
+      { label: 'Fertig', type: 'done' },
+    ],
+  },
 }
 
 // ── Root Component ────────────────────────────────────────────
@@ -137,6 +160,10 @@ export function VideoProduction() {
   const [wizardData, setWizardData] = useState<Record<string, string>>({})
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<VideoToolResult | null>(null)
+
+  // Project / Pipeline state
+  const [viewMode, setViewMode] = useState<'pipeline' | 'gallery'>('pipeline')
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -193,7 +220,43 @@ export function VideoProduction() {
           onSelect={startWizard}
         />
       )}
-      <VideoGallery />
+
+      {/* View Toggle */}
+      <div className="flex items-center gap-2" style={{ marginTop: 'var(--space-1)' }}>
+        <button
+          onClick={() => setViewMode('pipeline')}
+          style={{
+            ...tabBtnStyle,
+            ...(viewMode === 'pipeline' ? tabBtnActiveStyle : {}),
+          }}
+        >
+          Pipeline
+        </button>
+        <button
+          onClick={() => setViewMode('gallery')}
+          style={{
+            ...tabBtnStyle,
+            ...(viewMode === 'gallery' ? tabBtnActiveStyle : {}),
+          }}
+        >
+          Gallery
+        </button>
+      </div>
+
+      {viewMode === 'pipeline' ? (
+        <>
+          <PipelineReferenceView />
+          <ProjectList
+            selectedId={selectedProjectId}
+            onSelect={setSelectedProjectId}
+          />
+          {selectedProjectId && (
+            <ProjectPipelineMatrix projectId={selectedProjectId} />
+          )}
+        </>
+      ) : (
+        <VideoGallery />
+      )}
     </div>
   )
 }
@@ -210,6 +273,9 @@ function QuickActionGrid({ hasVibevideo, hasDeepfake, onSelect }: {
     { id: 'lipsync', available: hasDeepfake },
     { id: 'voice', available: hasDeepfake },
   ]
+
+  // "Neues Projekt" pseudo-wizard entry
+  const PROJECT_CARD = { title: 'Neues Projekt', icon: '\u{1F4C1}', desc: 'Video-Projekt erstellen', color: '#22cc88' }
 
   return (
     <div>
@@ -807,7 +873,11 @@ function VideoGallery() {
 
   return (
     <>
-      {selectedVideo && <VideoPlayerModal video={selectedVideo} onClose={() => setSelectedVideo(null)} />}
+      {selectedVideo && <VideoPlayerModal video={selectedVideo} onClose={() => setSelectedVideo(null)} onDelete={() => {
+        const v = selectedVideo
+        setSelectedVideo(null)
+        api()?.videoDelete?.(v.id, true).then((res: any) => { if (res?.success) refresh() })
+      }} />}
       <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)' }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-3)' }}>
           <div>
@@ -834,7 +904,7 @@ function VideoGallery() {
 }
 
 function VideoCard({ video, onClick }: { video: VideoFileInfo; onClick: () => void }) {
-  const videoSrc = `vibemind-video://video/${video.path.replace(/\\/g, '/')}`
+  const videoSrc = toVideoURL(video.path)
   return (
     <button onClick={onClick} style={{
       display: 'flex', flexDirection: 'column',
@@ -873,13 +943,14 @@ function VideoCard({ video, onClick }: { video: VideoFileInfo; onClick: () => vo
   )
 }
 
-function VideoPlayerModal({ video, onClose }: { video: VideoFileInfo; onClose: () => void }) {
-  const videoSrc = `vibemind-video://video/${video.path.replace(/\\/g, '/')}`
+function VideoPlayerModal({ video, onClose, onDelete }: { video: VideoFileInfo; onClose: () => void; onDelete?: () => void }) {
+  const videoSrc = toVideoURL(video.path)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (confirmDelete) setConfirmDelete(false); else onClose() } }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, confirmDelete])
 
   return (
     <div onClick={onClose} style={{
@@ -890,8 +961,35 @@ function VideoPlayerModal({ video, onClose }: { video: VideoFileInfo; onClose: (
       <div onClick={e => e.stopPropagation()} style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: '#fff' }}>{video.filename}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>&#x2715;</button>
+          <div className="flex items-center gap-2">
+            {onDelete && !confirmDelete && (
+              <button onClick={() => setConfirmDelete(true)} style={{
+                background: 'none', border: '1px solid rgba(255,80,80,0.4)', color: 'rgba(255,80,80,0.8)',
+                fontSize: 'var(--text-caption1)', cursor: 'pointer', padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+              }}>Loeschen</button>
+            )}
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>&#x2715;</button>
+          </div>
         </div>
+        {confirmDelete && (
+          <div style={{
+            background: 'rgba(255,60,60,0.12)', border: '1px solid rgba(255,80,80,0.3)',
+            borderRadius: 'var(--radius-md)', padding: 'var(--space-3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ color: 'rgba(255,180,180,0.9)', fontSize: 'var(--text-caption1)' }}>Wirklich loeschen? Datei wird von der Festplatte entfernt.</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => onDelete?.()} style={{
+                background: 'rgba(255,40,40,0.3)', border: '1px solid rgba(255,60,60,0.5)', color: '#ff6666',
+                fontSize: 'var(--text-caption1)', cursor: 'pointer', padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontWeight: 600,
+              }}>Ja, loeschen</button>
+              <button onClick={() => setConfirmDelete(false)} style={{
+                background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)',
+                fontSize: 'var(--text-caption1)', cursor: 'pointer', padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+              }}>Abbrechen</button>
+            </div>
+          </div>
+        )}
         <video src={videoSrc} controls autoPlay style={{ maxWidth: '100%', maxHeight: 'calc(85vh - 60px)', borderRadius: 'var(--radius-md)', background: '#000' }} />
         <div className="flex gap-3" style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--text-caption1)' }}>
           <span>{video.category}</span>
@@ -899,6 +997,322 @@ function VideoPlayerModal({ video, onClose }: { video: VideoFileInfo; onClose: (
           <span>{new Date(video.modified_iso).toLocaleString()}</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Pipeline Reference View (Surya) ──────────────────────────
+
+const STEP_ICONS: Record<string, string> = {
+  raw: '\u{1F4F7}', analyze: '\u{1F50D}', voice_clone: '\u{1F3A4}', transcript: '\u{1F4DD}',
+  tts: '\u{1F5E3}', lipsync: '\u{1F444}', background: '\u{1F3AC}', composite: '\u{1F3AD}',
+  build: '\u{1F3D7}', final: '\u2728',
+}
+
+const STEP_COLORS: Record<string, string> = {
+  raw: '#4488ff', analyze: '#44aaff', voice_clone: '#ffc145', transcript: '#88cc44',
+  tts: '#ff8844', lipsync: '#ff5a6e', background: '#8866ff', composite: '#22ccaa',
+  build: '#cc66ff', final: '#44ff88',
+}
+
+function PipelineReferenceView() {
+  const [ref, setRef] = useState<ReferencePipeline | null>(null)
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api()?.getReferencePipeline?.()
+        if (res?.success) setRef(res)
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  if (!ref) return null
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-4)',
+    }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-3)' }}>
+        <span style={{ fontSize: 'var(--text-body)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)' }}>
+          Video Pipeline
+        </span>
+        <span style={{
+          fontSize: 'var(--text-caption2)', padding: '2px 8px',
+          borderRadius: 'var(--radius-sm)', background: 'rgba(100,140,255,0.15)', color: 'var(--accent)',
+        }}>
+          Referenz: {ref.person}
+        </span>
+      </div>
+
+      {/* Horizontal pipeline flow */}
+      <div style={{
+        display: 'flex', gap: 'var(--space-2)', overflowX: 'auto',
+        padding: 'var(--space-1) 0',
+      }}>
+        {ref.steps.map((stepName, i) => {
+          const info = ref.step_info[stepName]
+          const asset = ref.assets[stepName]
+          const hasOutput = asset?.status === 'completed' && asset.output_path
+          const color = STEP_COLORS[stepName] || '#888'
+
+          return (
+            <div key={stepName} className="flex items-center gap-1">
+              <button
+                onClick={() => hasOutput && setPlayingVideo(asset.output_path)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: 4, padding: 'var(--space-3)',
+                  background: 'var(--fill-quaternary)', border: `1px solid ${hasOutput ? color + '44' : 'var(--separator)'}`,
+                  borderRadius: 'var(--radius-md)', minWidth: 110, maxWidth: 130,
+                  cursor: hasOutput ? 'pointer' : 'default',
+                  transition: 'border-color 150ms ease',
+                }}
+                onMouseEnter={e => { if (hasOutput) e.currentTarget.style.borderColor = color }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = hasOutput ? color + '44' : 'var(--separator)' }}
+              >
+                <span style={{ fontSize: 22 }}>{STEP_ICONS[stepName] || '\u{1F4E6}'}</span>
+                <span style={{ fontSize: 'var(--text-caption1)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {info?.label || stepName}
+                </span>
+                <span style={{
+                  fontSize: 9, color: 'var(--text-tertiary)',
+                  textAlign: 'center', lineHeight: 1.3,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {info?.description}
+                </span>
+                {info?.api && (
+                  <span style={{
+                    fontSize: 8, padding: '1px 4px', borderRadius: 3,
+                    background: 'rgba(255,193,69,0.15)', color: '#ffc145',
+                  }}>
+                    {info.api}
+                  </span>
+                )}
+                {hasOutput && (
+                  <span style={{ fontSize: 8, color: 'var(--system-green)' }}>
+                    \u25B6 Abspielen
+                  </span>
+                )}
+              </button>
+              {i < ref.steps.length - 1 && (
+                <span style={{ color: 'var(--text-quaternary)', fontSize: 14 }}>\u2192</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Video player for reference */}
+      {playingVideo && (
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+            <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+              {playingVideo.split(/[\\/]/).pop()}
+            </span>
+            <button onClick={() => setPlayingVideo(null)} style={linkBtnStyle}>Schliessen</button>
+          </div>
+          <video
+            src={toVideoURL(playingVideo)}
+            controls autoPlay
+            style={{
+              width: '100%', maxHeight: 300,
+              borderRadius: 'var(--radius-md)', background: '#000',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Project List ─────────────────────────────────────────────
+
+function ProjectList({ selectedId, onSelect }: {
+  selectedId: string | null; onSelect: (id: string | null) => void
+}) {
+  const [projects, setProjects] = useState<VideoProject[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api()?.listProjects?.()
+        if (res?.success) setProjects(res.projects || [])
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  if (projects.length === 0) return null
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-4)',
+    }}>
+      <div style={{
+        fontSize: 'var(--text-body)', fontWeight: 'var(--weight-semibold)',
+        color: 'var(--text-primary)', marginBottom: 'var(--space-3)',
+      }}>
+        Projekte
+      </div>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        {projects.map(p => (
+          <button
+            key={p.id}
+            onClick={() => onSelect(selectedId === p.id ? null : p.id)}
+            style={{
+              padding: 'var(--space-2) var(--space-3)',
+              background: selectedId === p.id ? 'rgba(100,140,255,0.15)' : 'var(--fill-quaternary)',
+              border: `1px solid ${selectedId === p.id ? 'var(--accent)' : 'var(--separator)'}`,
+              borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              transition: 'all 150ms ease',
+            }}
+          >
+            <div style={{ fontSize: 'var(--text-footnote)', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {p.name}
+            </div>
+            <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', marginTop: 2 }}>
+              {p.person_count} Personen \u00B7 {p.status}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Project Pipeline Matrix ──────────────────────────────────
+
+function ProjectPipelineMatrix({ projectId }: { projectId: string }) {
+  const [matrix, setMatrix] = useState<PipelineMatrix | null>(null)
+  const [runningStep, setRunningStep] = useState<string | null>(null)
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await api()?.getProjectPipeline?.(projectId)
+      if (res?.success) setMatrix(res)
+    } catch { /* ignore */ }
+  }, [projectId])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  // Poll while step is running
+  useEffect(() => {
+    if (!runningStep) return
+    const iv = setInterval(refresh, 3000)
+    return () => clearInterval(iv)
+  }, [runningStep, refresh])
+
+  if (!matrix) return null
+
+  const handleRunStep = async (personName: string, stepName: string) => {
+    const key = `${personName}:${stepName}`
+    setRunningStep(key)
+    try {
+      await api()?.runPipelineStep?.(projectId, personName, stepName)
+    } catch { /* ignore */ }
+    setRunningStep(null)
+    refresh()
+  }
+
+  const statusSymbol = (s: PipelineStepStatus | undefined, personName: string, stepName: string) => {
+    if (!s) return <span style={{ color: 'var(--text-quaternary)' }}>\u2014</span>
+    const key = `${personName}:${stepName}`
+    if (runningStep === key) return <span className="spin" style={{ color: '#ffc145' }}>\u21BB</span>
+
+    switch (s.status) {
+      case 'completed':
+        return s.output_path ? (
+          <button
+            onClick={() => setPlayingVideo(s.output_path)}
+            style={{ ...cellBtnStyle, color: 'var(--system-green)' }}
+            title="Abspielen"
+          >
+            \u25B6
+          </button>
+        ) : (
+          <span style={{ color: 'var(--system-green)' }}>\u2713</span>
+        )
+      case 'failed':
+        return <span style={{ color: 'var(--system-red)' }} title="Fehlgeschlagen">\u2717</span>
+      case 'skipped':
+        return <span style={{ color: 'var(--text-quaternary)' }}>skip</span>
+      case 'running':
+        return <span className="spin" style={{ color: '#ffc145' }}>\u21BB</span>
+      case 'pending':
+        return (
+          <button
+            onClick={() => handleRunStep(personName, stepName)}
+            style={{ ...cellBtnStyle, color: 'var(--accent)' }}
+            title="Step starten"
+          >
+            \u25B6
+          </button>
+        )
+      default:
+        return <span style={{ color: 'var(--text-quaternary)' }}>\u2014</span>
+    }
+  }
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-4)', overflow: 'auto',
+    }}>
+      <div style={{
+        fontSize: 'var(--text-body)', fontWeight: 'var(--weight-semibold)',
+        color: 'var(--text-primary)', marginBottom: 'var(--space-3)',
+      }}>
+        Pipeline Status
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-caption1)' }}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Person</th>
+            {matrix.steps.map(s => (
+              <th key={s} style={{ ...thStyle, textAlign: 'center' }}>
+                <span style={{ fontSize: 14 }}>{STEP_ICONS[s] || ''}</span>
+                <br />
+                {matrix.step_info[s]?.label || s}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.persons.map(person => (
+            <tr key={person}>
+              <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text-primary)' }}>{person}</td>
+              {matrix.steps.map(step => (
+                <td key={step} style={{ ...tdStyle, textAlign: 'center' }}>
+                  {statusSymbol(matrix.matrix[person]?.[step], person, step)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Inline video player */}
+      {playingVideo && (
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+            <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+              {playingVideo.split(/[\\/]/).pop()}
+            </span>
+            <button onClick={() => setPlayingVideo(null)} style={linkBtnStyle}>Schliessen</button>
+          </div>
+          <video
+            src={toVideoURL(playingVideo)}
+            controls autoPlay
+            style={{ width: '100%', maxHeight: 300, borderRadius: 'var(--radius-md)', background: '#000' }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -914,4 +1328,31 @@ const selectStyle: React.CSSProperties = {
 const linkBtnStyle: React.CSSProperties = {
   background: 'none', border: 'none', color: 'var(--accent)',
   fontSize: 'var(--text-caption1)', cursor: 'pointer', padding: 0,
+}
+
+const tabBtnStyle: React.CSSProperties = {
+  background: 'var(--fill-quaternary)', border: '1px solid var(--separator)',
+  borderRadius: 'var(--radius-sm)', padding: '4px 12px',
+  fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)',
+  cursor: 'pointer', transition: 'all 150ms ease',
+}
+
+const tabBtnActiveStyle: React.CSSProperties = {
+  background: 'rgba(100,140,255,0.15)', borderColor: 'var(--accent)', color: 'var(--accent)',
+}
+
+const cellBtnStyle: React.CSSProperties = {
+  background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+  fontSize: 14,
+}
+
+const thStyle: React.CSSProperties = {
+  padding: '6px 8px', borderBottom: '1px solid var(--separator)',
+  color: 'var(--text-tertiary)', fontWeight: 500, fontSize: 'var(--text-caption2)',
+  whiteSpace: 'nowrap',
+}
+
+const tdStyle: React.CSSProperties = {
+  padding: '8px', borderBottom: '1px solid var(--separator-opaque, var(--separator))',
+  color: 'var(--text-secondary)',
 }

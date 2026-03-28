@@ -65,7 +65,7 @@ Ziel: Beim Stop der Applikation müssen **alle** sauber heruntergefahren werden.
 | 29 | **APScheduler** | `python/spaces/schedule/workers/schedule_worker.py` | `AsyncIOScheduler` | `scheduler.shutdown(wait=False)` | OK |
 | 30 | **Stream Listener Dispatcher** | `python/swarm/stream_listener/dispatcher.py:108` | `asyncio.gather()` Fan-out zu 8+ Listenern | Wird mit Bridge gestoppt | OK |
 
-### Die 8 Backend Agents
+### Die 13 Backend Agents
 
 | Agent | Stream | Datei |
 |-------|--------|-------|
@@ -77,6 +77,11 @@ Ziel: Beim Stop der Applikation müssen **alle** sauber heruntergefahren werden.
 | ZeroClawAgent | `events:tasks:zeroclaw` | `python/spaces/research/agents/zeroclaw_research_agent.py` |
 | MinibookAgent | `events:tasks:minibook` | `python/spaces/minibook/agents/minibook_agent.py` |
 | ScheduleAgent | `events:tasks:schedule` | `python/spaces/schedule/agents/schedule_agent.py` |
+| N8nBackendAgent | `events:tasks:n8n` | `python/spaces/n8n/agents/n8n_agent.py` |
+| AgentFarmBackendAgent | `events:tasks:agentfarm` | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| VideoBackendAgent | `events:tasks:video` | `python/spaces/video/agents/video_agent.py` |
+| MiroFishBackendAgent | `events:tasks:mirofish_pred` | `python/spaces/mirofish/agents/mirofish_agent.py` |
+| FlowzenAgent | via submodule | `python/spaces/flowzen/agents/flowzen_agent.py` |
 
 ---
 
@@ -248,7 +253,7 @@ Ziel: Beim Stop der Applikation müssen **alle** sauber heruntergefahren werden.
 4. Python Process Termination (durch kill):
    ├── VoiceBridgeV2.shutdown()
    │   ├── TTS Queue stoppen
-   │   ├── 8 Backend Agents stoppen
+   │   ├── 13 Backend Agents stoppen
    │   ├── ZeroClaw stoppen
    │   ├── Status Listener stoppen
    │   ├── Question Listener stoppen

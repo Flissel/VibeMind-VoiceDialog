@@ -48,6 +48,54 @@ class KeyboardActions:
             logger.error("type_text failed: %s", e)
             return {"success": False, "message": f"Type failed: {e}"}
 
+    def insert_text(self, text: str) -> dict:
+        """Insert text at cursor via clipboard paste (handles Unicode).
+
+        Uses clipboard instead of typewrite() because pyautogui.typewrite()
+        cannot handle non-ASCII characters (ä, ö, ü, ß, etc.).
+        Saves and restores the clipboard contents.
+        """
+        try:
+            import pyautogui
+            import subprocess
+            import time as _time
+
+            # Save current clipboard
+            try:
+                old_clip = subprocess.run(
+                    ["powershell", "-Command", "Get-Clipboard"],
+                    capture_output=True, text=True, timeout=2,
+                ).stdout.rstrip("\r\n")
+            except Exception:
+                old_clip = ""
+
+            # Copy text to clipboard via powershell (handles Unicode)
+            subprocess.run(
+                ["powershell", "-Command", f"Set-Clipboard -Value '{text.replace(chr(39), chr(39)+chr(39))}'"],
+                timeout=2,
+            )
+
+            # Paste
+            pyautogui.hotkey("ctrl", "v")
+            _time.sleep(0.15)
+
+            # Restore clipboard
+            if old_clip:
+                try:
+                    subprocess.run(
+                        ["powershell", "-Command", f"Set-Clipboard -Value '{old_clip.replace(chr(39), chr(39)+chr(39))}'"],
+                        timeout=2,
+                    )
+                except Exception:
+                    pass
+
+            return {"success": True, "message": f"Inserted '{text[:50]}'"}
+        except ImportError:
+            return {"success": False, "message": "pyautogui not installed"}
+        except Exception as e:
+            logger.error("insert_text failed: %s", e)
+            return {"success": False, "message": f"Insert failed: {e}"}
+
     def press_key(self, key: str) -> dict:
         """Press a single key or combo like 'ctrl+c'.
 

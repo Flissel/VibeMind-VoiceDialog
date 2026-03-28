@@ -66,8 +66,14 @@ class EyeTermHeadless:
         self._accuracy_gate = None     # Phase-based cursor gate
         self._click_collector = None   # Windows mouse hook
         self._ga_calibrator = None     # Genetic algorithm calibration
+        self._presence = None          # Face presence detector
+        self._blink_tracker = None     # Blink rate / fatigue
+        self._head_gesture = None      # Nod/shake detector
         self._focus_router = None
         self._wink = None
+        self._intentional_wink = None  # IntentionalWinkDetector
+        self._dictation = None         # DictationController
+        self._keyboard_actions = None  # KeyboardActions
         self._cursor_driver = None
         self._camera_server = None
         self._overlay = None
@@ -307,8 +313,13 @@ class EyeTermHeadless:
 
             try:
                 from screeninfo import get_monitors
-                monitor = get_monitors()[0]
-                sw, sh = monitor.width, monitor.height
+                monitors = get_monitors()
+                # Use full virtual desktop spanning all monitors
+                max_right = max(m.x + m.width for m in monitors)
+                max_bottom = max(m.y + m.height for m in monitors)
+                sw = max_right
+                sh = max_bottom
+                self._log(f"Virtual desktop: {sw}x{sh} across {len(monitors)} monitor(s)")
             except Exception:
                 sw, sh = 1920, 1080
 
@@ -358,24 +369,83 @@ class EyeTermHeadless:
             self._click_collector.start()
             self._log("ClickCollector + ResidualGrid + AccuracyGate initialized")
 
-            # --- GeneticCalibrator (background affine matrix evolution) ---
+            # --- GeneticCalibrator (grid-aware piecewise-affine evolution) ---
             from .cursor.ga_calibrator import GeneticCalibrator
             self._ga_calibrator = GeneticCalibrator(
                 screen_w=sw, screen_h=sh,
-                pop_size=80,
+                grid_rows=3, grid_cols=3,
+                pop_size=100,
                 min_samples=8,
+                min_coverage=3,
                 evolve_interval=2.0,
-                improvement_threshold=5.0,
+                improvement_threshold=3.0,
+                coverage_penalty=50.0,
             )
 
-            def _on_ga_improved(matrix: "np.ndarray", residual: float) -> None:
-                self._screen_mapper.set_calibration(matrix)
+            def _on_ga_improved(genes: "np.ndarray", residual: float) -> None:
+                # Extract the global affine from genes[0:6] for GazeToScreen
+                import numpy as _np
+                affine = _np.array(genes[:6], dtype=_np.float64).reshape(2, 3)
+                self._screen_mapper.set_calibration(affine)
                 if self._residual_grid:
                     self._residual_grid.reset()
-                self._log(f"GA calibration applied (residual={residual:.1f}px, gen={self._ga_calibrator.generation})")
+                self._log(
+                    f"GA calibration applied (residual={residual:.1f}px, "
+                    f"gen={self._ga_calibrator.generation}, "
+                    f"coverage={self._ga_calibrator.status().get('coverage', '?')})"
+                )
 
             self._ga_calibrator.start(on_improved=_on_ga_improved)
-            self._log("GeneticCalibrator started (background evolution)")
+            self._log("GeneticCalibrator started (3x3 grid, background evolution)")
+
+            # --- T1 Detectors ---
+            from .vision.presence import PresenceDetector
+            self._presence = PresenceDetector(leave_debounce_s=3.0, return_debounce_s=0.5)
+
+            from .vision.blink_tracker import BlinkTracker
+            self._blink_tracker = BlinkTracker(
+                ear_threshold=self._config.wink.ear_threshold,
+                broadcast_interval_s=10.0,
+            )
+
+            from .vision.head_gesture import HeadGestureDetector
+            self._head_gesture = HeadGestureDetector()
+
+            self._log("T1 detectors initialized (presence, blink, gesture)")
+
+            # --- Dictation Controller ---
+            self._dictation = None
+            if self._config.dictation.enabled:
+                from .dictation.controller import DictationController
+                from .routing.transcript_polisher import TranscriptPolisher
+
+                polisher = TranscriptPolisher()
+                keyboard = self._keyboard_actions
+
+                def _dictation_state_event(event_name: str, payload=None):
+                    """Route DictationController events to the state machine."""
+                    event_map = {
+                        "dictation_stop": Event.DICTATION_STOP,
+                        "enhance_complete": Event.ENHANCE_COMPLETE,
+                    }
+                    ev = event_map.get(event_name)
+                    if ev:
+                        _, action = self._sm.transition(ev, payload)
+                        if action:
+                            self._handle_action(action)
+
+                def _dictation_insert(text: str):
+                    """Insert text at cursor via clipboard paste."""
+                    if keyboard:
+                        keyboard.insert_text(text)
+
+                self._dictation = DictationController(
+                    polisher=polisher,
+                    on_state_event=_dictation_state_event,
+                    on_insert_text=_dictation_insert,
+                    silence_timeout_s=self._config.dictation.silence_timeout_s,
+                )
+                self._log("DictationController initialized")
 
             self._focus_router = FocusRouter(
                 num_panes=1,
@@ -390,6 +460,26 @@ class EyeTermHeadless:
                 min_frames=self._config.wink.min_frames,
                 cooldown_ms=self._config.wink.cooldown_ms,
             )
+
+            # IntentionalWinkDetector (velocity + asymmetry-based)
+            if self._config.wink.use_intentional_detector:
+                try:
+                    from .vision.intentional_wink import IntentionalWinkDetector
+                    self._intentional_wink = IntentionalWinkDetector(
+                        velocity_threshold=self._config.wink.velocity_threshold,
+                        asymmetry_min_ms=self._config.wink.asymmetry_min_ms,
+                        both_closed_min_ms=self._config.wink.both_closed_min_ms,
+                        both_closed_max_ms=self._config.wink.both_closed_max_ms,
+                        cooldown_ms=self._config.wink.intentional_cooldown_ms,
+                        baseline_ema_alpha=self._config.wink.baseline_ema_alpha,
+                    )
+                    self._log("IntentionalWinkDetector initialized (adaptive threshold)")
+                except Exception as e:
+                    self._log(f"IntentionalWinkDetector failed, using basic: {e}")
+
+            # KeyboardActions (for text insertion)
+            from .action.keyboard_actions import KeyboardActions
+            self._keyboard_actions = KeyboardActions()
 
             from .ui.overlay import OverlayRenderer
             self._overlay = OverlayRenderer(
@@ -627,14 +717,22 @@ class EyeTermHeadless:
                     sx, sy = self._smoother.smooth((fx, fy))
                     smooth_x, smooth_y = sx, sy
                     gaze_point = (sx, sy)
-                    screen_x, screen_y = self._screen_mapper.to_screen(sx, sy)
+                    # Primary: use GA grid mapping if available
+                    ga_result = None
+                    if self._ga_calibrator:
+                        ga_result = self._ga_calibrator.map_gaze(sx, sy)
+
+                    if ga_result is not None:
+                        screen_x, screen_y = ga_result
+                    else:
+                        screen_x, screen_y = self._screen_mapper.to_screen(sx, sy)
 
                     # Screen-space smoothing: cursor glides to target, no jumps
                     if self._screen_smoother_x and self._screen_smoother_y:
                         screen_x = int(self._screen_smoother_x(float(screen_x)))
                         screen_y = int(self._screen_smoother_y(float(screen_y)))
 
-                    # Residual grid correction (click-learning)
+                    # Residual grid correction (click-learning, supplements GA)
                     if self._residual_grid:
                         dx, dy = self._residual_grid.interpolate(screen_x, screen_y)
                         screen_x = int(screen_x + dx)
@@ -687,14 +785,54 @@ class EyeTermHeadless:
 
                     if gaze_result.landmarks and self._wink:
                         from .vision.wink import WinkDetector
-                        wink = self._wink.update(gaze_result.landmarks, now_ms)
                         self._ear_values = WinkDetector.get_ear_values(gaze_result.landmarks)
 
-                        if wink in ("confirm", "cancel"):
-                            event = Event.LEFT_WINK if wink == "confirm" else Event.RIGHT_WINK
+                        # Use IntentionalWinkDetector if available, else fallback
+                        if self._intentional_wink:
+                            wink = self._intentional_wink.update(gaze_result.landmarks, now_ms)
+                        else:
+                            wink = self._wink.update(gaze_result.landmarks, now_ms)
+
+                        if wink in ("confirm", "cancel", "both_closed"):
+                            event_map = {
+                                "confirm": Event.LEFT_WINK,
+                                "cancel": Event.RIGHT_WINK,
+                                "both_closed": Event.BOTH_CLOSED,
+                            }
+                            event = event_map[wink]
                             _, action = self._sm.transition(event)
                             if action:
                                 self._handle_action(action)
+
+                    # --- T1: Blink rate tracking ---
+                    if self._blink_tracker and self._ear_values:
+                        fatigue_msg = self._blink_tracker.update(*self._ear_values)
+                        if fatigue_msg and self._broadcast_fn:
+                            try:
+                                self._broadcast_fn(fatigue_msg)
+                            except Exception:
+                                pass
+
+                    # --- T1: Head gesture detection ---
+                    if self._head_gesture:
+                        gesture = self._head_gesture.update(head_x, head_y)
+                        if gesture:
+                            if self._broadcast_fn:
+                                try:
+                                    self._broadcast_fn({
+                                        "type": "eyeterm_gesture",
+                                        "gesture": gesture,
+                                    })
+                                except Exception:
+                                    pass
+
+                            # Head-Nod → start dictation (when in IDLE or FOCUSED)
+                            if (gesture == "nod"
+                                    and self._dictation
+                                    and self._sm.state in (State.IDLE, State.FOCUSED)):
+                                _, action = self._sm.transition(Event.DICTATION_START)
+                                if action:
+                                    self._handle_action(action)
 
                     if self._focus_router and self._sm.state in (State.IDLE, State.FOCUSED):
                         pane = self._focus_router.update(screen_x, screen_y, now_ms)
@@ -707,6 +845,20 @@ class EyeTermHeadless:
                 self._gaze_valid = False
                 if self._cursor_driver:
                     self._cursor_driver.set_face_detected(False)
+
+            # --- T1: Presence detection (runs for both face/no-face) ---
+            if self._presence and self._broadcast_fn:
+                presence_event = self._presence.update(gaze_result is not None)
+                if presence_event:
+                    try:
+                        self._broadcast_fn({
+                            "type": "eyeterm_presence",
+                            "present": self._presence.present,
+                            "event": presence_event,
+                            "absent_duration_s": round(self._presence.absent_duration, 1),
+                        })
+                    except Exception:
+                        pass
 
         # Render composited frame for MJPEG (or raw frame if overlay unavailable)
         if self._overlay:
@@ -827,6 +979,19 @@ class EyeTermHeadless:
                     s.timestamp for s in recent_clicks
                 )
 
+        # Broadcast live gaze cursor every frame (for permanent overlay)
+        if self._broadcast_fn and self._gaze_valid:
+            try:
+                self._broadcast_fn({
+                    "type": "eyeterm_gaze_cursor",
+                    "x": self._gaze_screen_x,
+                    "y": self._gaze_screen_y,
+                    "screen_w": self._screen_width or 1920,
+                    "screen_h": self._screen_height or 1080,
+                })
+            except Exception:
+                pass
+
         if self._camera_server:
             self._camera_server.update_frame(ui_frame)
             self._camera_server.update_gaze(
@@ -874,17 +1039,69 @@ class EyeTermHeadless:
         elif action in ("start_polish", "start_polish_or_escape"):
             transcript = self._sm.pending_transcript
             if transcript:
-                # In headless mode, skip polish — route directly
                 self._command_router.route(transcript, self._current_element)
                 self._sm.pending_transcript = None
 
+        # --- Dictation actions ---
+        elif action == "start_dictation":
+            if self._dictation:
+                self._dictation.start_dictation()
+                self._log("Dictation mode activated (head nod)")
+        elif action == "start_enhancement":
+            if self._dictation:
+                gaze_ctx = None
+                if self._current_element:
+                    gaze_ctx = self._current_element.to_orchestrator_context()
+                self._dictation.start_enhancement(gaze_context=gaze_ctx)
+        elif action == "show_dictation_preview":
+            self._log("Dictation preview ready")
+        elif action == "cancel_dictation":
+            if self._dictation:
+                self._dictation.cancel()
+                self._log("Dictation cancelled")
+        elif action == "cancel_enhancement":
+            if self._dictation:
+                self._dictation.cancel()
+                self._log("Enhancement cancelled")
+        elif action == "insert_raw":
+            if self._dictation:
+                self._dictation.insert_raw()
+                self._log("Inserted raw transcript")
+        elif action == "insert_displayed":
+            if self._dictation:
+                self._dictation.insert_at_cursor()
+                self._log("Inserted displayed text")
+        elif action == "accept_enhanced":
+            if self._dictation:
+                self._dictation.accept_enhanced()
+                self._log("Accepted enhanced text")
+        elif action == "toggle_raw_enhanced":
+            if self._dictation:
+                mode = self._dictation.toggle_view()
+                self._sm.showing_raw = (mode == "raw")
+                self._log(f"Toggled to {mode}")
+        elif action == "reject_polished":
+            pass  # handled by existing flow
+        elif action == "submit_polished":
+            pass  # handled by existing flow
+
     def _on_stt_partial(self, text: str):
         self._transcript_partial = text
+        # Route to dictation if in DICTATING state
+        if self._dictation and self._sm.state == State.DICTATING:
+            self._dictation.on_stt_partial(text)
 
     def _on_stt_final(self, text: str):
         self._transcript_final = text
         self._transcript_partial = ""
-        if text.strip():
+        if not text.strip():
+            return
+        # Dictation mode: feed to DictationController
+        if self._dictation and self._sm.state == State.DICTATING:
+            self._dictation.on_stt_final(text.strip())
+            self._sm.raw_transcript = self._dictation.raw_transcript
+        else:
+            # Normal mode: route as command
             self._sm.pending_transcript = text.strip()
             self._command_router.route(text.strip(), self._current_element)
 

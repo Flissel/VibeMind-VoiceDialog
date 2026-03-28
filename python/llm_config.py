@@ -47,6 +47,39 @@ _LEGACY_ENV_MAP = {
     "OPENAI_SUMMARIZATION_MODEL": "summarization_worker",
     "GEMINI_MODEL": "rewrite_worker",
     "OPENAI_MODEL": "orchestrator",  # Generic fallback
+    # --- New roles ---
+    "ORCHESTRATOR_MODEL": "tool_orchestrator",
+    "DROPE_MODEL": "drope_resolver",
+    "FORMAT_DISPATCHER_MODEL": "format_dispatcher",
+    "IDEA_ENRICHMENT_MODEL": "idea_enrichment",
+    "OPENROUTER_WHITEPAPER_MODEL": "whitepaper",
+    "OPENROUTER_STRUCTURE_MODEL": "structure_analysis",
+    "OPENROUTER_FEATURE_MODEL": "feature_extraction",
+    "OPENROUTER_DOC_MODEL": "doc_generation",
+    "DESKTOP_REASONING_MODEL": "desktop_reasoning",
+    "DESKTOP_VISION_MODEL": "desktop_vision",
+    "DESKTOP_VISION_FAST_MODEL": "desktop_vision_fast",
+    "DESKTOP_QUICK_MODEL": "desktop_quick",
+    "DESKTOP_ORCHESTRATOR_MODEL": "desktop_orchestrator",
+    "DESKTOP_STT_MODEL": "desktop_stt",
+    "DESKTOP_TTS_MODEL": "desktop_tts",
+    "DESKTOP_WORKER_MODEL": "desktop_worker",
+    "N8N_SELECTOR_MODEL": "n8n_selector",
+    "ANTHROPIC_MODEL": "agentfarm_anthropic",
+    "MIROFISH_LLM_MODEL": "mirofish",
+    "MIROFISH_EVAL_MODEL": "mirofish_eval",
+    "MIROFISH_OPENROUTER_MODEL": "mirofish_openrouter",
+    "CLAUDE_WORKER_MODEL": "claude_worker",
+    "MESSAGING_OLLAMA_MODEL": "messaging_relevance",
+    # --- Runde 2 ---
+    "IDEAS_RESEARCH_MODEL": "ideas_research",
+    "CONNECTION_EVAL_MODEL": "connection_eval",
+    "MIROFISH_EMBEDDING_MODEL": "mirofish_embedding",
+    "TRANSCRIPTION_MODEL": "transcription",
+    "WIZARD_OLLAMA_MODEL": "wizard_ollama",
+    "WIZARD_OPENROUTER_MODEL": "wizard_openrouter",
+    "WIZARD_OPENAI_MODEL": "wizard_openai",
+    "ROWBOAT_MODEL": "rowboat_model",
 }
 
 # Reverse map: role -> legacy env var (for fallback reads)
@@ -282,6 +315,22 @@ def _get_api_key_env(role: str) -> str:
     provider = get_provider(role)
     config = _load_config()
     return config.get("providers", {}).get(provider, {}).get("api_key_env", "OPENAI_API_KEY")
+
+
+def token_kwargs(model: str, max_tokens: int) -> Dict[str, int]:
+    """
+    Return the correct token-limit kwarg for a model.
+
+    Newer OpenAI models (o1/o3/o4/gpt-5+) require 'max_completion_tokens';
+    older models and OpenRouter proxied models use 'max_tokens'.
+    """
+    model_lower = model.lower() if model else ""
+    # Models that require max_completion_tokens
+    needs_completion_tokens = any(tag in model_lower for tag in (
+        "o1", "o3", "o4", "gpt-5",
+    ))
+    key = "max_completion_tokens" if needs_completion_tokens else "max_tokens"
+    return {key: max_tokens}
 
 
 def reload_config():

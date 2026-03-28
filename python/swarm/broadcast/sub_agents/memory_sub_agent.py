@@ -124,11 +124,12 @@ class MemorySubAgent:
         try:
             client = get_async_client("profiling")
 
+            from llm_config import token_kwargs
             response = await client.chat.completions.create(
                 model=PROFILING_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=200,
+                **token_kwargs(PROFILING_MODEL, 200),
             )
 
             content = response.choices[0].message.content.strip()

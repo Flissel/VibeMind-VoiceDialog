@@ -25,7 +25,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Default model - Claude Sonnet 4 via OpenRouter
-DEFAULT_MODEL = "anthropic/claude-sonnet-4"
+DEFAULT_MODEL = get_model("orchestrator")
 
 
 class CloudModelClient:

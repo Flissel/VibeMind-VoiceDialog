@@ -44,6 +44,8 @@ class SpaceColors:
     VOICE = "\033[33m"         # Dark Yellow
     ORCHESTRATOR = "\033[35m"  # Dark Magenta
     BRAIN = "\033[32m"         # Dark Green
+    AGENTFARM = "\033[38;5;208m"  # Orange (distinct from all other spaces)
+    N8N = "\033[38;5;99m"      # Purple
     DEFAULT = "\033[2m"        # Dim
     RESET = "\033[0m"
 
@@ -65,13 +67,33 @@ MODULE_TO_SPACE: Dict[str, str] = {
     "spaces.ideas": "ideas",
     "spaces.coding": "coding",
     "spaces.desktop": "desktop",
+    "eyeterm": "desktop",
     "spaces.rowboat": "rowboat",
     "spaces.research": "research",
     "spaces.minibook": "minibook",
     "spaces.schedule": "schedule",
+    "spaces.autogen": "agentfarm",
+    "spaces.n8n": "n8n",
     "voice": "voice",
     "swarm.orchestrator": "orchestrator",
     "brain": "brain",
+    # AutoGen library loggers → agentfarm/n8n
+    "autogen_agentchat": "agentfarm",
+    "autogen_core": "agentfarm",
+    "autogen_ext": "agentfarm",
+    # n8n Society agents
+    "n8n.society": "n8n",
+    "society": "n8n",
+    # Publishing → rowboat
+    "publishing": "rowboat",
+    # IPC handlers → associated spaces
+    "ipc.canvas_manager": "ideas",
+    "ipc.eyeterm_handlers": "desktop",
+    "ipc.project_manager": "coding",
+    "ipc.n8n_handlers": "n8n",
+    "ipc.exploration_handlers": "ideas",
+    "ipc.shuttle_handlers": "ideas",
+    "ipc.voice_manager": "voice",
 }
 
 # Sorted by key length descending for longest-prefix matching
@@ -89,6 +111,8 @@ SPACE_TO_COLOR: Dict[str, str] = {
     "voice": SpaceColors.VOICE,
     "orchestrator": SpaceColors.ORCHESTRATOR,
     "brain": SpaceColors.BRAIN,
+    "agentfarm": SpaceColors.AGENTFARM,
+    "n8n": SpaceColors.N8N,
 }
 
 SPACE_TO_TAG: Dict[str, str] = {
@@ -103,6 +127,8 @@ SPACE_TO_TAG: Dict[str, str] = {
     "voice": "[VOICE]",
     "orchestrator": "[ORCH]",
     "brain": "[BRAIN]",
+    "agentfarm": "[AGENTFARM]",
+    "n8n": "[N8N]",
 }
 
 # Pad all tags to same width for aligned output

@@ -214,6 +214,7 @@ class EventRouter:
 
         # Flowzen (Blaue Rose) — only explicit user queries
         "rose.recommend": STREAM_TASKS_FLOWZEN,
+        "rose.accept": STREAM_TASKS_FLOWZEN,
         "rose.status": STREAM_TASKS_FLOWZEN,
 
         # MiroFish (Prediction Engine) → mirofish stream

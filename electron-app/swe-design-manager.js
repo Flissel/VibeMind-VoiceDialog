@@ -15,6 +15,11 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// ANSI colors for SWE Design space logs
+const SWE_COLOR = '\x1b[96m';     // Bright Cyan
+const SWE_MGR_COLOR = '\x1b[96m'; // Bright Cyan
+const RST = '\x1b[0m';
+
 class SweDesignManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -116,7 +121,9 @@ class SweDesignManager {
 
       proc.stdout.on('data', (data) => {
         const line = data.toString();
-        process.stdout.write(`[SWE-Server] ${line}`);
+        for (const l of line.split('\n').filter(s => s.trim())) {
+          process.stdout.write(`${SWE_COLOR}[SWE-Server] ${l.trim()}${RST}\n`);
+        }
         if (!resolved && (line.includes('Dashboard running') || line.includes('localhost'))) {
           resolved = true;
           clearTimeout(timeout);
@@ -129,7 +136,9 @@ class SweDesignManager {
       proc.stderr.on('data', (data) => {
         const line = data.toString();
         stderrBuf += line;
-        process.stderr.write(`[SWE-Server] ${line}`);
+        for (const l of line.split('\n').filter(s => s.trim())) {
+          process.stderr.write(`${SWE_COLOR}[SWE-Server] ${l.trim()}${RST}\n`);
+        }
         if (!resolved && (line.includes('Running on') || line.includes('localhost'))) {
           resolved = true;
           clearTimeout(timeout);
@@ -199,10 +208,12 @@ class SweDesignManager {
         this.mainWindow.setBrowserView(this.view);
         this._updateBounds();
 
-        // Load the server URL
-        const url = `http://localhost:${this.port}`;
+        // Load the server URL (cache-bust to avoid stale Chromium cache)
+        const url = `http://localhost:${this.port}?_t=${Date.now()}`;
         console.log('[SweDesignManager] Loading:', url);
-        this.view.webContents.loadURL(url);
+        this.view.webContents.session.clearCache().then(() => {
+          this.view.webContents.loadURL(url);
+        });
 
         // Handle external links
         this.view.webContents.setWindowOpenHandler(({ url }) => {

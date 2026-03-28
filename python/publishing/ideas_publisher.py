@@ -17,7 +17,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .base_publisher import BasePublisher, _slugify
-from .knowledge_note_builder import build_project_note
+from .knowledge_note_builder import (
+    build_project_note,
+    build_requirements_note,
+    build_stakeholders_note,
+    build_constraints_note,
+    build_techstack_note,
+    build_mirofish_eval_note,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -191,8 +198,11 @@ class IdeasPublisher(BasePublisher):
             (bubble_dir / filename).write_text("\n".join(lines), encoding="utf-8")
 
         # Prune ideas that were deleted (files in folder but not in current notes)
+        # Skip _-prefixed files (wizard outputs like _requirements.md)
         for existing in bubble_dir.iterdir():
-            if existing.name not in written_files and existing.suffix == ".md":
+            if (existing.name not in written_files
+                    and existing.suffix == ".md"
+                    and not existing.name.startswith("_")):
                 existing.unlink()
                 logger.debug(f"[IdeasPublisher] Pruned stale note: {existing.name}")
 
@@ -241,6 +251,88 @@ class IdeasPublisher(BasePublisher):
 
         self._update_index(self._count_manifests())
         logger.debug(f"[IdeasPublisher] Removed bubble '{title}'")
+
+    def publish_wizard_results(
+        self,
+        bubble_id: str,
+        wizard_state: Dict[str, Any],
+        mirofish_result: Optional[Dict[str, Any]] = None,
+    ):
+        """Publish wizard + MiroFish outputs as _-prefixed .md files.
+
+        Called after wizard finalize (full state) or after init_from_bubble
+        (only mirofish_result available, wizard fields may be empty).
+
+        Files written into existing knowledge/Projects/VibeMind - {Title}/ folder:
+          _requirements.md, _stakeholders.md, _constraints.md,
+          _techstack.md, _mirofish_eval.md, and enriched _overview.md.
+        """
+        from data import IdeasRepository
+
+        bubble = IdeasRepository().get(bubble_id)
+        if not bubble:
+            logger.warning(f"[IdeasPublisher] publish_wizard_results: bubble {bubble_id} not found")
+            return
+
+        bubble_title = bubble.title or "Untitled"
+        folder_name = f"VibeMind - {_safe_filename(bubble_title)}"
+        bubble_dir = self.knowledge_dir / "Projects" / folder_name
+        bubble_dir.mkdir(parents=True, exist_ok=True)
+
+        # Requirements
+        reqs = wizard_state.get("requirements", [])
+        md = build_requirements_note(bubble_title, reqs)
+        (bubble_dir / "_requirements.md").write_text(md, encoding="utf-8")
+
+        # Stakeholders
+        shs = wizard_state.get("stakeholders", [])
+        md = build_stakeholders_note(bubble_title, shs)
+        (bubble_dir / "_stakeholders.md").write_text(md, encoding="utf-8")
+
+        # Constraints
+        cons = wizard_state.get("constraints", {})
+        md = build_constraints_note(bubble_title, cons)
+        (bubble_dir / "_constraints.md").write_text(md, encoding="utf-8")
+
+        # Tech Stack
+        tech = wizard_state.get("techstack", {})
+        wd = wizard_state.get("work_division", "")
+        md = build_techstack_note(bubble_title, tech, wd)
+        (bubble_dir / "_techstack.md").write_text(md, encoding="utf-8")
+
+        # MiroFish Eval (optional)
+        if mirofish_result:
+            md = build_mirofish_eval_note(bubble_title, mirofish_result)
+            (bubble_dir / "_mirofish_eval.md").write_text(md, encoding="utf-8")
+
+        # Enrich _overview.md with wizard summary
+        key_facts = []
+        if reqs:
+            key_facts.append(f"{len(reqs)} requirements")
+        if shs:
+            key_facts.append(f"{len(shs)} stakeholders")
+        if mirofish_result:
+            score = mirofish_result.get("total_score", "?")
+            pred = mirofish_result.get("prediction", "?")
+            key_facts.append(f"MiroFish Score: {score}/100 ({pred})")
+
+        # Determine status based on wizard completeness
+        has_wizard_data = bool(reqs or shs or cons)
+        overview_md = build_project_note(
+            title=f"VibeMind - {bubble_title}",
+            project_type="swe-project" if has_wizard_data else "idea-bubble",
+            status="wizard-complete" if has_wizard_data else "active",
+            summary=wizard_state.get("project", {}).get("description", bubble.description or ""),
+            started=str(bubble.created_at)[:10] if bubble.created_at else "",
+            key_facts=key_facts or None,
+            source_space="SWE Design",
+        )
+        (bubble_dir / "_overview.md").write_text(overview_md, encoding="utf-8")
+
+        logger.info(
+            f"[IdeasPublisher] Published wizard results for '{bubble_title}' "
+            f"({len(reqs)} reqs, {len(shs)} stakeholders, mirofish={'yes' if mirofish_result else 'no'})"
+        )
 
     def sync_all(self):
         """Publish all existing bubbles (initial sync on startup)."""

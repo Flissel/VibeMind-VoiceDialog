@@ -10,6 +10,9 @@
 const { BrowserView } = require('electron');
 const path = require('path');
 
+const _MF_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (MiroFish/Desktop family)
+function _mfLog(...a) { process.stdout.write(`${_MF_C}[MiroFishManager] ${a.join(' ')}${_RST}\n`); }
+
 class MiroFishManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -53,7 +56,7 @@ class MiroFishManager {
     });
 
     // Load MiroFish web app
-    console.log('[MiroFishManager] Loading from:', this.mirofishUrl);
+    _mfLog('Loading from:', this.mirofishUrl);
     this.mirofishView.webContents.loadURL(this.mirofishUrl);
 
     // Open DevTools in development
@@ -76,7 +79,7 @@ class MiroFishManager {
           status: 'ready',
         });
       }
-      console.log('[MiroFishManager] MiroFish loaded');
+      _mfLog('MiroFish loaded');
     });
 
     this.mirofishView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -84,7 +87,7 @@ class MiroFishManager {
       if (errorCode === -102 && this.retryCount < this.maxRetries) {
         this.retryCount++;
         const delay = Math.min(1000 * this.retryCount, 5000);
-        console.log(`[MiroFishManager] Server not ready, retry ${this.retryCount}/${this.maxRetries} in ${delay}ms`);
+        _mfLog(`Server not ready, retry ${this.retryCount}/${this.maxRetries} in ${delay}ms`);
         this.retryTimer = setTimeout(() => {
           if (this.mirofishView && !this.mirofishView.webContents.isDestroyed()) {
             this.mirofishView.webContents.loadURL(this.mirofishUrl);
@@ -122,7 +125,7 @@ class MiroFishManager {
     this.mainWindow.setBrowserView(this.mirofishView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[MiroFishManager] MiroFish shown');
+    _mfLog('MiroFish shown');
   }
 
   /**
@@ -133,7 +136,7 @@ class MiroFishManager {
 
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[MiroFishManager] MiroFish hidden');
+    _mfLog('MiroFish hidden');
   }
 
   /**

@@ -30,7 +30,7 @@
 - DroPE Reference Resolution (SakanaAI/DroPE-SmolLM-135M-32K)
 - RAG Intent Classifier (Supermemory + LLM)
 - Event Router + Event Bus (Redis Streams / Sync-Fallback)
-- BaseBackendAgent Framework (8 Domain-Agents)
+- BaseBackendAgent Framework (13 Domain-Agents)
 - Notification Queue, Question Queue, System Context Store
 
 ---
@@ -777,4 +777,87 @@ Eigene 3D-Szene im VibeMind Multiverse:
 
 ---
 
-> **Gesamtumfang:** ~70.000 Zeilen eigenentwickelter Code (Python + JS/TS), 200+ externe Dependencies, 5 Submodule, 18 MCP-Server, 3 Electron-Apps, 4 Datenbank-Engines, 6+ LLM-Provider, 4 custom-trainierte Neural Networks.
+## Video Space (`python/spaces/video/`)
+
+| Kategorie | Technologien |
+|-----------|-------------|
+| **Submodule** | `vibevideo` (Team Video Pipeline, Sora AI Vision), `vibevideo_deepfake` (MuseTalk Lip Sync, Chatterbox Voice Cloning) |
+| **Video Processing** | `subprocess` (CLI Delegation an Submodule), `pathlib` (Datei-Management) |
+| **Database** | SQLite via `VideoRepository`, `VideoProjectRepository` |
+| **Streaming** | Custom HTTP Media Server (Port 9877, Range Requests) |
+| **Electron UI** | React (video-ui), Wizard-Pattern, Video Gallery mit Player |
+
+**Eigenentwicklung:**
+
+- VideoBackendAgent (11 video.* Events)
+- 10-Step Pipeline pro Person (raw → analyze → voice_clone → transcript → tts → lipsync → background → composite → build → final)
+- Auto-Detection von Person/Stage/Category aus Dateipfaden
+- Video Gallery mit SQLite-Backend und Filesystem-Fallback
+- Publish-to-Rowboat Integration (MongoDB → Filesystem-Fallback)
+
+---
+
+## MiroFish Space (`python/spaces/mirofish/`)
+
+| Kategorie | Technologien |
+|-----------|-------------|
+| **Backend** | Flask REST API (Docker Container, Port 5001) |
+| **Frontend** | Vue.js (Docker Container, Port 3001) |
+| **Graph DB** | Neo4j (Knowledge Graph, bolt://localhost:7687) |
+| **Local LLM** | Ollama (Agent-Simulation) |
+| **HTTP Client** | `requests` (MiroFishClient REST Wrapper) |
+| **Container** | Docker Compose (Flask + Neo4j + Ollama) |
+
+**Eigenentwicklung:**
+
+- MiroFishBackendAgent (15 mirofish.* Events, 13 Tools)
+- End-to-End Prediction Pipeline (Upload → Ontologie → Graph → Simulation → Report)
+- Multi-Agent Simulation mit konfigurierbarer Agent-Anzahl und Runden
+- Interactive Agent Interview und Report Chat
+- Docker Lifecycle Management (start/stop/restart/status)
+- Bubble Readiness Evaluation
+
+---
+
+## Flowzen Space (`python/spaces/flowzen/`)
+
+| Kategorie | Technologien |
+|-----------|-------------|
+| **Implementation** | Git Submodule (Proxy-Pattern, Top-Level-Imports delegieren an Submodule) |
+| **AI/LLM** | OpenRouter (Circadian-aware Reasoning) |
+| **Database** | SQLite via `FlowzenRepository` (Checkins, Activities, Diary Entries) |
+| **Electron UI** | HTML Page-Flip Diary (flowzen-diary.html, kein React) |
+
+**Eigenentwicklung:**
+
+- FlowzenAgent (via Submodule-Proxy)
+- ActivityTracker mit Circadian Matrix (Tageszeit → Aktivitaets-Scoring)
+- FlowzenBrainBridge (Kognitive Rueckkopplung mit Brain/Tahlamus)
+- Blaue Rose Journal Interface (Page-Flip UI)
+- Message Queue Pattern fuer deferred IPC-Handler
+
+---
+
+## AgentFarm Space (`python/spaces/autogen/`)
+
+| Kategorie | Technologien |
+|-----------|-------------|
+| **Multi-Agent** | `autogen-agentchat ~=0.4`, `autogen-core` (CancellationToken, run_stream) |
+| **MCP** | Custom MCP Server (`vibemind_mcp.py`) fuer Claude-Integration |
+| **Orchestration** | HybridPipeline (Multi-Space), OpenClaw Bridge |
+| **Config** | JSON/YAML Templates (domino_agents, swarm_agents, openclaw_agents) |
+| **Submodule** | Autogen_AgentFarm (FastAPI + Next.js Frontend) |
+| **Electron UI** | Next.js Dashboard (agentfarm-ui), React Dashboard (agentfarm) |
+
+**Eigenentwicklung:**
+
+- AgentFarmBackendAgent (8 agentfarm.* Events)
+- TeamRunner (Non-blocking async AutoGen 0.4 Execution, CancellationToken)
+- HybridPipeline (Multi-Space-Kollaboration via Minibook)
+- OpenClaw Bridge und Gateway
+- MCP Server fuer Claude Tool-Integration
+- Real-time Progress Broadcast an Electron
+
+---
+
+> **Gesamtumfang:** ~70.000 Zeilen eigenentwickelter Code (Python + JS/TS), 200+ externe Dependencies, 8 Submodule, 18 MCP-Server, 3 Electron-Apps, 4 Datenbank-Engines, 6+ LLM-Provider, 4 custom-trainierte Neural Networks.

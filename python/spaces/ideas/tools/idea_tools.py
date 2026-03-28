@@ -27,6 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import logging
+from llm_config import get_model, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -480,7 +481,7 @@ def create_idea_batch(params: Dict[str, Any]) -> str:
         )
 
         response = client.chat.completions.create(
-            model=os.getenv("SPACE_AGENT_MODEL", "openai/gpt-4o-mini"),
+            model=get_model("space_agent"),
             messages=[
                 {
                     "role": "system",
@@ -711,12 +712,9 @@ def _generate_content_for_topic(topic: str, idea_title: str) -> str:
         if not api_key:
             return f"[Could not generate content - OPENROUTER_API_KEY missing]\n\nTopic: {topic}"
 
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
+        client = get_client("summary")
 
-        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+        model = get_model("summary")
 
         response = client.chat.completions.create(
             model=model,
@@ -875,12 +873,9 @@ def classify_idea(params: Dict[str, Any]) -> str:
         if not api_key:
             return f"Classification not possible - OPENROUTER_API_KEY missing. Idea: {match.title}"
 
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
+        client = get_client("summary")
 
-        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+        model = get_model("summary")
 
         # Build content for classification
         content_text = f"Titel: {match.title}\n\nInhalt: {match.content or 'Kein Inhalt'}"
@@ -1582,7 +1577,7 @@ Antworte NUR als JSON-Array, keine Erklaerungen:
 
     try:
         response = client.chat.completions.create(
-            model="anthropic/claude-sonnet-4",
+            model=get_model("idea_enrichment"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1000,
@@ -2043,12 +2038,9 @@ def explain_idea(params: Dict[str, Any]) -> str:
                 return f"'{title}': {content[:500]}"
             return f"The idea '{title}' has no content yet."
 
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
+        client = get_client("summary")
 
-        model = os.getenv("OPENROUTER_SUMMARY_MODEL", "openai/gpt-4o-mini")
+        model = get_model("summary")
 
         response = client.chat.completions.create(
             model=model,

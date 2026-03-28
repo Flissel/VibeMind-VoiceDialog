@@ -2,7 +2,7 @@
 
 Detaillierte Beschreibung der Kommunikation zwischen allen VibeMind Spaces, deren Datenflüsse und geplanten Erweiterungen.
 
-## Übersicht: 10 Spaces (8 aktiv + 2 geplant)
+## Übersicht: 15 Spaces (13 aktiv + 1 standalone + 1 submodule-only)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐

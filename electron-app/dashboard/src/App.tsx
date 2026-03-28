@@ -5,6 +5,7 @@ import { AgentStatus } from './features/AgentStatus'
 import { ChatPanel } from './features/ChatPanel'
 import { MemoryBrowser } from './features/MemoryBrowser'
 import { PluginBrowser } from './features/PluginBrowser'
+import { ModelsBrowser } from './features/ModelsBrowser'
 
 const TABS: { key: DashboardTab; label: string; icon: string }[] = [
   { key: 'schedule', label: 'Schedule', icon: '\u{1F4C5}' },
@@ -12,6 +13,7 @@ const TABS: { key: DashboardTab; label: string; icon: string }[] = [
   { key: 'chat', label: 'Chat', icon: '\u{1F4AC}' },
   { key: 'memory', label: 'Memory', icon: '\u{1F9E0}' },
   { key: 'plugins', label: 'Plugins', icon: '\u{1F9E9}' },
+  { key: 'models', label: 'Models', icon: '\u2699' },
 ]
 
 export default function App() {
@@ -70,6 +72,7 @@ export default function App() {
           {activeTab === 'chat' && <ChatPanel />}
           {activeTab === 'memory' && <MemoryBrowser />}
           {activeTab === 'plugins' && <PluginBrowser />}
+          {activeTab === 'models' && <ModelsBrowser />}
         </div>
       </div>
     </div>

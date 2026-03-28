@@ -247,9 +247,10 @@ class GrpcWorkerHost:
         Diese Simulation nutzt asyncio.gather für parallele Verarbeitung.
         """
         from ..core.openrouter_client import get_openrouter_client
-        
+        from llm_config import get_model as _get_model
+
         client = get_openrouter_client()
-        model = "google/gemini-2.0-flash-001"
+        model = _get_model("desktop_worker")
         
         async def classify_single(icon: ClassifyIconMessage) -> ValidationResult:
             """Klassifiziert ein einzelnes Icon."""

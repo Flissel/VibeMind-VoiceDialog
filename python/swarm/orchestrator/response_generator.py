@@ -130,13 +130,14 @@ class ResponseGenerator:
         notifications_text = "\n".join(notification_lines)
         prompt = RESPONSE_PROMPT_TEMPLATE.replace("$NOTIFICATIONS$", notifications_text)
 
+        from llm_config import token_kwargs
         response = self.client.chat.completions.create(
             model=self._model,
             messages=[
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=200,
+            **token_kwargs(self._model, 200),
         )
 
         content = response.choices[0].message.content.strip()

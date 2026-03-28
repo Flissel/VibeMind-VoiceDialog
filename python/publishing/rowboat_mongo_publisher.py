@@ -51,7 +51,7 @@ class RowboatMongoPublisher:
 
         conn_str = os.getenv(
             "ROWBOAT_MONGODB_URI",
-            os.getenv("MONGODB_CONNECTION_STRING", "mongodb://localhost:27017"),
+            os.getenv("MONGODB_CONNECTION_STRING", "mongodb://localhost:37017"),
         )
         db_name = os.getenv("ROWBOAT_MONGODB_DB", "rowboat")
         self._project_id = os.getenv("ROWBOAT_PROJECT_ID", "")

@@ -127,9 +127,12 @@ class VisionAnalystAgent:
     
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = None,
         max_tokens: int = 2000
     ):
+        if model is None:
+            from llm_config import get_model as _get_model
+            model = _get_model("desktop_vision")
         self.model = model
         self.max_tokens = max_tokens
         self.client: Optional[anthropic.Anthropic] = None

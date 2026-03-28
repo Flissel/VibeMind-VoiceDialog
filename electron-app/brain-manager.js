@@ -15,6 +15,11 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// ANSI colors for Brain space logs
+const BRAIN_COLOR = '\x1b[32m';   // Dark Green (matches SpaceLogger)
+const BRAIN_MGR_COLOR = '\x1b[32m'; // Dark Green
+const RST = '\x1b[0m';
+
 class BrainManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -113,17 +118,16 @@ class BrainManager {
         if (!resolved) {
           resolved = true;
           this._serverReady = true;
-          console.log('[BrainManager] Server start timeout — assuming ready on port', port);
+          console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Server start timeout — assuming ready on port`, port);
           resolve(port);
         }
       }, 15000);
 
       proc.stdout.on('data', (data) => {
         const line = data.toString();
-        process.stdout.write(`[Brain-Server] ${line}`);
-        // Also emit via console.log so CDP Debug Agent sees it
+        // Colored output — one write per line to avoid duplicates
         for (const l of line.split('\n').filter(s => s.trim())) {
-          console.log(`[Brain-Server] ${l.trim()}`);
+          process.stdout.write(`${BRAIN_COLOR}[Brain-Server] ${l.trim()}${RST}\n`);
         }
         if (!resolved && (
           line.includes('Uvicorn running') ||
@@ -132,7 +136,7 @@ class BrainManager {
           resolved = true;
           clearTimeout(timeout);
           this._serverReady = true;
-          console.log('[BrainManager] Server ready on port', port);
+          console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Server ready on port`, port);
           resolve(port);
         }
       });
@@ -140,10 +144,9 @@ class BrainManager {
       proc.stderr.on('data', (data) => {
         const line = data.toString();
         stderrBuf += line;
-        process.stderr.write(`[Brain-Server] ${line}`);
-        // Also emit via console.log so CDP Debug Agent sees it
+        // Colored output — one write per line to avoid duplicates
         for (const l of line.split('\n').filter(s => s.trim())) {
-          console.log(`[Brain-Server] ${l.trim()}`);
+          process.stderr.write(`${BRAIN_COLOR}[Brain-Server] ${l.trim()}${RST}\n`);
         }
         if (!resolved && (
           line.includes('Uvicorn running') ||
@@ -153,7 +156,7 @@ class BrainManager {
           resolved = true;
           clearTimeout(timeout);
           this._serverReady = true;
-          console.log('[BrainManager] Server ready on port', port);
+          console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Server ready on port`, port);
           resolve(port);
         }
       });
@@ -191,7 +194,7 @@ class BrainManager {
 
     // Prevent concurrent start attempts
     if (this._starting) {
-      console.log('[BrainManager] Already starting, please wait...');
+      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Already starting, please wait...`);
       return;
     }
 
@@ -199,7 +202,7 @@ class BrainManager {
       // Start server if not running
       if (!this._serverReady) {
         this._starting = true;
-        console.log('[BrainManager] Starting brain dashboard server...');
+        console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Starting brain dashboard server...`);
         this.port = await this._startServer();
         this._starting = false;
       }
@@ -220,7 +223,7 @@ class BrainManager {
 
         // Load the Unified Brain Dashboard (dark theme, thought stream, chat)
         const url = `http://localhost:${this.port}/brain`;
-        console.log('[BrainManager] Loading:', url);
+        console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Loading:`, url);
         this.view.webContents.loadURL(url);
 
         // Handle external links
@@ -238,7 +241,7 @@ class BrainManager {
               status: 'ready',
             });
           }
-          console.log('[BrainManager] Dashboard loaded successfully');
+          console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Dashboard loaded successfully`);
         });
 
         this.view.webContents.on('did-fail-load', (_ev, code, desc) => {
@@ -251,7 +254,7 @@ class BrainManager {
             setTimeout(() => {
               if (this.view && !this.view.webContents.isDestroyed()) {
                 const retryUrl = `http://localhost:${this.port}/brain`;
-                console.log('[BrainManager] Retrying:', retryUrl);
+                console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Retrying:`, retryUrl);
                 this.view.webContents.loadURL(retryUrl);
               }
             }, delay);
@@ -270,14 +273,14 @@ class BrainManager {
         // Reload if previous load failed
         if (this._loadRetries > 0) {
           const url = `http://localhost:${this.port}/brain`;
-          console.log('[BrainManager] Reloading after previous failure:', url);
+          console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Reloading after previous failure:`, url);
           this._loadRetries = 0;
           this.view.webContents.loadURL(url);
         }
       }
 
       this.isVisible = true;
-      console.log('[BrainManager] Shown');
+      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Shown`);
     } catch (err) {
       this._starting = false;
       console.error('[BrainManager] Failed to show:', err.message);
@@ -298,7 +301,7 @@ class BrainManager {
     if (!this.mainWindow || !this.view) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[BrainManager] Hidden');
+    console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Hidden`);
   }
 
   /**
@@ -344,7 +347,7 @@ class BrainManager {
       this._serverProcess = null;
     }
     this._serverReady = false;
-    console.log('[BrainManager] Destroyed');
+    console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Destroyed`);
   }
 
   // -- Private helpers --

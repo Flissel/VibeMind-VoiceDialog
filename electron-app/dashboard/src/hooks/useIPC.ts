@@ -8,6 +8,7 @@ import type {
   ProjectsResponse,
   GenerationStatusResponse,
   PluginListResponse,
+  ModelsConfigResponse,
 } from '../types'
 
 /**
@@ -167,6 +168,27 @@ export async function stopAgentRun(runId: string) {
 export async function getAgentRunResults(runId: string) {
   if (!api) throw new Error('API not available')
   return api.agentfarmRunResults(runId)
+}
+
+// ── Models Config ──
+
+export function useModelsConfig() {
+  return useIPCQuery<ModelsConfigResponse>(() => api.getModelsConfig(), [])
+}
+
+export async function updateModelRole(
+  role: string,
+  provider: string,
+  model: string,
+  maxTokens: number | null
+) {
+  if (!api) throw new Error('API not available')
+  return api.updateModelRole(role, provider, model, maxTokens)
+}
+
+export async function testModelConnection(role: string) {
+  if (!api) throw new Error('API not available')
+  return api.testModelConnection(role)
 }
 
 // ── Python message listener ──

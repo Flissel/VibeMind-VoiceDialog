@@ -159,10 +159,12 @@ class TextToSpeech:
 
         try:
             loop = asyncio.get_event_loop()
+            from llm_config import get_model as _get_model
+            _tts_model = _get_model("desktop_tts")
             response = await loop.run_in_executor(
                 None,
                 lambda: self._openai_client.audio.speech.create(
-                    model="tts-1",
+                    model=_tts_model,
                     voice="alloy",  # Options: alloy, echo, fable, onyx, nova, shimmer
                     input=text
                 )

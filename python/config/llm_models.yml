@@ -167,3 +167,209 @@ models:
     model: "gpt-5.4"
     max_tokens: 200
     description: "Neuroscience-based circadian reasoning for task recommendations"
+
+  # --- Tool Orchestrator ---
+  tool_orchestrator:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4"
+    max_tokens: 4096
+    description: "Agentic tool orchestrator (multi-step tool calling)"
+
+  # --- Reference Resolution ---
+  drope_resolver:
+    provider: "ollama"
+    model: "SakanaAI/DroPE-SmolLM-135M-32K"
+    max_tokens: null
+    description: "DroPE reference resolver (local HuggingFace model)"
+
+  # --- Ideas Content ---
+  format_dispatcher:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4-5"
+    max_tokens: 4096
+    description: "Ideas format dispatcher (structured formatting)"
+
+  idea_enrichment:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4"
+    max_tokens: 4096
+    description: "Idea enrichment, expansion and linking"
+
+  whitepaper:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "White paper generation from ideas"
+
+  structure_analysis:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "Ideas structure analysis and requirements extraction"
+
+  feature_extraction:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "Feature extraction and documentation from ideas"
+
+  doc_generation:
+    provider: "openrouter"
+    model: "openai/gpt-4o"
+    max_tokens: 4096
+    description: "Documentation synthesis from ideas"
+
+  bubble_eval:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "Bubble evaluation and scoring"
+
+  # --- Desktop Automation ---
+  desktop_reasoning:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4"
+    max_tokens: 4096
+    description: "Desktop automation reasoning and planning"
+
+  desktop_vision:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4"
+    max_tokens: 4096
+    description: "Desktop automation vision (screenshot analysis)"
+
+  desktop_vision_fast:
+    provider: "openrouter"
+    model: "google/gemini-2.0-flash-exp:free"
+    max_tokens: 4096
+    description: "Desktop automation fast vision (free tier)"
+
+  desktop_quick:
+    provider: "openrouter"
+    model: "anthropic/claude-3.5-sonnet"
+    max_tokens: 4096
+    description: "Desktop automation quick tasks"
+
+  desktop_orchestrator:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "Desktop automation orchestrator and subagents"
+
+  desktop_stt:
+    provider: "openai"
+    model: "whisper-1"
+    max_tokens: null
+    description: "Desktop speech-to-text (Whisper)"
+
+  desktop_tts:
+    provider: "openai"
+    model: "tts-1"
+    max_tokens: null
+    description: "Desktop text-to-speech"
+
+  desktop_worker:
+    provider: "openrouter"
+    model: "google/gemini-2.0-flash-001"
+    max_tokens: 4096
+    description: "Desktop automation worker host"
+
+  # --- N8n ---
+  n8n_selector:
+    provider: "openai"
+    model: "gpt-4o-mini"
+    max_tokens: 2048
+    description: "N8n SelectorGroupChat routing model"
+
+  # --- AutoGen/AgentFarm ---
+  agentfarm_anthropic:
+    provider: "openrouter"
+    model: "claude-sonnet-4-6"
+    max_tokens: 4096
+    description: "AgentFarm Anthropic provider model"
+
+  # --- MiroFish ---
+  mirofish:
+    provider: "ollama"
+    model: "qwen2.5:32b"
+    max_tokens: 4096
+    description: "MiroFish simulation LLM (local Ollama)"
+
+  mirofish_eval:
+    provider: "openai"
+    model: "gpt-5.4"
+    max_tokens: 4096
+    description: "MiroFish evaluation model"
+
+  mirofish_openrouter:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+    max_tokens: 4096
+    description: "MiroFish OpenRouter fallback"
+
+  # --- Workers ---
+  claude_worker:
+    provider: "openrouter"
+    model: "anthropic/claude-opus-4-5-20251101"
+    max_tokens: 4096
+    description: "Claude worker for Anthropic SDK tasks"
+
+  # --- Messaging ---
+  messaging_relevance:
+    provider: "ollama"
+    model: "qwen2.5:3b"
+    max_tokens: 2048
+    description: "Messaging relevance filter (local Ollama)"
+
+  # --- Ideas (additional) ---
+  ideas_research:
+    provider: "openai"
+    model: "gpt-4"
+    max_tokens: 4096
+    description: "Ideas AutoGen research agent"
+
+  connection_eval:
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    max_tokens: 4096
+    description: "Connection evaluator for idea linking"
+
+  # --- MiroFish (additional) ---
+  mirofish_embedding:
+    provider: "ollama"
+    model: "nomic-embed-text"
+    max_tokens: null
+    description: "MiroFish embedding model (local Ollama)"
+
+  # --- Transcription ---
+  transcription:
+    provider: "openai"
+    model: "whisper-1"
+    max_tokens: null
+    description: "Speech-to-text transcription (Whisper)"
+
+  # --- Shuttle Wizard ---
+  wizard_ollama:
+    provider: "ollama"
+    model: "qwen2.5:3b"
+    max_tokens: 4096
+    description: "Shuttle wizard Ollama provider"
+
+  wizard_openrouter:
+    provider: "openrouter"
+    model: "google/gemini-2.0-flash-001"
+    max_tokens: 4096
+    description: "Shuttle wizard OpenRouter provider"
+
+  wizard_openai:
+    provider: "openai"
+    model: "gpt-4o-mini"
+    max_tokens: 4096
+    description: "Shuttle wizard OpenAI provider"
+
+  # --- Rowboat ---
+  rowboat_model:
+    provider: "openrouter"
+    model: "anthropic/claude-sonnet-4"
+    max_tokens: 4096
+    description: "Rowboat agent model"

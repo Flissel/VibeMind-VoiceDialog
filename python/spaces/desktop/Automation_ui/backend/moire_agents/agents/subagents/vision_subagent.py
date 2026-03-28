@@ -361,8 +361,9 @@ Additional context:
 Return ONLY valid JSON with the analysis."""
 
             # Call LLM with vision
+            from llm_config import get_model as _get_model
             response = await self.client.chat_completion(
-                model="openai/gpt-4o-mini",
+                model=_get_model("desktop_orchestrator"),
                 messages=[
                     {"role": "system", "content": "You are a UI analysis expert. Analyze screenshots and identify UI elements precisely."},
                     {

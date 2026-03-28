@@ -119,11 +119,12 @@ Anforderungen:
 
 Antworte NUR mit dem Namen, nichts anderes."""
 
+        from llm_config import token_kwargs
         response = self.client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,  # Higher for creativity
-            max_tokens=20,
+            **token_kwargs(self._model, 20),
         )
 
         name = response.choices[0].message.content.strip()

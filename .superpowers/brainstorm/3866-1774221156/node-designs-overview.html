@@ -1,0 +1,301 @@
+<h2>Canvas Node Redesign — Aktuelle vs. Neue Konzepte</h2>
+<p class="subtitle">So sehen die Nodes aktuell aus (links) und was möglich wäre (rechts)</p>
+
+<style>
+  .demo-canvas {
+    background: #0a0a0a;
+    border-radius: 12px;
+    padding: 30px;
+    position: relative;
+    min-height: 320px;
+    overflow: hidden;
+  }
+
+  /* Current node style */
+  .node-current {
+    min-width: 220px;
+    max-width: 280px;
+    background: rgba(20, 25, 40, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    margin: 12px;
+    display: inline-block;
+    vertical-align: top;
+  }
+  .node-current .n-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    background: rgba(35, 30, 55, 0.60);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px 8px 0 0;
+    font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.9);
+  }
+  .node-current .n-body {
+    padding: 12px 14px;
+    color: rgba(255,255,255,0.8);
+    font-size: 13px; line-height: 1.5;
+  }
+  .node-current[data-type="note"] { border-left: 3px solid rgba(255, 200, 100, 0.7); }
+  .node-current[data-type="todo"] { border-left: 3px solid rgba(255, 200, 100, 0.7); }
+  .node-current[data-type="whitepaper"] { border-left: 3px solid rgba(255, 200, 100, 0.7); }
+
+  /* ===== NEW DESIGN: TODO Node ===== */
+  .node-todo-new {
+    min-width: 250px; max-width: 300px;
+    background: rgba(25, 15, 18, 0.95);
+    border: 1px solid rgba(255, 80, 80, 0.25);
+    border-left: 4px solid #ff4444;
+    border-radius: 10px;
+    box-shadow: 0 4px 24px rgba(255, 50, 50, 0.12), 0 2px 8px rgba(0,0,0,0.4);
+    margin: 12px; display: inline-block; vertical-align: top;
+  }
+  .node-todo-new .n-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: rgba(60, 20, 25, 0.70);
+    border-bottom: 1px solid rgba(255, 80, 80, 0.15);
+    border-radius: 10px 10px 0 0;
+    font-size: 13px; font-weight: 600; color: #ff8888;
+  }
+  .node-todo-new .n-body { padding: 10px 14px; }
+  .todo-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-check {
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 2px solid rgba(255, 100, 100, 0.5);
+    background: transparent; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .todo-check.done {
+    background: rgba(100, 255, 150, 0.2);
+    border-color: rgba(100, 255, 150, 0.5);
+  }
+  .todo-check.done::after { content: "✓"; color: #66ff99; font-size: 12px; }
+  .todo-text { color: rgba(255,255,255,0.85); font-size: 13px; }
+  .todo-text.done { text-decoration: line-through; color: rgba(255,255,255,0.35); }
+  .todo-priority {
+    font-size: 9px; padding: 2px 6px; border-radius: 8px;
+    font-weight: 600; letter-spacing: 0.5px; margin-left: auto; flex-shrink: 0;
+  }
+  .priority-high { background: rgba(255,60,60,0.25); color: #ff6666; }
+  .priority-medium { background: rgba(255,180,50,0.2); color: #ffbb44; }
+  .priority-low { background: rgba(100,200,255,0.15); color: #88ccff; }
+
+  /* ===== NEW DESIGN: Note Node (Paper) ===== */
+  .node-note-new {
+    min-width: 240px; max-width: 300px;
+    background: linear-gradient(170deg, #faf8f4 0%, #f5f0e8 50%, #efe8db 100%);
+    border: none;
+    border-radius: 3px;
+    box-shadow:
+      2px 3px 12px rgba(0,0,0,0.35),
+      0 1px 4px rgba(0,0,0,0.2),
+      inset 0 0 60px rgba(255,250,240,0.15);
+    margin: 12px; display: inline-block; vertical-align: top;
+    position: relative;
+  }
+  .node-note-new::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      transparent, transparent 27px,
+      rgba(180, 200, 220, 0.25) 27px, rgba(180, 200, 220, 0.25) 28px
+    );
+    pointer-events: none;
+    border-radius: 3px;
+  }
+  .node-note-new .n-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px 6px;
+    font-size: 14px; font-weight: 600;
+    color: #3a3530;
+    position: relative; z-index: 1;
+    border-bottom: 2px solid rgba(200, 80, 80, 0.35);
+    margin: 0 12px;
+  }
+  .node-note-new .n-body {
+    padding: 12px 20px 16px;
+    color: #4a4540;
+    font-size: 13px; line-height: 1.75;
+    position: relative; z-index: 1;
+    font-family: 'Georgia', serif;
+  }
+  /* Paper fold corner */
+  .node-note-new::after {
+    content: "";
+    position: absolute; bottom: 0; right: 0;
+    width: 20px; height: 20px;
+    background: linear-gradient(135deg, #efe8db 50%, #d8d0c0 50%);
+    border-top-left-radius: 4px;
+  }
+
+  /* ===== NEW DESIGN: Whitepaper Node ===== */
+  .node-wp-new {
+    min-width: 260px; max-width: 320px;
+    background: linear-gradient(180deg, rgba(15, 20, 35, 0.97) 0%, rgba(12, 16, 28, 0.98) 100%);
+    border: 1px solid rgba(100, 140, 220, 0.2);
+    border-top: 3px solid rgba(100, 160, 255, 0.5);
+    border-radius: 4px;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.5), 0 1px 3px rgba(100,160,255,0.1);
+    margin: 12px; display: inline-block; vertical-align: top;
+  }
+  .node-wp-new .n-header {
+    padding: 14px 18px 8px;
+    font-size: 15px; font-weight: 700; color: rgba(220,230,255,0.95);
+    letter-spacing: -0.3px;
+  }
+  .node-wp-new .wp-meta {
+    padding: 0 18px 10px;
+    font-size: 11px; color: rgba(150,170,200,0.6);
+    border-bottom: 1px solid rgba(100,140,220,0.12);
+    display: flex; gap: 12px;
+  }
+  .node-wp-new .n-body {
+    padding: 12px 18px 16px;
+    color: rgba(200,210,230,0.8);
+    font-size: 13px; line-height: 1.65;
+  }
+  .wp-abstract {
+    font-style: italic;
+    border-left: 2px solid rgba(100,160,255,0.3);
+    padding-left: 12px;
+    margin-bottom: 10px;
+  }
+  .wp-section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: rgba(100,160,255,0.6);
+    margin: 10px 0 4px;
+  }
+
+  .compare-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.3); margin-bottom: 10px; padding-left: 12px;
+  }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+</style>
+
+<!-- TODO Comparison -->
+<div style="margin-bottom: 40px;">
+  <h3 style="color: #ff6666; margin-bottom: 4px;">TODO / Action List</h3>
+  <p class="subtitle">Aufgaben sollen sofort als solche erkennbar sein — rot markiert</p>
+  <div class="demo-canvas">
+    <div class="row">
+      <div>
+        <div class="compare-label">Aktuell</div>
+        <div class="node-current" data-type="todo">
+          <div class="n-header">📝 Marketing Tasks</div>
+          <div class="n-body">
+            <div style="margin-bottom: 4px;">☐ Landing Page erstellen</div>
+            <div style="margin-bottom: 4px;">☐ Social Media Plan</div>
+            <div style="color: rgba(255,255,255,0.4);">☑ Logo Design</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="compare-label">Neu — Rot akzentuiert</div>
+        <div class="node-todo-new">
+          <div class="n-header">
+            <span style="font-size: 14px;">☐</span>
+            Marketing Tasks
+            <span style="margin-left: auto; font-size: 11px; color: rgba(255,100,100,0.6);">2/3</span>
+          </div>
+          <div class="n-body">
+            <div class="todo-item">
+              <div class="todo-check"></div>
+              <span class="todo-text">Landing Page erstellen</span>
+              <span class="todo-priority priority-high">HIGH</span>
+            </div>
+            <div class="todo-item">
+              <div class="todo-check"></div>
+              <span class="todo-text">Social Media Plan</span>
+              <span class="todo-priority priority-medium">MED</span>
+            </div>
+            <div class="todo-item">
+              <div class="todo-check done"></div>
+              <span class="todo-text done">Logo Design</span>
+              <span class="todo-priority priority-low">LOW</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTE Comparison -->
+<div style="margin-bottom: 40px;">
+  <h3 style="color: #f5f0e8; margin-bottom: 4px;">Notes — Papier-Look</h3>
+  <p class="subtitle">Notizen sollen wie auf einem echten Blatt Papier wirken</p>
+  <div class="demo-canvas">
+    <div class="row">
+      <div>
+        <div class="compare-label">Aktuell</div>
+        <div class="node-current" data-type="note">
+          <div class="n-header">📝 Meeting Notizen</div>
+          <div class="n-body">
+            Gespräch mit Team über Q3 Roadmap. Fokus auf API-Redesign und neue Kunden-Features. Timeline: 6 Wochen.
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="compare-label">Neu — Weißes Papier</div>
+        <div class="node-note-new">
+          <div class="n-header">
+            <span style="font-size: 14px;">✏️</span>
+            Meeting Notizen
+          </div>
+          <div class="n-body">
+            Gespräch mit Team über Q3 Roadmap. Fokus auf API-Redesign und neue Kunden-Features. Timeline: 6 Wochen.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WHITEPAPER Comparison -->
+<div style="margin-bottom: 40px;">
+  <h3 style="color: #88aaff; margin-bottom: 4px;">Whitepaper — Akademischer Look</h3>
+  <p class="subtitle">Whitepapers sollen sich wie ein echtes Forschungsdokument anfühlen</p>
+  <div class="demo-canvas">
+    <div class="row">
+      <div>
+        <div class="compare-label">Aktuell</div>
+        <div class="node-current" data-type="whitepaper">
+          <div class="n-header">📄 API Architecture</div>
+          <div class="n-body" style="font-size: 12px; color: rgba(255,255,255,0.5);">
+            This document outlines the proposed architecture for our new REST API. The system will use a microservices approach with event-driven communication...
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="compare-label">Neu — Akademisch</div>
+        <div class="node-wp-new">
+          <div class="n-header">API Architecture Design</div>
+          <div class="wp-meta">
+            <span>📄 Whitepaper</span>
+            <span>12 min read</span>
+            <span>v2.1</span>
+          </div>
+          <div class="n-body">
+            <div class="wp-abstract">
+              This document outlines the proposed architecture for our new REST API using a microservices approach.
+            </div>
+            <div class="wp-section-title">1. Introduction</div>
+            <div>The system will use event-driven communication between loosely coupled services...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="padding: 16px; background: rgba(100,160,255,0.08); border-radius: 8px; border: 1px solid rgba(100,160,255,0.15); margin-top: 10px;">
+  <strong style="color: rgba(200,220,255,0.9);">Erste Frage:</strong>
+  <span style="color: rgba(200,210,230,0.75);">Gefällt dir die generelle Richtung? Sollen die Notes wirklich wie Papier aussehen (hell auf dunklem Canvas), oder lieber dark-theme Papier-Textur?</span>
+</div>

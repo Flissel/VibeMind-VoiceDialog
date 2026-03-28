@@ -19,7 +19,7 @@ import concurrent.futures
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
-from llm_config import get_model
+from llm_config import get_model, token_kwargs
 
 from data.intent_rule_repository import (
     IntentRuleRepository,
@@ -374,7 +374,7 @@ class RAGIntentClassifier:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.1,
-                    max_tokens=2048,  # Sufficient for 30+ step multi-step responses
+                    **token_kwargs(self.model, 2048),  # Sufficient for 30+ step multi-step responses
                 )
                 elapsed = _time.perf_counter() - start
                 logger.debug(f"[RAG LLM] Completed in {elapsed:.2f}s")

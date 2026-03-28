@@ -53,10 +53,8 @@ class DroPEReferenceResolver:
         Args:
             model_name: HuggingFace model name. Defaults to env var or SmolLM-135M.
         """
-        self.model_name = model_name or os.getenv(
-            "DROPE_MODEL",
-            "SakanaAI/DroPE-SmolLM-135M-32K"
-        )
+        from llm_config import get_model
+        self.model_name = model_name or get_model("drope_resolver")
         self._model = None
         self._tokenizer = None
         self._available: Optional[bool] = None

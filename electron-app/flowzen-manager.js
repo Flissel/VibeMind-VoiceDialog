@@ -11,6 +11,9 @@
 const { BrowserView } = require('electron');
 const path = require('path');
 
+const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
+function _fzLog(...a) { process.stdout.write(`${_FZ_C}[FlowzenManager] ${a.join(' ')}${_RST}\n`); }
+
 class FlowzenManager {
   constructor(mainWindow, sendToPythonFn) {
     this.mainWindow = mainWindow;
@@ -48,7 +51,7 @@ class FlowzenManager {
 
     // Load the local diary HTML page
     const diaryPath = path.join(__dirname, 'flowzen-diary.html');
-    console.log('[FlowzenManager] Loading diary from:', diaryPath);
+    _fzLog('Loading diary from:', diaryPath);
     this.flowzenView.webContents.loadFile(diaryPath);
 
     // Handle external link navigation
@@ -76,7 +79,7 @@ class FlowzenManager {
           status: 'ready',
         });
       }
-      console.log('[FlowzenManager] Diary loaded');
+      _fzLog('Diary loaded');
 
       // Send pending data request now that page is ready
       if (this.isVisible && this.sendToPython) {
@@ -116,7 +119,7 @@ class FlowzenManager {
     this.mainWindow.addBrowserView(this.flowzenView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[FlowzenManager] Diary shown');
+    _fzLog('Diary shown');
 
     // Request fresh diary data (only if page already loaded, otherwise did-finish-load handles it)
     if (this._loaded && this.sendToPython) {
@@ -133,7 +136,7 @@ class FlowzenManager {
 
     this.mainWindow.removeBrowserView(this.flowzenView);
     this.isVisible = false;
-    console.log('[FlowzenManager] Diary hidden');
+    _fzLog('Diary hidden');
   }
 
   /**
@@ -174,7 +177,10 @@ class FlowzenManager {
    */
   send(channel, payload) {
     if (this.flowzenView && !this.flowzenView.webContents.isDestroyed()) {
+      _fzLog(`send(${channel}) -> BrowserView`);
       this.flowzenView.webContents.send(channel, payload);
+    } else {
+      _fzLog(`send(${channel}) FAILED - view not ready`);
     }
   }
 

@@ -402,8 +402,9 @@ Generate an action plan using the {self.approach.value} approach.
 Return ONLY valid JSON with actions, confidence, and reasoning."""
 
             # Call LLM
+            from llm_config import get_model as _get_model
             response = await self.client.chat_completion(
-                model="openai/gpt-4o-mini",
+                model=_get_model("desktop_orchestrator"),
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_prompt}

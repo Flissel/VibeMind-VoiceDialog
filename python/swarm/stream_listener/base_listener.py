@@ -14,6 +14,7 @@ import concurrent.futures
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from llm_config import token_kwargs, get_model
 from .models import ListenerEvaluation, EvalContext
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class BaseStreamListener(ABC):
         return None
 
     async def evaluate(
-        self, text: str, context: EvalContext, model: str = "openai/gpt-4o-mini", temperature: float = 0.1
+        self, text: str, context: EvalContext, model: str = None, temperature: float = 0.1
     ) -> ListenerEvaluation:
         """
         LLM-based evaluation of whether input belongs to this domain.
@@ -124,6 +125,7 @@ class BaseStreamListener(ABC):
         Returns:
             ListenerEvaluation with confidence, event_type, payload
         """
+        model = model or get_model("stream_listener")
         start = time.perf_counter()
 
         # Build conversation history string
@@ -190,7 +192,7 @@ class BaseStreamListener(ABC):
                     {"role": "user", "content": prompt},
                 ],
                 temperature=temperature,
-                max_tokens=300,
+                **token_kwargs(model, 300),
             )
             return response.choices[0].message.content.strip()
 

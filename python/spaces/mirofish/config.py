@@ -9,6 +9,7 @@ VibeMind communicates via its HTTP API.
 import os
 from dataclasses import dataclass
 from typing import Optional
+from llm_config import get_model
 
 
 @dataclass
@@ -25,7 +26,7 @@ class MiroFishConfig:
 
     # LLM (OpenRouter free model, or any OpenAI-compatible API)
     llm_base_url: str = "https://openrouter.ai/api/v1"
-    llm_model_name: str = "meta-llama/llama-3.3-70b-instruct:free"
+    llm_model_name: str = ""  # Resolved at runtime via get_model("mirofish")
     llm_api_key: str = ""
 
     # Docker
@@ -57,7 +58,7 @@ class MiroFishConfig:
 
             # LLM
             llm_base_url=os.getenv("MIROFISH_LLM_BASE_URL", "https://openrouter.ai/api/v1"),
-            llm_model_name=os.getenv("MIROFISH_LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
+            llm_model_name=os.getenv("MIROFISH_LLM_MODEL") or get_model("mirofish"),
             llm_api_key=os.getenv("MIROFISH_LLM_API_KEY", os.getenv("OPENROUTER_API_KEY", "")),
 
             # Docker

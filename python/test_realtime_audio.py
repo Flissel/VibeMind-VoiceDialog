@@ -10,6 +10,10 @@ import time
 import base64
 import numpy as np
 
+# Add parent to path for llm_config import
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from llm_config import get_model
+
 # Fix Windows console encoding
 if sys.platform == "win32":
     try:
@@ -39,7 +43,7 @@ async def test_audio():
 
     log("Connecting to OpenAI Realtime...")
     connection_manager = client.realtime.connect(
-        model="gpt-4o-realtime-preview",
+        model=get_model("voice"),
         websocket_connection_options={"open_timeout": 15, "close_timeout": 5},
     )
     connection = await connection_manager.__aenter__()
@@ -53,7 +57,7 @@ async def test_audio():
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24000},
-                "transcription": {"model": "whisper-1"},
+                "transcription": {"model": get_model("transcription")},
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,

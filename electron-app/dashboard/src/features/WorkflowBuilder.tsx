@@ -125,7 +125,7 @@ export function WorkflowBuilder() {
     finally { setActionLoading(null) }
   }
 
-  const n8nUrl = status.data?.url ?? 'http://localhost:5678'
+  const n8nUrl = status.data?.url ?? 'http://localhost:15678'
 
   return (
     <div>
@@ -146,20 +146,18 @@ export function WorkflowBuilder() {
           <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
             {status.data?.online ? 'n8n online' : 'n8n offline'}
           </span>
-          <a
-            href={n8nUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => api?.openN8nEditor?.()}
             className="hover-bg"
             style={{
               padding: '4px 10px', borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--separator)', background: 'transparent',
               color: 'var(--system-blue)', cursor: 'pointer',
-              fontSize: 'var(--text-caption1)', textDecoration: 'none',
+              fontSize: 'var(--text-caption1)',
             }}
           >
             n8n Editor
-          </a>
+          </button>
           <button
             onClick={() => { status.refresh(); refresh() }}
             className="hover-bg"
@@ -321,22 +319,20 @@ export function WorkflowBuilder() {
                   </button>
 
                   {/* Open in n8n */}
-                  <a
-                    href={`${n8nUrl}/workflow/${wf.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => api?.openN8nEditor?.(wf.id)}
                     className="hover-bg flex items-center justify-center"
-                    title="Open in n8n"
+                    title="In n8n oeffnen"
                     style={{
                       width: 28, height: 28, borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--separator)', background: 'transparent',
-                      color: 'var(--system-blue)', textDecoration: 'none',
+                      color: 'var(--system-blue)', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 12,
                     }}
                   >
                     &#x2197;
-                  </a>
+                  </button>
 
                   {/* Delete */}
                   <button

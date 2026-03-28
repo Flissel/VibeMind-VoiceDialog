@@ -6,7 +6,7 @@ Project-specific terms used throughout VibeMind documentation.
 |------|-----------|
 | **Bubble** | A container/folder for ideas. Bubbles can be nested. Rendered as 3D glass spheres in the UI. |
 | **Idea** | A content node inside a bubble. Can have a title, description, tags, format, and connections to other ideas. |
-| **Space** | A domain module with its own agent, tools, and event types. VibeMind has 8 spaces: Ideas, Coding, Desktop, Rowboat, Research, Minibook, Shuttles, Schedule. |
+| **Space** | A domain module with its own agent, tools, and event types. VibeMind has 15 spaces: Ideas, Bubbles, Coding, Desktop, Rowboat, Research, Minibook, Schedule, N8n, AgentFarm, Video, MiroFish, Flowzen, Brain, Shuttles. |
 | **Event Type** | A structured action identifier like `bubble.create` or `idea.auto_link`. Produced by the IntentClassifier from voice input. |
 | **Intent Classification** | The LLM-based process of converting natural language ("Erstelle Bubble Marketing") to a structured event type + payload. |
 | **Rachel** | The OpenAI Realtime voice agent. The primary voice interface for VibeMind. |

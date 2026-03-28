@@ -78,6 +78,11 @@
     };
 
     H['node_added'] = function(msg) {
+        // If it's a top-level bubble, add to 3D Multiverse
+        if (msg.node && msg.node.node_type === 'bubble' && window.multiverseApp) {
+            window.multiverseApp.addBubbleTo3D(msg.node);
+        }
+        // Also forward to space canvas (for inside-bubble view)
         if (window.spaceCanvas) window.spaceCanvas.onNodeAdded(msg.node);
     };
 

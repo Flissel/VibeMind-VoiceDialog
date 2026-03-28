@@ -16,11 +16,13 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Default Ollama settings (overridable via env)
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
-DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+DEFAULT_OLLAMA_MODEL = get_model("messaging_relevance")
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
 
 RELEVANCE_PROMPT = """Du bist ein Relevanz-Filter fuer eingehende Chat-Nachrichten.
@@ -54,7 +56,7 @@ class RelevanceFilter:
         host: Optional[str] = None,
         threshold: Optional[float] = None,
     ):
-        self.model = model or os.getenv("MESSAGING_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+        self.model = model or get_model("messaging_relevance")
         self.host = host or os.getenv("OLLAMA_HOST", DEFAULT_OLLAMA_HOST)
         self.threshold = threshold or float(
             os.getenv("MESSAGING_RELEVANCE_THRESHOLD", str(DEFAULT_RELEVANCE_THRESHOLD))

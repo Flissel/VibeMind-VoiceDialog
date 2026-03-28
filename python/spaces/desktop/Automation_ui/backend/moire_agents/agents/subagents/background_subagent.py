@@ -207,8 +207,9 @@ class BackgroundSubagent(BaseSubagent):
                 import base64
                 image_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
 
+                from llm_config import get_model as _get_model
                 response = await self.client.chat_completion(
-                    model="openai/gpt-4o-mini",
+                    model=_get_model("desktop_orchestrator"),
                     messages=[
                         {"role": "system", "content": "You are a UI element detector. Answer only 'YES' or 'NO'."},
                         {
@@ -274,8 +275,9 @@ class BackgroundSubagent(BaseSubagent):
                 import base64
                 image_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
 
+                from llm_config import get_model as _get_model
                 response = await self.client.chat_completion(
-                    model="openai/gpt-4o-mini",
+                    model=_get_model("desktop_orchestrator"),
                     messages=[
                         {"role": "system", "content": "You are a text detector. Answer only 'YES' or 'NO'."},
                         {

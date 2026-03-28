@@ -63,13 +63,15 @@ except ImportError:
     logger.warning("OpenRouter client not found, using direct API calls")
     get_openrouter_client = None
 
+from llm_config import get_model
+
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
 # Claude Opus 4.5 via OpenRouter
-WORKER_MODEL = "anthropic/claude-opus-4-5-20251101"
+WORKER_MODEL = get_model("claude_worker")
 
 # System prompt for the worker
 WORKER_SYSTEM_PROMPT = """You are a desktop automation worker. You execute tasks step by step using MCP tools.

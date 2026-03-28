@@ -1096,6 +1096,10 @@
                     break;
 
                 case 'node_added':
+                    // Add top-level bubbles to 3D Multiverse
+                    if (message.node && message.node.node_type === 'bubble' && window.multiverseApp) {
+                        window.multiverseApp.addBubbleTo3D(message.node);
+                    }
                     if (window.spaceCanvas) {
                         window.spaceCanvas.onNodeAdded(message.node);
                     }

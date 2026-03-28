@@ -90,9 +90,12 @@ class ClassificationValidationAgent:
     
     def __init__(
         self,
-        model: str = "google/gemini-2.0-flash-001",
+        model: str = None,
         max_concurrent: int = 5
     ):
+        if model is None:
+            from llm_config import get_model as _get_model
+            model = _get_model("desktop_worker")
         self.model = model
         self.max_concurrent = max_concurrent
         self.openrouter_client: Optional[OpenRouterClient] = None

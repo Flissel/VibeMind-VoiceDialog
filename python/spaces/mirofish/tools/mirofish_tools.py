@@ -8,6 +8,7 @@ VibeMind-standard result dict with broadcast to Electron.
 import json
 import logging
 from typing import Dict, Any, Optional
+from llm_config import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -534,54 +535,41 @@ def _format_readiness_report(
 
 
 def _create_missing_ideas(bubble_id: str, missing_items: list) -> list:
-    """Create missing items as canvas nodes (ideas) in the bubble."""
+    """Append missing items to the bubble's description instead of creating separate nodes."""
     created = []
     try:
-        from data import CanvasRepository
+        from data import IdeasRepository
 
-        repo = CanvasRepository()
-        all_nodes = repo.list_nodes(limit=1000)
-        bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
-        count = len(bubble_nodes)
+        repo = IdeasRepository()
+        bubble = repo.get(bubble_id)
+        if not bubble:
+            logger.warning(f"mirofish.evaluate: Bubble {bubble_id} not found for TODO merge")
+            return created
 
-        for i, item in enumerate(missing_items[:15]):  # max 15 items
-            if not item or len(item) < 3:
-                continue
+        # Filter valid items
+        valid_items = [item for item in missing_items[:25] if item and len(item) >= 3]
+        if not valid_items:
+            return created
 
-            # Spiral position
-            angle = (count + i) * 0.8
-            radius = 2.0 + (count + i) * 0.3
-            import math
-            x = radius * math.cos(angle)
-            y = radius * math.sin(angle)
+        # Build TODO section
+        todo_section = "\n\n--- MiroFish Evaluation: Offene Punkte ---"
+        for i, item in enumerate(valid_items, 1):
+            todo_section += f"\n{i}. {item}"
+            created.append({"title": f"TODO: {item[:80]}"})
 
-            node = repo.create_node(
-                node_type="note",
-                title=f"TODO: {item}",
-                content=f"Fehlender Punkt aus MiroFish Evaluation.\n\nDieses Element wurde als fehlend identifiziert und muss noch ausgearbeitet werden:\n\n{item}",
-                x=x,
-                y=y,
-                linked_idea_id=bubble_id,
-            )
+        # Remove previous MiroFish section if present, then append new one
+        desc = bubble.description or ""
+        marker = "--- MiroFish Evaluation: Offene Punkte ---"
+        if marker in desc:
+            desc = desc[:desc.index(marker)].rstrip()
 
-            node_id = node.id if hasattr(node, 'id') else str(node)
-            created.append({"id": node_id, "title": f"TODO: {item}"})
+        bubble.description = desc + todo_section
+        repo.update(bubble)
 
-            _broadcast_to_electron({
-                "type": "node_added",
-                "node": {
-                    "id": node_id,
-                    "title": f"TODO: {item}",
-                    "type": "note",
-                    "x": x,
-                    "y": y,
-                },
-            })
-
-        logger.info(f"mirofish.evaluate: Created {len(created)} missing-item ideas in bubble {bubble_id}")
+        logger.info(f"mirofish.evaluate: Merged {len(created)} TODOs into bubble {bubble_id} description")
 
     except Exception as e:
-        logger.warning(f"mirofish.evaluate: Could not create missing ideas: {e}")
+        logger.warning(f"mirofish.evaluate: Could not merge TODOs into bubble: {e}")
 
     return created
 
@@ -626,24 +614,41 @@ def evaluate_bubble_readiness(bubble_name: str) -> Dict[str, Any]:
         logger.warning(f"mirofish.evaluate: requirements tool failed: {e}")
         bubble_data = {"metadata": {"bubble_title": bubble.title}, "nodes": [], "edges": []}
 
-    # Build content text
+    # Build content text — include child ideas + canvas nodes
     content_parts = [
         f"# Bubble: {bubble.title}",
         f"Beschreibung: {bubble.description or 'Keine'}",
     ]
+
+    # Load child ideas (ideas with parent_id = bubble.id)
+    try:
+        all_ideas = ideas_repo.list()
+        child_ideas = [i for i in all_ideas if i.parent_id == bubble.id]
+        if child_ideas:
+            content_parts.append(f"\n## Kind-Ideen ({len(child_ideas)} Stueck)")
+            for ci in child_ideas:
+                content_parts.append(f"\n### {ci.title}")
+                if ci.description:
+                    content_parts.append(ci.description)
+            logger.info(f"mirofish.evaluate: loaded {len(child_ideas)} child ideas")
+    except Exception as e:
+        logger.warning(f"mirofish.evaluate: child ideas load failed: {e}")
+
+    # Canvas nodes from bubble_requirements_tool
     for node in bubble_data.get("nodes", []):
         title = node.get("title", "")
         content = node.get("content", "") or node.get("description", "")
         if title:
-            content_parts.append(f"## {title}")
+            content_parts.append(f"\n## {title}")
         if content:
             content_parts.append(content[:500])
     if bubble_data.get("requirements"):
-        content_parts.append("## Requirements")
+        content_parts.append("\n## Requirements")
         for req in bubble_data["requirements"][:10]:
             content_parts.append(f"- {req.get('text', req) if isinstance(req, dict) else req}")
 
     content_text = "\n".join(content_parts)
+    logger.info(f"mirofish.evaluate: content_text length={len(content_text)} chars")
 
     _broadcast_to_electron({
         "type": "mirofish_status",
@@ -670,99 +675,59 @@ def evaluate_bubble_readiness(bubble_name: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"mirofish.evaluate: graph build skipped: {e}")
 
-    # ── Step 3: Post evaluation to Minibook ──
+    # ── Step 3: Multi-agent LLM evaluation (5 perspectives) ──
+    agent_responses = {}
     try:
-        import os
-        minibook_enabled = os.getenv("MINIBOOK_ENABLED", "false").lower() in ("true", "1")
-        use_minibook = os.getenv("USE_MINIBOOK_HUB", "false").lower() in ("true", "1")
+        client_llm, model = _get_llm_client()
+        if not client_llm:
+            raise RuntimeError("No LLM client available")
 
-        if not minibook_enabled or not use_minibook:
-            raise RuntimeError("Minibook not enabled")
+        target_spaces = ["coding", "swe_design", "research", "rowboat", "ideas"]
+        agent_label_map = {
+            "coding": "vibemind_coding",
+            "swe_design": "vibemind_swe_design",
+            "research": "vibemind_research",
+            "rowboat": "vibemind_rowboat",
+            "ideas": "vibemind_ideas",
+        }
 
-        from spaces.minibook.tools.minibook_client import get_minibook_client
-        from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
-
-        minibook_client = get_minibook_client()
-        project_id = minibook_client._project_id
-
-        if not project_id:
-            projects = minibook_client.list_projects()
-            if projects:
-                project_id = projects[0].get("id", "")
-
-        if not project_id:
-            raise RuntimeError("No Minibook project available")
-
-        # Build evaluation post with @mentions
-        target_spaces = ["coding", "swe_design", "research", "roarboot", "ideas"]
-        mentions = []
-        target_agent_names = []
-
-        for space_key in target_spaces:
-            agent_info = SPACE_AGENT_REGISTRY.get(space_key)
-            if agent_info:
-                mentions.append(f"@{agent_info['name']}")
-                target_agent_names.append(agent_info["name"])
-
-        # Build enriched evaluation content
-        eval_sections = []
-        for space_key in target_spaces:
-            prompt = _EVALUATION_PROMPTS.get(space_key, "")
-            eval_sections.append(
-                f"=== Fuer {space_key} ===\n{prompt}"
-            )
-
-        post_content = (
-            f"BUBBLE EVALUATION: {bubble_name}\n\n"
-            f"--- Bubble Content ---\n{content_text[:3000]}\n\n"
-        )
+        # Truncated content for each agent call
+        eval_content = content_text[:4000]
         if graph_summary:
-            post_content += f"--- Knowledge Graph ---\n{graph_summary}\n\n"
-        post_content += (
-            f"--- Evaluation Aufgabe ---\n"
-            f"Jeder Agent bewertet aus seiner Perspektive.\n"
-            f"Antwort-Format: JSON mit score (0-25), assessment, missing\n\n"
-            + "\n\n".join(eval_sections)
-            + f"\n\n{' '.join(mentions)}"
-        )
+            eval_content += f"\n\n=== Knowledge Graph ===\n{graph_summary}"
 
-        # Create post
-        post_data = minibook_client.create_post(
-            project_id=project_id,
-            content=post_content,
-            agent_name="vibemind_orchestrator",
-            post_type="evaluation",
-            title=f"[mirofish.evaluate] Bubble Readiness: {bubble_name}",
-        )
-        post_id = post_data.get("id", "")
+        # GPT-5+ uses max_completion_tokens, older models use max_tokens
+        token_param = {}
+        if model and model.startswith("gpt-"):
+            token_param["max_completion_tokens"] = 500
+        else:
+            token_param["max_tokens"] = 500
 
-        if not post_id:
-            raise RuntimeError("Minibook post creation failed")
+        for space_key in target_spaces:
+            agent_name = agent_label_map[space_key]
+            prompt = _EVALUATION_PROMPTS.get(space_key, "")
 
-        logger.info(f"mirofish.evaluate: posted to Minibook, post_id={post_id}, waiting for {len(target_agent_names)} agents")
-
-        # ── Step 4: Poll for responses (120s timeout) ──
-        deadline = time.time() + 120
-        agent_responses = {}
-
-        while time.time() < deadline and len(agent_responses) < len(target_agent_names):
             try:
-                comments = minibook_client.get_comments(post_id)
-                for comment in comments:
-                    agent = comment.get("agent_name", "") or comment.get("author", "")
-                    if agent in target_agent_names and agent not in agent_responses:
-                        agent_responses[agent] = comment.get("content", "")
-                        logger.info(f"mirofish.evaluate: {agent} responded ({len(agent_responses)}/{len(target_agent_names)})")
+                response = client_llm.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": eval_content},
+                    ],
+                    temperature=0.3,
+                    **token_param,
+                )
+                raw = response.choices[0].message.content or ""
+                agent_responses[agent_name] = raw
+                logger.info(f"mirofish.evaluate: {agent_name} responded ({len(agent_responses)}/5)")
             except Exception as e:
-                logger.warning(f"mirofish.evaluate: poll error: {e}")
+                logger.warning(f"mirofish.evaluate: {agent_name} LLM call failed: {e}")
+                agent_responses[agent_name] = ""
 
-            if len(agent_responses) < len(target_agent_names):
-                time.sleep(2)
+        target_agent_names = list(agent_label_map.values())
 
     except Exception as e:
-        logger.warning(f"mirofish.evaluate: Minibook unavailable ({e}), using single-agent fallback")
-
-        # ── Fallback: Single-agent LLM evaluation ──
+        logger.warning(f"mirofish.evaluate: Multi-agent eval failed ({e}), using single-agent fallback")
         return _evaluate_bubble_fallback(bubble_name, bubble, content_text, graph_summary, graph_id)
 
     # ── Step 5: Parse and aggregate scores ──
@@ -806,7 +771,7 @@ def evaluate_bubble_readiness(bubble_name: str) -> Dict[str, Any]:
 
     # ── Step 7: Auto-create missing items as ideas in the bubble ──
     created_ideas = []
-    if missing_items and prediction != "GO":
+    if missing_items:
         created_ideas = _create_missing_ideas(bubble.id, missing_items)
 
     report_text = _format_readiness_report(
@@ -847,12 +812,12 @@ def _get_llm_client():
         # Priority 1: OpenAI (GPT-5.4)
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key:
-            return OpenAI(api_key=openai_key), os.getenv("MIROFISH_EVAL_MODEL", "gpt-5.4")
+            return OpenAI(api_key=openai_key), get_model("mirofish_eval")
 
         # Priority 2: OpenRouter
         or_key = os.getenv("OPENROUTER_API_KEY")
         if or_key:
-            return OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1"), os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+            return OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1"), get_model("mirofish_openrouter")
     except ImportError:
         pass
     return None, None
@@ -971,7 +936,7 @@ def _evaluate_bubble_fallback(
 
     # Auto-create missing items as ideas in the bubble
     created_ideas = []
-    if missing_items and prediction != "GO":
+    if missing_items:
         created_ideas = _create_missing_ideas(bubble.id, missing_items)
 
     report_text = _format_readiness_report(

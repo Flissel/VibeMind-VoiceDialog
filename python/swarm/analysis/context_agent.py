@@ -119,11 +119,12 @@ class ContextAgent:
                 current_topic=context.current_topic or "Kein spezifisches Thema"
             )
 
+            from llm_config import token_kwargs
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=600,
+                **token_kwargs(self.model, 600),
             )
 
             content = response.choices[0].message.content.strip()

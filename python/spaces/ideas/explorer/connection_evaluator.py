@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 
 from .idea_node import IdeaNode, ConnectionType
+from llm_config import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +266,7 @@ REASONING: [Erklärung]"""
             # OpenAI-style client
             if hasattr(self.llm_client, 'chat'):
                 response = await self.llm_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=get_model("connection_eval"),
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.3,
                     max_tokens=300,

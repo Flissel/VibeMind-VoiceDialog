@@ -23,6 +23,8 @@ import uuid
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 
+from llm_config import token_kwargs
+
 from swarm.orchestrator.tool_definitions import (
     get_all_tools,
     TOOL_TO_EVENT_TYPE,
@@ -123,10 +125,8 @@ class ToolOrchestrator:
             model: Model to use (default: anthropic/claude-sonnet-4)
             use_tool_orchestrator: Override env var USE_TOOL_ORCHESTRATOR
         """
-        self.model = model or os.getenv(
-            "ORCHESTRATOR_MODEL",
-            "anthropic/claude-sonnet-4"
-        )
+        from llm_config import get_model
+        self.model = model or get_model("tool_orchestrator")
         self._client = None
         self._tools = get_all_tools()
         self._executors: Dict[str, Callable] = {}
@@ -352,7 +352,7 @@ class ToolOrchestrator:
                 tools=self._tools,
                 tool_choice="auto",
                 temperature=0.1,
-                max_tokens=1000,
+                **token_kwargs(self.model, 1000),
             )
 
             message = response.choices[0].message

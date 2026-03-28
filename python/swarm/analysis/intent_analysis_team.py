@@ -282,11 +282,12 @@ Antworte NUR mit JSON:
 {{"event_type": "...", "confidence": 0.0-1.0, "reasoning": "..."}}"""
 
         try:
+            from llm_config import token_kwargs
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=200,
+                **token_kwargs(self._model, 200),
             )
 
             import json

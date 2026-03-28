@@ -192,6 +192,47 @@ export interface PluginActionResponse {
   error?: string
 }
 
+// ── Models ──
+
+export interface ModelRoleConfig {
+  role: string
+  provider: string
+  model: string
+  max_tokens: number | null
+  description: string
+  group: string
+  locked?: boolean
+}
+
+export interface ProviderInfo {
+  name: string
+  base_url: string | null
+  api_key_env: string | null
+  has_key: boolean
+}
+
+export interface ModelsConfigResponse {
+  type: 'models_config'
+  providers: ProviderInfo[]
+  models: ModelRoleConfig[]
+  error?: string
+}
+
+export interface ModelUpdateResponse {
+  type: 'model_update_result'
+  success: boolean
+  role: string
+  error?: string
+}
+
+export interface ModelTestResponse {
+  type: 'model_test_result'
+  success: boolean
+  role: string
+  latency_ms?: number
+  error?: string
+}
+
 // ── Tab ──
 
-export type DashboardTab = 'schedule' | 'agents' | 'chat' | 'memory' | 'plugins'
+export type DashboardTab = 'schedule' | 'agents' | 'chat' | 'memory' | 'plugins' | 'models'

@@ -135,11 +135,12 @@ class ReasoningAgent:
         try:
             prompt = REASONING_PROMPT.format(user_input=user_input)
 
+            from llm_config import token_kwargs
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=800,
+                **token_kwargs(self.model, 800),
             )
 
             content = response.choices[0].message.content.strip()
@@ -246,7 +247,7 @@ Falls keine sinnvolle Alternative existiert, antworte:
                 model=self.model,
                 messages=[{"role": "user", "content": alternative_prompt}],
                 temperature=0.2,
-                max_tokens=300,
+                **token_kwargs(self.model, 300),
             )
 
             content = self._extract_json(response.choices[0].message.content.strip())

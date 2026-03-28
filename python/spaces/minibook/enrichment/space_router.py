@@ -184,11 +184,12 @@ class SpaceRouter:
                 context_summary=context_summary[:300] if context_summary else "Kein Kontext",
             )
 
+            from llm_config import token_kwargs
             response = await client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
                 temperature=0.1,
+                **token_kwargs(self._model, 200),
             )
 
             content = response.choices[0].message.content.strip()

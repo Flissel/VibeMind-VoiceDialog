@@ -22,6 +22,7 @@ from autogen_agentchat.messages import TextMessage
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from .agents import create_all_agents
+from llm_config import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def _resolve_llm_config():
 def _create_model_client() -> OpenAIChatCompletionClient:
     """Create the model client for agents. Prefers OpenAI, falls back to OpenRouter."""
     cfg = _resolve_llm_config()
-    model = os.getenv("N8N_GENERATOR_MODEL", "gpt-4o")
+    model = get_model("n8n_generator")
     if model.startswith("openai/"):
         model = model[len("openai/"):]
 
@@ -70,42 +71,59 @@ def _create_model_client() -> OpenAIChatCompletionClient:
         api_key=cfg["api_key"],
         base_url=cfg["base_url"],
         temperature=0.3,
+        model_info={
+            "vision": True,
+            "function_calling": True,
+            "json_output": True,
+            "family": "unknown",
+        },
     )
 
 
 def _create_selector_client() -> OpenAIChatCompletionClient:
     """Create a cheaper model client for the SelectorGroupChat's routing LLM."""
     cfg = _resolve_llm_config()
-    selector_model = "gpt-4o-mini"
-    # OpenRouter needs openai/ prefix for OpenAI models
-    if "openrouter" in cfg["base_url"]:
-        selector_model = "openai/gpt-4o-mini"
+    selector_model = get_model("n8n_selector")
 
     return OpenAIChatCompletionClient(
         model=selector_model,
         api_key=cfg["api_key"],
         base_url=cfg["base_url"],
         temperature=0.0,
+        model_info={
+            "vision": False,
+            "function_calling": True,
+            "json_output": True,
+            "family": "unknown",
+        },
     )
 
 
 SELECTOR_PROMPT = """Du bist der Koordinator eines n8n Workflow-Builder Teams.
-Waehle den naechsten Agenten basierend auf dem Gespraechsverlauf:
+Waehle den naechsten Agenten basierend auf dem Gespraechsverlauf.
 
-- workflow_architect: Wenn ein neuer Plan gebraucht wird oder der Plan ueberarbeitet werden muss
-- n8n_docs_expert: Wenn Node-Typen, Parameter oder Connections validiert werden muessen
-- workflow_builder: Wenn ein validierter Plan in JSON assembliert werden muss, oder JSON gefixt werden muss
-- workflow_tester: Wenn ein fertiges JSON deployed und getestet werden muss
-- ux_agent: Wenn der Workflow aus UX-Sicht geprueft werden soll (vor dem finalen Review)
-- workflow_reviewer: Wenn Tests bestanden sind und das finale Quality Review ansteht
+Agenten:
+- workflow_architect: Plant den Workflow (Nodes, Connections, Rollen)
+- n8n_docs_expert: Validiert Node-Typen, Parameter, Connection-Typen
+- workflow_builder: Assembliert valides n8n JSON aus dem Plan
+- workflow_tester: Deployed und testet den Workflow in n8n
+- ux_agent: Prueft UX (Naming, Greeting, Klarheit)
+- workflow_reviewer: Finales Quality-Gate, gibt WORKFLOW_APPROVED
 
-Typischer Ablauf:
-workflow_architect → n8n_docs_expert → workflow_builder → workflow_tester → ux_agent → workflow_reviewer
+PFLICHT-REIHENFOLGE (NIEMALS ueberspringen!):
+1. workflow_architect (Plan erstellen)
+2. n8n_docs_expert (Plan validieren)
+3. workflow_builder (JSON assemblieren)
+4. workflow_tester (Deploy + Test)
+5. ux_agent (UX Review)
+6. workflow_reviewer (Final Approval)
+
+Antworte NUR mit dem Namen des naechsten Agenten, z.B.: n8n_docs_expert
 
 Bei Fehlern zurueck zum passenden Agenten:
-- Deploy-Fehler (falsche Node-Typen) → n8n_docs_expert
-- JSON-Format-Fehler → workflow_builder
-- Test-Fehler (Workflow laeuft nicht) → workflow_builder oder workflow_architect
+- Deploy-Fehler → n8n_docs_expert
+- JSON-Fehler → workflow_builder
+- Test-Fehler → workflow_architect
 """
 
 

@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('vibemindDashboard', {
     ipcRenderer.invoke('clawport:get-conversation-history', { limit }),
 
   // ── n8n Workflows ──
+  openN8nEditor: (workflowId) =>
+    ipcRenderer.invoke('clawport:open-n8n-editor', { workflowId }),
   n8nStatus: () =>
     ipcRenderer.invoke('clawport:n8n-status'),
 
@@ -93,6 +95,16 @@ contextBridge.exposeInMainWorld('vibemindDashboard', {
 
   agentfarmRunResults: (runId) =>
     ipcRenderer.invoke('clawport:agentfarm-run-results', { runId }),
+
+  // ── Models Config ──
+  getModelsConfig: () =>
+    ipcRenderer.invoke('clawport:get-models-config'),
+
+  updateModelRole: (role, provider, model, maxTokens) =>
+    ipcRenderer.invoke('clawport:update-model-role', { role, provider, model, maxTokens }),
+
+  testModelConnection: (role) =>
+    ipcRenderer.invoke('clawport:test-model-connection', { role }),
 
   // ── Python message push events ──
   onPythonMessage: (callback) => {

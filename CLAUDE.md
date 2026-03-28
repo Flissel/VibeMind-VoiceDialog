@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Voice Provider** — OpenAI Realtime API (speech-to-speech, native function calling) via VoiceBridgeV2 async architecture. Rachel is the single voice interface agent.
 - **Intent Classification** — LLM-based classification of natural language to event types
-- **Swarm Backend** — 8 backend agents across 8 domain spaces execute tools
+- **Swarm Backend** — 13 backend agents across 15 domain spaces execute tools
 - **Electron UI** — 3D multiverse with bubbles (ideas) rendered via Three.js
 
 ## Quick Start
@@ -88,9 +88,9 @@ Rachel is the single voice interface agent (OpenAI Realtime). She receives user 
 
 **Key File:** `python/spaces/ideas/agents/rachel_agent.py`
 
-### Eleven Spaces (Domains)
+### Fifteen Spaces (Domains)
 
-VibeMind has 11 domain spaces, each with its own backend agent and Redis stream:
+VibeMind has 15 domain spaces, each with its own backend agent and Redis stream:
 
 | Space | Stream | Backend Agent | Event Prefix | File |
 | ----- | ------ | ------------- | ------------ | ---- |
@@ -103,7 +103,10 @@ VibeMind has 11 domain spaces, each with its own backend agent and Redis stream:
 | Minibook | `events:tasks:minibook` | MinibookBackendAgent | `minibook.*` | `python/spaces/minibook/agents/minibook_agent.py` |
 | Schedule | `events:tasks:schedule` | ScheduleBackendAgent | `schedule.*` | `python/spaces/schedule/agents/schedule_agent.py` |
 | N8n | `events:tasks:n8n` | N8nBackendAgent | `n8n.*` | `python/spaces/n8n/agents/n8n_agent.py` |
-| AgentFarm | `events:tasks:agentfarm` | AgentFarmAgent | `agentfarm.*` | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| AgentFarm | `events:tasks:agentfarm` | AgentFarmBackendAgent | `agentfarm.*` | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| Video | `events:tasks:video` | VideoBackendAgent | `video.*` | `python/spaces/video/agents/video_agent.py` |
+| MiroFish | `events:tasks:mirofish_pred` | MiroFishBackendAgent | `mirofish.*` | `python/spaces/mirofish/agents/mirofish_agent.py` |
+| Flowzen | via submodule | FlowzenAgent | `flowzen.*` | `python/spaces/flowzen/agents/flowzen_agent.py` |
 | Brain | — (standalone microservices) | — | — | `python/spaces/brain/` (Tahlamus submodule) |
 
 > **Note:** Shuttles (`python/spaces/shuttles/`) contains only the SWE Design submodule and has no dedicated backend agent. Shuttle events (`bubble.evaluate`, `bubble.promote`) are handled by BubblesAgent.

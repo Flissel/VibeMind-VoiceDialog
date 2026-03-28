@@ -12,10 +12,12 @@ import logging
 import os
 from typing import Dict, Any, List, Optional
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Defaults
-DEFAULT_MODEL = "gpt-4o-realtime-preview"
+DEFAULT_MODEL = get_model("voice")
 DEFAULT_VOICE = "alloy"
 DEFAULT_SAMPLE_RATE = 24000
 SAMPLE_RATE = DEFAULT_SAMPLE_RATE  # Alias for convenience
@@ -179,7 +181,7 @@ def create_session_config(
         "input_audio_format": "pcm16",
         "output_audio_format": "pcm16",
         "input_audio_transcription": {
-            "model": "whisper-1",
+            "model": get_model("transcription"),
         },
         "turn_detection": td_config,
         "tools": tools,

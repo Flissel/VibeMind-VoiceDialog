@@ -6,17 +6,26 @@ The Electron app is the desktop UI for VibeMind. It renders a 3D multiverse of b
 
 ```
 electron-app/
-├── main.js                     # Main process: Python spawning, IPC routing (64KB)
-├── preload.js                  # Context bridge for renderer security (12KB)
+├── main.js                     # Main process: Python spawning, IPC routing (137KB)
+├── preload.js                  # Context bridge for renderer security (14KB)
+├── agentfarm-manager.js        # AgentFarm BrowserView (Next.js dashboard)
+├── agentfarm-preload.js        # Preload for AgentFarm (team mgmt, video, n8n IPC)
+├── brain-manager.js            # Brain/Tahlamus BrowserView embedding
+├── clawport-manager.js         # ClawPort Dashboard BrowserView integration
+├── clawport-preload.js         # Preload script for ClawPort Dashboard
 ├── dashboard-manager.js        # Coding Engine Dashboard BrowserView integration
 ├── dashboard-preload.js        # Preload script for dashboard BrowserView
 ├── docker-manager.js           # Docker container management
+├── eyeterm-manager.js          # EyeTerm (eye tracking) BrowserView embedding
+├── flowzen-manager.js          # Flowzen diary BrowserView (Blaue Rose journal)
+├── flowzen-preload.js          # Preload for Flowzen diary (recommend, register)
+├── mirofish-manager.js         # MiroFish BrowserView (Vue frontend, localhost:3001)
 ├── port-allocator.js           # Dynamic port allocation for services
 ├── rowboat-manager.js          # Rowboat BrowserView embedding
 ├── rowboat-preload.js          # Preload script for Rowboat BrowserView
 ├── swe-design-manager.js       # Factory Space (SWE Design) BrowserView embedding
-├── clawport-manager.js         # ClawPort Dashboard BrowserView integration
-├── clawport-preload.js         # Preload script for ClawPort Dashboard
+├── video-manager.js            # Video Production BrowserView (React wizard UI)
+├── video-preload.js            # Preload for Video (tools, gallery, projects IPC)
 ├── dashboard/                  # ClawPort Dashboard (Vite + React)
 │   ├── package.json            # Dashboard dependencies (React 19, Vite 6)
 │   ├── vite.config.ts          # Vite build config (base: './')
@@ -59,7 +68,7 @@ The main process is the core of the Electron app (64KB). It handles:
 - **Python Backend Spawning** -- Launches the Python backend (`python/electron_backend.py`) as a child process, communicating via stdin/stdout JSON messages.
 - **IPC Routing** -- Routes messages between the renderer process and the Python backend.
 - **Window Management** -- Creates and manages the main BrowserWindow.
-- **BrowserView Integration** -- Manages embedded views for Coding Engine Dashboard, Rowboat, SWE Design, and ClawPort Dashboard. Views are mutually exclusive — showing one hides the others.
+- **BrowserView Integration** -- Manages 10 embedded views: AgentFarm, Brain, ClawPort, Dashboard, EyeTerm, Flowzen, MiroFish, Rowboat, SWE Design, and Video. Views are mutually exclusive — showing one hides the others.
 
 ### Python Communication Protocol
 
@@ -149,7 +158,7 @@ The dashboard provides 4 features accessible via tabs:
 | Tab | Feature | Python IPC Messages |
 |-----|---------|-------------------|
 | Schedule | APScheduler task management | `get_scheduled_tasks`, `update_task_status` |
-| Agents | 8 backend agent status cards | `get_agent_status` |
+| Agents | 13 backend agent status cards | `get_agent_status` |
 | Chat | Text input → IntentOrchestrator | `chat_text_input`, `get_conversation_history` |
 | Memory | Supermemory service overview | `get_memory_overview`, `search_memory`, `get_recent_memory` |
 

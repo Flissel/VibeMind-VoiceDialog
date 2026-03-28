@@ -11,6 +11,9 @@ const { BrowserView } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const _CP_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (ClawPort/Dashboard)
+function _cpLog(...a) { process.stdout.write(`${_CP_C}[ClawPortManager] ${a.join(' ')}${_RST}\n`); }
+
 class ClawPortManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -64,11 +67,11 @@ class ClawPortManager {
 
     // Load renderer
     if (this.isDev) {
-      console.log('[ClawPortManager] Loading from dev server:', process.env.CLAWPORT_DEV_URL);
+      _cpLog('Loading from dev server:', process.env.CLAWPORT_DEV_URL);
       this.clawportView.webContents.loadURL(process.env.CLAWPORT_DEV_URL);
     } else {
       const rendererPath = this._resolveRendererPath();
-      console.log('[ClawPortManager] Loading from file:', rendererPath);
+      _cpLog('Loading from file:', rendererPath);
       this.clawportView.webContents.loadFile(rendererPath);
     }
 
@@ -91,7 +94,7 @@ class ClawPortManager {
           status: 'ready',
         });
       }
-      console.log('[ClawPortManager] Dashboard loaded');
+      _cpLog('Dashboard loaded');
     });
 
     this.clawportView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -124,7 +127,7 @@ class ClawPortManager {
     this.mainWindow.setBrowserView(this.clawportView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[ClawPortManager] Dashboard shown');
+    _cpLog('Dashboard shown');
   }
 
   /**
@@ -135,7 +138,7 @@ class ClawPortManager {
 
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[ClawPortManager] Dashboard hidden');
+    _cpLog('Dashboard hidden');
   }
 
   /**

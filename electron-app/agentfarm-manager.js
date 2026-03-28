@@ -11,6 +11,9 @@ const { BrowserView } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
+function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
+
 class AgentFarmManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -64,11 +67,11 @@ class AgentFarmManager {
 
     // Load renderer
     if (this.isDev) {
-      console.log('[AgentFarmManager] Loading from dev server:', process.env.AGENTFARM_DEV_URL);
+      _afLog('Loading from dev server:', process.env.AGENTFARM_DEV_URL);
       this.agentfarmView.webContents.loadURL(process.env.AGENTFARM_DEV_URL);
     } else {
       const rendererPath = this._resolveRendererPath();
-      console.log('[AgentFarmManager] Loading from file:', rendererPath);
+      _afLog('Loading from file:', rendererPath);
       this.agentfarmView.webContents.loadFile(rendererPath);
     }
 
@@ -91,7 +94,7 @@ class AgentFarmManager {
           status: 'ready',
         });
       }
-      console.log('[AgentFarmManager] Agent Farm loaded');
+      _afLog('Agent Farm loaded');
     });
 
     this.agentfarmView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -124,7 +127,7 @@ class AgentFarmManager {
     this.mainWindow.setBrowserView(this.agentfarmView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[AgentFarmManager] Agent Farm shown');
+    _afLog('Agent Farm shown');
   }
 
   /**
@@ -135,7 +138,7 @@ class AgentFarmManager {
 
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[AgentFarmManager] Agent Farm hidden');
+    _afLog('Agent Farm hidden');
   }
 
   /**

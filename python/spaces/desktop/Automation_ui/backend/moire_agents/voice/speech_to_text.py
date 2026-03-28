@@ -89,10 +89,8 @@ class SpeechToText:
 
         # Set model based on backend
         if model is None:
-            if self.backend == STTBackend.GROQ_WHISPER:
-                self.model = "whisper-large-v3"
-            else:
-                self.model = "whisper-1"
+            from llm_config import get_model as _get_model
+            self.model = _get_model("desktop_stt")
         else:
             self.model = model
 

@@ -14,7 +14,7 @@ import logging
 import os
 import sys
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 # Add parent paths
@@ -82,12 +82,16 @@ Return ONLY a JSON object in this exact format:
 Always respond with valid JSON only, no additional text."""
 
 
+def _default_desktop_worker_model() -> str:
+    from llm_config import get_model as _get_model
+    return _get_model("desktop_worker")
+
 @dataclass
 class WorkerConfig:
     """Konfiguration für den Classification Worker."""
     worker_id: str
     host_address: str = "localhost:50051"
-    model: str = "google/gemini-2.0-flash-001"
+    model: str = field(default_factory=_default_desktop_worker_model)
     max_concurrent: int = 5
     timeout_seconds: int = 10
     use_dynamic_categories: bool = True  # NEU: Dynamische Kategorien
@@ -494,8 +498,11 @@ if HAS_AUTOGEN:
         AutoGen 0.4 gRPC Worker Agent für Classification.
         """
         
-        def __init__(self, model: str = "google/gemini-2.0-flash-001"):
+        def __init__(self, model: str = None):
             super().__init__()
+            if model is None:
+                from llm_config import get_model as _get_model
+                model = _get_model("desktop_worker")
             self._worker = ClassificationWorker(WorkerConfig(
                 worker_id=f"agent_{id(self)}",
                 model=model,

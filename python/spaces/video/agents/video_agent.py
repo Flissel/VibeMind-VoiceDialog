@@ -28,7 +28,7 @@ class VideoBackendAgent(BaseBackendAgent):
     - video.demo_build:     Build demo video from config
     - video.lipsync:        Run lip sync (MuseTalk)
     - video.lipsync_analyze: Quality analysis on lip sync
-    - video.voice_clone:    Clone team voices (ElevenLabs)
+    - video.voice_clone:    Extract reference audio (Chatterbox, local)
     - video.voice_tts:      Generate TTS voiceover
     """
 
@@ -43,6 +43,7 @@ class VideoBackendAgent(BaseBackendAgent):
         "video.lipsync_analyze": "lipsync_analyze",
         "video.voice_clone":     "voice_clone",
         "video.voice_tts":       "voice_tts",
+        "video.publish":         "publish_videos_to_rowboat",
     }
 
     PARAM_MAPPING: Dict[str, Dict[str, str]] = {
@@ -93,6 +94,7 @@ class VideoBackendAgent(BaseBackendAgent):
                 lipsync_analyze,
                 voice_clone,
                 voice_tts,
+                publish_videos_to_rowboat,
             )
 
             tools.update({
@@ -106,6 +108,7 @@ class VideoBackendAgent(BaseBackendAgent):
                 "lipsync_analyze": lipsync_analyze,
                 "voice_clone": voice_clone,
                 "voice_tts": voice_tts,
+                "publish_videos_to_rowboat": publish_videos_to_rowboat,
             })
             logger.info(f"{self.name}: Loaded {len(tools)} tools")
 

@@ -25,11 +25,11 @@ Rather than offering single-purpose AI capabilities, Vibemind's Desktop Assistan
 - **Context Layer**: Supermemory-based persistent memory system supporting all spaces
 - **Infrastructure Stack**: DSGVO-compliant deployment options (local Ollama, cloud, custom endpoints)
 
-> **Hinweis:** 10 Spaces haben dedizierte Backend-Agents (Bubbles, Ideas, Coding, Desktop, Roarboot, Research, Minibook, Schedule, N8n, Video). Brain läuft als standalone Microservices. AgentFarm hat nur eine Electron-UI-Shell.
+> **Hinweis:** 13 Spaces haben dedizierte Backend-Agents (Bubbles, Ideas, Coding, Desktop, Roarboot, Research, Minibook, Schedule, N8n, AgentFarm, Video, MiroFish, Flowzen). Brain läuft als standalone Microservices.
 
 ## Current Status
 
-- **Core Architecture**: Operational with 12 domain spaces and 10 dedicated backend agents
+- **Core Architecture**: Operational with 15 domain spaces and 13 dedicated backend agents
 - **Orchestration**: Multi-space routing and coordination system functional for standard workflows
 - **UI Integration**: 3D Multiverse (Three.js) with 9 visual spaces; ClawPort React Dashboard (5 Tabs: Schedule, Agents, Chat, Memory, Plugins)
 - **Voice Interface**: Rachel as single voice agent routing through IntentOrchestrator

@@ -18,6 +18,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field
 
+# Ensure python/ is on sys.path so llm_config and other modules are importable
+_PYTHON_DIR = str(Path(__file__).resolve().parent.parent)
+if _PYTHON_DIR not in sys.path:
+    sys.path.insert(0, _PYTHON_DIR)
+
 # Load .env from project root (two levels up from python/debug/)
 try:
     from dotenv import load_dotenv
@@ -531,31 +536,32 @@ Recent errors:
         analyze_tool = FunctionTool(analyze_logs, description="Analyze debug logs for patterns or issues")
         stats_tool = FunctionTool(get_stats, description="Get current debugging statistics")
 
-        # Create model client: prefer OpenRouter, fallback to OpenAI
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        openai_key = os.getenv("OPENAI_API_KEY", "")
+        # Create model client via centralized LLM config
+        from llm_config import get_model, get_model_config
+        cfg = get_model_config("desktop_orchestrator")
+        model_name = cfg["model"]
+        api_key = cfg["api_key"]
+        base_url = cfg["base_url"]
 
-        if openrouter_key:
-            model_client = OpenAIChatCompletionClient(
-                model="openai/gpt-4o-mini",
-                api_key=openrouter_key,
-                base_url="https://openrouter.ai/api/v1",
-                model_info={
-                    "vision": False,
-                    "function_calling": True,
-                    "json_output": True,
-                    "structured_output": False,
-                    "family": "gpt-4o-mini",
-                },
-            )
-        elif openai_key:
-            model_client = OpenAIChatCompletionClient(
-                model="gpt-4o-mini",
-                api_key=openai_key,
-            )
-        else:
-            print("WARNING: No API key found for debug analysis (set OPENROUTER_API_KEY or OPENAI_API_KEY)")
-            return
+        if not api_key:
+            # Fallback: try OpenRouter
+            api_key = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+            if not api_key:
+                print("WARNING: No API key found for debug analysis (set OPENROUTER_API_KEY or OPENAI_API_KEY)")
+                return
+
+        client_kwargs = {"model": model_name, "api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+            client_kwargs["model_info"] = {
+                "vision": False,
+                "function_calling": True,
+                "json_output": True,
+                "structured_output": False,
+                "family": model_name.split("/")[-1] if "/" in model_name else model_name,
+            }
+
+        model_client = OpenAIChatCompletionClient(**client_kwargs)
         
         self.autogen_agent = AssistantAgent(
             name="ElectronDebugger",
@@ -810,14 +816,18 @@ When errors occur, analyze them and suggest fixes."""
         if node_space:
             color = SPACE_ANSI.get(node_space, SPACE_ANSI["system"])
             tag = SPACE_TAGS.get(node_space, "[SYSTEM]").ljust(10)
-            level_str = "ERROR" if msg_type in ("error",) else "INFO"
+            level_str = "ERROR" if msg_type == "error" else \
+                        "WARNING" if msg_type in ("warning", "warn") else "INFO"
             level_color = LEVEL_ANSI.get(level_str, "")
-            print(f"{color}{tag} {level_str.ljust(5)} {message}{RST}")
+            print(f"{color}{tag} {level_color}{level_str.ljust(5)}{RST} {color}{message}{RST}")
             self.stats["console_logs"] += 1
             self.logger.log(f"node:{node_space}", level_str.lower(), message, silent=True)
-            if msg_type == "error":
+            if level_str == "ERROR":
                 self.stats["errors"] += 1
                 self._buffer_issue("error", message, f"node:{node_space}")
+            elif level_str == "WARNING":
+                self.stats["warnings"] += 1
+                self._buffer_issue("warning", message, f"node:{node_space}")
             return
 
         # ── Fallback: everything else gets [SYSTEM] space coloring ──
@@ -859,8 +869,14 @@ When errors occur, analyze them and suggest fixes."""
         level = entry.get("level", "info")
         text = entry.get("text", "")
         source = entry.get("source", "")
-        
+
         self.logger.log(f"log:{source}", level, text, entry)
+        if level == "error":
+            self.stats["errors"] += 1
+            self._buffer_issue("error", text, f"log:{source}")
+        elif level == "warning":
+            self.stats["warnings"] += 1
+            self._buffer_issue("warning", text, f"log:{source}")
     
     async def _on_network_request(self, params: Dict):
         """Handle network requests."""

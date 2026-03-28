@@ -50,7 +50,10 @@ class SocietyDesktopAgent:
     - pyautogui für Desktop-Automation
     """
     
-    def __init__(self, model_name: str = "gpt-4o"):
+    def __init__(self, model_name: str = None):
+        if model_name is None:
+            from llm_config import get_model as _get_model
+            model_name = _get_model("desktop_reasoning")
         self.model_name = model_name
         
         # Clients
@@ -220,8 +223,8 @@ Beispiele:
     parser.add_argument(
         "--model", "-m",
         type=str,
-        default="gpt-4o",
-        help="Model für die Agents (default: gpt-4o)"
+        default=None,
+        help="Model für die Agents (default: from llm_models.yml desktop_reasoning)"
     )
     parser.add_argument(
         "--max-rounds", "-r",

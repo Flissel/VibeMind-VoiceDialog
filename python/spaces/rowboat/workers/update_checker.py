@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 # Default: check every 6 hours
 DEFAULT_CHECK_INTERVAL = 6 * 60 * 60
 
-# GitHub API endpoint
-GITHUB_RELEASES_URL = "https://api.github.com/repos/rowboatlabs/rowboat/releases/latest"
+# GitHub API endpoint (fetch all releases to include pre-releases)
+GITHUB_RELEASES_URL = "https://api.github.com/repos/rowboatlabs/rowboat/releases?per_page=1"
 
 
 class RowboatUpdateChecker:
@@ -142,13 +142,16 @@ class RowboatUpdateChecker:
                 },
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
+                raw = json.loads(resp.read().decode())
+                # API returns a list (all releases incl. pre-releases)
+                data = raw[0] if isinstance(raw, list) and raw else raw
                 return {
                     "tag_name": data.get("tag_name", ""),
                     "name": data.get("name", ""),
                     "html_url": data.get("html_url", ""),
                     "published_at": data.get("published_at", ""),
                     "body": data.get("body", "")[:500],  # Truncate changelog
+                    "prerelease": data.get("prerelease", False),
                 }
         except urllib.error.HTTPError as e:
             logger.warning(f"[UpdateChecker] GitHub API error: {e.code}")
@@ -197,70 +200,46 @@ class RowboatUpdateChecker:
 
     def _auto_pull_update(self) -> Dict[str, Any]:
         """
-        Auto-pull latest changes: stash local changes, pull, restore.
+        Auto-pull latest release: fetch tags, checkout the target tag.
+
+        Submodules run in detached HEAD, so git pull doesn't work.
+        Instead: fetch → checkout tag.
 
         Returns:
             Dict with keys: success, old_version, new_version, error
         """
         old_version = self._current_version or "unknown"
-        stashed = False
+        target_tag = self._latest_version
+
+        if not target_tag:
+            return {"success": False, "old_version": old_version,
+                    "new_version": old_version, "error": "No target version"}
 
         try:
-            # 1. Check for local changes
-            status = self._run_git("status", "--porcelain", timeout=10)
-            has_changes = bool(status.stdout.strip())
-
-            # 2. Stash if dirty
-            if has_changes:
-                logger.info("[UpdateChecker] Stashing local changes...")
-                stash_result = self._run_git(
-                    "stash", "push", "-m", "auto-pull before update", "--include-untracked"
-                )
-                if stash_result.returncode != 0:
-                    return {"success": False, "old_version": old_version,
-                            "new_version": old_version, "error": f"Stash failed: {stash_result.stderr.strip()}"}
-                stashed = True
-
-            # 3. Pull
-            logger.info("[UpdateChecker] Pulling latest from origin/main...")
-            pull_result = self._run_git("pull", "origin", "main", timeout=30)
-            if pull_result.returncode != 0:
-                # Restore stash on failure
-                if stashed:
-                    self._run_git("stash", "pop")
+            # 1. Fetch latest tags
+            logger.info("[UpdateChecker] Fetching tags from origin...")
+            fetch_result = self._run_git("fetch", "--tags", timeout=30)
+            if fetch_result.returncode != 0:
                 return {"success": False, "old_version": old_version,
-                        "new_version": old_version, "error": f"Pull failed: {pull_result.stderr.strip()}"}
+                        "new_version": old_version, "error": f"Fetch failed: {fetch_result.stderr.strip()}"}
 
-            # 4. Restore stash
-            if stashed:
-                logger.info("[UpdateChecker] Restoring local changes...")
-                pop_result = self._run_git("stash", "pop")
-                if pop_result.returncode != 0:
-                    conflict_msg = pop_result.stderr.strip()
-                    logger.warning(f"[UpdateChecker] Stash pop had conflicts: {conflict_msg}")
-                    self._send_message({
-                        "type": "rowboat_update_error",
-                        "error": f"Stash pop conflict after update: {conflict_msg}",
-                        "details": "Local changes conflicted with the pulled update. Manual resolution may be needed.",
-                    })
+            # 2. Checkout the target tag (detached HEAD)
+            logger.info(f"[UpdateChecker] Checking out {target_tag}...")
+            checkout_result = self._run_git("checkout", target_tag, timeout=15)
+            if checkout_result.returncode != 0:
+                return {"success": False, "old_version": old_version,
+                        "new_version": old_version, "error": f"Checkout failed: {checkout_result.stderr.strip()}"}
 
-            # 5. Get new version
-            new_version = self._get_current_version() or "unknown"
-            logger.info(f"[UpdateChecker] Auto-pull complete: {old_version} -> {new_version}")
+            # 3. Verify
+            new_version = self._get_current_version() or target_tag
+            logger.info(f"[UpdateChecker] Auto-update complete: {old_version} -> {new_version}")
 
             return {"success": True, "old_version": old_version, "new_version": new_version, "error": None}
 
         except subprocess.TimeoutExpired:
-            if stashed:
-                self._run_git("stash", "pop")
             return {"success": False, "old_version": old_version,
                     "new_version": old_version, "error": "Git operation timed out"}
         except Exception as e:
-            if stashed:
-                try:
-                    self._run_git("stash", "pop")
-                except Exception:
-                    pass
             return {"success": False, "old_version": old_version,
                     "new_version": old_version, "error": str(e)}
 

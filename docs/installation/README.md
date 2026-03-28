@@ -25,7 +25,7 @@ cd electron-app && npm start
 | Mode | What You Need | Features |
 |------|--------------|----------|
 | **Minimal** | Python 3.11+, Node 18+, OpenAI key | Voice, Ideas space, basic intent routing |
-| **Full** | + Redis, Supermemory key, submodules | All 8 spaces, memory, async mode, coding engine |
+| **Full** | + Redis, Supermemory key, submodules | All 15 spaces, memory, async mode, coding engine |
 
 Set `FORCE_SYNC_MODE=true` in `.env` for minimal mode (no Redis required).
 

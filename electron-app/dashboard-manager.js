@@ -8,6 +8,9 @@
 const { BrowserView } = require('electron');
 const path = require('path');
 
+const _DM_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (Dashboard)
+function _dmLog(...a) { process.stdout.write(`${_DM_C}[DashboardManager] ${a.join(' ')}${_RST}\n`); }
+
 class DashboardManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -52,10 +55,10 @@ class DashboardManager {
 
     // Load the dashboard
     if (this.isDev) {
-      console.log('[DashboardManager] Loading from dev server:', process.env.DASHBOARD_DEV_URL);
+      _dmLog('Loading from dev server:', process.env.DASHBOARD_DEV_URL);
       this.dashboardView.webContents.loadURL(process.env.DASHBOARD_DEV_URL);
     } else {
-      console.log('[DashboardManager] Loading from file:', this.dashboardPath);
+      _dmLog('Loading from file:', this.dashboardPath);
       this.dashboardView.webContents.loadFile(this.dashboardPath);
     }
 
@@ -88,7 +91,7 @@ class DashboardManager {
     this.updateBounds();
 
     this.isVisible = true;
-    console.log('[DashboardManager] Dashboard shown');
+    _dmLog('Dashboard shown');
   }
 
   /**
@@ -103,7 +106,7 @@ class DashboardManager {
     this.mainWindow.setBrowserView(null);
 
     this.isVisible = false;
-    console.log('[DashboardManager] Dashboard hidden');
+    _dmLog('Dashboard hidden');
   }
 
   /**

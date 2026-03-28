@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import type { ProjectInfo } from '../types'
 import { useProjects, usePythonMessages } from '../hooks/useIPC'
 
+const api = typeof window !== 'undefined' ? (window as any).vibemindAgentFarm : null
+
 /* ── Progress stage definitions (matching Coding Engine) ── */
 const STAGES = [
   { name: 'Analyzing Requirements', threshold: 10 },
@@ -229,6 +231,112 @@ function ProjectCard({
   )
 }
 
+/* ── Pipeline Runs from Minibook ── */
+interface PipelineRun {
+  id: string
+  name: string
+  post_count: number
+  last_agent?: string
+  last_title?: string
+}
+
+function PipelineRunsSection() {
+  const [runs, setRuns] = useState<PipelineRun[]>([])
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const refresh = useCallback(async () => {
+    if (!api?.getPipelineRuns) return
+    setLoading(true)
+    try {
+      const result = await api.getPipelineRuns()
+      if (result?.success && result.runs) {
+        setRuns(result.runs)
+      }
+    } catch { /* minibook not reachable */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  return (
+    <div style={{
+      marginBottom: 'var(--space-4)',
+      background: 'var(--bg-secondary)',
+      border: '1px solid var(--separator)',
+      borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-3)',
+    }}>
+      <div
+        onClick={() => { setExpanded(!expanded); if (!expanded) refresh() }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+      >
+        <span style={{
+          fontSize: 'var(--text-footnote)',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+        }}>
+          Pipeline Runs {loading ? '...' : `(${runs.length})`}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+          {expanded ? '▲' : '▼'}
+        </span>
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+          {loading && <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)' }}>Lade Pipeline Runs von Minibook...</span>}
+          {!loading && runs.length === 0 && (
+            <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-tertiary)' }}>
+              Keine Pipeline Runs gefunden. Minibook auf localhost:3480 erreichbar?
+            </span>
+          )}
+          {runs.map(run => (
+            <div key={run.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: 'var(--space-2) var(--space-3)',
+              borderRadius: 'var(--radius-sm)',
+              background: run.post_count > 5 ? 'var(--accent-fill)' : 'transparent',
+            }}>
+              <div>
+                <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-primary)' }}>
+                  {run.name}
+                </span>
+                {run.last_agent && (
+                  <span style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                    [{run.last_agent}] {run.last_title}
+                  </span>
+                )}
+              </div>
+              <span style={{
+                fontSize: 'var(--text-caption2)',
+                color: run.post_count > 5 ? 'var(--system-green)' : 'var(--text-tertiary)',
+                fontWeight: 600,
+              }}>
+                {run.post_count} posts
+              </span>
+            </div>
+          ))}
+          <button
+            onClick={() => window.open('http://localhost:3481/dashboard', '_blank')}
+            style={{
+              marginTop: 'var(--space-2)',
+              border: '1px solid var(--separator)',
+              background: 'var(--fill-tertiary)',
+              color: 'var(--text-secondary)',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontSize: 'var(--text-caption1)',
+            }}
+          >
+            Open Minibook Dashboard
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Main component ── */
 export function ProjectProgress() {
   const { data, loading, error, refresh } = useProjects()
@@ -284,17 +392,18 @@ export function ProjectProgress() {
     )
   }
 
-  if (projects.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--text-tertiary)' }}>
-        <span style={{ fontSize: 32 }}>&#128187;</span>
-        <span style={{ fontSize: 'var(--text-footnote)' }}>No projects yet</span>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex h-full" style={{ gap: 'var(--space-4)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Pipeline Runs from Minibook */}
+      <PipelineRunsSection />
+
+    {projects.length === 0 ? (
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1, color: 'var(--text-tertiary)' }}>
+        <span style={{ fontSize: 32 }}>&#128187;</span>
+        <span style={{ fontSize: 'var(--text-footnote)' }}>No Coding Engine projects yet</span>
+      </div>
+    ) : (
+    <div className="flex" style={{ gap: 'var(--space-4)', flex: 1, overflow: 'hidden' }}>
       {/* Project list sidebar */}
       <div style={{
         width: 220,
@@ -416,6 +525,8 @@ export function ProjectProgress() {
           </div>
         )}
       </div>
+    </div>
+    )}
     </div>
   )
 }

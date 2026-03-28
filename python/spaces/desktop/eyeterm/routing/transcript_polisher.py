@@ -33,9 +33,12 @@ class TranscriptPolisher:
 
     def __init__(
         self,
-        model: str = "openai/gpt-4o-mini",
+        model: str = None,
         max_workers: int = 1,
     ) -> None:
+        if model is None:
+            from llm_config import get_model as _get_model
+            model = _get_model("desktop_orchestrator")
         self._model = model
         self._api_key = os.environ.get("OPENROUTER_API_KEY", "")
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="polisher")

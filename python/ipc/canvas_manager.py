@@ -81,7 +81,7 @@ class CanvasManager:
 
         try:
             import math
-            ideas = self.backend.ideas_repo.list(limit=50, order_by="created_at DESC")
+            ideas = self.backend.ideas_repo.list_top_level(limit=50, order_by="created_at DESC")
 
             # Color palette for bubbles
             colors = [0x66aaff, 0xff66aa, 0x66ffaa, 0xffcc66, 0xcc66ff,
@@ -149,6 +149,23 @@ class CanvasManager:
                 self.backend.bubble_id_map[idea.id] = bubble.id
                 electron_backend._bubble_id_map[idea.id] = bubble.id  # Sync module-level
                 self.backend.next_bubble_id += 1
+
+                # Broadcast to Electron renderer so 3D bubble appears in Ideas Space
+                try:
+                    self.send_message({
+                        "type": "node_added",
+                        "node": {
+                            "id": idea.id,
+                            "title": idea.title,
+                            "x": x, "y": y, "z": z,
+                            "color": colors[i % len(colors)],
+                            "radius": 0.6 + (idea.score / 200),
+                            "node_type": "bubble",
+                            "description": (idea.description or "")[:200],
+                        }
+                    })
+                except Exception as e:
+                    debug_log(f"Failed to broadcast bubble '{idea.title}': {e}")
 
             logger.info(f"Loaded {len(ideas)} bubbles from database")
 
@@ -368,9 +385,56 @@ class CanvasManager:
 
                         bubble_nodes.append(node)
 
-                logger.info(f"Loaded {len(bubble_nodes)} nodes for bubble {db_bubble_id}")
+                logger.info(f"Loaded {len(bubble_nodes)} canvas nodes for bubble {db_bubble_id}")
             except Exception as e:
                 logger.warning(f"Failed to load nodes from database: {e}")
+
+        # Also load child ideas (ideas with parent_id == db_bubble_id)
+        if self.backend.ideas_repo and db_bubble_id:
+            try:
+                import math
+                all_ideas = self.backend.ideas_repo.list(limit=200)
+                child_ideas = [i for i in all_ideas if i.parent_id == db_bubble_id]
+                for ci, child in enumerate(child_ideas):
+                    # Check if already loaded as canvas_node
+                    already_loaded = any(
+                        n.get("content", {}).get("title") == child.title
+                        for n in bubble_nodes
+                    )
+                    if already_loaded:
+                        continue
+
+                    # Generate a stable local ID from child idea UUID
+                    if child.id not in self.backend.db_id_map:
+                        local_id = self.backend.next_node_id
+                        self.backend.next_node_id += 1
+                        self.backend.db_id_map[child.id] = local_id
+                        self.backend.node_id_map[local_id] = child.id
+                    else:
+                        local_id = self.backend.db_id_map[child.id]
+
+                    # Arrange in a circle
+                    angle = ci * (2 * math.pi / max(len(child_ideas), 1))
+                    radius = 250
+                    cx = 400 + math.cos(angle) * radius
+                    cy = 300 + math.sin(angle) * radius
+
+                    node = {
+                        "id": local_id,
+                        "type": "idea",
+                        "position": {"x": cx, "y": cy},
+                        "content": {
+                            "title": child.title or "",
+                            "text": child.description or "",
+                        },
+                        "connections": []
+                    }
+                    bubble_nodes.append(node)
+
+                if child_ideas:
+                    logger.info(f"Loaded {len(child_ideas)} child ideas for bubble {db_bubble_id}")
+            except Exception as e:
+                logger.warning(f"Failed to load child ideas: {e}")
 
         # Update in-memory content
         self.backend.bubbles[bubble_id].content = bubble_nodes

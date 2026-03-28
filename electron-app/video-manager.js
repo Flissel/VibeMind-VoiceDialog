@@ -11,6 +11,9 @@ const { BrowserView } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const _VD_C = '\x1b[36m', _RST = '\x1b[0m'; // Cyan (Video)
+function _vdLog(...a) { process.stdout.write(`${_VD_C}[VideoManager] ${a.join(' ')}${_RST}\n`); }
+
 class VideoManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -54,11 +57,12 @@ class VideoManager {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
+        webSecurity: false,  // Allow file:// URLs for local video playback
       },
     });
 
     const rendererPath = this._resolveRendererPath();
-    console.log('[VideoManager] Loading from file:', rendererPath);
+    _vdLog('Loading from file:', rendererPath);
     this.videoView.webContents.loadFile(rendererPath);
 
     // Open DevTools in development
@@ -73,7 +77,7 @@ class VideoManager {
     });
 
     this.videoView.webContents.on('did-finish-load', () => {
-      console.log('[VideoManager] Video UI loaded');
+      _vdLog('Video UI loaded');
     });
 
     this.videoView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -90,14 +94,14 @@ class VideoManager {
     this.mainWindow.setBrowserView(this.videoView);
     this.updateBounds();
     this.isVisible = true;
-    console.log('[VideoManager] Video shown');
+    _vdLog('Video shown');
   }
 
   hide() {
     if (!this.mainWindow || !this.videoView) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    console.log('[VideoManager] Video hidden');
+    _vdLog('Video hidden');
   }
 
   toggle() {

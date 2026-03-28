@@ -111,10 +111,11 @@ def configure_agent() -> bool:
         return False
 
     try:
+        from llm_config import get_model
         # Register agent
         result = subprocess.run(
             ["openclaw", "agents", "add", "agentfarm-orchestrator",
-             "--model", "openai/gpt-5.4"],
+             "--model", get_model("agentfarm")],
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:

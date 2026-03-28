@@ -440,9 +440,10 @@ Return JSON array:
 """
 
         try:
+            from llm_config import get_model as _get_model
             response = await self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                model="anthropic/claude-sonnet-4-20250514",
+                model=_get_model("desktop_reasoning"),
                 temperature=0.3,
                 max_tokens=2000
             )
@@ -612,8 +613,9 @@ Return JSON array:
 
         logger.info("Calling Claude API for task decomposition...")
 
+        from llm_config import get_model as _get_model
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=_get_model("desktop_reasoning"),
             max_tokens=4096,
             messages=[
                 {"role": "user", "content": prompt}

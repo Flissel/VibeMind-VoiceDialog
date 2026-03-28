@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import type { AgentFarmTab } from './types'
 import { ProjectProgress } from './features/ProjectProgress'
+import { TeamRunner } from './features/TeamRunner'
 import { WorkflowBuilder } from './features/WorkflowBuilder'
 
 const SUB_TABS: { key: AgentFarmTab; label: string }[] = [
-  { key: 'autogen', label: 'Autogen' },
+  { key: 'autogen', label: 'Pipeline' },
+  { key: 'teams', label: 'Teams' },
   { key: 'n8n', label: 'n8n' },
 ]
 
@@ -113,6 +115,7 @@ export default function App() {
           style={{ padding: 'var(--space-4)' }}
         >
           {activeTab === 'autogen' && <ProjectProgress />}
+          {activeTab === 'teams' && <TeamRunner />}
           {activeTab === 'n8n' && <WorkflowBuilder />}
         </div>
       </div>

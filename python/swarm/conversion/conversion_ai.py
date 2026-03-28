@@ -241,11 +241,12 @@ Das Ergebnis sollte:
 Antworte NUR mit dem formatierten Text, keine Erklaerungen."""
 
         try:
+            from llm_config import token_kwargs
             response = self.client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=200,
+                **token_kwargs(self._model, 200),
             )
 
             formatted = response.choices[0].message.content.strip()
@@ -281,7 +282,7 @@ Stelle dich kurz (1-2 Saetze) vor. Sei freundlich aber nicht uebertrieben enthus
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.5,
-                max_tokens=100,
+                **token_kwargs(self._model, 100),
             )
 
             return response.choices[0].message.content.strip()

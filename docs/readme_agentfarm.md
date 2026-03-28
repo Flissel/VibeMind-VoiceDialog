@@ -1,22 +1,52 @@
 # AgentFarm.Space
 
-**Konzept-Framework für schnelles Agent-Building mit AutoGen und N8n — Design erfolgt in Rowboat.Space oder Ideas.Space.**
+**Multi-Agent-Orchestrierung mit AutoGen 0.4 — Team-Erstellung, asynchrone Ausführung, MCP-Server und Hybrid-Pipeline.**
 
 ## Overview
 
-AgentFarm.Space ist darauf ausgelegt, Usern zu ermöglichen, schnell eigene Agents in AutoGen oder N8n zu bauen. Es handelt sich um ein Konzept-Framework — die eigentliche Agent-Konzeption und das Design finden in Rowboat.Space (Business-Daten & Kontext) oder Ideas.Space (kreative Ideation) statt. AgentFarm stellt die Ausführungsumgebung und Orchestrierungsschicht bereit. Aktuell existiert eine Electron-UI-Shell; die zugrunde liegenden Technologien (Microsoft AutoGen, N8n) sind in anderen Spaces implementiert.
+AgentFarm.Space erstellt und orchestriert konfigurierbare Multi-Agent-Teams via AutoGen 0.4. Teams führen kollaborative Tasks aus (Code-Generierung, Research, Dokumentation) mit Echtzeit-Progress-Broadcast an Electron. Der Space bietet zusätzlich einen MCP-Server für Claude-Integration und einen Hybrid-Pipeline-Orchestrator für Multi-Space-Kollaboration via Minibook.
 
 ## Aktueller Implementierungsstand
 
 | Komponente | Status | Ort |
 |-----------|--------|-----|
+| Backend-Agent | **Implementiert** | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| Tool Functions (8 Tools) | **Implementiert** | `python/spaces/autogen/tools/agentfarm_tools.py` (510 Zeilen) |
+| TeamRunner (async AutoGen) | **Implementiert** | `python/spaces/autogen/runner/team_runner.py` |
+| MCP Server | **Implementiert** | `python/spaces/autogen/mcp_server/vibemind_mcp.py` |
+| Hybrid Pipeline | **Implementiert** | `python/spaces/autogen/orchestrator/hybrid_pipeline.py` |
+| OpenClaw Bridge | **Implementiert** | `python/spaces/autogen/orchestrator/openclaw_bridge.py` |
 | Electron UI-Shell | Implementiert | `electron-app/agentfarm-manager.js`, `electron-app/agentfarm/` |
-| React Dashboard | Implementiert | `electron-app/agentfarm/dist/index.html` |
+| Next.js Dashboard (AgentFarm-UI) | Implementiert | `electron-app/agentfarm-ui/` |
 | ClawPort Dashboard-Tab | Implementiert | `electron-app/dashboard/src/features/AgentFarm.tsx` |
-| ProjectProgress | Implementiert | `electron-app/dashboard/src/features/ProjectProgress.tsx` |
-| WorkflowBuilder | Implementiert | `electron-app/dashboard/src/features/WorkflowBuilder.tsx` |
-| Backend-Agent | **Nicht vorhanden** | Kein Eintrag in `python/swarm/backend_agents/__init__.py` |
-| Python Space-Verzeichnis | **Nicht vorhanden** | `python/spaces/autogen/` existiert aber ist leer |
+
+### Backend Agent
+
+**Datei:** `python/spaces/autogen/agents/agentfarm_agent.py`
+**Klasse:** `AgentFarmBackendAgent`
+**Stream:** `events:tasks:agentfarm`
+
+### Events (8)
+
+| Event | Tool | Beschreibung |
+|-------|------|-------------|
+| `agentfarm.create_team` | `create_team` | Team aus Template oder Config erstellen |
+| `agentfarm.run` | `run_team` | Async Team-Task-Ausführung starten |
+| `agentfarm.status` | `get_farm_status` | Übersicht aller Teams und aktiver Runs |
+| `agentfarm.list_teams` | `list_teams` | Registrierte Teams auflisten |
+| `agentfarm.stop` | `stop_run` | Laufendes Team abbrechen |
+| `agentfarm.results` | `get_run_results` | Ergebnisse von abgeschlossenem/laufendem Team |
+| `agentfarm.list_templates` | `list_templates` | Template-Configs aus Submodule scannen |
+| `agentfarm.collaborate` | `start_collaboration` | Multi-Space-Kollaboration via Minibook |
+
+### Parameter Mapping (Deutsch → Englisch)
+
+| Event | Mapping |
+|-------|---------|
+| `agentfarm.create_team` | vorlage/template → template_id, name → team_name |
+| `agentfarm.run` | aufgabe/beschreibung/text → task, team → team_id |
+| `agentfarm.stop` | run → run_id |
+| `agentfarm.results` | run → run_id |
 
 ### ClawPort Dashboard Integration
 
@@ -27,45 +57,46 @@ AgentFarm hat einen eigenen Tab im ClawPort React Dashboard mit zwei Sub-Tabs:
 | AutoGen | `ProjectProgress.tsx` | Code-Generierungs-Fortschritt aus Coding Engine (6 Stages: Analyzing → Complete) |
 | N8n | `WorkflowBuilder.tsx` | N8n-Workflow-Management (Status, Liste, Aktivierung/Deaktivierung) |
 
-## Wo die Technologien tatsächlich leben
+## Wo AutoGen auch genutzt wird
 
-### Microsoft AutoGen
-AutoGen wird in mehreren anderen Spaces genutzt, nicht zentral in AgentFarm:
+AutoGen wird zusätzlich in anderen Spaces eingesetzt:
 - **Coding.Space**: `python/spaces/coding/Coding_engine/` — Extensive AutoGen-Nutzung für Code-Generierung
 - **SWE Design**: `python/spaces/shuttles/swe_desgine/external/arch_team/` — AutoGen-basierte Architektur-Validierung
 - **Ideas.Space**: `python/spaces/ideas/tools/autogen_research.py` — AutoGen für Research-Tasks
-- **N8n.Space**: `python/spaces/n8n/society/` — AutoGen-Society für Workflow-Generierung
+- **N8n.Space**: `python/spaces/n8n/society/` — AutoGen-Society für Workflow-Generierung mit 6 Agents
 
-### N8n Workflow-Generierung
-N8n ist als eigenständiger Space mit 8 Events implementiert:
-- Backend-Agent: `python/spaces/n8n/agents/n8n_agent.py` (8 Events: generate, list, status, activate, deactivate, delete, execute, describe)
-- 40+ Workflow-Templates in `python/spaces/n8n/templates/`
-- AutoGen-Society in `python/spaces/n8n/society/` mit 6 spezialisierten Agents:
-  - `workflow_architect` — Workflow-Design
-  - `n8n_docs_expert` — N8n-API-Wissen
-  - `workflow_builder` — JSON-Generierung
-  - `workflow_tester` — Validierung
-  - `ux_agent` — User-Experience
-  - `workflow_reviewer` — Qualitätssicherung
-- Orchestriert via AutoGen 0.4 `SocietyOfMindAgent` mit `SelectorGroupChat`
+## Subsysteme
+
+### TeamRunner (`python/spaces/autogen/runner/team_runner.py`)
+Non-blocking async Ausführung von AutoGen 0.4 Teams:
+- `start_run(team_id, config, task)` — Background-Task, returned `run_id` sofort
+- `autogen_core.CancellationToken` für Abbruch
+- Iteriert `team.run_stream()` und sammelt Messages
+- Real-time Broadcast an Electron
+- Auto-Pruning: max 50 abgeschlossene Runs
+
+### MCP Server (`python/spaces/autogen/mcp_server/`)
+- `vibemind_mcp.py` — MCP-Server für Claude-Integration
+- `web_fetch_pipe.py` — Web-Fetch-Utility
+
+### Hybrid Pipeline (`python/spaces/autogen/orchestrator/`)
+- `hybrid_pipeline.py` — Multi-Space-Kollaboration (AutoGen + Minibook)
+- `openclaw_bridge.py` — OpenClaw-Integration
+- `pipeline_enrichment.py` — Kontext-Anreicherung
+- `step_registry.py` — Dynamische Step-Registrierung
+
+### Config (`python/spaces/autogen/config/`)
+Agent-Templates und Pipeline-Konfigurationen in JSON/YAML.
 
 ## Geplante Features
 
-- Zentralisierte Agent-Orchestrierung über alle Spaces hinweg
-- Docker Toolkit für isolierte Agent-Environments
-- MCP-Integration für standardisierte Tool-Konnektivität
-- Custom-Tooling-Framework für domänenspezifische Capabilities
 - Agent-Marketplace für validierte Agent-Templates
 - Monitoring und Performance-Analytics
-
-## Roadmap
-
-- Dedizierter Backend-Agent implementieren
-- AutoGen-Nutzung aus einzelnen Spaces in AgentFarm zentralisieren
-- Custom-Tooling-Framework vervollständigen (Q2 2026)
 - Cost-Optimization-Layer für Agent-Execution
-- Multi-Agent-Orchestrierung für sequentielle und parallele Tasks
+- Docker Toolkit für isolierte Agent-Environments
 
 ## Ecosystem-Fit
 
 AgentFarm.Space gibt Usern die Werkzeuge, um schnell eigene Agents zu erstellen. Das Konzept wird in Rowboat.Space (Business-Kontext) oder Ideas.Space (kreative Ideation) entworfen und dann in AgentFarm zur Ausführung gebracht. Es arbeitet eng mit Desktop.Space (User-Activity-Trigger) und Coding.Space (Custom-Implementierungen) zusammen.
+
+> Detaillierte technische Dokumentation: [docs/python/spaces/autogen/README.md](python/spaces/autogen/README.md)

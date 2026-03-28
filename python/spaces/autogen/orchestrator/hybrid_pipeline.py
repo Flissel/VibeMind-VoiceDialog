@@ -47,12 +47,17 @@ class HybridPipeline:
     # ------------------------------------------------------------------
 
     async def run(self, task_description: str, channel: str = None) -> Dict[str, Any]:
-        """Run the full hybrid pipeline.
+        """Run the full hybrid pipeline using original SwarmPipeline.run().
+
+        The original pipeline handles @mention chains between steps internally.
+        HybridPipeline wraps it with: Setup, Status-Updates, Channel-Communication.
 
         Args:
             task_description: What to build (e.g. "Agent team for data analysis")
             channel: OpenClaw channel for user communication (e.g. "whatsapp")
         """
+        import aiohttp
+
         self._status = "starting"
         self._task_description = task_description
         self._start_time = time.time()
@@ -73,8 +78,8 @@ class HybridPipeline:
             self._status = "error"
             return {"success": False, "message": f"Minibook setup failed: {e}"}
 
-        # 3. Create SwarmPipeline for Swarm steps (lazy-loaded from submodule)
-        from spaces.autogen.wrapper import _ensure_pipeline_loaded, SwarmPipeline as _SP_ref
+        # 3. Create SwarmPipeline (lazy-loaded from submodule)
+        from spaces.autogen.wrapper import _ensure_pipeline_loaded
         _ensure_pipeline_loaded()
         from spaces.autogen.wrapper import SwarmPipeline
         self._pipeline = SwarmPipeline(
@@ -83,60 +88,61 @@ class HybridPipeline:
             task_name=task_description[:80],
         )
 
-        # 4. Execute steps in order
+        # 4. Inject Claude CLI via OpenClaw ACP into pipeline's _call_claude_code
+        if openclaw_available:
+            original_call = self._pipeline._call_claude_code
+
+            async def _patched_call_claude_code(prompt: str) -> str:
+                """Route through OpenClaw ACP first, fall back to original."""
+                try:
+                    result = await self.openclaw.delegate_to_claude_cli(prompt, timeout=300.0)
+                    if result["success"] and result["output"]:
+                        logger.info("[ACP] Claude CLI via OpenClaw returned code")
+                        return result["output"]
+                except Exception as e:
+                    logger.debug(f"[ACP] OpenClaw delegation failed: {e}, using original")
+                return await original_call(prompt)
+
+            self._pipeline._call_claude_code = _patched_call_claude_code
+            logger.info("Patched pipeline._call_claude_code → OpenClaw ACP")
+
+        # 5. Run the ORIGINAL pipeline.run() — it handles @mention chains internally
         self._status = "running"
-        steps = get_step_order()
-        completed = 0
+        _broadcast_to_electron({
+            "type": "agentfarm_pipeline_started",
+            "task": task_description[:100],
+            "project_id": self._project_id,
+        })
 
-        for i, step_name in enumerate(steps, 1):
-            step_config = PIPELINE_STEPS[step_name]
-            self._current_step = step_name
-
-            status_msg = f"[Step {i}/{len(steps)}] {step_config.name}: {step_config.description}"
-            logger.info(status_msg)
+        try:
+            async with aiohttp.ClientSession() as session:
+                success = await self._pipeline.run(session, task_description)
+        except Exception as e:
+            logger.error(f"Pipeline failed: {e}")
+            self._status = "error"
             if openclaw_available:
-                await self.openclaw.send_status(status_msg, channel)
-            _broadcast_to_electron({
-                "type": "agentfarm_step_update",
-                "step": i, "total": len(steps),
-                "name": step_config.name, "status": "running",
-            })
-
-            try:
-                result = await self._execute_step(step_name, step_config, channel)
-                self._step_results[step_name] = result
-                completed += 1
-                _broadcast_to_electron({
-                    "type": "agentfarm_step_update",
-                    "step": i, "total": len(steps),
-                    "name": step_config.name, "status": "completed",
-                })
-            except Exception as e:
-                logger.error(f"Step {step_name} failed: {e}")
-                self._step_results[step_name] = {"error": str(e)}
-                if openclaw_available:
-                    await self.openclaw.send_status(
-                        f"Step {step_config.name} fehlgeschlagen: {e}", channel
-                    )
-                # Abort on critical steps
-                if step_name in ("swarm_manager", "architect", "coder"):
-                    self._status = "error"
-                    break
+                await self.openclaw.send_status(f"Pipeline fehlgeschlagen: {e}", channel)
+            return {"success": False, "message": f"Pipeline failed: {e}"}
 
         # 5. Summary
         elapsed = time.time() - self._start_time
         self._status = "completed"
+        steps_done = len(self._pipeline.completed_steps) if hasattr(self._pipeline, "completed_steps") else 0
         summary = {
-            "success": completed == len(steps),
-            "steps_completed": completed,
-            "total_steps": len(steps),
+            "success": success,
+            "steps_completed": steps_done,
+            "total_steps": 13,
             "elapsed_seconds": round(elapsed, 1),
             "project_id": self._project_id,
             "task": task_description,
+            "output_path": str(self._pipeline.output_path) if self._pipeline.output_path else None,
+            "generated_files": len(self._pipeline.generated_files),
+            "yaml_files": len(self._pipeline.yaml_files),
         }
         if openclaw_available:
             await self.openclaw.send_status(
-                f"Pipeline fertig! {completed}/{len(steps)} Steps in {elapsed:.0f}s.", channel
+                f"Pipeline fertig! {steps_done}/13 Steps in {elapsed:.0f}s. "
+                f"Output: {self._pipeline.output_path}", channel
             )
             await self.openclaw.disconnect()
 

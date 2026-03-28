@@ -151,14 +151,16 @@ def _get_llm_model() -> str:
         from app.config import get_settings
         return get_settings().llm_model
     except Exception:
-        return "anthropic/claude-opus-4"
+        from llm_config import get_model as _get_model
+        return _get_model("desktop_reasoning")
 
 def _get_compaction_model() -> str:
     try:
         from app.config import get_settings
         return get_settings().compaction_model
     except Exception:
-        return "anthropic/claude-sonnet-4"
+        from llm_config import get_model as _get_model
+        return _get_model("desktop_reasoning")
 
 # ============================================
 # Conversation Memory Store (Persistent + Rolling Compaction)

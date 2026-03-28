@@ -15,6 +15,8 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
+from llm_config import get_model
+
 logger = logging.getLogger(__name__)
 
 # Wizard steps mapped to shuttle stages
@@ -450,14 +452,48 @@ class ShuttleWizardHandler:
             if all_tags:
                 state["context"]["tags"] = sorted(all_tags)
 
+            # ----------------------------------------------------------
+            # Optional: MiroFish readiness evaluation (30s timeout)
+            # ----------------------------------------------------------
+            mirofish_result = None
+            try:
+                from spaces.mirofish.tools.mirofish_tools import evaluate_bubble_readiness
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(evaluate_bubble_readiness, bubble.title or "")
+                    mirofish_result = future.result(timeout=600)
+
+                if mirofish_result and mirofish_result.get("success"):
+                    state["mirofish_result"] = mirofish_result
+                    # Missing items → pre-populate constraints
+                    for item in mirofish_result.get("missing_items", []):
+                        state["constraints"].setdefault("mirofish_gaps", []).append(item)
+                    state["context"]["mirofish_readiness"] = {
+                        "score": mirofish_result.get("total_score"),
+                        "prediction": mirofish_result.get("prediction"),
+                    }
+                    logger.info(
+                        f"[WizardHandler] MiroFish eval: {mirofish_result.get('total_score')}/100 "
+                        f"({mirofish_result.get('prediction')})"
+                    )
+                else:
+                    mirofish_result = None
+            except Exception as e:
+                logger.warning(f"[WizardHandler] MiroFish eval skipped: {e}")
+                mirofish_result = None
+
             self._persist_state(shuttle_id, state)
 
-            return {
+            result = {
                 "success": True,
                 "project": state["project"],
                 "requirements_count": len(state["requirements"]),
                 "tags": sorted(all_tags) if all_tags else [],
             }
+            if mirofish_result:
+                result["mirofish_result"] = mirofish_result
+            return result
         except Exception as e:
             logger.error(f"[WizardHandler] init_from_bubble failed: {e}")
             return {"success": False, "error": str(e)}
@@ -511,26 +547,34 @@ class ShuttleWizardHandler:
             logger.debug(f"[WizardHandler] Complete failed: {e}")
 
     def _publish_to_rowboat(self, shuttle_id: str, state: Dict[str, Any]):
-        """Publish wizard data to Rowboat knowledge base."""
+        """Publish enriched wizard + MiroFish results to Rowboat knowledge folder."""
         try:
             bubble_id = state.get("bubble_id")
             if not bubble_id:
-                # Try to find bubble_id from shuttle
                 from data import ShuttlesRepository
                 shuttle = ShuttlesRepository().get_by_shuttle_id(shuttle_id)
                 if shuttle:
                     bubble_id = shuttle.bubble_id
 
-            if bubble_id:
-                from publishing import get_ideas_publisher
-                publisher = get_ideas_publisher()
-                if hasattr(publisher, "publish_shuttle_data"):
-                    publisher.publish_shuttle_data(bubble_id)
-                    logger.info(
-                        f"[WizardHandler] Published to Rowboat for bubble {bubble_id}"
-                    )
+            if not bubble_id:
+                logger.debug("[WizardHandler] No bubble_id for Rowboat publish")
+                return
+
+            from publishing import get_ideas_publisher
+            publisher = get_ideas_publisher()
+            mirofish_result = state.get("mirofish_result")
+
+            # Write enriched .md files (_requirements, _stakeholders, etc.)
+            if hasattr(publisher, "publish_wizard_results"):
+                publisher.publish_wizard_results(bubble_id, state, mirofish_result)
+                logger.info(
+                    f"[WizardHandler] Published wizard results to Rowboat for bubble {bubble_id}"
+                )
+            # Fallback: MongoDB publisher path
+            elif hasattr(publisher, "publish_shuttle_data"):
+                publisher.publish_shuttle_data(bubble_id)
         except Exception as e:
-            logger.debug(f"[WizardHandler] Rowboat publish failed: {e}")
+            logger.warning(f"[WizardHandler] Rowboat publish failed: {e}")
 
     def load_state_from_shuttle(self, shuttle_id: str) -> Dict[str, Any]:
         """Restore wizard state from shuttle's stage_data (e.g. after restart)."""
@@ -572,18 +616,18 @@ _LLM_PROVIDERS = [
         "key_env": None,  # No key needed
         "api_key": "ollama",
         "base_url": "http://localhost:11434/v1",
-        "model": "qwen2.5:3b",
+        "model": get_model("wizard_ollama"),
         "timeout": 15,
     },
     {
         "key_env": "OPENROUTER_API_KEY",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "google/gemini-2.0-flash-001",
+        "model": get_model("wizard_openrouter"),
     },
     {
         "key_env": "OPENAI_API_KEY",
         "base_url": None,  # Default OpenAI
-        "model": "gpt-4o-mini",
+        "model": get_model("wizard_openai"),
     },
 ]
 

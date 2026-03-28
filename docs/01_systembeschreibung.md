@@ -49,13 +49,13 @@ Nutzer spricht
 | Sync Mode (Redis optional)|
 +---------------------------+
     |
-    +--------+--------+--------+--------+--------+--------+
-    |        |        |        |        |        |        |
-    v        v        v        v        v        v        v
- IDEAS   CODING  DESKTOP ROARBOOT RESEARCH MINIBOOK SHUTTLES
- Space   Space   Space   Space    Space    Space    Space
-    |        |        |        |        |        |        |
-    +--------+--------+--------+--------+--------+--------+
+    +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
+    |        |        |        |        |        |        |        |        |        |        |
+    v        v        v        v        v        v        v        v        v        v        v
+ IDEAS   CODING  DESKTOP ROARBOOT RESEARCH MINIBOOK SHUTTLES  N8N   AGENTFARM VIDEO  MIROFISH
+ Space   Space   Space   Space    Space    Space    Space    Space   Space   Space   Space
+    |        |        |        |        |        |        |        |        |        |        |
+    +--------+--------+--------+--------+--------+--------+--------+--------+--------+--------+
     |
     v
 +---------------------------+
@@ -71,12 +71,12 @@ Nutzer spricht
 
 | Metrik | Wert |
 |--------|------|
-| Aktive Spaces | 8 (7 Domains + 1 Pipeline) |
+| Aktive Spaces | 15 (13 Domains + 1 Pipeline + 1 Standalone) |
 | Intent Types | 100+ (ueber alle Spaces) |
 | Orchestrator-Code | 7.500+ Zeilen |
-| Backend Agents | 7 Domain-Agents |
+| Backend Agents | 13 Domain-Agents |
 | Tool-Module | 30+ |
-| Event Streams | 8 Task-Streams + 4 System-Streams (optional via Redis) |
+| Event Streams | 13 Task-Streams + 4 System-Streams (optional via Redis) |
 | Testdateien | 62 |
 | ENV-Variablen | 50+ konfigurierbare Optionen |
 | DB-Schema | Version 13 (SQLite WAL) |
@@ -94,7 +94,7 @@ OpenAI Realtime API als einziger Voice Provider. Unterstuetzt Speech-to-Speech, 
 LLM-basierte Klassifikation von natuerlicher Sprache in strukturierte Event-Types. Optionale Erweiterungen: CollectorAgent (Fragmentakkumulation), IntentEnhancer (ASR-Fehlerkorrektur), DroPE Resolver (Referenzaufloesung), RAG Classifier (Semantische Klassifikation).
 
 ### 3. Multiverse Spaces
-8 modulare Spaces mit eigenstaendigen Agents, Tools und Workers. Jeder Space verarbeitet seine eigenen Event-Types im Sync-Modus (optional async via Redis Streams).
+15 modulare Spaces mit eigenstaendigen Agents, Tools und Workers. Jeder Space verarbeitet seine eigenen Event-Types im Sync-Modus (optional async via Redis Streams).
 
 ### 4. Electron 3D UI
 Three.js-basierte 3D-Visualisierung mit Bubbles (Ideen), Canvas (Verbindungen), Shuttles (Requirements Pipeline) und Space-spezifischen Visualisierungen (Nebula, Planet, Portal, Factory).

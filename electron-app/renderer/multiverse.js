@@ -404,34 +404,9 @@ class MultiverseApp {
     createIdeasSpace() {
         const spaceGroup = new THREE.Group();
         spaceGroup.position.copy(this.spaces.ideas.position);
-        
-        // Create glass bubbles
-        const bubbleData = [
-            { title: "Universe Alpha", pos: { x: -2, y: 0.5, z: 0 }, color: 0x66aaff, radius: 0.8 },
-            { title: "Universe Beta", pos: { x: 2, y: -0.5, z: -1 }, color: 0xff66aa, radius: 0.7 },
-            { title: "Research Hub", pos: { x: 0, y: 1.5, z: 1 }, color: 0x66ffaa, radius: 0.6 },
-            { title: "Creative Space", pos: { x: -1, y: -1, z: 2 }, color: 0xffcc66, radius: 0.75 },
-            { title: "Data Nexus", pos: { x: 1.5, y: 0, z: -2 }, color: 0xcc66ff, radius: 0.65 },
-        ];
-        
-        bubbleData.forEach(data => {
-            const geometry = new THREE.IcosahedronGeometry(data.radius, 3);
-            const material = new THREE.MeshPhysicalMaterial({
-                color: data.color,
-                metalness: 0.1,
-                roughness: 0.1,
-                transmission: 0.9,
-                transparent: true,
-                opacity: 0.8,
-            });
-            
-            const bubble = new THREE.Mesh(geometry, material);
-            bubble.position.set(data.pos.x, data.pos.y, data.pos.z);
-            bubble.userData = { type: 'bubble', title: data.title };
-            spaceGroup.add(bubble);
-            this.spaces.ideas.objects.push(bubble);
-        });
-        
+
+        // No hardcoded bubbles — real bubbles arrive via node_added from DB
+
         // Central marker ring
         const markerGeometry = new THREE.RingGeometry(2.5, 3, 32);
         const markerMaterial = new THREE.MeshBasicMaterial({
@@ -444,9 +419,49 @@ class MultiverseApp {
         marker.rotation.x = -Math.PI / 2;
         marker.position.y = -2;
         spaceGroup.add(marker);
-        
+
         this.scene.add(spaceGroup);
         this.spaces.ideas.group = spaceGroup;
+    }
+
+    /**
+     * Add a bubble from the database to the 3D Ideas Space.
+     * Called when node_added messages arrive with node_type=bubble.
+     */
+    addBubbleTo3D(node) {
+        const group = this.spaces.ideas.group;
+        if (!group) return;
+
+        const radius = node.radius || 0.7;
+        const color = node.color || 0x4488ff;
+
+        const geometry = new THREE.IcosahedronGeometry(radius, 3);
+        const material = new THREE.MeshPhysicalMaterial({
+            color: color,
+            metalness: 0.1,
+            roughness: 0.1,
+            transmission: 0.9,
+            transparent: true,
+            opacity: 0.8,
+        });
+
+        const bubble = new THREE.Mesh(geometry, material);
+        bubble.position.set(
+            node.x || 0,
+            node.y || 0,
+            node.z || 0
+        );
+        bubble.userData = {
+            type: 'bubble',
+            id: node.id,
+            title: node.title || 'Untitled',
+            description: node.description || '',
+        };
+
+        group.add(bubble);
+        this.spaces.ideas.objects.push(bubble);
+
+        console.log(`[Multiverse] Added DB bubble: "${node.title}" at (${node.x}, ${node.y}, ${node.z})`);
     }
     
     // ========================================================================
@@ -3559,6 +3574,13 @@ class MultiverseApp {
             dotCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11';
             wrapper.appendChild(dotCanvas);
 
+            // Per-monitor gaze cursor canvas (live crosshair)
+            const gazeCanvas = document.createElement('canvas');
+            gazeCanvas.className = 'gaze-cursor-canvas';
+            gazeCanvas.dataset.monitor = monitorIdx;
+            gazeCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:13';
+            wrapper.appendChild(gazeCanvas);
+
             return wrapper;
         };
 
@@ -3655,6 +3677,106 @@ class MultiverseApp {
 
         // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on per-monitor canvases
         if (window.vibemind && window.vibemind.onPythonMessage) {
+            // --- Live gaze cursor (every frame) ---
+            window.vibemind.onPythonMessage((msg) => {
+                if (msg.type !== 'eyeterm_gaze_cursor') return;
+                const grid = document.getElementById('monitor-grid');
+                if (!grid) return;
+                const panels = grid.querySelectorAll('.monitor-panel');
+                panels.forEach(p => {
+                    const canvas = p.querySelector('.gaze-cursor-canvas');
+                    const img = p.querySelector('.desktop-stream-img');
+                    if (!canvas || !img || !img.naturalWidth) return;
+                    const rect = canvas.parentElement.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const offX = parseInt(p.dataset.offsetX || '0', 10);
+                    const offY = parseInt(p.dataset.offsetY || '0', 10);
+                    const mw = img.naturalWidth || 1920;
+                    const mh = img.naturalHeight || 1080;
+
+                    // Check if gaze point is on this monitor
+                    if (msg.x < offX || msg.x >= offX + mw || msg.y < offY || msg.y >= offY + mh) return;
+
+                    // Object-fit:contain letterbox calc
+                    const imgAspect = mw / mh;
+                    const elemAspect = rect.width / rect.height;
+                    let renderW, renderH, padX, padY;
+                    if (imgAspect > elemAspect) {
+                        renderW = rect.width; renderH = rect.width / imgAspect; padX = 0; padY = (rect.height - renderH) / 2;
+                    } else {
+                        renderH = rect.height; renderW = rect.height * imgAspect; padX = (rect.width - renderW) / 2; padY = 0;
+                    }
+
+                    const localX = msg.x - offX;
+                    const localY = msg.y - offY;
+                    const cx = padX + (localX / mw) * renderW;
+                    const cy = padY + (localY / mh) * renderH;
+
+                    // Pulsing cyan crosshair
+                    const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 200);
+                    ctx.strokeStyle = `rgba(103, 232, 249, ${pulse})`;
+                    ctx.lineWidth = 1.5;
+                    // Cross
+                    ctx.beginPath();
+                    ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 12, cy);
+                    ctx.moveTo(cx, cy - 12); ctx.lineTo(cx, cy + 12);
+                    ctx.stroke();
+                    // Ring
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+                    ctx.stroke();
+                    // Center dot
+                    ctx.fillStyle = `rgba(103, 232, 249, ${pulse})`;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // T3.4: Mark this monitor as gaze-focused
+                    p.dataset.gazeFocused = 'true';
+                });
+
+                // T3.4: Gaze-aware panel dimming — dim monitors not being looked at
+                panels.forEach(p => {
+                    const focused = p.dataset.gazeFocused === 'true';
+                    const target = focused ? 1.0 : 0.45;
+                    const current = parseFloat(p.dataset.gazeOpacity || '1.0');
+                    // Smooth interpolation (ease toward target)
+                    const lerped = current + (target - current) * 0.15;
+                    p.style.opacity = lerped.toFixed(2);
+                    p.dataset.gazeOpacity = lerped.toFixed(3);
+                    p.dataset.gazeFocused = 'false'; // reset for next frame
+                });
+            });
+
+            // --- T1: Presence / Gesture / Fatigue events ---
+            window.vibemind.onPythonMessage((msg) => {
+                if (msg.type === 'eyeterm_presence') {
+                    const strip = document.getElementById('eyeterm-strip');
+                    if (strip) {
+                        strip.style.borderLeft = msg.present ? '3px solid #0f0' : '3px solid #f00';
+                    }
+                    console.log(`[eyeTerm] Presence: ${msg.event} (absent ${msg.absent_duration_s}s)`);
+                }
+                if (msg.type === 'eyeterm_gesture') {
+                    console.log(`[eyeTerm] Gesture: ${msg.gesture}`);
+                    // Flash border on eyeterm strip
+                    const strip = document.getElementById('eyeterm-strip');
+                    if (strip) {
+                        const color = msg.gesture === 'nod' ? '#0f0' : '#f44';
+                        strip.style.borderTop = `3px solid ${color}`;
+                        setTimeout(() => { strip.style.borderTop = ''; }, 800);
+                    }
+                }
+                if (msg.type === 'eyeterm_fatigue') {
+                    console.log(`[eyeTerm] Fatigue: rate=${msg.blink_rate}/min score=${msg.fatigue_score}`);
+                }
+            });
+
+            // --- Click dots + GA overlay ---
             window.vibemind.onPythonMessage((msg) => {
                 if (msg.type !== 'eyeterm_click_dots') return;
                 const grid = document.getElementById('monitor-grid');
@@ -3750,18 +3872,26 @@ class MultiverseApp {
                     }
                 }
 
-                // GA status overlay (bottom-left of first monitor)
+                // GA two-tier status overlay (bottom-left of first monitor)
                 if (msg.ga && monitorInfos.length > 0) {
                     const m0 = monitorInfos[0];
                     const ctx0 = m0.ctx;
                     const ga = msg.ga;
-                    ctx0.fillStyle = 'rgba(0,0,0,0.6)';
-                    ctx0.fillRect(4, m0.canvas.height - 44, 220, 40);
-                    ctx0.fillStyle = '#0f0';
+                    const h = 56;
+                    ctx0.fillStyle = 'rgba(0,0,0,0.65)';
+                    ctx0.fillRect(4, m0.canvas.height - h - 4, 260, h);
                     ctx0.font = '11px monospace';
-                    ctx0.fillText(`GA gen=${ga.generation} samples=${ga.samples}`, 8, m0.canvas.height - 28);
-                    const res = ga.best_residual_px != null ? ga.best_residual_px + 'px' : '—';
-                    ctx0.fillText(`best=${res}  applied=${ga.applied_residual_px || '—'}px`, 8, m0.canvas.height - 12);
+                    // Line 1: generation + merges + coverage
+                    ctx0.fillStyle = '#67e8f9';
+                    ctx0.fillText(`GA gen=${ga.generation} merges=${ga.merges || 0} cov=${ga.coverage || '?'}`, 8, m0.canvas.height - h + 8);
+                    // Line 2: base residual
+                    ctx0.fillStyle = '#f97316';
+                    const baseRes = ga.base_residual_px != null ? ga.base_residual_px + 'px' : '—';
+                    ctx0.fillText(`base=${baseRes}  samples=${ga.samples}`, 8, m0.canvas.height - h + 22);
+                    // Line 3: combined (base+delta) residual
+                    ctx0.fillStyle = '#22c55e';
+                    const combRes = ga.combined_residual_px != null ? ga.combined_residual_px + 'px' : '—';
+                    ctx0.fillText(`base+delta=${combRes}`, 8, m0.canvas.height - h + 36);
                 }
             });
         }

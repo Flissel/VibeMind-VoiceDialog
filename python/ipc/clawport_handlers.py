@@ -18,11 +18,14 @@ class ClawPortHandlers:
     async def handle_get_scheduled_tasks(self, message: dict):
         """Get scheduled tasks for ClawPort Schedule tab."""
         try:
-            from data import ScheduledTasksRepository
-            repo = ScheduledTasksRepository()
+            from data import ScheduledTaskRepository
+            repo = ScheduledTaskRepository()
             status = message.get("status")
             limit = int(message.get("limit", 50))
-            tasks = repo.list(status=status, limit=limit)
+            if status:
+                tasks = repo.get_by_status(status)[:limit]
+            else:
+                tasks = repo.list_all(limit=limit)
             tasks_data = []
             for t in tasks:
                 tasks_data.append({
@@ -62,8 +65,8 @@ class ClawPortHandlers:
     async def handle_update_task_status(self, message: dict):
         """Update a scheduled task's status (pause/resume/cancel)."""
         try:
-            from data import ScheduledTasksRepository
-            repo = ScheduledTasksRepository()
+            from data import ScheduledTaskRepository
+            repo = ScheduledTaskRepository()
             task_id = message.get("task_id")
             new_status = message.get("new_status")
             if not task_id or not new_status:
@@ -92,20 +95,31 @@ class ClawPortHandlers:
                 "error": str(e),
             })
 
+    # Known backend agents for status display
+    _KNOWN_AGENTS = [
+        "bubbles", "ideas", "coding", "desktop", "rowboat",
+        "research", "minibook", "schedule", "n8n", "agentfarm",
+        "flowzen", "video", "mirofish",
+    ]
+
     async def handle_get_agent_status_sync(self):
         """Get status of all backend agents for ClawPort Agents tab."""
         try:
-            from swarm.listeners.status_listener import get_status_listener
-            listener = get_status_listener()
+            from swarm.backend_agents import get_agent
             agents_data = []
-            for name, info in listener.get_all_status().items():
+            for name in self._KNOWN_AGENTS:
+                try:
+                    agent = get_agent(name)
+                    status = "loaded" if agent else "idle"
+                except Exception:
+                    status = "unavailable"
                 agents_data.append({
                     "name": name,
-                    "status": info.get("status", "idle"),
-                    "last_event_type": info.get("last_event_type"),
-                    "last_event_at": info.get("last_event_at"),
-                    "last_result": info.get("last_result"),
-                    "error": info.get("error"),
+                    "status": status,
+                    "last_event_type": None,
+                    "last_event_at": None,
+                    "last_result": None,
+                    "error": None,
                 })
             self.send_message({
                 "type": "agent_status_list",
@@ -120,7 +134,11 @@ class ClawPortHandlers:
             })
 
     async def handle_chat_text_input(self, message: dict):
-        """Handle text chat input from ClawPort Chat tab."""
+        """Handle text chat input from ClawPort Chat tab.
+
+        If a VibeCoder session is active, routes follow-up messages to it.
+        Otherwise routes through the normal intent orchestrator.
+        """
         text = message.get("text", "").strip()
         if not text:
             self.send_message({
@@ -129,6 +147,33 @@ class ClawPortHandlers:
                 "message": "Empty input",
             })
             return
+
+        # Check if there's an active VibeCoder session for this chat
+        vibecoder_sid = getattr(self, '_active_vibecoder_session', None)
+        if vibecoder_sid:
+            try:
+                from spaces.n8n.tools.workflow_chat import get_workflow_chat_manager
+                import asyncio
+                mgr = get_workflow_chat_manager()
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, mgr.send_message, vibecoder_sid, text)
+                self.send_message({
+                    "type": "chat_response",
+                    "success": True,
+                    "message": result.get("response", result.get("message", "OK")),
+                    "event_type": "n8n.vibecoder",
+                    "vibecoder_session_id": vibecoder_sid,
+                    "has_workflow": result.get("has_workflow", False),
+                })
+                # Clear session when workflow is deployed or user says stop
+                if text.lower() in ("stop", "abbruch", "fertig", "exit"):
+                    self._active_vibecoder_session = None
+                return
+            except Exception as e:
+                debug_log(f"VibeCoder chat error: {e}")
+                self._active_vibecoder_session = None
+                # Fall through to normal orchestrator
+
         try:
             from swarm.orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
@@ -140,11 +185,23 @@ class ClawPortHandlers:
                 })
                 return
             result = await orchestrator.process_intent(text)
+
+            response_msg = result.response_hint if result else "OK"
+            event_type = result.event_type if result else None
+
+            # Check if the tool result triggered a VibeCoder session
+            tool_result = result.tool_result if result and hasattr(result, 'tool_result') else None
+            if isinstance(tool_result, dict) and tool_result.get("needs_checklist"):
+                vibecoder_sid = tool_result.get("vibecoder_session_id")
+                if vibecoder_sid:
+                    self._active_vibecoder_session = vibecoder_sid
+                    debug_log(f"VibeCoder session started from chat: {vibecoder_sid}")
+
             self.send_message({
                 "type": "chat_response",
                 "success": True,
-                "message": result.response_hint if result else "OK",
-                "event_type": result.event_type if result else None,
+                "message": response_msg,
+                "event_type": event_type,
             })
         except Exception as e:
             debug_log(f"Chat input error: {e}")
@@ -329,5 +386,188 @@ class ClawPortHandlers:
                 "action": "toggle",
                 "plugin_id": plugin_id,
                 "success": False,
+                "error": str(e),
+            })
+
+    # ── Models Config Tab ──
+
+    # Group assignment for model roles
+    _ROLE_GROUPS = {
+        "classifier": "Core", "rag_classifier": "Core", "response": "Core",
+        "orchestrator": "Core", "analysis": "Core",
+        "space_agent": "Agents & Routing", "stream_listener": "Agents & Routing",
+        "space_router": "Agents & Routing",
+        "summary": "Content", "rewrite": "Content", "exploration": "Content",
+        "n8n_generator": "Content",
+        "conversion": "Personality & Context", "personality": "Personality & Context",
+        "profiling": "Personality & Context", "context": "Personality & Context",
+        "summarization_worker": "Workers", "rewrite_worker": "Workers",
+        "voice": "Special", "vision": "Special", "local": "Special",
+        "agentfarm": "Special", "flowzen_reasoning": "Special",
+    }
+
+    def _get_yaml_path(self):
+        from pathlib import Path
+        return Path(__file__).parent.parent / "config" / "llm_models.yml"
+
+    async def handle_get_models_config(self):
+        """Get all LLM model roles and providers for Models tab."""
+        try:
+            import os
+            import yaml
+            yaml_path = self._get_yaml_path()
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+
+            # Build providers list
+            providers = []
+            for name, prov in config.get("providers", {}).items():
+                api_key_env = prov.get("api_key_env")
+                has_key = bool(os.environ.get(api_key_env)) if api_key_env else False
+                providers.append({
+                    "name": name,
+                    "base_url": prov.get("base_url"),
+                    "api_key_env": api_key_env,
+                    "has_key": has_key,
+                })
+
+            # Build models list
+            models = []
+            for role, role_cfg in config.get("models", {}).items():
+                models.append({
+                    "role": role,
+                    "provider": role_cfg.get("provider", "openai"),
+                    "model": role_cfg.get("model", ""),
+                    "max_tokens": role_cfg.get("max_tokens"),
+                    "description": role_cfg.get("description", ""),
+                    "group": self._ROLE_GROUPS.get(role, "Other"),
+                    "locked": role == "voice",
+                })
+
+            self.send_message({
+                "type": "models_config",
+                "providers": providers,
+                "models": models,
+            })
+        except Exception as e:
+            debug_log(f"Error getting models config: {e}")
+            self.send_message({
+                "type": "models_config",
+                "providers": [],
+                "models": [],
+                "error": str(e),
+            })
+
+    async def handle_update_model_role(self, message: dict):
+        """Update a single model role in llm_models.yml."""
+        role = message.get("role", "")
+        try:
+            if role == "voice":
+                self.send_message({
+                    "type": "model_update_result",
+                    "success": False,
+                    "role": role,
+                    "error": "Voice role is locked (Realtime API)",
+                })
+                return
+
+            import yaml
+            yaml_path = self._get_yaml_path()
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+
+            models = config.get("models", {})
+            if role not in models:
+                self.send_message({
+                    "type": "model_update_result",
+                    "success": False,
+                    "role": role,
+                    "error": f"Unknown role: {role}",
+                })
+                return
+
+            # Update fields
+            if "provider" in message:
+                models[role]["provider"] = message["provider"]
+            if "model" in message:
+                models[role]["model"] = message["model"]
+            if "max_tokens" in message:
+                models[role]["max_tokens"] = message["max_tokens"]
+
+            # Write back
+            header = (
+                "# config/llm_models.yml — SINGLE SOURCE OF TRUTH for all VibeMind LLM models\n"
+                "# Edit THIS file to change any model globally across the entire system.\n"
+                "#\n"
+                "# Override any role via environment variable:\n"
+                "#   LLM_MODEL_CLASSIFIER=gpt-4o\n"
+                "#   LLM_MODEL_VOICE=gpt-4o-realtime-preview-2025-06\n"
+                "#\n"
+                "# Legacy env vars (CLASSIFIER_MODEL, OPENAI_MODEL, etc.) also work as fallbacks.\n\n"
+            )
+            yaml_content = yaml.dump(config, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            with open(yaml_path, "w", encoding="utf-8") as f:
+                f.write(header)
+                f.write(yaml_content)
+
+            # Reload in-process config
+            import llm_config
+            llm_config.reload_config()
+
+            debug_log(f"Updated model role '{role}': provider={message.get('provider')}, model={message.get('model')}")
+            self.send_message({
+                "type": "model_update_result",
+                "success": True,
+                "role": role,
+            })
+        except Exception as e:
+            debug_log(f"Error updating model role '{role}': {e}")
+            self.send_message({
+                "type": "model_update_result",
+                "success": False,
+                "role": role,
+                "error": str(e),
+            })
+
+    async def handle_test_model_connection(self, message: dict):
+        """Test a model connection by making a minimal API call."""
+        role = message.get("role", "")
+        try:
+            if role == "voice":
+                self.send_message({
+                    "type": "model_test_result",
+                    "success": False,
+                    "role": role,
+                    "error": "Realtime API cannot be tested via chat completions",
+                })
+                return
+
+            import time
+            import llm_config
+
+            client = llm_config.get_client(role)
+            model = llm_config.get_model(role)
+            token_kw = llm_config.token_kwargs(model, 5)
+
+            start = time.time()
+            client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "hi"}],
+                **token_kw,
+            )
+            latency_ms = int((time.time() - start) * 1000)
+
+            self.send_message({
+                "type": "model_test_result",
+                "success": True,
+                "role": role,
+                "latency_ms": latency_ms,
+            })
+        except Exception as e:
+            debug_log(f"Model test failed for '{role}': {e}")
+            self.send_message({
+                "type": "model_test_result",
+                "success": False,
+                "role": role,
                 "error": str(e),
             })

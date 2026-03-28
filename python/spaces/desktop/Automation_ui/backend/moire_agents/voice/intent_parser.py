@@ -158,10 +158,8 @@ Wichtig:
 
         # Set model based on backend
         if model is None:
-            if self.backend == LLMBackend.OPENROUTER:
-                self.model = "anthropic/claude-sonnet-4"  # OpenRouter format
-            else:
-                self.model = "claude-sonnet-4-20250514"  # Anthropic format
+            from llm_config import get_model as _get_model
+            self.model = _get_model("desktop_reasoning")
         else:
             self.model = model
 

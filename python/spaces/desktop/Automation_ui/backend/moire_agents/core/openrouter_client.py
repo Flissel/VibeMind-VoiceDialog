@@ -13,10 +13,18 @@ import json
 import base64
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from dataclasses import dataclass
 from enum import Enum
+
+# Ensure python/ root is on sys.path for llm_config import
+_python_root = str(Path(__file__).resolve().parents[6])
+if _python_root not in sys.path:
+    sys.path.insert(0, _python_root)
+
+from llm_config import get_model
 
 try:
     from dotenv import load_dotenv
@@ -46,10 +54,10 @@ except ImportError:
 
 class ModelType(Enum):
     """Verfügbare Modelle via OpenRouter."""
-    REASONING = "anthropic/claude-sonnet-4"  # Beste Qualität für Planung
-    VISION = "anthropic/claude-sonnet-4"  # Claude Sonnet 4 hat exzellente Vision
-    VISION_FAST = "google/gemini-2.0-flash-exp:free"  # Schnelle kostenlose Alternative
-    QUICK = "anthropic/claude-3.5-sonnet"  # Schnell für einfache Aufgaben
+    REASONING = get_model("desktop_reasoning")  # Beste Qualität für Planung
+    VISION = get_model("desktop_vision")  # Claude Sonnet 4 hat exzellente Vision
+    VISION_FAST = get_model("desktop_vision_fast")  # Schnelle kostenlose Alternative
+    QUICK = get_model("desktop_quick")  # Schnell für einfache Aufgaben
 
 
 @dataclass

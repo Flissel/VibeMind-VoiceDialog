@@ -644,8 +644,11 @@ class SocietyOfMindOrchestrator:
         interaction_agent: Optional[Any] = None,
         openrouter_client: Optional[OpenRouterClient] = None,
         memory: Optional['AgentMemory'] = None,
-        model: str = "anthropic/claude-sonnet-4"
+        model: str = None
     ):
+        if model is None:
+            from llm_config import get_model as _get_model
+            model = _get_model("desktop_reasoning")
         self.moire_client = moire_client
         self.interaction_agent = interaction_agent
         self.openrouter_client = openrouter_client or get_openrouter_client()
@@ -1220,7 +1223,7 @@ Has the goal been achieved? Respond with:
 async def create_society_orchestrator(
     moire_client: Optional[Any] = None,
     interaction_agent: Optional[Any] = None,
-    model: str = "anthropic/claude-sonnet-4"
+    model: str = None
 ) -> SocietyOfMindOrchestrator:
     """Factory function für SocietyOfMindOrchestrator."""
     return SocietyOfMindOrchestrator(
@@ -1235,7 +1238,7 @@ _society_orchestrator_instance: Optional[SocietyOfMindOrchestrator] = None
 def get_society_orchestrator(
     moire_client: Optional[Any] = None,
     interaction_agent: Optional[Any] = None,
-    model_name: str = "anthropic/claude-sonnet-4"
+    model_name: str = None
 ) -> SocietyOfMindOrchestrator:
     """Singleton Factory für SocietyOfMindOrchestrator."""
     global _society_orchestrator_instance

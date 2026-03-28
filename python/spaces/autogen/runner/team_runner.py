@@ -146,6 +146,7 @@ class TeamRunner:
 
         Supports team_type: "selector" (default), "round_robin", "swarm".
         """
+        from llm_config import get_model
         from autogen_agentchat.agents import AssistantAgent
         from autogen_agentchat.teams import (
             SelectorGroupChat, RoundRobinGroupChat, Swarm,
@@ -153,7 +154,7 @@ class TeamRunner:
         from autogen_ext.models.openai import OpenAIChatCompletionClient
 
         model_client = OpenAIChatCompletionClient(
-            model=config.get("model", "gpt-4o"),
+            model=config.get("model") or get_model("agentfarm"),
         )
         agents = []
         for agent_cfg in config.get("agents", []):

@@ -11,7 +11,7 @@
 [========================================] Kern-Architektur      100%
 [========================================] Modular Migration      100%
 [====================================    ] Voice Layer             90%
-[==================================      ] Spaces (8/8)            85%
+[==================================      ] Spaces (15/15)          85%
 [================================        ] Swarm Orchestrator      80%
 [==============================          ] Electron UI             75%
 [==========================              ] Memory System           65%
@@ -31,7 +31,7 @@
 - [x] **Intent Pipeline** — LLM-basierte Klassifikation mit 100+ Event Types
 - [x] **BaseBackendAgent Pattern** — Konsistentes Agent-Pattern fuer alle Domains
 - [x] **Electron IPC** — JSON ueber stdin/stdout, Python Spawning
-- [x] **Three.js Multiverse** — 3D-Visualisierung mit 8 Space-Typen
+- [x] **Three.js Multiverse** — 3D-Visualisierung mit 15 Space-Typen
 - [x] **SQLite Schema v13** — Stabile Datenbank mit Repository Pattern
 
 ### Spaces
@@ -43,7 +43,13 @@
 - [x] **Research Space** — Web-Recherche, Scraping, Zusammenfassung via ZeroClaw (5 Tools)
 - [x] **Minibook Space** — Inter-Space Collaboration, Multi-Agent Diskussionen (5+ Tools)
 - [x] **Shuttles/SWE Design** — Requirements Pipeline (Submodul integriert)
-- [x] **OpenClaw Space** — AutoGen Desktop Swarm (Konfiguration vorhanden)
+- [x] **N8n Space** — Workflow-Automatisierung, AI-generierte Workflows (8 Events, 6-Agent AutoGen Society)
+- [x] **Schedule Space** — APScheduler-basierte Task-Planung, NLP Zeitausdruecke
+- [x] **AgentFarm Space** — Multi-Agent-Orchestrierung mit AutoGen 0.4 (8 Events, MCP Server, HybridPipeline)
+- [x] **Video Space** — Video-Produktion, Lip Sync, Voice Cloning, Sora Vision (11 Events, 11 Tools)
+- [x] **MiroFish Space** — KI-Vorhersagen, Wissens-Graphen, Agent-Simulationen (15 Events, 13 Tools)
+- [x] **Flowzen Space** — Circadian Activity Tracking, Tagebuch, Brain-Integration (Submodul)
+- [x] **Brain Space** — Tahlamus Cognitive System (Standalone Microservices)
 
 ### Infrastructure
 

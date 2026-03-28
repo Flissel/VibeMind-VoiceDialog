@@ -38,7 +38,7 @@ class VoiceConfig:
     openai_api_key: Optional[str]
 
     # OpenAI Realtime settings
-    openai_realtime_model: str = "gpt-4o-realtime-preview"
+    openai_realtime_model: str = get_model("voice")
     openai_realtime_voice: str = "alloy"
 
     logging: LoggingConfig = None

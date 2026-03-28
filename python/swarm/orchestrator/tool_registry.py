@@ -35,6 +35,7 @@ class ToolRegistry:
 
     def __init__(self):
         self._executors: Dict[str, Callable] = {}
+        self._param_mappings: Dict[str, Dict[str, str]] = {}
         self._logger = logging.getLogger(__name__)
 
     def load_all(self, realtime_evaluator=None) -> Dict[str, Callable]:
@@ -63,8 +64,44 @@ class ToolRegistry:
         self._load_n8n_tools()
         self._load_agentfarm_tools()
         self._load_messaging_tools()
+        self._load_param_mappings()
         self._logger.info(f"Loaded {len(self._executors)} tools for sync fallback")
         return self._executors
+
+    def get_param_mappings(self) -> Dict[str, Dict[str, str]]:
+        """Return consolidated PARAM_MAPPINGs from all backend agents."""
+        return self._param_mappings
+
+    def _load_param_mappings(self):
+        """Collect PARAM_MAPPINGs from all backend agent classes."""
+        agent_modules = [
+            ("spaces.ideas.agents.bubbles_agent", "BubblesAgent"),
+            ("spaces.ideas.agents.ideas_agent", "IdeasAgent"),
+            ("spaces.coding.agents.coding_agent", "CodingAgent"),
+            ("spaces.desktop.agents.desktop_agent", "DesktopAgent"),
+            ("spaces.rowboat.agents.roarboot_agent", "RoarbootBackendAgent"),
+            ("spaces.research.agents.zeroclaw_research_agent", "ZeroClawResearchAgent"),
+            ("spaces.minibook.agents.minibook_agent", "MinibookBackendAgent"),
+            ("spaces.schedule.agents.schedule_agent", "ScheduleBackendAgent"),
+            ("spaces.n8n.agents.n8n_agent", "N8nBackendAgent"),
+            ("spaces.autogen.agents.agentfarm_agent", "AgentFarmAgent"),
+            ("spaces.video.agents.video_agent", "VideoAgent"),
+            ("spaces.mirofish.agents.mirofish_agent", "MirofishAgent"),
+        ]
+        for module_path, class_name in agent_modules:
+            try:
+                import importlib
+                mod = importlib.import_module(module_path)
+                agent_cls = getattr(mod, class_name, None)
+                if agent_cls and hasattr(agent_cls, "PARAM_MAPPING"):
+                    for event_type, mapping in agent_cls.PARAM_MAPPING.items():
+                        # Skip _inject entries (handled separately)
+                        clean_mapping = {k: v for k, v in mapping.items() if k != "_inject"}
+                        if clean_mapping:
+                            self._param_mappings[event_type] = clean_mapping
+            except Exception as e:
+                self._logger.debug(f"Could not load PARAM_MAPPING from {module_path}: {e}")
+        self._logger.info(f"Loaded param mappings for {len(self._param_mappings)} event types")
 
     # =========================================================================
     # Bubble Tools

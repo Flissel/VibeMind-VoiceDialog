@@ -51,8 +51,8 @@ class IdeasRepository:
         data = idea.to_dict()
         self.db.execute(
             """
-            INSERT INTO ideas (id, title, description, source, created_at, score, status, promoted_to_project_id, tags, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ideas (id, title, description, source, created_at, score, status, promoted_to_project_id, tags, metadata, parent_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["id"],
@@ -65,6 +65,7 @@ class IdeasRepository:
                 data["promoted_to_project_id"],
                 data["tags"],
                 data["metadata"],
+                data.get("parent_id"),
             ),
         )
 
@@ -181,6 +182,16 @@ class IdeasRepository:
         rows = self.db.fetch_all(sql, tuple(params))
         return [Idea.from_dict(dict(row)) for row in rows]
 
+    def list_top_level(
+        self,
+        limit: int = 50,
+        order_by: str = "created_at DESC",
+    ) -> List[Idea]:
+        """List only top-level ideas (parent_id IS NULL) — excludes children."""
+        sql = f"SELECT * FROM ideas WHERE parent_id IS NULL ORDER BY {order_by} LIMIT ?"
+        rows = self.db.fetch_all(sql, (limit,))
+        return [Idea.from_dict(dict(row)) for row in rows]
+
     def list_top_scored(self, limit: int = 5) -> List[Idea]:
         """Get top scored ideas"""
         return self.list(limit=limit, order_by="score DESC")
@@ -203,7 +214,8 @@ class IdeasRepository:
                 status = ?,
                 promoted_to_project_id = ?,
                 tags = ?,
-                metadata = ?
+                metadata = ?,
+                parent_id = ?
             WHERE id = ?
             """,
             (
@@ -215,6 +227,7 @@ class IdeasRepository:
                 data["promoted_to_project_id"],
                 data["tags"],
                 data["metadata"],
+                data.get("parent_id"),
                 data["id"],
             ),
         )

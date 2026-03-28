@@ -27,7 +27,7 @@ class Database:
     Uses WAL mode for better concurrent access performance.
     """
 
-    SCHEMA_VERSION = 19
+    SCHEMA_VERSION = 22
 
     SCHEMA_SQL = """
     -- Ideas table: captures raw ideas from voice/text
@@ -324,6 +324,74 @@ class Database:
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC);
+
+    -- Videos: tracked video assets from production pipelines
+    CREATE TABLE IF NOT EXISTS videos (
+        id              TEXT PRIMARY KEY,
+        filename        TEXT NOT NULL,
+        file_path       TEXT NOT NULL UNIQUE,
+        title           TEXT DEFAULT '',
+        person          TEXT DEFAULT '',
+        pipeline_stage  TEXT DEFAULT 'raw',
+        category        TEXT DEFAULT 'Other',
+        source_dir      TEXT DEFAULT '',
+        size_bytes      INTEGER DEFAULT 0,
+        duration_secs   REAL DEFAULT 0.0,
+        width           INTEGER DEFAULT 0,
+        height          INTEGER DEFAULT 0,
+        tags            TEXT DEFAULT '[]',
+        notes           TEXT DEFAULT '',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        file_modified   TIMESTAMP,
+        metadata        TEXT DEFAULT '{}'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_videos_person ON videos(person);
+    CREATE INDEX IF NOT EXISTS idx_videos_category ON videos(category);
+    CREATE INDEX IF NOT EXISTS idx_videos_pipeline ON videos(pipeline_stage);
+    CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC);
+
+    -- Video projects: container for a video production run
+    CREATE TABLE IF NOT EXISTS video_projects (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL,
+        description     TEXT DEFAULT '',
+        status          TEXT DEFAULT 'draft',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        metadata        TEXT DEFAULT '{}'
+    );
+
+    -- Video project persons: team members in a project
+    CREATE TABLE IF NOT EXISTS video_project_persons (
+        id              TEXT PRIMARY KEY,
+        project_id      TEXT NOT NULL REFERENCES video_projects(id),
+        name            TEXT NOT NULL,
+        role            TEXT DEFAULT '',
+        raw_video_path  TEXT DEFAULT '',
+        voice_id        TEXT DEFAULT '',
+        UNIQUE(project_id, name)
+    );
+
+    -- Video pipeline steps: per-person, per-step progress tracking
+    CREATE TABLE IF NOT EXISTS video_pipeline_steps (
+        id              TEXT PRIMARY KEY,
+        project_id      TEXT NOT NULL REFERENCES video_projects(id),
+        person_name     TEXT NOT NULL,
+        step_name       TEXT NOT NULL,
+        status          TEXT DEFAULT 'pending',
+        output_path     TEXT DEFAULT '',
+        output_video_id TEXT DEFAULT '',
+        started_at      TIMESTAMP,
+        completed_at    TIMESTAMP,
+        error_message   TEXT DEFAULT '',
+        UNIQUE(project_id, person_name, step_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_video_projects_status ON video_projects(status);
+    CREATE INDEX IF NOT EXISTS idx_video_project_persons_project ON video_project_persons(project_id);
+    CREATE INDEX IF NOT EXISTS idx_video_pipeline_steps_project ON video_pipeline_steps(project_id);
+    CREATE INDEX IF NOT EXISTS idx_video_pipeline_steps_person ON video_pipeline_steps(person_name);
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -784,6 +852,114 @@ class Database:
                 )
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_diary_created ON flowzen_diary(created_at DESC)")
+
+        if from_version < 20:
+            logger.info("Migration v20: Flowzen recommendation tracking + user preferences")
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flowzen_recommendation_log (
+                    id                  TEXT PRIMARY KEY,
+                    recommended_task_id TEXT,
+                    recommended_title   TEXT DEFAULT '',
+                    mood                TEXT DEFAULT '',
+                    time_window         TEXT DEFAULT '',
+                    hour                INTEGER DEFAULT 0,
+                    category            TEXT DEFAULT '',
+                    reason_text         TEXT DEFAULT '',
+                    was_accepted        INTEGER DEFAULT 0,
+                    accepted_at         TIMESTAMP,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flowzen_user_preferences (
+                    key         TEXT PRIMARY KEY,
+                    value       TEXT DEFAULT '{}',
+                    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_flowzen_reclog_created ON flowzen_recommendation_log(created_at DESC)")
+
+        # Migration 20 -> 21: Videos table for video asset tracking
+        if from_version < 21:  # noqa: SIM102
+            logger.info("Migration v21: Videos table")
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS videos (
+                    id              TEXT PRIMARY KEY,
+                    filename        TEXT NOT NULL,
+                    file_path       TEXT NOT NULL UNIQUE,
+                    title           TEXT DEFAULT '',
+                    person          TEXT DEFAULT '',
+                    pipeline_stage  TEXT DEFAULT 'raw',
+                    category        TEXT DEFAULT 'Other',
+                    source_dir      TEXT DEFAULT '',
+                    size_bytes      INTEGER DEFAULT 0,
+                    duration_secs   REAL DEFAULT 0.0,
+                    width           INTEGER DEFAULT 0,
+                    height          INTEGER DEFAULT 0,
+                    tags            TEXT DEFAULT '[]',
+                    notes           TEXT DEFAULT '',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    file_modified   TIMESTAMP,
+                    metadata        TEXT DEFAULT '{}'
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_person ON videos(person)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_category ON videos(category)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_pipeline ON videos(pipeline_stage)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC)")
+
+        # Migration 21 -> 22: Video projects + pipeline steps
+        if from_version < 22:
+            logger.info("Migration v22: Video projects + pipeline tracking")
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS video_projects (
+                    id              TEXT PRIMARY KEY,
+                    name            TEXT NOT NULL,
+                    description     TEXT DEFAULT '',
+                    status          TEXT DEFAULT 'draft',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metadata        TEXT DEFAULT '{}'
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS video_project_persons (
+                    id              TEXT PRIMARY KEY,
+                    project_id      TEXT NOT NULL REFERENCES video_projects(id),
+                    name            TEXT NOT NULL,
+                    role            TEXT DEFAULT '',
+                    raw_video_path  TEXT DEFAULT '',
+                    voice_id        TEXT DEFAULT '',
+                    UNIQUE(project_id, name)
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS video_pipeline_steps (
+                    id              TEXT PRIMARY KEY,
+                    project_id      TEXT NOT NULL REFERENCES video_projects(id),
+                    person_name     TEXT NOT NULL,
+                    step_name       TEXT NOT NULL,
+                    status          TEXT DEFAULT 'pending',
+                    output_path     TEXT DEFAULT '',
+                    output_video_id TEXT DEFAULT '',
+                    started_at      TIMESTAMP,
+                    completed_at    TIMESTAMP,
+                    error_message   TEXT DEFAULT '',
+                    UNIQUE(project_id, person_name, step_name)
+                )
+            """)
+            try:
+                cursor.execute("ALTER TABLE videos ADD COLUMN project_id TEXT DEFAULT ''")
+            except Exception:
+                pass
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_video_projects_status ON video_projects(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_video_project_persons_project ON video_project_persons(project_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_video_pipeline_steps_project ON video_pipeline_steps(project_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_video_pipeline_steps_person ON video_pipeline_steps(person_name)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_project ON videos(project_id)")
 
         # Update schema version
         conn.execute("UPDATE schema_version SET version = ?", (self.SCHEMA_VERSION,))

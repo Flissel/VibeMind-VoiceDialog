@@ -40,7 +40,28 @@ export interface GenerationStatusResponse {
 
 // ── Sub-Tab ──
 
-export type AgentFarmTab = 'autogen' | 'n8n'
+export type AgentFarmTab = 'autogen' | 'teams' | 'n8n'
+
+// ── Teams (completed pipeline runs) ──
+
+export interface TeamInfo {
+  team_id: string
+  name: string
+  agent_count: number
+  agent_names: string[]
+  status: 'completed' | 'running' | 'failed'
+  pattern: string
+  created_at?: string
+  output_path?: string
+  github_url?: string
+  eval_score?: number
+}
+
+export interface TeamsResponse {
+  success: boolean
+  teams: TeamInfo[]
+  total: number
+}
 
 // ── Video ──
 

@@ -12,6 +12,7 @@ Phase 13: Multi-Agent Intent Analysis System
 - UserContext for context-aware processing
 """
 
+import asyncio
 import logging
 import sys
 import time
@@ -466,6 +467,7 @@ class IntentOrchestrator:
         self._tool_executors: Dict[str, Callable] = _registry.load_all(
             realtime_evaluator=self.realtime_evaluator,
         )
+        self._param_mappings = _registry.get_param_mappings()
 
         # Broadcast Dispatcher (Fan-Out architecture)
         # When enabled, every classified intent is broadcast to ALL domain agents.
@@ -504,6 +506,7 @@ class IntentOrchestrator:
             sm_task_memory=self.sm_task_memory,
             sm_user_profile=self.sm_user_profile,
             use_broadcast_mode=self._use_broadcast_mode,
+            param_mappings=self._param_mappings,
         )
 
     def _looks_like_multi_step(self, text: str) -> bool:
@@ -683,7 +686,7 @@ class IntentOrchestrator:
                             tool_fn = self._tool_executors[tool_name]
                             try:
                                 tool_params = _classification.get("parameters", {}) if _classification else {}
-                                result = tool_fn(**tool_params) if tool_params else tool_fn()
+                                result = tool_fn(tool_params)
                                 if asyncio.iscoroutine(result):
                                     result = await result
                                 response = result.get("message", str(result)) if isinstance(result, dict) else str(result)

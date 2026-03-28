@@ -101,10 +101,17 @@ Gib Tool-Calls zurück für die korrigierten Aktionen."""
 class PlannerWorkerConfig:
     """Konfiguration für den Planner Worker."""
     worker_id: str = "planner_worker"
-    model: str = "google/gemini-2.0-flash-001"
+    model: str = None
     max_planning_steps: int = 10
     enable_tool_calling: bool = True
     temperature: float = 0.3
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        if self.model is None:
+            from llm_config import get_model as _get_model
+            self.model = _get_model("desktop_worker")
 
 
 class PlannerWorker:

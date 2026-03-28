@@ -25,11 +25,12 @@ class GazeConfig:
     # One-Euro filter params (replace EMA)
     min_cutoff: float = 0.15     # low = more smoothing at rest (was 0.4)
     beta: float = 0.001          # speed-adaptive gain (was 0.003)
-    # Auto-range defaults (iris ratio typically 0.2–0.8)
-    range_x_min: float = 0.20
-    range_x_max: float = 0.80
-    range_y_min: float = 0.25
-    range_y_max: float = 0.75
+    # Auto-range defaults (iris ratio range — tighter = more screen coverage)
+    # Y range is narrower because looking down is physically limited
+    range_x_min: float = 0.25
+    range_x_max: float = 0.75
+    range_y_min: float = 0.30
+    range_y_max: float = 0.65
     # Confidence gate — skip frames with poor face detection
     min_confidence: float = 0.8
     # Adaptive head-eye fusion (speed-dependent)
@@ -43,6 +44,23 @@ class WinkConfig:
     ear_threshold: float = 0.21
     min_frames: int = 3
     cooldown_ms: int = 600
+    # IntentionalWinkDetector params
+    use_intentional_detector: bool = True
+    velocity_threshold: float = 1.5      # EAR/s — below = intentional
+    asymmetry_min_ms: int = 150           # ms asymmetry needed for wink
+    both_closed_min_ms: int = 400         # ms — intentional both-closed
+    both_closed_max_ms: int = 2000        # ms — beyond = resting, not gesture
+    intentional_cooldown_ms: int = 800    # cooldown for intentional detector
+    baseline_ema_alpha: float = 0.01      # adaptive baseline speed
+
+
+@dataclass
+class DictationConfig:
+    enabled: bool = True
+    silence_timeout_s: float = 2.0          # seconds of silence before auto-enhance
+    preview_timeout_s: float = 15.0         # auto-dismiss preview
+    use_agent_team: bool = True             # route enhancement via Agent Team
+    use_clipboard_paste: bool = True        # clipboard vs typewrite for insertion
 
 
 @dataclass
@@ -61,8 +79,8 @@ class CursorConfig:
     max_speed_px: int = 400     # Velocity clamp — max px per frame (was 800)
     dwell_lock_frames: int = 5  # Frames in deadzone before locking position
     # AccuracyGate
-    accuracy_threshold: float = 0.75
-    accuracy_off_threshold: float = 0.50
+    accuracy_threshold: float = 0.95
+    accuracy_off_threshold: float = 0.70
     accuracy_radius_frac: float = 0.05   # fraction of screen diagonal
     drift_threshold_frac: float = 0.07
     accuracy_min_clicks: int = 20
@@ -87,6 +105,7 @@ class AppConfig:
     panes: List[PaneConfig] = field(default_factory=list)
     gaze: GazeConfig = field(default_factory=GazeConfig)
     wink: WinkConfig = field(default_factory=WinkConfig)
+    dictation: DictationConfig = field(default_factory=DictationConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     cursor: CursorConfig = field(default_factory=CursorConfig)
     stream: StreamConfig = field(default_factory=StreamConfig)

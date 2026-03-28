@@ -675,6 +675,17 @@ class ElectronBackend:
                 # Ensure Redis URL is set (Automation_ui defaults to 6381 otherwise)
                 if "REDIS_URL" not in env:
                     env["REDIS_URL"] = "redis://localhost:6379/0"
+                # Inject LLM models from global config (llm_models.yml)
+                try:
+                    from llm_config import get_model
+                    if "LLM_MODEL" not in env:
+                        env["LLM_MODEL"] = get_model("orchestrator")
+                    if "VISION_MODEL" not in env:
+                        env["VISION_MODEL"] = get_model("vision")
+                    if "COMPACTION_MODEL" not in env:
+                        env["COMPACTION_MODEL"] = get_model("summary")
+                except Exception:
+                    pass  # Non-fatal — Automation UI will use its own defaults
                 self._automation_ui_proc = subprocess.Popen(
                     [sys.executable, str(server_path)],
                     cwd=str(server_path.parent.parent),
@@ -1233,6 +1244,16 @@ class ElectronBackend:
         elif msg_type == "toggle_plugin":
             asyncio.create_task(self._clawport.handle_toggle_plugin(message))
 
+        # ── Models Config ──
+        elif msg_type == "get_models_config":
+            asyncio.create_task(self._clawport.handle_get_models_config())
+
+        elif msg_type == "update_model_role":
+            asyncio.create_task(self._clawport.handle_update_model_role(message))
+
+        elif msg_type == "test_model_connection":
+            asyncio.create_task(self._clawport.handle_test_model_connection(message))
+
         elif msg_type == "n8n_status":
             asyncio.create_task(self._n8n.handle_n8n_status())
 
@@ -1250,6 +1271,25 @@ class ElectronBackend:
 
         elif msg_type == "n8n_delete":
             asyncio.create_task(self._n8n.handle_n8n_delete(message))
+
+        # ── VibeCoder Chat (iterative n8n workflow builder) ──
+        elif msg_type == "n8n_chat_start":
+            asyncio.create_task(self._n8n.handle_n8n_chat_start(message))
+
+        elif msg_type == "n8n_chat_checklist":
+            asyncio.create_task(self._n8n.handle_n8n_chat_checklist(message))
+
+        elif msg_type == "n8n_chat_message":
+            asyncio.create_task(self._n8n.handle_n8n_chat_message(message))
+
+        elif msg_type == "n8n_chat_deploy":
+            asyncio.create_task(self._n8n.handle_n8n_chat_deploy(message))
+
+        elif msg_type == "n8n_chat_history":
+            asyncio.create_task(self._n8n.handle_n8n_chat_history(message))
+
+        elif msg_type == "n8n_chat_sessions":
+            asyncio.create_task(self._n8n.handle_n8n_chat_sessions())
 
         # ── AgentFarm handlers ──
         elif msg_type == "agentfarm_create_team":
@@ -1307,6 +1347,8 @@ class ElectronBackend:
             asyncio.create_task(self._handle_video_tool("get_reference_pipeline", "video_reference_pipeline_result"))
         elif msg_type == "video_publish_rowboat":
             asyncio.create_task(self._handle_video_tool("publish_videos_to_rowboat", "video_publish_rowboat_result"))
+        elif msg_type == "video_delete":
+            asyncio.create_task(self._handle_video_delete(message))
 
         # ── Rowboat update checker ──
         elif msg_type == "check_rowboat_update":
@@ -1519,8 +1561,30 @@ class ElectronBackend:
             debug_log(f"Video tool error ({tool_name}): {e}")
             self.send_message({"type": response_type, "success": False, "message": str(e)})
 
+    async def _handle_video_delete(self, message: dict):
+        """Delete a video from DB and optionally from disk."""
+        try:
+            from data.video_repository import VideoRepository
+            import os
+            repo = VideoRepository()
+            video_id = message.get("video_id", "")
+            delete_disk = message.get("delete_disk", False)
 
+            video = repo.get(video_id)
+            if not video:
+                self.send_message({"type": "video_delete_result", "success": False, "message": f"Video {video_id} not found"})
+                return
 
+            if delete_disk and video.get("file_path"):
+                try:
+                    os.remove(video["file_path"])
+                except FileNotFoundError:
+                    pass
+
+            repo.delete(video_id)
+            self.send_message({"type": "video_delete_result", "success": True, "message": f"Deleted {video['filename']}"})
+        except Exception as e:
+            self.send_message({"type": "video_delete_result", "success": False, "message": str(e)})
 
 
 
@@ -1568,6 +1632,14 @@ async def main():
     backend = ElectronBackend()
     debug_log("ElectronBackend created")
     
+    # Start media server for video/audio playback in Rowboat
+    try:
+        from spaces.video.media_server import start_media_server
+        start_media_server()
+        debug_log("Media server started on port 9877")
+    except Exception as e:
+        debug_log(f"Media server failed to start: {e}")
+
     # Send ready signal to Electron
     backend.send_message({"type": "python_ready"})
     debug_log("Sent python_ready signal")

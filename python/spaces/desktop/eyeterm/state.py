@@ -1,10 +1,12 @@
-"""eyeTerm state machine — 4 states for look + speak + polish + preview UX.
+"""eyeTerm state machine — 6 states for look + speak + polish + preview + dictation UX.
 
 States:
   IDLE       — no focus (gaze not dwelling)
   FOCUSED    — element highlighted, voice dictation active
   POLISHING  — AI is refining the transcript (left wink triggered)
   PREVIEWING — polished text shown, awaiting confirm/reject wink
+  DICTATING  — capturing voice input (system-wide dictation mode)
+  ENHANCING  — AI is enhancing dictated text
 """
 
 import logging
@@ -20,6 +22,8 @@ class State(Enum):
     FOCUSED = "focused"
     POLISHING = "polishing"
     PREVIEWING = "previewing"
+    DICTATING = "dictating"
+    ENHANCING = "enhancing"
 
 
 class Event(Enum):
@@ -27,9 +31,13 @@ class Event(Enum):
     GAZE_LOST = "gaze_lost"
     LEFT_WINK = "left_wink"
     RIGHT_WINK = "right_wink"
+    BOTH_CLOSED = "both_closed"
     SPEECH_FINAL = "speech_final"
     POLISH_COMPLETE = "polish_complete"
     PREVIEW_TIMEOUT = "preview_timeout"
+    DICTATION_START = "dictation_start"
+    DICTATION_STOP = "dictation_stop"
+    ENHANCE_COMPLETE = "enhance_complete"
 
 
 # Transition table: (current_state, event) -> (new_state, action_or_none)
@@ -53,9 +61,28 @@ _TRANSITIONS = {
     # PREVIEWING (polished text shown — confirm or reject)
     (State.PREVIEWING, Event.RIGHT_WINK): (State.FOCUSED, "submit_polished"),
     (State.PREVIEWING, Event.LEFT_WINK): (State.FOCUSED, "reject_polished"),
+    (State.PREVIEWING, Event.BOTH_CLOSED): (State.IDLE, "accept_enhanced"),
     (State.PREVIEWING, Event.PREVIEW_TIMEOUT): (State.FOCUSED, "dismiss_preview"),
     (State.PREVIEWING, Event.GAZE_LOST): (State.IDLE, "dismiss_preview_and_unfocus"),
     (State.PREVIEWING, Event.GAZE_DWELL): (State.PREVIEWING, None),  # ignore, stay
+
+    # --- Dictation mode (system-wide voice-to-text with AI enhancement) ---
+
+    # Enter dictation via head nod (from IDLE or FOCUSED)
+    (State.IDLE, Event.DICTATION_START): (State.DICTATING, "start_dictation"),
+    (State.FOCUSED, Event.DICTATION_START): (State.DICTATING, "start_dictation"),
+
+    # DICTATING (capturing voice)
+    (State.DICTATING, Event.DICTATION_STOP): (State.ENHANCING, "start_enhancement"),
+    (State.DICTATING, Event.LEFT_WINK): (State.IDLE, "cancel_dictation"),
+    (State.DICTATING, Event.RIGHT_WINK): (State.IDLE, "insert_raw"),
+
+    # ENHANCING (LLM processing)
+    (State.ENHANCING, Event.ENHANCE_COMPLETE): (State.PREVIEWING, "show_dictation_preview"),
+    (State.ENHANCING, Event.LEFT_WINK): (State.IDLE, "cancel_enhancement"),
+
+    # PREVIEWING reuses existing transitions + adds BOTH_CLOSED for dictation accept
+    # (BOTH_CLOSED already added above)
 }
 
 
@@ -67,6 +94,10 @@ class StateMachine:
     focused_pane: Optional[int] = None
     pending_transcript: Optional[str] = None
     polished_text: Optional[str] = None
+    # Dictation mode fields
+    raw_transcript: Optional[str] = None
+    enhanced_transcript: Optional[str] = None
+    showing_raw: bool = False  # toggle between raw/enhanced in PREVIEWING
     history: list = field(default_factory=list)
 
     def transition(self, event: Event, payload: Any = None) -> Tuple[State, Optional[str]]:
@@ -109,11 +140,17 @@ class StateMachine:
         if event == Event.POLISH_COMPLETE and isinstance(payload, str):
             self.polished_text = payload
 
+        if event == Event.ENHANCE_COMPLETE and isinstance(payload, str):
+            self.enhanced_transcript = payload
+
         # Clear focus on IDLE
         if new_state == State.IDLE:
             self.focused_pane = None
             self.pending_transcript = None
             self.polished_text = None
+            self.raw_transcript = None
+            self.enhanced_transcript = None
+            self.showing_raw = False
 
         # Clear polish state when returning to FOCUSED from PREVIEWING
         if old_state == State.PREVIEWING and new_state == State.FOCUSED:
@@ -136,3 +173,6 @@ class StateMachine:
         self.focused_pane = None
         self.pending_transcript = None
         self.polished_text = None
+        self.raw_transcript = None
+        self.enhanced_transcript = None
+        self.showing_raw = False
