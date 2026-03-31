@@ -827,7 +827,94 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   )
 }
 
-// ── Video Gallery (unchanged) ─────────────────────────────────
+// ── Video Upload Dropzone ─────────────────────────────────────
+
+function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [personName, setPersonName] = useState('')
+  const [status, setStatus] = useState('')
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    const files = Array.from(e.dataTransfer.files).filter(f =>
+      /\.(mp4|mov|avi|mkv|webm)$/i.test(f.name)
+    )
+    if (files.length === 0) { setStatus('Keine Video-Dateien gefunden'); return }
+
+    setUploading(true)
+    for (const file of files) {
+      const name = personName || file.name.replace(/\.[^.]+$/, '')
+      setStatus(`Uploade ${file.name}...`)
+      try {
+        const res = await api()?.videoUpload?.((file as any).path, name)
+        if (res?.success) {
+          setStatus(`${file.name} hochgeladen`)
+        } else {
+          setStatus(`Fehler: ${res?.message || 'Upload fehlgeschlagen'}`)
+        }
+      } catch (err: any) {
+        setStatus(`Fehler: ${err.message}`)
+      }
+    }
+    setUploading(false)
+    setPersonName('')
+    onUploaded()
+  }, [personName, onUploaded])
+
+  return (
+    <div style={{ marginBottom: 'var(--space-4)' }}>
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        style={{
+          border: `2px dashed ${dragging ? 'var(--accent)' : 'var(--separator)'}`,
+          borderRadius: 'var(--radius-lg)',
+          padding: 'var(--space-5)',
+          textAlign: 'center',
+          background: dragging ? 'rgba(100,140,255,0.08)' : 'var(--bg-secondary)',
+          transition: 'all 150ms ease',
+          cursor: 'pointer',
+        }}
+      >
+        <div style={{ fontSize: 28, marginBottom: 'var(--space-2)', opacity: 0.6 }}>
+          {uploading ? '\u23F3' : '\u{1F4E5}'}
+        </div>
+        <div style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
+          {uploading ? 'Wird hochgeladen...' : 'Video hierher ziehen'}
+        </div>
+        <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
+          MP4, MOV, AVI, MKV, WebM
+        </div>
+        {!uploading && (
+          <input
+            type="text"
+            placeholder="Person (optional)"
+            value={personName}
+            onChange={e => setPersonName(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            style={{
+              marginTop: 'var(--space-3)', padding: '6px 12px',
+              background: 'var(--fill-quaternary)', border: '1px solid var(--separator)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+              fontSize: 'var(--text-caption1)', textAlign: 'center', width: 180,
+              outline: 'none',
+            }}
+          />
+        )}
+        {status && (
+          <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-caption2)', color: 'var(--accent)' }}>
+            {status}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Video Gallery ─────────────────────────────────────────────
 
 function VideoGallery() {
   const [videos, setVideos] = useState<VideoFileInfo[]>([])
@@ -856,21 +943,6 @@ function VideoGallery() {
     return <div style={{ color: 'var(--text-tertiary)', padding: 'var(--space-4)' }}>Videos werden geladen...</div>
   }
 
-  if (videos.length === 0) {
-    return (
-      <div style={{
-        background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
-        padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-tertiary)',
-      }}>
-        <div style={{ fontSize: 32, marginBottom: 'var(--space-2)' }}>&#127909;</div>
-        <div style={{ fontSize: 'var(--text-footnote)' }}>Keine Videos gefunden</div>
-        <div style={{ fontSize: 'var(--text-caption2)', marginTop: 4 }}>
-          Starte eine Pipeline um Videos zu generieren
-        </div>
-      </div>
-    )
-  }
-
   return (
     <>
       {selectedVideo && <VideoPlayerModal video={selectedVideo} onClose={() => setSelectedVideo(null)} onDelete={() => {
@@ -878,6 +950,9 @@ function VideoGallery() {
         setSelectedVideo(null)
         api()?.videoDelete?.(v.id, true).then((res: any) => { if (res?.success) refresh() })
       }} />}
+
+      <UploadDropzone onUploaded={refresh} />
+
       <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)' }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-3)' }}>
           <div>
@@ -895,9 +970,16 @@ function VideoGallery() {
             <button onClick={refresh} style={linkBtnStyle}>Aktualisieren</button>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
-          {filtered.map(video => <VideoCard key={video.path} video={video} onClick={() => setSelectedVideo(video)} />)}
-        </div>
+        {videos.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 'var(--space-4)' }}>
+            <div style={{ fontSize: 'var(--text-footnote)' }}>Keine Videos gefunden</div>
+            <div style={{ fontSize: 'var(--text-caption2)', marginTop: 4 }}>Ziehe ein Video in die Dropzone oben</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 'var(--space-3)' }}>
+            {filtered.map(video => <VideoCard key={video.path} video={video} onClick={() => setSelectedVideo(video)} />)}
+          </div>
+        )}
       </div>
     </>
   )

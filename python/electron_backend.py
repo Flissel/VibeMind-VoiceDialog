@@ -1347,6 +1347,8 @@ class ElectronBackend:
             asyncio.create_task(self._handle_video_tool("get_reference_pipeline", "video_reference_pipeline_result"))
         elif msg_type == "video_publish_rowboat":
             asyncio.create_task(self._handle_video_tool("publish_videos_to_rowboat", "video_publish_rowboat_result"))
+        elif msg_type == "video_upload":
+            asyncio.create_task(self._handle_video_upload(message))
         elif msg_type == "video_delete":
             asyncio.create_task(self._handle_video_delete(message))
 
@@ -1560,6 +1562,53 @@ class ElectronBackend:
         except Exception as e:
             debug_log(f"Video tool error ({tool_name}): {e}")
             self.send_message({"type": response_type, "success": False, "message": str(e)})
+
+    async def _handle_video_upload(self, message: dict):
+        """Upload a video: copy to ~/.rowboat/Videos/data/ and create DB entry."""
+        try:
+            import shutil
+            from pathlib import Path
+            from data.video_repository import VideoRepository
+
+            repo = VideoRepository()
+            src_path = message.get("file_path", "")
+            person_name = message.get("person_name", "").strip()
+
+            if not src_path or not Path(src_path).exists():
+                self.send_message({"type": "video_upload_result", "success": False, "message": f"File not found: {src_path}"})
+                return
+
+            src = Path(src_path)
+            dest_dir = Path.home() / ".rowboat" / "Videos" / "data"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Use person name as filename if provided, otherwise keep original
+            filename = f"{person_name}{src.suffix}" if person_name else src.name
+            dest = dest_dir / filename
+
+            # Copy file
+            shutil.copy2(str(src), str(dest))
+            size_bytes = dest.stat().st_size
+
+            # Create DB entry
+            video = repo.create(
+                filename=filename,
+                file_path=str(dest),
+                source_dir=str(dest_dir),
+                size_bytes=size_bytes,
+                category="Team",
+                pipeline_stage="raw",
+                person=person_name or None,
+            )
+
+            self.send_message({
+                "type": "video_upload_result",
+                "success": True,
+                "message": f"Uploaded {filename} ({size_bytes // 1024} KB)",
+                "video": video,
+            })
+        except Exception as e:
+            self.send_message({"type": "video_upload_result", "success": False, "message": str(e)})
 
     async def _handle_video_delete(self, message: dict):
         """Delete a video from DB and optionally from disk."""

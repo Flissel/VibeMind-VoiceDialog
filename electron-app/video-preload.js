@@ -68,6 +68,10 @@ contextBridge.exposeInMainWorld('vibemindVideo', {
   publishToRowboat: () =>
     ipcRenderer.invoke('video:publish-rowboat'),
 
+  // ── Video upload ──
+  videoUpload: (filePath, personName) =>
+    ipcRenderer.invoke('video:upload', { file_path: filePath, person_name: personName }),
+
   // ── Video delete ──
   videoDelete: (videoId, deleteDisk) =>
     ipcRenderer.invoke('video:delete', { video_id: videoId, delete_disk: !!deleteDisk }),

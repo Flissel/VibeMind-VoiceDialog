@@ -2395,6 +2395,11 @@ function setupIpcHandlers() {
             return await sendToPythonAndWait({ type: 'video_publish_rowboat' }, 'video_publish_rowboat_result', 30000);
         } catch (e) { return { success: false, message: e.message }; }
     });
+    ipcMain.handle('video:upload', async (_event, params) => {
+        try {
+            return await sendToPythonAndWait({ type: 'video_upload', ...params }, 'video_upload_result', 30000);
+        } catch (e) { return { success: false, message: e.message }; }
+    });
     ipcMain.handle('video:delete', async (_event, params) => {
         try {
             return await sendToPythonAndWait({ type: 'video_delete', ...params }, 'video_delete_result', 15000);
