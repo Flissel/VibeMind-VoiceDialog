@@ -393,9 +393,17 @@ function startPythonBackend() {
         return;
     }
 
+    // PYTHONPATH: add vibemind-os root so 'brain' and 'spaces' packages are importable
+    const vibemindRoot = path.join(__dirname, '..', '..');
+    const existingPythonPath = process.env.PYTHONPATH || '';
+    const newPythonPath = existingPythonPath
+        ? `${vibemindRoot}${path.delimiter}${existingPythonPath}`
+        : vibemindRoot;
+
     pythonProcess = spawn(pythonPath, [backendPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: path.join(__dirname, '..', 'python'),
+        env: { ...process.env, PYTHONPATH: newPythonPath },
     });
     
     console.log('[Main] Python process started with PID:', pythonProcess.pid);

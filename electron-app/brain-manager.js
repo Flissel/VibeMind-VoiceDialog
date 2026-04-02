@@ -37,11 +37,14 @@ class BrainManager {
     const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
     this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
 
-    // Brain project root — try submodule first, then standalone Desktop location
+    // Brain project root — try root-level brain/ first, then legacy submodule, then standalone
+    const rootBrainPath = path.join(projectRoot, '..', 'brain', 'the_brain');
     const submodulePath = path.join(projectRoot, 'python', 'spaces', 'brain', 'the_brain');
     const standalonePath = path.join('C:', 'Users', 'User', 'Desktop', 'the_brain', 'the_brain');
 
-    if (fs.existsSync(path.join(submodulePath, 'web', 'brain_server.py'))) {
+    if (fs.existsSync(path.join(rootBrainPath, 'web', 'brain_server.py'))) {
+      this.brainProjectRoot = rootBrainPath;
+    } else if (fs.existsSync(path.join(submodulePath, 'web', 'brain_server.py'))) {
       this.brainProjectRoot = submodulePath;
     } else if (fs.existsSync(path.join(standalonePath, 'web', 'brain_server.py'))) {
       this.brainProjectRoot = standalonePath;

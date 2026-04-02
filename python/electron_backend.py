@@ -29,6 +29,11 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+# Ensure vibemind-os root is on sys.path for 'brain' and 'spaces' packages
+_vibemind_root = str(Path(__file__).parent.parent.parent)
+if _vibemind_root not in sys.path:
+    sys.path.insert(0, _vibemind_root)
+
 # Load .env file FIRST before any other imports that might need env vars
 try:
     from dotenv import load_dotenv
@@ -436,7 +441,7 @@ class ElectronBackend:
 
                 # Wire up BrainSeeder (if enabled)
                 try:
-                    from spaces.brain.brain_seeder import BrainSeeder
+                    from brain.brain_seeder import BrainSeeder
                     seeder = BrainSeeder(
                         mongo_client=getattr(publisher, '_client', None),
                         db_name=getattr(publisher, '_db_name', ''),
