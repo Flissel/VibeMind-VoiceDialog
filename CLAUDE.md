@@ -455,25 +455,25 @@ npm run dashboard:dev     # Vite dev server with hot-reload
 
 **BrowserView Mutual Exclusion:** All 4 managers (Dashboard, Rowboat, SweDesign, ClawPort) hide each other when any one is shown.
 
-### Memory System (Optional)
+### Memory System (Always-On)
 
-Supermemory integration for semantic memory:
+Supermemory integration for semantic memory — active for **every intent** across all routing paths (HybridRouter, MinibookHub, RAG, fallback). The `_store_memory_for_intent()` hook in `IntentOrchestrator` fires after every processed intent.
 
-| Service | File | Purpose |
-| ------- | ---- | ------- |
-| TaskMemory | `python/memory/task_memory_service.py` | Task event tracking |
-| ConversationMemory | `python/memory/conversation_memory_service.py` | Cross-session context |
-| UserProfile | `python/memory/user_profile_service.py` | Preference learning |
-| ConversationRouter | `python/memory/conversation_router.py` | RAG-based routing |
+| Service | File | Purpose | Trigger |
+| ------- | ---- | ------- | ------- |
+| TaskMemory | `python/memory/task_memory_service.py` | Task event tracking | After tool execution (SyncExecutor) + conversational events |
+| ConversationMemory | `python/memory/conversation_memory_service.py` | Cross-session context | Every intent (user input + response pair) |
+| UserProfile | `python/memory/user_profile_service.py` | Preference learning | Every intent (intent usage frequency) |
+| ConversationRouter | `python/memory/conversation_router.py` | RAG-based routing | Every intent (interaction for semantic routing) |
 
-Enable via `.env`:
+Required `.env`:
 
 ```bash
 USE_TASK_MEMORY=true
 USE_CONVERSATION_MEMORY=true
 USE_USER_PROFILES=true
 USE_RAG_CLASSIFIER=true
-SUPERMEMORY_API_KEY=xxx
+SUPERMEMORY_API_KEY=xxx  # from https://supermemory.ai
 ```
 
 ## Common Commands

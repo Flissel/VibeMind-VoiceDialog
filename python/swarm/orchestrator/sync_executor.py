@@ -81,6 +81,7 @@ class SyncExecutor:
         broadcast_dispatcher=None,
         sm_task_memory=None,
         sm_user_profile=None,
+        sm_conversation_memory=None,
         use_broadcast_mode: bool = False,
         param_mappings: Optional[Dict[str, Dict[str, str]]] = None,
     ):
@@ -90,6 +91,7 @@ class SyncExecutor:
         self._broadcast_dispatcher = broadcast_dispatcher
         self.sm_task_memory = sm_task_memory
         self.sm_user_profile = sm_user_profile
+        self.sm_conversation_memory = sm_conversation_memory
         self._use_broadcast_mode = use_broadcast_mode
         self._param_mappings = param_mappings or {}
 

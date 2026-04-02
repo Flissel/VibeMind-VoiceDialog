@@ -514,6 +514,7 @@ class IntentOrchestrator:
             broadcast_dispatcher=getattr(self, '_broadcast_dispatcher', None),
             sm_task_memory=self.sm_task_memory,
             sm_user_profile=self.sm_user_profile,
+            sm_conversation_memory=self.sm_conversation_memory,
             use_broadcast_mode=self._use_broadcast_mode,
             param_mappings=self._param_mappings,
         )
@@ -572,6 +573,72 @@ class IntentOrchestrator:
         except Exception as e:
             logger.warning(f"Redis not available ({e}) - using synchronous fallback")
             return False
+
+    async def _store_memory_for_intent(
+        self,
+        intent_text: str,
+        result: OrchestrationResult,
+        context: Optional[TaskContext] = None,
+    ) -> None:
+        """
+        Store intent data to all Supermemory services (non-blocking).
+
+        Called after every successful intent processing to ensure all 4
+        memory services receive data for every intent, regardless of
+        which routing path was taken (HybridRouter, MinibookHub, RAG, etc.).
+        """
+        if not HAS_SUPERMEMORY_SERVICES:
+            return
+
+        session_id = context.session_id if context else "default"
+        user_id = context.user_id if context else "default"
+
+        # 1. ConversationRouter — store interaction for semantic routing context
+        if self.conversation_router and self.conversation_router.is_available:
+            try:
+                await self.conversation_router.store_interaction(
+                    user_input=intent_text,
+                    classified_intent=result.event_type,
+                    confidence=0.0,
+                    agent_response=result.response_hint or "",
+                    parameters={}
+                )
+            except Exception as e:
+                logger.debug(f"[Memory] ConversationRouter store failed: {e}")
+
+        # 2. UserProfileService — track intent usage for habit learning
+        if self.sm_user_profile and self.sm_user_profile.is_available:
+            try:
+                await self.sm_user_profile.track_intent_usage(result.event_type)
+            except Exception as e:
+                logger.debug(f"[Memory] UserProfile tracking failed: {e}")
+
+        # 3. ConversationMemoryService — store user/assistant exchange
+        if self.sm_conversation_memory and self.sm_conversation_memory.is_available:
+            try:
+                await self.sm_conversation_memory.store_message_pair(
+                    session_id=session_id,
+                    user_message=intent_text,
+                    assistant_response=result.response_hint or "",
+                    agent_name="rachel"
+                )
+            except Exception as e:
+                logger.debug(f"[Memory] ConversationMemory store failed: {e}")
+
+        # 4. TaskMemoryService — task tracking is handled by SyncExecutor
+        #    (store_supermemory_task_completed/failed) after tool execution.
+        #    For conversational events that skip tools, store explicitly.
+        if result.is_conversational and self.sm_task_memory and self.sm_task_memory.is_available:
+            try:
+                await self.sm_task_memory.store_task_completed(
+                    task_id=result.job_id or f"conv-{result.event_type}",
+                    intent_type=result.event_type,
+                    result=result.response_hint or "",
+                    duration_ms=0,
+                    session_id=session_id
+                )
+            except Exception as e:
+                logger.debug(f"[Memory] TaskMemory conversational store failed: {e}")
 
     def set_minibook_hub(self, hub) -> None:
         """Set the MinibookHub for centralized execution dispatch."""
@@ -656,6 +723,9 @@ class IntentOrchestrator:
                 domain_result = await self._route_to_domain(intent_text, domain_hint, context)
                 if domain_result:
                     self._log_classification(intent_text, domain_result, context)
+                    asyncio.create_task(self._store_memory_for_intent(
+                        intent_text, domain_result, context
+                    ))
                     return domain_result
                 # If domain routing failed, continue to normal analysis
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
@@ -707,12 +777,17 @@ class IntentOrchestrator:
                                         actual_space=route_result.space,
                                         success=True,
                                     ))
-                                return OrchestrationResult(
+                                hybrid_result = OrchestrationResult(
                                     job_id="",
                                     event_type=route_result.event_type,
                                     stream=route_result.space,
                                     response_hint=response,
                                 )
+                                # Memory: store intent for all services
+                                asyncio.create_task(self._store_memory_for_intent(
+                                    intent_text, hybrid_result, context
+                                ))
+                                return hybrid_result
                             except Exception as exec_err:
                                 logger.warning(f"[HybridRouter] Direct exec failed: {exec_err}, falling through")
 
@@ -722,6 +797,9 @@ class IntentOrchestrator:
                         if self._minibook_hub:
                             hub_result = await self._minibook_hub.dispatch(intent_text, context)
                             if hub_result and getattr(hub_result, 'success', False):
+                                asyncio.create_task(self._store_memory_for_intent(
+                                    intent_text, hub_result, context
+                                ))
                                 return hub_result
 
                 except Exception as router_err:
@@ -736,6 +814,9 @@ class IntentOrchestrator:
                     hub_result = await self._minibook_hub.dispatch(intent_text, context)
                     if hub_result and getattr(hub_result, 'success', False):
                         logger.info(f"[MinibookHub] Dispatched: {getattr(hub_result, 'event_type', '?')}")
+                        asyncio.create_task(self._store_memory_for_intent(
+                            intent_text, hub_result, context
+                        ))
                         return hub_result
                     logger.warning("[MinibookHub] Dispatch returned no result")
                     return OrchestrationResult(
@@ -763,6 +844,9 @@ class IntentOrchestrator:
             if analysis_result:
                 # Core analysis succeeded - use it as primary result
                 self._log_classification(intent_text, analysis_result, context)
+                asyncio.create_task(self._store_memory_for_intent(
+                    intent_text, analysis_result, context
+                ))
                 return analysis_result
 
             # =================================================================
@@ -774,6 +858,9 @@ class IntentOrchestrator:
             best_extension = self._select_best_extension(extension_results)
             if best_extension:
                 self._log_classification(intent_text, best_extension, context)
+                asyncio.create_task(self._store_memory_for_intent(
+                    intent_text, best_extension, context
+                ))
                 return best_extension
 
             # =================================================================
@@ -781,6 +868,9 @@ class IntentOrchestrator:
             # =================================================================
             fallback_result = await self._fallback_processing(intent_text, context)
             self._log_classification(intent_text, fallback_result, context)
+            asyncio.create_task(self._store_memory_for_intent(
+                intent_text, fallback_result, context
+            ))
             return fallback_result
 
         except Exception as e:
@@ -1310,20 +1400,8 @@ class IntentOrchestrator:
                     except Exception as log_error:
                         logger.debug(f"[RAG] Could not log reasoning: {log_error}")
 
-                    # Handle MULTI-STEP requests
-                    # Store interaction in ConversationRouter for future context
-                    if self.conversation_router and self.conversation_router.is_available:
-                        try:
-                            await self.conversation_router.store_interaction(
-                                user_input=original_input,
-                                classified_intent=result.event_type,
-                                confidence=result.confidence,
-                                agent_response=result.reasoning or "",
-                                parameters=result.payload
-                            )
-                            logger.debug(f"[ConversationRouter] Stored: {original_input[:30]}... -> {result.event_type}")
-                        except Exception as store_err:
-                            logger.debug(f"[ConversationRouter] Failed to store interaction: {store_err}")
+                    # NOTE: ConversationRouter + memory storage is now handled
+                    # universally by _store_memory_for_intent() in process_intent()
 
                     if result.is_multi_step and result.steps:
                         logger.debug(f"[RAG MULTI-STEP] {len(result.steps)} steps detected")

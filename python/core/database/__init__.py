@@ -21,7 +21,6 @@ from data.models import (
     ConversationMessage,
     Shuttle,
     Task,
-    MermaidDiagram,
 )
 from data.repository import (
     IdeasRepository,
@@ -29,7 +28,6 @@ from data.repository import (
     CanvasRepository,
     ConversationRepository,
     ShuttlesRepository,
-    MermaidDiagramsRepository,
 )
 
 __all__ = [
@@ -47,12 +45,10 @@ __all__ = [
     "ConversationMessage",
     "Shuttle",
     "Task",
-    "MermaidDiagram",
     # Repositories
     "IdeasRepository",
     "ProjectsRepository",
     "CanvasRepository",
     "ConversationRepository",
     "ShuttlesRepository",
-    "MermaidDiagramsRepository",
 ]

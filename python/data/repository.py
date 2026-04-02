@@ -7,7 +7,6 @@ Individual repositories have been split into separate files:
   - canvas_repository.py
   - conversation_repository.py
   - shuttles_repository.py
-  - mermaid_repository.py
   - schedule_repository.py
 
 This file re-exports all classes for backwards compatibility.
@@ -20,7 +19,6 @@ from .projects_repository import ProjectsRepository
 from .canvas_repository import CanvasRepository
 from .conversation_repository import ConversationRepository
 from .shuttles_repository import ShuttlesRepository
-from .mermaid_repository import MermaidDiagramsRepository
 from .schedule_repository import ScheduledTaskRepository
 from .flowzen_repository import FlowzenRepository
 from .video_repository import VideoRepository
@@ -35,7 +33,6 @@ __all__ = [
     "CanvasRepository",
     "ConversationRepository",
     "ShuttlesRepository",
-    "MermaidDiagramsRepository",
     "ScheduledTaskRepository",
     "FlowzenRepository",
     "VideoRepository",
