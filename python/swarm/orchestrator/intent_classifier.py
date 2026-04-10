@@ -1381,22 +1381,22 @@ class IntentClassifier:
 
         # =====================================================================
         # Rule 24: Detect potential multi-step patterns LLM missed
-        # If single-step but text contains multi-action indicators, flag it
+        # Delegates to swarm.orchestrator.multi_step_detector — same helper
+        # is consulted by the orchestrator BEFORE Brain classification to
+        # prevent the Brain from firing on multi-step inputs.
         # =====================================================================
-        # Note: text_lower already defined above from user_input
-        multi_step_connectors = [" und ", " dann ", " danach ", ", dann ", " sowie ", ", und "]
-        action_verbs = ["erstelle", "create", "fuege", "add", "geh", "go", "liste", "list",
-                        "verbinde", "link", "loesche", "delete", "verlinke", "zeig", "show"]
-
-        # Count action verbs in input
-        verb_count = sum(1 for v in action_verbs if v in text_lower)
-        has_connector = any(c in text_lower for c in multi_step_connectors)
-
-        if verb_count >= 2 and has_connector:
-            # LLM returned single-step but text looks like multi-step
-            logger.info(f"Post-process Rule 24: Detected potential multi-step ({verb_count} verbs, has connector)")
-            # Don't auto-convert, just log for monitoring
-            # Future: Could trigger re-classification with explicit multi-step hint
+        try:
+            from swarm.orchestrator.multi_step_detector import explain as _explain_multi
+            _is_multi, _evidence = _explain_multi(user_input)
+            if _is_multi and not result.get("is_multi_step"):
+                logger.info(
+                    f"Post-process Rule 24: Detected potential multi-step "
+                    f"(verbs={_evidence['verbs']}, connectors={_evidence['connectors']})"
+                )
+                # Don't auto-convert — just log for monitoring so we can
+                # later correlate with actual LLM multi-step misses.
+        except Exception:
+            pass
 
         # =====================================================================
         # Rule 27: Multi-step structured formatting -> idea.structure
@@ -1420,13 +1420,24 @@ class IntentClassifier:
 
         # Rule FINAL: MiroFish bubble evaluation - LAST rule, overrides everything
         # "Bewerte Bubble X", "Evaluate Bubble X", "Go/No-Go Bubble X"
+        #
+        # NOTE: Phrases are matched with \b word boundaries on both ends.
+        # A previous version used plain substring matching, which caused
+        # "ist bubble" to accidentally fire on "list bubbles" (l‑IST BUBBLE‑s)
+        # — turning every "list bubbles" request into a mirofish.evaluate call.
+        # Do NOT remove the word boundaries without re-testing that case.
+        import re as _re
         mirofish_eval_phrases = [
             "bewerte bubble", "evaluate bubble", "bubble readiness",
             "go/no-go", "go no go", "code-ready", "code ready",
             "pruefe bubble", "prüfe bubble", "bubble bewerten",
             "ist bubble", "ist die bubble",
         ]
-        if any(p in text_lower for p in mirofish_eval_phrases):
+        _mirofish_eval_re = _re.compile(
+            r"\b(?:" + "|".join(_re.escape(p) for p in mirofish_eval_phrases) + r")\b",
+            _re.IGNORECASE,
+        )
+        if _mirofish_eval_re.search(text_lower):
             import re
             bubble_name = ""
             match = re.search(r'bubble\s+["\']?([^"\']+?)["\']?\s*(?:bereit|ready|$)', text_lower)

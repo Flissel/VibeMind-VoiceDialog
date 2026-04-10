@@ -14,6 +14,14 @@ providers:
   openrouter:
     base_url: "https://openrouter.ai/api/v1"
     api_key_env: "OPENROUTER_API_KEY"
+  anthropic:
+    base_url: "https://api.anthropic.com/v1/"
+    api_key_env: "ANTHROPIC_API_KEY"
+  claude-code:
+    # Routes through 'claude --print' CLI which uses the Max subscription OAuth.
+    # No API key needed. Handled by claude_code_provider.py, not the OpenAI SDK.
+    base_url: null
+    api_key_env: null
   ollama:
     base_url: "http://localhost:11434"
     api_key_env: null
@@ -21,109 +29,109 @@ providers:
 models:
   # --- Core Orchestrator ---
   classifier:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "claude-code"
+    model: "claude-haiku-4-5-20251001"
     max_tokens: 2048
-    description: "Intent classification (IntentClassifier, RAGIntentClassifier)"
+    description: "Intent classification — routed through claude CLI (Max subscription)"
 
   rag_classifier:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "claude-code"
+    model: "claude-haiku-4-5-20251001"
     max_tokens: 4096
     description: "RAG-based semantic classification (Supermemory)"
 
   response:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "claude-code"
+    model: "claude-haiku-4-5-20251001"
     max_tokens: 2048
     description: "Response generation for voice output"
 
   orchestrator:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "claude-code"
+    model: "google/gemma-3-4b-it:free"
     max_tokens: 4096
     description: "Cloud client default (swarm/cloud_client.py)"
 
   analysis:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "IntentAnalysisTeam multi-hypothesis"
 
   # --- Agents & Routing ---
   space_agent:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Per-space LLM tool orchestration"
 
   stream_listener:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "StreamListener parallel intent routing"
 
   space_router:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "MinibookHub SpaceRouter + enrichment"
 
   # --- Content Generation ---
   summary:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Idea summarization, white papers"
 
   rewrite:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Content rewriting, formatting"
 
   exploration:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "AI-Scientist tree search exploration"
 
   n8n_generator:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 8192
     description: "N8n workflow generation"
 
   # --- Personality & Conversion ---
   conversion:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "ConversionAI personality responses"
 
   personality:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "PersonalityGenerator"
 
   # --- Broadcast/Profiling ---
   profiling:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "Memory sub-agent profiling"
 
   context:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "Context sub-agent"
 
   # --- Vision & Media ---
   vision:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Vision analysis (desktop, video)"
 
@@ -143,28 +151,28 @@ models:
 
   # --- Workers ---
   summarization_worker:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Background summarization worker"
 
   rewrite_worker:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Background rewrite worker"
 
   # --- AgentFarm ---
   agentfarm:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "AgentFarm SwarmPipeline + ForgeOrchestrator"
 
   # --- Flowzen (Blaue Rose) ---
   flowzen_reasoning:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 200
     description: "Neuroscience-based circadian reasoning for task recommendations"
 
@@ -197,19 +205,19 @@ models:
 
   whitepaper:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "White paper generation from ideas"
 
   structure_analysis:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Ideas structure analysis and requirements extraction"
 
   feature_extraction:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Feature extraction and documentation from ideas"
 
@@ -221,7 +229,7 @@ models:
 
   bubble_eval:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Bubble evaluation and scoring"
 
@@ -240,7 +248,7 @@ models:
 
   desktop_vision_fast:
     provider: "openrouter"
-    model: "google/gemini-2.0-flash-exp:free"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Desktop automation fast vision (free tier)"
 
@@ -252,7 +260,7 @@ models:
 
   desktop_orchestrator:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Desktop automation orchestrator and subagents"
 
@@ -276,8 +284,8 @@ models:
 
   # --- N8n ---
   n8n_selector:
-    provider: "openai"
-    model: "gpt-4o-mini"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 2048
     description: "N8n SelectorGroupChat routing model"
 
@@ -296,8 +304,8 @@ models:
     description: "MiroFish simulation LLM (local Ollama)"
 
   mirofish_eval:
-    provider: "openai"
-    model: "gpt-5.4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "MiroFish evaluation model"
 
@@ -323,14 +331,14 @@ models:
 
   # --- Ideas (additional) ---
   ideas_research:
-    provider: "openai"
-    model: "gpt-4"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Ideas AutoGen research agent"
 
   connection_eval:
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Connection evaluator for idea linking"
 
@@ -362,8 +370,8 @@ models:
     description: "Shuttle wizard OpenRouter provider"
 
   wizard_openai:
-    provider: "openai"
-    model: "gpt-4o-mini"
+    provider: "openrouter"
+    model: "openai/gpt-oss-20b:free"
     max_tokens: 4096
     description: "Shuttle wizard OpenAI provider"
 

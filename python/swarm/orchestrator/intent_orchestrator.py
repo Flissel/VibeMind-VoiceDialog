@@ -122,6 +122,51 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Events the Brain can handle WITHOUT LLM-extracted parameters.
+# These are lists, stats, greetings, toggles — commands that either
+# take no arguments or whose arguments are implicit (e.g. "current bubble"
+# means "the bubble I'm in right now"). Everything NOT in this set
+# needs the LLM to extract title, description, query, etc. from the
+# user's free-form text.
+_BRAIN_PARAMETERLESS_EVENTS = frozenset({
+    # Bubbles — read-only / navigation
+    "bubble.list", "bubble.stats", "bubble.current", "bubble.back",
+    # Ideas — read-only
+    "idea.list", "idea.current_space",
+    # Conversation
+    "conversation.greeting", "conversation.farewell", "conversation.unknown",
+    "conversation.listening", "conversation.help",
+    # Evaluation feedback
+    "evaluation.correct", "evaluation.incorrect",
+    # Desktop — parameterless actions
+    "desktop.screenshot",
+    # Schedule — read-only
+    "schedule.list", "schedule.status",
+    # N8n — read-only
+    "n8n.list", "n8n.status",
+    # Code — read-only
+    "code.list", "code.status",
+    # AgentFarm — read-only
+    "agentfarm.list_teams", "agentfarm.list_templates", "agentfarm.status",
+    # Video — read-only
+    "video.status", "video.team_status",
+    # Roarboot — read-only
+    "roarboot.status",
+    # Minibook — read-only
+    "minibook.status", "minibook.list_projects",
+    # MiroFish — read-only
+    "mirofish.status",
+    # Flowzen — read-only
+    "rose.status",
+    # OpenClaw — read-only
+    "openclaw.status", "openclaw.notifications",
+    # Docker controls (no params, just toggle)
+    "roarboot.docker.start", "roarboot.docker.stop",
+    "mirofish.docker.start", "mirofish.docker.stop", "mirofish.docker.status",
+    # Desktop task list (no params)
+    "desktop.task.list",
+})
+
 # RAG Intent Classifier (Supermemory-based semantic search)
 # Must be after logger definition
 try:
@@ -469,6 +514,57 @@ class IntentOrchestrator:
         except Exception as e:
             logger.warning(f"BrainShadowObserver not available: {e}")
 
+        # Brain Event Shadow Observer — watches LLM classifications,
+        # trains EventRoutingHead, and (once graduated) replaces the LLM
+        # classifier on the hot path. Independent from _brain_shadow above.
+        self._brain_event_shadow = None
+        try:
+            from swarm.routing.brain_event_shadow import BrainEventShadowObserver
+            self._brain_event_shadow = BrainEventShadowObserver()
+            logger.info("BrainEventShadowObserver enabled (event-classification shadow mode)")
+        except Exception as e:
+            logger.warning(f"BrainEventShadowObserver not available: {e}")
+
+        # Most recent brain classification per session (in-memory cache),
+        # used by Phase F (user-correction signal) to know what to retrain on.
+        self._last_brain_classify: Dict[str, Dict[str, Any]] = {}
+        self._BRAIN_EVENT_MIN_CONFIDENCE = float(
+            os.getenv("BRAIN_EVENT_MIN_CONFIDENCE", "0.7")
+        )
+        # When True, skip the graduation requirement (500 samples at 95%)
+        # and let the Brain event-classifier fire immediately. Analogous to
+        # BRAIN_BRIDGE_FORCE_ACTIVE for the space router.
+        self._brain_event_force_active = (
+            os.getenv("BRAIN_EVENT_FORCE_ACTIVE", "false").lower() == "true"
+        )
+
+        # Brain + OpenFang Bridge — instantiated when EITHER:
+        #  - USE_BRAIN_BRIDGE=true → Phase -1 full Brain→OpenFang orchestration
+        #    (activates after brain_shadow graduates to 95% routing accuracy)
+        #  - USE_OPENFANG_DIRECT=true → Phase 0 HybridRouter can route tools
+        #    through OpenFang agents using the bridge's ensure_agent/send helpers
+        self._brain_bridge = None
+        _use_brain_bridge = os.getenv("USE_BRAIN_BRIDGE", "false").lower() == "true"
+        self._use_openfang_direct = os.getenv("USE_OPENFANG_DIRECT", "false").lower() == "true"
+        if (_use_brain_bridge or self._use_openfang_direct) and self._brain_shadow:
+            try:
+                from swarm.routing.brain_openfang_bridge import BrainOpenFangBridge
+                openfang_url = os.getenv("OPENFANG_URL", "http://localhost:4200")
+                self._brain_bridge = BrainOpenFangBridge(
+                    brain_url=self._brain_shadow._brain_url,
+                    openfang_url=openfang_url,
+                )
+                _modes = []
+                if _use_brain_bridge:
+                    _modes.append("Phase -1 orchestration")
+                if self._use_openfang_direct:
+                    _modes.append("Phase 0 OpenFang direct")
+                logger.info(
+                    f"BrainOpenFangBridge enabled ({', '.join(_modes)})"
+                )
+            except Exception as e:
+                logger.warning(f"BrainOpenFangBridge init failed: {e}")
+
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
         from swarm.orchestrator.tool_registry import ToolRegistry
@@ -685,6 +781,39 @@ class IntentOrchestrator:
         if not context.user_input:
             context.user_input = intent_text
 
+        # =====================================================================
+        # USER-CORRECTION SIGNAL (Phase F)
+        # =====================================================================
+        # If the previous turn produced a brain classification AND the current
+        # turn looks like a correction ("nein", "stop", "falsch", "ich meinte"),
+        # send negative reward to the brain for that previous routing_id.
+        try:
+            _sess_id = context.session_id or "default"
+            _last = self._last_brain_classify.get(_sess_id)
+            if _last and (time.time() - _last.get("ts", 0)) < 60:
+                _txt = (intent_text or "").strip().lower()
+                _correction_markers = (
+                    "nein", "no.", "falsch", "stop", "halt", "abbrechen",
+                    "ich meinte", "i meant", "wrong", "not what i wanted",
+                    "das war falsch", "meine ich nicht", "doch nicht",
+                )
+                if any(_txt.startswith(m) or _txt == m.rstrip(".") for m in _correction_markers) \
+                        or any(m in _txt for m in ("ich meinte", "i meant", "meine ich nicht")):
+                    if self._brain_event_shadow and _last.get("routing_id"):
+                        asyncio.create_task(self._brain_event_shadow.reward(
+                            routing_id=_last["routing_id"],
+                            success=False,
+                        ))
+                        logger.info(
+                            f"[BrainEvent] correction detected, "
+                            f"penalizing previous classification "
+                            f"'{_last.get('event_type')}' for '{_last.get('user_text', '')[:40]}'"
+                        )
+                    # Clear the cache so we don't double-penalize
+                    self._last_brain_classify.pop(_sess_id, None)
+        except Exception as _corr_err:
+            logger.debug(f"[BrainEvent] correction detection error: {_corr_err}")
+
         # Set system-wide session context for tools to access
         if HAS_SESSION_CONTEXT and set_session_context:
             try:
@@ -731,19 +860,266 @@ class IntentOrchestrator:
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
 
             # =================================================================
+            # PHASE -1: BRAIN + OPENFANG (context-aware routing + execution)
+            # =================================================================
+            # Activated only when Brain has graduated to active mode (95% accuracy),
+            # OR when BRAIN_BRIDGE_FORCE_ACTIVE=true for evaluation/testing.
+            # Routes via Brain with full workspace context, executes via OpenFang.
+            # Falls through to HybridRouter on failure or low confidence.
+            _brain_ready = (
+                self._brain_bridge
+                and self._brain_shadow
+                and (self._brain_shadow._active
+                     or os.getenv("BRAIN_BRIDGE_FORCE_ACTIVE", "false").lower() == "true")
+                and not domain_hint
+            )
+            if _brain_ready:
+                try:
+                    # Pre-classify for event_type hint.
+                    # Priority:
+                    #   1. EventRoutingHead (Brain, local, <50ms) when graduated
+                    #   2. LLM classifier (fallback, ~500ms)
+                    _pre_event = ""
+                    _pre_event_brain_routing_id = ""
+                    _user_id_pre = getattr(context, 'user_id', None) if context else None
+
+                    if (self._brain_event_shadow
+                            and (self._brain_event_shadow.brain_active
+                                 or self._brain_event_force_active)):
+                        try:
+                            _brain_cls = await self._brain_event_shadow.classify_via_brain(
+                                intent_text, user_id=_user_id_pre,
+                            )
+                            if _brain_cls and _brain_cls.get("confidence", 0) >= self._BRAIN_EVENT_MIN_CONFIDENCE:
+                                _pre_event = _brain_cls.get("event_type", "")
+                                _pre_event_brain_routing_id = _brain_cls.get("routing_id", "")
+                                logger.info(
+                                    f"[BrainBridge] pre-classification via EventRoutingHead: "
+                                    f"'{_pre_event}' ({_brain_cls.get('confidence', 0):.0%})"
+                                )
+                        except Exception as be_err:
+                            logger.debug(f"[BrainBridge] EventRoutingHead pre-cls failed: {be_err}")
+
+                    # Fallback to LLM if Event-Brain didn't hit
+                    if not _pre_event:
+                        try:
+                            from swarm.orchestrator.intent_classifier import IntentClassifier
+                            _pre_cls = IntentClassifier()
+                            _pre_result = await _pre_cls.classify(intent_text)
+                            _pre_event = _pre_result.get("event_type", "") if _pre_result else ""
+                            # Shadow-train the Event-Brain from the LLM answer
+                            if self._brain_event_shadow and _pre_event:
+                                asyncio.create_task(self._brain_event_shadow.observe(
+                                    user_text=intent_text,
+                                    actual_event_type=_pre_event,
+                                    user_id=_user_id_pre,
+                                ))
+                        except Exception:
+                            pass
+
+                    bridge_result = await self._brain_bridge.execute(
+                        intent_text=intent_text,
+                        context=context,
+                        pre_classification=_pre_event,
+                    )
+                    if bridge_result and not bridge_result.error:
+                        # Reward the Event-Brain if its classification drove this path
+                        if _pre_event_brain_routing_id and self._brain_event_shadow:
+                            asyncio.create_task(self._brain_event_shadow.reward(
+                                routing_id=_pre_event_brain_routing_id, success=True,
+                            ))
+                        asyncio.create_task(self._store_memory_for_intent(
+                            intent_text, bridge_result, context
+                        ))
+                        return bridge_result
+                    # None or error → fall through to HybridRouter
+                    if _pre_event_brain_routing_id and self._brain_event_shadow:
+                        asyncio.create_task(self._brain_event_shadow.reward(
+                            routing_id=_pre_event_brain_routing_id, success=False,
+                        ))
+                except Exception as bridge_err:
+                    logger.warning(f"[BrainBridge] Phase -1 failed, falling through: {bridge_err}")
+
+            # =================================================================
             # PHASE 0: HYBRID ROUTER (deterministic fast-path)
             # =================================================================
             # Tiers 1-4: Resolve deterministically without MinibookHub roundtrip.
             # Tier 5 (multi-space): Delegates to MinibookHub.
             if self._hybrid_router and not domain_hint:
                 try:
-                    # Classify first to get event_type for prefix matching
+                    # =========================================================
+                    # CLASSIFY: Brain first, LLM as fallback
+                    # =========================================================
+                    # If the Brain event-classifier has graduated AND its
+                    # confidence on this input clears the threshold, we skip
+                    # the LLM entirely. Otherwise we fall through to the LLM
+                    # and use its answer as supervised training for the Brain.
+                    _classification: Optional[Dict[str, Any]] = None
                     _pre_event_type = ""
+                    _brain_routing_id = ""
+
+                    # 0. Multi-step gate — Brain only handles single-step intents.
+                    # If the user combined multiple actions with a connector
+                    # ("erstelle idee und füge sie der bubble hinzu"), defer
+                    # straight to the LLM which returns is_multi_step=true.
+                    _is_multi_step = False
                     try:
-                        from swarm.orchestrator.intent_classifier import IntentClassifier
-                        _classifier = IntentClassifier()
-                        _classification = await _classifier.classify(intent_text)
-                        _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                        from swarm.orchestrator.multi_step_detector import looks_multi_step
+                        _is_multi_step = looks_multi_step(intent_text)
+                        if _is_multi_step:
+                            logger.info(
+                                f"[BrainEvent] multi-step detected in "
+                                f"'{intent_text[:60]}', deferring to LLM"
+                            )
+                    except Exception:
+                        pass
+
+                    # 1. Brain-first attempt (only when graduated AND single-step
+                    #    AND the event doesn't need LLM-extracted parameters).
+                    #
+                    # The Brain classifies event_type but cannot extract
+                    # parameters from the user's text (title, description,
+                    # name, query, etc.). For events that need params, we
+                    # MUST fall through to the LLM, which returns them in
+                    # payload. Events in _BRAIN_PARAMETERLESS_EVENTS are
+                    # safe to execute without LLM params — they're lists,
+                    # stats, greetings, toggles, etc.
+                    _user_id_for_brain = getattr(context, 'user_id', None) if context else None
+                    if (not _is_multi_step
+                            and self._brain_event_shadow
+                            and (self._brain_event_shadow.brain_active
+                                 or self._brain_event_force_active)):
+                        try:
+                            brain_cls = await self._brain_event_shadow.classify_via_brain(
+                                intent_text,
+                                user_id=_user_id_for_brain,
+                            )
+                            if (brain_cls
+                                    and brain_cls.get("confidence", 0) >= self._BRAIN_EVENT_MIN_CONFIDENCE
+                                    and brain_cls.get("event_type", "") in _BRAIN_PARAMETERLESS_EVENTS):
+                                _pre_event_type = brain_cls.get("event_type", "")
+                                _brain_routing_id = brain_cls.get("routing_id", "")
+                                _classification = {
+                                    "event_type": _pre_event_type,
+                                    "parameters": {},
+                                    "payload": {},
+                                    "_brain_routing_id": _brain_routing_id,
+                                }
+                                logger.info(
+                                    f"[BrainEvent] hit '{_pre_event_type}' "
+                                    f"({brain_cls.get('confidence', 0):.0%}), skipping LLM"
+                                )
+                            elif brain_cls and brain_cls.get("confidence", 0) >= self._BRAIN_EVENT_MIN_CONFIDENCE:
+                                # Brain is confident but event needs params.
+                                # Route to OpenFang if available — the agent
+                                # has its own Claude access and can extract
+                                # params + execute in one step. Only fall
+                                # through to LLM if OpenFang isn't up.
+                                _needs_params_event = brain_cls.get("event_type", "")
+                                _brain_routing_id = brain_cls.get("routing_id", "")
+                                if self._use_openfang_direct and self._brain_bridge:
+                                    try:
+                                        from swarm.routing.brain_openfang_bridge import SPACE_AGENT_MAP
+                                        from swarm.orchestrator.intent_classifier import IntentClassifier
+                                        # Map event → space → agent
+                                        _evt_space = None
+                                        try:
+                                            from core.space_routing_head import EVENT_SPACE_MAP
+                                            _evt_space = EVENT_SPACE_MAP.get(_needs_params_event)
+                                        except ImportError:
+                                            pass
+                                        _of_agent_name = self._brain_bridge.space_to_agent(
+                                            _evt_space or "ideas"
+                                        )
+                                        if _of_agent_name:
+                                            _of_agent_id = await asyncio.wait_for(
+                                                self._brain_bridge.ensure_agent(_of_agent_name),
+                                                timeout=2.0,
+                                            )
+                                            if _of_agent_id:
+                                                _of_msg = (
+                                                    f"Classify and execute this VibeMind intent.\n"
+                                                    f"Event type: {_needs_params_event}\n"
+                                                    f"User said: {intent_text}\n\n"
+                                                    f"Extract the parameters from the user text "
+                                                    f"and execute the {_needs_params_event} tool. "
+                                                    f"Return a short confirmation message."
+                                                )
+                                                _of_response = await asyncio.wait_for(
+                                                    self._brain_bridge.send_to_agent(
+                                                        _of_agent_id, _of_msg
+                                                    ),
+                                                    timeout=10.0,
+                                                )
+                                                logger.info(
+                                                    f"[BrainEvent+OpenFang] '{_needs_params_event}' "
+                                                    f"({brain_cls.get('confidence', 0):.0%}) → "
+                                                    f"OpenFang '{_of_agent_name}'"
+                                                )
+                                                # Reward brain for correct classification
+                                                if self._brain_event_shadow and _brain_routing_id:
+                                                    asyncio.create_task(
+                                                        self._brain_event_shadow.reward(
+                                                            routing_id=_brain_routing_id,
+                                                            success=True,
+                                                        )
+                                                    )
+                                                _of_result = OrchestrationResult(
+                                                    job_id=_brain_routing_id or "",
+                                                    event_type=_needs_params_event,
+                                                    stream=_evt_space or "ideas",
+                                                    response_hint=_of_response,
+                                                )
+                                                asyncio.create_task(
+                                                    self._store_memory_for_intent(
+                                                        intent_text, _of_result, context
+                                                    )
+                                                )
+                                                return _of_result
+                                    except Exception as of_err:
+                                        logger.warning(
+                                            f"[BrainEvent+OpenFang] failed: {of_err}, "
+                                            f"falling through to LLM"
+                                        )
+                                # OpenFang not available or failed → fall through to LLM
+                                logger.info(
+                                    f"[BrainEvent] '{_needs_params_event}' "
+                                    f"({brain_cls.get('confidence', 0):.0%}) needs params, "
+                                    f"deferring to LLM"
+                                )
+                        except Exception as be_err:
+                            logger.debug(f"[BrainEvent] classify_via_brain failed: {be_err}")
+
+                    # 2. LLM fallback (always reached when brain didn't hit)
+                    if _classification is None:
+                        try:
+                            from swarm.orchestrator.intent_classifier import IntentClassifier
+                            _classifier = IntentClassifier()
+                            _classification = await _classifier.classify(intent_text)
+                            _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                            # Brain learns from the LLM ground truth (shadow training),
+                            # personalized to the current user when available.
+                            if self._brain_event_shadow and _pre_event_type:
+                                asyncio.create_task(self._brain_event_shadow.observe(
+                                    user_text=intent_text,
+                                    actual_event_type=_pre_event_type,
+                                    user_id=_user_id_for_brain,
+                                ))
+                        except Exception:
+                            pass
+
+                    # Cache the classification keyed by session for Phase F
+                    # (user-correction signal). Capped at 100 entries.
+                    try:
+                        _sess_id = (context or {}).get("session_id", "default") if context else "default"
+                        if len(self._last_brain_classify) > 100:
+                            self._last_brain_classify.clear()
+                        self._last_brain_classify[_sess_id] = {
+                            "user_text": intent_text,
+                            "event_type": _pre_event_type,
+                            "routing_id": _brain_routing_id,
+                            "ts": time.time(),
+                        }
                     except Exception:
                         pass
 
@@ -764,17 +1140,66 @@ class IntentOrchestrator:
                         if tool_name in self._tool_executors:
                             tool_fn = self._tool_executors[tool_name]
                             try:
-                                tool_params = _classification.get("parameters", {}) if _classification else {}
-                                result = tool_fn(tool_params)
-                                if asyncio.iscoroutine(result):
-                                    result = await result
-                                response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
-                                # Shadow: Brain observes this routing decision
+                                tool_params = (_classification.get("parameters") or {}) if _classification else {}
+                                # Patch 2: optionally route through OpenFang agent
+                                # when USE_OPENFANG_DIRECT=true. The bridge's
+                                # public helpers ensure_agent/send_to_agent are
+                                # used; the space → agent mapping comes from
+                                # the bridge's SPACE_AGENT_MAP. On any failure
+                                # (no mapping, no agent, timeout) we fall back
+                                # to the local tool executor.
+                                response: Optional[str] = None
+                                if (self._use_openfang_direct
+                                        and self._brain_bridge is not None):
+                                    try:
+                                        _agent_name = self._brain_bridge.space_to_agent(route_result.space)
+                                        if _agent_name:
+                                            _agent_id = await asyncio.wait_for(
+                                                self._brain_bridge.ensure_agent(_agent_name),
+                                                timeout=1.0,
+                                            )
+                                            if _agent_id:
+                                                _of_message = (
+                                                    f"Tool: {tool_name}\n"
+                                                    f"Params: {tool_params}\n"
+                                                    f"User: {intent_text}"
+                                                )
+                                                response = await asyncio.wait_for(
+                                                    self._brain_bridge.send_to_agent(
+                                                        _agent_id, _of_message
+                                                    ),
+                                                    timeout=5.0,
+                                                )
+                                                logger.info(
+                                                    f"[HybridRouter] Executed '{tool_name}' "
+                                                    f"via OpenFang agent '{_agent_name}'"
+                                                )
+                                    except Exception as of_err:
+                                        logger.warning(
+                                            f"[HybridRouter] OpenFang exec failed "
+                                            f"({of_err}), falling back to local"
+                                        )
+                                        response = None
+
+                                # Local execution path (original behavior, also
+                                # the fallback when OpenFang routing is off or fails)
+                                if response is None:
+                                    result = tool_fn(tool_params)
+                                    if asyncio.iscoroutine(result):
+                                        result = await result
+                                    response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                # Shadow: Brain observes this routing decision (space routing)
                                 if self._brain_shadow:
                                     asyncio.create_task(self._brain_shadow.observe(
                                         user_text=intent_text,
                                         event_type=route_result.event_type,
                                         actual_space=route_result.space,
+                                        success=True,
+                                    ))
+                                # Reward: Brain event-classifier learns from tool success
+                                if self._brain_event_shadow and _brain_routing_id:
+                                    asyncio.create_task(self._brain_event_shadow.reward(
+                                        routing_id=_brain_routing_id,
                                         success=True,
                                     ))
                                 hybrid_result = OrchestrationResult(
@@ -790,6 +1215,13 @@ class IntentOrchestrator:
                                 return hybrid_result
                             except Exception as exec_err:
                                 logger.warning(f"[HybridRouter] Direct exec failed: {exec_err}, falling through")
+                                # Negative reward for the brain classifier — its
+                                # event_type led to a tool execution failure.
+                                if self._brain_event_shadow and _brain_routing_id:
+                                    asyncio.create_task(self._brain_event_shadow.reward(
+                                        routing_id=_brain_routing_id,
+                                        success=False,
+                                    ))
 
                     elif route_result.tier == 5 and route_result.multi_space:
                         # Multi-space → delegate to MinibookHub

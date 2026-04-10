@@ -190,8 +190,8 @@ def get_model(role: str) -> str:
         return model
 
     # 4. Fallback
-    logger.warning(f"No model configured for role '{role}', falling back to gpt-5.4")
-    return "gpt-5.4"
+    logger.warning(f"No model configured for role '{role}', falling back to openai/gpt-oss-20b:free")
+    return "openai/gpt-oss-20b:free"
 
 
 def get_provider(role: str) -> str:
@@ -292,9 +292,11 @@ def get_client(role: str):
     """
     Get a configured OpenAI-compatible client for a role.
 
-    Returns an openai.OpenAI instance pointed at the correct provider
-    (OpenAI direct, OpenRouter, or Ollama).
+    Returns an openai.OpenAI instance (or a ClaudeCodeClient shim if
+    provider is 'claude-code').
     """
+    if get_provider(role) == "claude-code":
+        return _get_claude_code_client(role)
     from openai import OpenAI
     return OpenAI(**_resolve_credentials(role))
 
@@ -303,11 +305,68 @@ def get_async_client(role: str):
     """
     Get a configured async OpenAI-compatible client for a role.
 
-    Returns an openai.AsyncOpenAI instance pointed at the correct provider
-    (OpenAI direct, OpenRouter, or Ollama).
+    Returns an openai.AsyncOpenAI instance (or a ClaudeCodeClient shim
+    if provider is 'claude-code' — the shim wraps sync subprocess calls).
     """
+    if get_provider(role) == "claude-code":
+        return _get_claude_code_client(role)
     from openai import AsyncOpenAI
     return AsyncOpenAI(**_resolve_credentials(role))
+
+
+def _get_claude_code_client(role: str):
+    """Return a minimal OpenAI-compatible shim that routes through claude --print.
+
+    This uses the user's Max subscription OAuth — no API key needed. The
+    shim implements just enough of the OpenAI client interface for the
+    IntentClassifier to work (chat.completions.create).
+    """
+    model = get_model(role)
+
+    class _Msg:
+        def __init__(self, content):
+            self.content = content
+
+    class _Choice:
+        def __init__(self, content):
+            self.message = _Msg(content)
+
+    class _Response:
+        def __init__(self, content, model_name):
+            self.choices = [_Choice(content)]
+            self.model = model_name
+
+    class _Completions:
+        def __init__(self, default_model):
+            self._model = default_model
+
+        def create(self, model=None, messages=None, **kwargs):
+            from claude_code_provider import claude_code_chat
+            # Extract the last user message as the prompt
+            prompt = ""
+            if messages:
+                for m in reversed(messages):
+                    if m.get("role") == "user":
+                        prompt = m.get("content", "")
+                        break
+                if not prompt:
+                    prompt = messages[-1].get("content", "")
+            used_model = model or self._model
+            response = claude_code_chat(prompt, model=used_model, timeout=30.0)
+            if response is None:
+                raise RuntimeError("claude --print returned no response")
+            return _Response(response, used_model)
+
+    class _Chat:
+        def __init__(self, default_model):
+            self.completions = _Completions(default_model)
+
+    class ClaudeCodeClient:
+        """Minimal OpenAI-compatible client shim for claude --print."""
+        def __init__(self, default_model):
+            self.chat = _Chat(default_model)
+
+    return ClaudeCodeClient(model)
 
 
 def _get_api_key_env(role: str) -> str:
