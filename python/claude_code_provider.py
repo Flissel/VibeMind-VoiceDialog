@@ -59,6 +59,8 @@ def claude_code_chat(
             text=True,
             timeout=timeout,
             env=env,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             stderr = (result.stderr or "").strip()

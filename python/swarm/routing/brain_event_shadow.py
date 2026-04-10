@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import deque
 from typing import Any, Dict, Optional
 
@@ -150,11 +151,12 @@ class BrainEventShadowObserver:
         Returns: {event_type, confidence, routing_id, alternatives, latency_ms}
         When user_id is given, the brain applies that user's personalization delta.
         """
-        # Time-based re-enable: if brain was disabled >N seconds ago, try again.
-        # This replaces the unreliable call_later approach which doesn't work
-        # across event loops (e.g. process_intent_sync creates a fresh loop).
-        import time as _time
-        if not self._brain_available:
+        # When force_active is set via env, ALWAYS try the brain — never skip.
+        # This overrides the backoff logic for development/testing.
+        _force = os.environ.get("BRAIN_EVENT_FORCE_ACTIVE", "").lower() == "true"
+
+        if not self._brain_available and not _force:
+            import time as _time
             if (_time.time() - self._brain_disabled_at) > self._brain_backoff_s:
                 self._brain_available = True
                 logger.debug("Brain re-enabled after backoff")
