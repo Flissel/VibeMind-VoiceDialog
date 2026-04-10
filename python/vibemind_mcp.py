@@ -88,6 +88,21 @@ TOOLS = [
         }
     },
     {
+        "name": "vibemind_ui",
+        "description": "Liest den aktuellen VibeMind Electron UI-Zustand via CDP (Chrome DevTools Protocol). Zeigt: aktive Spaces, Chat-Messages, 3D-Szene Status, WebGL, Fehler. Nützlich um zu prüfen ob die UI richtig rendert.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Was tun: 'read' (UI-State lesen), 'reload' (Seite neu laden), 'screenshot' (Screenshot als Pfad)",
+                    "enum": ["read", "reload", "screenshot"],
+                    "default": "read"
+                }
+            }
+        }
+    },
+    {
         "name": "vibemind_brain_classify",
         "description": "Fragt direkt den Brain (EventRoutingHead) wie er einen Text klassifizieren würde, ohne Tool-Ausführung. Nützlich um zu sehen ob der Brain schon gut genug trainiert ist.",
         "inputSchema": {
@@ -185,6 +200,15 @@ async def handle_tool(name: str, args: dict) -> str:
         except Exception as e:
             return f"Fehler beim Laden der Bubbles: {e}"
 
+    elif name == "vibemind_ui":
+        action = args.get("action", "read")
+        CDP_PORT = int(os.environ.get("ELECTRON_CDP_PORT", "9223"))
+        try:
+            result = await _vibemind_ui_action(action, CDP_PORT)
+            return result
+        except Exception as e:
+            return f"VibeMind UI nicht erreichbar (CDP :{CDP_PORT}): {e}"
+
     elif name == "vibemind_brain_classify":
         text = args.get("text", "").strip()
         if not text:
@@ -260,6 +284,163 @@ async def handle_tool(name: str, args: dict) -> str:
             return f"Brain nicht erreichbar: {e}"
 
     return f"Unbekanntes Tool: {name}"
+
+
+async def _vibemind_ui_action(action: str, cdp_port: int) -> str:
+    """Read/reload VibeMind Electron UI via Chrome DevTools Protocol."""
+    import urllib.request
+
+    # 1. Find the Multiverse page WebSocket URL
+    try:
+        resp = urllib.request.urlopen(f"http://localhost:{cdp_port}/json", timeout=3)
+        pages = json.loads(resp.read())
+    except Exception as e:
+        return f"CDP nicht erreichbar auf :{cdp_port} — Electron läuft nicht? ({e})"
+
+    ws_url = None
+    all_pages = []
+    for p in pages:
+        all_pages.append(f"  [{p.get('type','?')}] {p.get('title','?')}")
+        if "Multiverse" in p.get("title", "") or "renderer/index.html" in p.get("url", ""):
+            ws_url = p.get("webSocketDebuggerUrl")
+
+    if not ws_url:
+        return f"Kein VibeMind Renderer gefunden. Pages:\n" + "\n".join(all_pages)
+
+    # 2. Connect via WebSocket and run JS expressions
+    try:
+        import websockets
+    except ImportError:
+        return "websockets package nicht installiert (pip install websockets)"
+
+    async with websockets.connect(ws_url, max_size=2**20) as ws:
+        async def evaluate(expr: str, eid: int) -> str:
+            await ws.send(json.dumps({
+                "id": eid, "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": True}
+            }))
+            for _ in range(5):
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+                if msg.get("id") == eid:
+                    res = msg.get("result", {}).get("result", {})
+                    if msg.get("result", {}).get("exceptionDetails"):
+                        exc = msg["result"]["exceptionDetails"]
+                        return f"JS ERROR: {exc.get('text', str(exc)[:200])}"
+                    return str(res.get("value", res.get("description", "")))
+            return "TIMEOUT"
+
+        if action == "reload":
+            await ws.send(json.dumps({"id": 99, "method": "Page.reload", "params": {"ignoreCache": True}}))
+            await asyncio.sleep(2)
+            return "✅ VibeMind Seite neu geladen (WebGL sollte sich reinitialisieren)"
+
+        if action == "screenshot":
+            await ws.send(json.dumps({"id": 98, "method": "Page.captureScreenshot", "params": {"format": "png"}}))
+            for _ in range(5):
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+                if msg.get("id") == 98:
+                    import base64
+                    data = msg.get("result", {}).get("data", "")
+                    if data:
+                        spath = os.path.join(os.environ.get("TEMP", "/tmp"), "vibemind_screenshot.png")
+                        with open(spath, "wb") as f:
+                            f.write(base64.b64decode(data))
+                        return f"📸 Screenshot gespeichert: {spath}"
+                    return "Screenshot fehlgeschlagen"
+            return "Screenshot TIMEOUT"
+
+        # action == "read" — collect UI state
+        lines = ["🖥️ VibeMind UI State"]
+
+        # Title + URL
+        title = await evaluate("document.title", 1)
+        lines.append(f"  Title: {title}")
+
+        # WebGL status
+        webgl = await evaluate("""
+            (function() {
+                var c = document.querySelector('canvas');
+                if (!c) return 'NO CANVAS';
+                var gl = c.getContext('webgl2') || c.getContext('webgl');
+                if (!gl) return 'NO WEBGL CONTEXT';
+                if (gl.isContextLost()) return 'CONTEXT LOST (weißer Screen!)';
+                return 'OK (' + c.width + 'x' + c.height + ')';
+            })()
+        """, 2)
+        lines.append(f"  WebGL: {webgl}")
+
+        # Active space / navigation
+        spaces = await evaluate("""
+            JSON.stringify(Array.from(document.querySelectorAll('.space-tab, .nav-item, [class*=space]'))
+                .slice(0, 15)
+                .map(e => ({text: e.textContent.trim().substring(0, 30), active: e.classList.contains('active')})))
+        """, 3)
+        lines.append(f"  Spaces: {spaces[:300]}")
+
+        # Chat messages
+        chat = await evaluate("""
+            JSON.stringify((function() {
+                var msgs = document.querySelectorAll('.chat-message, .message, [class*=message]');
+                var result = [];
+                msgs.forEach(function(m) {
+                    var text = m.textContent.trim().substring(0, 100);
+                    if (text) result.push(text);
+                });
+                return result.slice(-5);
+            })())
+        """, 4)
+        lines.append(f"  Chat (letzte 5): {chat[:400]}")
+
+        # Current bubble/space indicator
+        current = await evaluate("""
+            (function() {
+                var el = document.querySelector('#current-space, #current-bubble, .current-space, [class*=current]');
+                return el ? el.textContent.trim().substring(0, 50) : 'kein aktives Element';
+            })()
+        """, 5)
+        lines.append(f"  Aktueller Space: {current}")
+
+        # Voice status
+        voice = await evaluate("""
+            (function() {
+                var el = document.querySelector('#voice-status, [class*=voice], .voice-indicator');
+                return el ? el.textContent.trim().substring(0, 50) : 'kein Voice-Element';
+            })()
+        """, 6)
+        lines.append(f"  Voice: {voice}")
+
+        # 3D scene objects (Three.js)
+        scene3d = await evaluate("""
+            (function() {
+                if (typeof window.scene === 'undefined' && typeof window.app === 'undefined') return 'kein scene/app Objekt';
+                var s = window.scene || (window.app && window.app.scene);
+                if (!s) return 'scene nicht gefunden';
+                var names = [];
+                s.traverse(function(obj) { if (obj.name) names.push(obj.name); });
+                return names.length + ' Objekte: ' + names.slice(0, 20).join(', ');
+            })()
+        """, 7)
+        lines.append(f"  3D Szene: {scene3d[:300]}")
+
+        # Console errors (last 5)
+        errors = await evaluate("""
+            JSON.stringify(window.__vibemind_errors || [])
+        """, 8)
+        if errors and errors != "[]":
+            lines.append(f"  Errors: {errors[:300]}")
+
+        # Connection status (WebSocket to MoireServer)
+        ws_status = await evaluate("""
+            (function() {
+                var sockets = [];
+                if (window._ws) sockets.push('_ws: ' + window._ws.readyState);
+                if (window._moireWs) sockets.push('moire: ' + window._moireWs.readyState);
+                return sockets.length ? sockets.join(', ') : 'keine WebSockets gefunden';
+            })()
+        """, 9)
+        lines.append(f"  WebSockets: {ws_status}")
+
+        return "\n".join(lines)
 
 
 def main():
