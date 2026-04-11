@@ -1011,7 +1011,7 @@ class ToolRegistry:
             try:
                 # Active services
                 services = []
-                for name, port in [("Brain", 5000), ("OpenFang", 50051), ("n8n", 15678), ("Minibook", 3480)]:
+                for name, port in [("Brain", 5000), ("OpenFang", 4200), ("n8n", 15678), ("Minibook", 3480)]:
                     try:
                         urllib.request.urlopen(f"http://localhost:{port}/", timeout=1)
                         services.append(f"{name}:up")
@@ -1064,4 +1064,40 @@ class ToolRegistry:
 
         self._executors.setdefault("openclaw.prompt", _openclaw_prompt)
 
-        self._logger.info("Loaded status stubs (mirofish, video, rose, openclaw, docker controls)")
+        # All OpenClaw events route through the same prompt executor
+        # with a task-specific instruction prefix
+        def _make_openclaw_task(task_instruction):
+            def executor(p):
+                text = p.get("text", p.get("query", p.get("url", p.get("message", ""))))
+                p["text"] = f"{task_instruction}: {text}"
+                return _openclaw_prompt(p)
+            return executor
+
+        self._executors.setdefault("openclaw.browse",
+            _make_openclaw_task("Open this URL in the browser and describe what you see"))
+        self._executors.setdefault("openclaw.scrape",
+            _make_openclaw_task("Scrape this website and extract the key data"))
+        self._executors.setdefault("openclaw.research",
+            _make_openclaw_task("Do thorough web research on this topic using the browser"))
+        self._executors.setdefault("openclaw.message.send",
+            _make_openclaw_task("Send this message via the appropriate channel"))
+        self._executors.setdefault("openclaw.message.read",
+            _make_openclaw_task("Check and read recent messages from my channels"))
+        self._executors.setdefault("openclaw.linkedin.search",
+            _make_openclaw_task("Search LinkedIn for this query using the browser"))
+        self._executors.setdefault("openclaw.enrich",
+            _make_openclaw_task("Research this topic on the web and enrich the idea with findings"))
+        self._executors.setdefault("openclaw.pitch",
+            _make_openclaw_task("Create a professional pitch based on this context"))
+        self._executors.setdefault("openclaw.compare",
+            _make_openclaw_task("Compare these options by researching each one online"))
+        self._executors.setdefault("openclaw.monitor",
+            _make_openclaw_task("Check if this URL is accessible and report status"))
+        self._executors.setdefault("openclaw.screenshot.web",
+            _make_openclaw_task("Take a screenshot of this website"))
+        self._executors.setdefault("openclaw.fill_form",
+            _make_openclaw_task("Fill out this form on the website"))
+        self._executors.setdefault("openclaw.cron",
+            _make_openclaw_task("Schedule this as a recurring task"))
+
+        self._logger.info("Loaded status stubs + 13 OpenClaw task executors")
