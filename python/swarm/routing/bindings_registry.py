@@ -119,6 +119,11 @@ def _get_static_fallback() -> Dict[str, SpaceBinding]:
         "schedule.": SpaceBinding(space="schedule", agent="ScheduleBackendAgent", stream="events:tasks:schedule", pattern="prefix:schedule.*"),
         "n8n.": SpaceBinding(space="n8n", agent="N8nBackendAgent", stream="events:tasks:n8n", pattern="prefix:n8n.*"),
         "video.": SpaceBinding(space="video", agent="VideoBackendAgent", stream="events:tasks:video", pattern="prefix:video.*"),
+        "agentfarm.": SpaceBinding(space="autogen", agent="AgentFarmBackendAgent", stream="events:tasks:agentfarm", pattern="prefix:agentfarm.*"),
+        "mirofish.": SpaceBinding(space="mirofish", agent="MiroFishBackendAgent", stream="events:tasks:mirofish", pattern="prefix:mirofish.*"),
+        "rose.": SpaceBinding(space="flowzen", agent="FlowzenBackendAgent", stream="events:tasks:flowzen", pattern="prefix:rose.*"),
+        "conversation.": SpaceBinding(space="conversation", agent=None, stream=None, pattern="prefix:conversation.*"),
+        "evaluation.": SpaceBinding(space="conversation", agent=None, stream=None, pattern="prefix:evaluation.*"),
     }
 
 

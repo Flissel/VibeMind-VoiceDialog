@@ -64,6 +64,8 @@ class ToolRegistry:
         self._load_n8n_tools()
         self._load_agentfarm_tools()
         self._load_messaging_tools()
+        self._load_conversation_tools()
+        self._load_status_stubs()
         self._load_param_mappings()
         self._logger.info(f"Loaded {len(self._executors)} tools for sync fallback")
         return self._executors
@@ -854,3 +856,50 @@ class ToolRegistry:
             self._logger.info("Loaded messaging pipeline tools for sync fallback (2 tools)")
         except ImportError as e:
             self._logger.warning(f"Could not load messaging pipeline tools: {e}")
+
+    def _load_conversation_tools(self):
+        """Template responses for conversation events that don't need tool execution."""
+        self._executors.update({
+            "conversation.greeting": lambda p: {"message": "Hallo! Wie kann ich dir helfen?"},
+            "conversation.farewell": lambda p: {"message": "Tschuess! Bis zum naechsten Mal."},
+            "conversation.help": lambda p: {"message": (
+                "Ich kann dir helfen mit: Bubbles verwalten, Ideen erstellen, "
+                "Screenshots machen, Termine planen, Workflows starten, "
+                "Code-Projekte verwalten, und vieles mehr. "
+                "Sag einfach was du brauchst!"
+            )},
+            "conversation.unknown": lambda p: {"message": "Ich habe dich nicht ganz verstanden. Kannst du das anders formulieren?"},
+            "conversation.listening": lambda p: {"message": "Ich hoere zu..."},
+            "evaluation.correct": lambda p: {"message": "Super, freut mich dass es passt!"},
+            "evaluation.incorrect": lambda p: {"message": "OK, ich versuche es anders."},
+        })
+        self._logger.info("Loaded conversation tools for sync fallback (7 tools)")
+
+    def _load_status_stubs(self):
+        """Status-check stubs for spaces that don't have dedicated sync tools yet."""
+        # MiroFish status
+        try:
+            import aiohttp
+            def _mirofish_status(p):
+                import urllib.request
+                try:
+                    url = os.environ.get("MIROFISH_URL", "http://localhost:5101")
+                    resp = urllib.request.urlopen(f"{url}/health", timeout=3)
+                    return {"message": f"MiroFish ist erreichbar ({url})."}
+                except Exception:
+                    return {"message": f"MiroFish nicht erreichbar. Docker-Container gestartet?"}
+            self._executors["mirofish.status"] = _mirofish_status
+        except Exception:
+            pass
+
+        # Video status
+        self._executors.setdefault("video.status", lambda p: {
+            "message": "Video Studio: Kein aktiver Video-Job. Sag 'video team run' um ein Video zu erstellen."
+        })
+
+        # Rose/Flowzen status
+        self._executors.setdefault("rose.status", lambda p: {
+            "message": "Blue Rose (Flowzen): Aktivitaets-Tracker ist bereit. Sag 'rose recommend' fuer Empfehlungen."
+        })
+
+        self._logger.info("Loaded status stubs (mirofish, video, rose)")

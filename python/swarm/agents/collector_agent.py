@@ -76,6 +76,9 @@ class CollectorConfig:
         "go", "show", "list", "create", "delete", "navigate", "back", "open",
         "close", "start", "stop", "end", "save", "connect", "find", "search",
         "update", "edit", "change", "switch", "all",
+        # Conversational / greetings — always execute immediately
+        "hi", "hey", "hallo", "hello", "hei", "ciao", "ok", "okay", "ja", "nein",
+        "danke", "thanks", "status", "help", "hilfe", "was", "wie", "wo", "wer",
     )
 
 
@@ -219,10 +222,13 @@ Reply ONLY with: COMPLETE or INCOMPLETE"""
             logger.debug(f"[Collector] Long input ({word_count} words) - skip accumulation")
             return False
 
-        # Action verb at the beginning = execute immediately (even for short inputs)
-        # This handles commands like "geh rein", "zeig alle", "zurück"
-        if words and words[0] in self.config.action_verbs:
-            logger.debug(f"[Collector] Action verb '{words[0]}' detected - skip accumulation")
+        # Action verb at the beginning OR end = execute immediately (even for short inputs)
+        # This handles commands like "geh rein", "zeig alle", "zurück",
+        # and also "mirofish status", "video status", "rose status" where
+        # the action keyword is in the second position.
+        if words and any(w in self.config.action_verbs for w in words):
+            _matched = [w for w in words if w in self.config.action_verbs]
+            logger.debug(f"[Collector] Action verb {_matched} detected - skip accumulation")
             return False
 
         # Very short inputs always accumulate (1-2 words) - unless they have action verbs (checked above)

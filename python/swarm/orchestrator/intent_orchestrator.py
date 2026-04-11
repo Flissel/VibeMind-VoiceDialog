@@ -872,6 +872,7 @@ class IntentOrchestrator:
                 and (self._brain_shadow._active
                      or os.getenv("BRAIN_BRIDGE_FORCE_ACTIVE", "false").lower() == "true")
                 and not domain_hint
+                and not self._brain_event_force_active  # Phase 0 has priority when event-brain is force-active
             )
             if _brain_ready:
                 try:
@@ -1142,15 +1143,16 @@ class IntentOrchestrator:
                             try:
                                 tool_params = (_classification.get("parameters") or {}) if _classification else {}
                                 # Patch 2: optionally route through OpenFang agent
-                                # when USE_OPENFANG_DIRECT=true. The bridge's
-                                # public helpers ensure_agent/send_to_agent are
-                                # used; the space → agent mapping comes from
-                                # the bridge's SPACE_AGENT_MAP. On any failure
-                                # (no mapping, no agent, timeout) we fall back
-                                # to the local tool executor.
+                                # when USE_OPENFANG_DIRECT=true AND the event
+                                # actually needs remote execution. Parameterless
+                                # events (lists, stats, etc.) have working local
+                                # tool_executors — sending them to OpenFang just
+                                # gets "VibeMind nicht verfuegbar" because the
+                                # agent has no DB access.
                                 response: Optional[str] = None
                                 if (self._use_openfang_direct
-                                        and self._brain_bridge is not None):
+                                        and self._brain_bridge is not None
+                                        and tool_name not in _BRAIN_PARAMETERLESS_EVENTS):
                                     try:
                                         _agent_name = self._brain_bridge.space_to_agent(route_result.space)
                                         if _agent_name:
