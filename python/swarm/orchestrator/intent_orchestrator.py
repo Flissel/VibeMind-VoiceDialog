@@ -130,7 +130,7 @@ logger = logging.getLogger(__name__)
 # user's free-form text.
 _BRAIN_PARAMETERLESS_EVENTS = frozenset({
     # Bubbles — read-only / navigation
-    "bubble.list", "bubble.stats", "bubble.current", "bubble.back",
+    "bubble.list", "bubble.stats", "bubble.current", "bubble.back", "bubble.exit",
     # Ideas — read-only
     "idea.list", "idea.current_space",
     # Conversation

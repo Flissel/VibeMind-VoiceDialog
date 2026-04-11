@@ -902,4 +902,40 @@ class ToolRegistry:
             "message": "Blue Rose (Flowzen): Aktivitaets-Tracker ist bereit. Sag 'rose recommend' fuer Empfehlungen."
         })
 
-        self._logger.info("Loaded status stubs (mirofish, video, rose)")
+        # Video team status
+        self._executors.setdefault("video.team_status", lambda p: {
+            "message": "Video Team: Kein aktiver Team-Run. Sag 'video team run' um einen Run zu starten."
+        })
+
+        # OpenClaw status
+        def _openclaw_status(p):
+            import urllib.request
+            try:
+                url = os.environ.get("OPENCLAW_URL", "http://localhost:18789")
+                resp = urllib.request.urlopen(f"{url}/health", timeout=3)
+                return {"message": f"OpenClaw ist erreichbar ({url})."}
+            except Exception:
+                return {"message": "OpenClaw nicht erreichbar. Gateway gestartet?"}
+        self._executors.setdefault("openclaw.status", _openclaw_status)
+        self._executors.setdefault("openclaw.notifications", lambda p: {
+            "message": "Keine neuen OpenClaw-Benachrichtigungen."
+        })
+
+        # Docker controls
+        self._executors.setdefault("roarboot.docker.start", lambda p: {
+            "message": "Rowboat Docker-Container wird gestartet... Bitte warten."
+        })
+        self._executors.setdefault("roarboot.docker.stop", lambda p: {
+            "message": "Rowboat Docker-Container wird gestoppt."
+        })
+        self._executors.setdefault("mirofish.docker.start", lambda p: {
+            "message": "MiroFish Docker-Container wird gestartet..."
+        })
+        self._executors.setdefault("mirofish.docker.stop", lambda p: {
+            "message": "MiroFish Docker-Container wird gestoppt."
+        })
+        self._executors.setdefault("mirofish.docker.status", lambda p: {
+            "message": "MiroFish Docker: Status wird geprueft..."
+        })
+
+        self._logger.info("Loaded status stubs (mirofish, video, rose, openclaw, docker controls)")
