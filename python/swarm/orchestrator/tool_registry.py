@@ -973,4 +973,95 @@ class ToolRegistry:
         self._executors.setdefault("mirofish.docker.stop", lambda p: _docker_ctl(_mirofish_compose, "vibemind-mirofish", "stop"))
         self._executors.setdefault("mirofish.docker.status", lambda p: _docker_ctl(_mirofish_compose, "vibemind-mirofish", "status"))
 
+        # OpenClaw prompt — forwards to the OpenClaw AI assistant via Docker CLI
+        def _build_vibemind_context():
+            """Collect current VibeMind state for OpenClaw context injection."""
+            ctx_parts = []
+            try:
+                # Current bubble / space
+                from swarm.context.session_context import get_session_context
+                sc = get_session_context()
+                if sc:
+                    ctx_parts.append(f"User: {sc.get('user_id', 'default')}")
+                    ctx_parts.append(f"Session: {sc.get('session_id', 'default')}")
+            except Exception:
+                pass
+
+            try:
+                # Recent bubbles from DB
+                from data import IdeasRepository
+                repo = IdeasRepository()
+                bubbles = repo.list(limit=5, order_by="created_at DESC")
+                if bubbles:
+                    names = [f"{b.title} (score={b.score:.0f})" for b in bubbles if b.title]
+                    ctx_parts.append(f"Recent bubbles: {', '.join(names)}")
+            except Exception:
+                pass
+
+            try:
+                # Brain stats
+                import urllib.request
+                resp = urllib.request.urlopen("http://localhost:5000/api/cortex/classify/stats", timeout=2)
+                import json as _json
+                stats = _json.loads(resp.read())
+                ctx_parts.append(f"Brain: {stats.get('total_events', '?')} events, {stats.get('total_routes', 0)} routes")
+            except Exception:
+                pass
+
+            try:
+                # Active services
+                services = []
+                for name, port in [("Brain", 5000), ("OpenFang", 50051), ("n8n", 15678), ("Minibook", 3480)]:
+                    try:
+                        urllib.request.urlopen(f"http://localhost:{port}/", timeout=1)
+                        services.append(f"{name}:up")
+                    except Exception:
+                        services.append(f"{name}:down")
+                ctx_parts.append(f"Services: {', '.join(services)}")
+            except Exception:
+                pass
+
+            if not ctx_parts:
+                return ""
+            return "[VibeMind Context]\n" + "\n".join(ctx_parts) + "\n[/VibeMind Context]\n\n"
+
+        def _openclaw_prompt(p):
+            import subprocess
+            text = p.get("text", p.get("query", p.get("message", "")))
+            if not text:
+                return {"message": "Kein Text fuer OpenClaw angegeben."}
+
+            # Build dynamic context prefix
+            context = _build_vibemind_context()
+            full_prompt = context + text
+
+            # Escape single quotes for shell
+            safe_prompt = full_prompt.replace("'", "'\\''")
+
+            try:
+                r = subprocess.run(
+                    ["docker", "exec", "openclaw-openclaw-gateway-1", "sh", "-c",
+                     f"openclaw agent --agent main --message '{safe_prompt}' --json"],
+                    capture_output=True, text=True, timeout=90
+                )
+                if r.returncode == 0:
+                    import json
+                    try:
+                        data = json.loads(r.stdout)
+                        # Collect ALL payloads (OpenClaw may stream multiple)
+                        payloads = data.get("result", data).get("payloads", data.get("payloads", []))
+                        if payloads:
+                            texts = [p.get("text", "") for p in payloads if p.get("text")]
+                            return {"message": "\n".join(texts)[:500]}
+                    except json.JSONDecodeError:
+                        pass
+                    return {"message": r.stdout.strip()[:300]}
+                return {"message": f"OpenClaw Fehler: {(r.stderr or r.stdout)[:200]}"}
+            except subprocess.TimeoutExpired:
+                return {"message": "OpenClaw Timeout (90s)"}
+            except Exception as e:
+                return {"message": f"OpenClaw nicht erreichbar: {e}"}
+
+        self._executors.setdefault("openclaw.prompt", _openclaw_prompt)
+
         self._logger.info("Loaded status stubs (mirofish, video, rose, openclaw, docker controls)")
