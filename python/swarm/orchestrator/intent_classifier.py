@@ -865,6 +865,84 @@ class IntentClassifier:
                 self._applied_rules.append("rule_6c_schedule_today")
                 logger.debug("Post-process: -> schedule.status (today query)")
 
+        # Rule 6d-sec: Security & System commands → issue-detector / PoC MCP servers
+        # Order matters: approve/reject BEFORE issues (both can contain "problem")
+        security_kw = ["security", "sicherheit", "sicherheits", "schwachstell", "vulnerab", "pentest", "exploit"]
+        scan_kw = ["scan", "check", "pruef", "ueberpruef", "test"]
+        finding_kw = ["finding", "pending", "issue"]
+        if any(kw in text_lower for kw in security_kw) or any(kw in text_lower for kw in finding_kw):
+            if any(kw in text_lower for kw in ["approve", "genehm", "push als issue", "akzeptier"]):
+                result["event_type"] = "security.approve"
+                result["payload"] = {"text": user_input}
+                self._applied_rules.append("rule_6d_sec_approve")
+            elif any(kw in text_lower for kw in ["reject", "verwerf", "ablehnen", "verwerfe"]):
+                result["event_type"] = "security.reject"
+                result["payload"] = {"text": user_input}
+                self._applied_rules.append("rule_6d_sec_reject")
+            elif any(kw in text_lower for kw in ["deep", "tief", "genauer", "detail"]):
+                result["event_type"] = "security.deep_scan"
+                result["payload"] = {"text": user_input}
+                self._applied_rules.append("rule_6d_sec_deep")
+            elif any(kw in text_lower for kw in ["issue", "finding", "pending", "offen", "gefunden"]):
+                result["event_type"] = "security.issues"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_sec_issues")
+                logger.debug("Post-process: -> security.issues")
+            elif any(kw in text_lower for kw in scan_kw + ["scan"]):
+                result["event_type"] = "security.scan"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_sec_scan")
+                logger.debug("Post-process: -> security.scan")
+            elif any(kw in text_lower for kw in security_kw):
+                result["event_type"] = "security.scan"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_sec_default")
+
+        # Rule 6d-sys: System health / management / processes / updates
+        system_kw = ["system", "health", "gesundheit", "hardware"]
+        proc_kw = ["prozess", "process", "ram", "cpu", "task manager", "laufen", "laufend"]
+        update_kw = ["update", "updates", "aktualisier", "patch"]
+        if not result["event_type"].startswith("security."):
+            if any(kw in text_lower for kw in proc_kw):
+                result["event_type"] = "system.processes"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_sys_processes")
+            elif any(kw in text_lower for kw in update_kw) and any(kw in text_lower for kw in ["windows", "system", "pruef", "check", "install"]):
+                result["event_type"] = "system.updates"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_sys_updates")
+            elif any(kw in text_lower for kw in system_kw):
+                if any(kw in text_lower for kw in ["health", "gesundheit", "in ordnung", "alles ok", "status"]):
+                    result["event_type"] = "system.health"
+                    result["payload"] = {}
+                    self._applied_rules.append("rule_6d_sys_health")
+
+        # Rule 6d-net: Network / Firewall / Drivers / Events
+        if not result["event_type"].startswith(("security.", "system.")):
+            if any(kw in text_lower for kw in ["netzwerk", "network", "wifi", "wlan", "arp"]):
+                result["event_type"] = "system.network"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_net")
+            elif any(kw in text_lower for kw in ["firewall"]):
+                result["event_type"] = "system.firewall"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_firewall")
+            elif any(kw in text_lower for kw in ["treiber", "driver"]) and any(kw in text_lower for kw in ["status", "problem", "unsigned"]):
+                result["event_type"] = "system.drivers"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_drivers")
+            elif any(kw in text_lower for kw in ["event log", "eventlog", "windows event", "bsod", "bluescreen"]):
+                result["event_type"] = "system.events"
+                result["payload"] = {}
+                self._applied_rules.append("rule_6d_events")
+
+        # Rule 6d-browse: OpenClaw autonomous browsing
+        if any(kw in text_lower for kw in ["linkedin", "twitter", "youtube", "github.com", "browse to", "geh auf"]):
+            if not result["event_type"].startswith(("desktop.", "web.", "research.", "security.", "system.")):
+                result["event_type"] = "openclaw.browse"
+                result["payload"] = {"text": user_input}
+                self._applied_rules.append("rule_6d_openclaw_browse")
+
         # Rule 6d: N8n-specific commands missed by LLM
         if intent in ["conversation.unknown", "conversation.listening"] and "workflow" in text_lower:
             if any(kw in text_lower for kw in ["ausführ", "ausfuehr", "fuehr", "execute", "run", "starte"]):
