@@ -877,20 +877,29 @@ class ToolRegistry:
 
     def _load_status_stubs(self):
         """Status-check stubs for spaces that don't have dedicated sync tools yet."""
-        # MiroFish status
-        try:
-            import aiohttp
-            def _mirofish_status(p):
-                import urllib.request
-                try:
-                    url = os.environ.get("MIROFISH_URL", "http://localhost:5101")
-                    resp = urllib.request.urlopen(f"{url}/health", timeout=3)
-                    return {"message": f"MiroFish ist erreichbar ({url})."}
-                except Exception:
-                    return {"message": f"MiroFish nicht erreichbar. Docker-Container gestartet?"}
-            self._executors["mirofish.status"] = _mirofish_status
-        except Exception:
-            pass
+        # MiroFish status — actually check Docker + HTTP
+        def _mirofish_status(p):
+            import subprocess, urllib.request
+            url = os.environ.get("MIROFISH_URL", "http://localhost:5101")
+            # 1. Try HTTP health
+            try:
+                resp = urllib.request.urlopen(f"{url}/health", timeout=3)
+                return {"message": f"MiroFish ist online ({url})."}
+            except Exception:
+                pass
+            # 2. Check Docker container
+            try:
+                r = subprocess.run(
+                    ["docker", "ps", "--filter", "name=mirofish", "--format", "{{.Status}}"],
+                    capture_output=True, text=True, timeout=5
+                )
+                status = r.stdout.strip()
+                if status:
+                    return {"message": f"MiroFish Docker laeuft ({status}), aber HTTP auf {url} antwortet nicht."}
+                return {"message": f"MiroFish Docker-Container ist gestoppt. Starte mit 'mirofish docker start'."}
+            except Exception:
+                return {"message": f"MiroFish nicht erreichbar auf {url}. Docker-Status konnte nicht geprueft werden."}
+        self._executors["mirofish.status"] = _mirofish_status
 
         # Video status
         self._executors.setdefault("video.status", lambda p: {
@@ -907,35 +916,61 @@ class ToolRegistry:
             "message": "Video Team: Kein aktiver Team-Run. Sag 'video team run' um einen Run zu starten."
         })
 
-        # OpenClaw status
+        # OpenClaw status — check HTTP + Docker
         def _openclaw_status(p):
-            import urllib.request
+            import subprocess, urllib.request
+            url = os.environ.get("OPENCLAW_URL", "http://localhost:18789")
             try:
-                url = os.environ.get("OPENCLAW_URL", "http://localhost:18789")
                 resp = urllib.request.urlopen(f"{url}/health", timeout=3)
-                return {"message": f"OpenClaw ist erreichbar ({url})."}
+                return {"message": f"OpenClaw ist online ({url})."}
             except Exception:
-                return {"message": "OpenClaw nicht erreichbar. Gateway gestartet?"}
+                pass
+            try:
+                r = subprocess.run(
+                    ["docker", "ps", "--filter", "name=openclaw", "--format", "{{.Status}}"],
+                    capture_output=True, text=True, timeout=5
+                )
+                status = r.stdout.strip()
+                if status:
+                    return {"message": f"OpenClaw Docker laeuft ({status}), aber Gateway auf {url} antwortet nicht."}
+                return {"message": f"OpenClaw Docker-Container ist gestoppt. Gateway auf {url} nicht erreichbar."}
+            except Exception:
+                return {"message": f"OpenClaw nicht erreichbar auf {url}."}
         self._executors.setdefault("openclaw.status", _openclaw_status)
         self._executors.setdefault("openclaw.notifications", lambda p: {
             "message": "Keine neuen OpenClaw-Benachrichtigungen."
         })
 
-        # Docker controls
-        self._executors.setdefault("roarboot.docker.start", lambda p: {
-            "message": "Rowboat Docker-Container wird gestartet... Bitte warten."
-        })
-        self._executors.setdefault("roarboot.docker.stop", lambda p: {
-            "message": "Rowboat Docker-Container wird gestoppt."
-        })
-        self._executors.setdefault("mirofish.docker.start", lambda p: {
-            "message": "MiroFish Docker-Container wird gestartet..."
-        })
-        self._executors.setdefault("mirofish.docker.stop", lambda p: {
-            "message": "MiroFish Docker-Container wird gestoppt."
-        })
-        self._executors.setdefault("mirofish.docker.status", lambda p: {
-            "message": "MiroFish Docker: Status wird geprueft..."
-        })
+        # Docker controls — actually run docker compose
+        def _docker_ctl(compose_file, project, action):
+            import subprocess
+            cmd = ["docker", "compose", "-f", compose_file, "--project-name", project]
+            if action == "start":
+                cmd += ["up", "-d"]
+            elif action == "stop":
+                cmd += ["down"]
+            elif action == "status":
+                cmd += ["ps", "--format", "table {{.Name}}\\t{{.Status}}"]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                out = (r.stdout or "").strip()
+                if r.returncode == 0:
+                    return {"message": f"Docker {action}: {out or 'OK'}"}
+                return {"message": f"Docker {action} fehlgeschlagen: {(r.stderr or out)[:100]}"}
+            except subprocess.TimeoutExpired:
+                return {"message": f"Docker {action}: Timeout nach 30s"}
+            except Exception as e:
+                return {"message": f"Docker {action}: {e}"}
+
+        _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+        _rowboat_compose = os.path.join(_root, "spaces", "rowboat", "rowboat", "docker-compose.yml")
+        self._executors.setdefault("roarboot.docker.start", lambda p: _docker_ctl(_rowboat_compose, "vibemind-rowboat", "start"))
+        self._executors.setdefault("roarboot.docker.stop", lambda p: _docker_ctl(_rowboat_compose, "vibemind-rowboat", "stop"))
+
+        _mirofish_compose = os.path.join(_root, "..", "docker-compose.mirofish.yml")
+        self._executors.setdefault("mirofish.docker.start", lambda p: _docker_ctl(_mirofish_compose, "vibemind-mirofish", "start"))
+        self._executors.setdefault("mirofish.docker.stop", lambda p: _docker_ctl(_mirofish_compose, "vibemind-mirofish", "stop"))
+        self._executors.setdefault("mirofish.docker.status", lambda p: _docker_ctl(_mirofish_compose, "vibemind-mirofish", "status"))
 
         self._logger.info("Loaded status stubs (mirofish, video, rose, openclaw, docker controls)")
