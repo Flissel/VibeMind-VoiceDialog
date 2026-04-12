@@ -14,7 +14,7 @@ def generate_embeddings():
     print("=" * 60)
 
     from data import IdeasRepository
-    from data.database import get_database
+    from data.supabase_database import get_database
 
     repo = IdeasRepository()
     db = get_database()

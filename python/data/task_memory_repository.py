@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import Task, TaskStatus
 from .repository_utils import generate_id
 

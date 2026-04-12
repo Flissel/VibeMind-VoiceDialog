@@ -5,8 +5,8 @@ Re-exports from legacy data/ module for backward compatibility.
 New code should import from core.database.
 """
 
-# Re-export from legacy data module
-from data.database import (
+# Re-export from the Supabase-backed data module
+from data.supabase_database import (
     Database,
     get_database,
     reset_database,

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import FlowzenCheckin, FlowzenActivity, FlowzenDiaryEntry
 from .repository_utils import generate_id
 

@@ -3,7 +3,7 @@ import os
 import tempfile
 from unittest.mock import patch, MagicMock
 
-from data.database import Database
+from data.supabase_database import Database
 
 
 def _temp_db():

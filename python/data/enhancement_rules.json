@@ -121,7 +121,7 @@
     },
     {
       "id": "asr_010",
-      "pattern": "bubbl",
+      "pattern": "bubbl\\b",
       "replacement": "bubble",
       "category": "asr",
       "times_applied": 76,
@@ -130,7 +130,7 @@
       "confidence_score": 1.0,
       "active": true,
       "auto_generated": false,
-      "is_regex": false
+      "is_regex": true
     },
     {
       "id": "asr_011",

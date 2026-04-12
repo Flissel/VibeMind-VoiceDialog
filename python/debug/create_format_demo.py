@@ -15,7 +15,7 @@ from datetime import datetime
 # Add python dir to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.database import get_database
+from data.supabase_database import get_database
 from data.repository import IdeasRepository
 from data.canvas_repository import CanvasRepository
 from data.repository_utils import generate_id

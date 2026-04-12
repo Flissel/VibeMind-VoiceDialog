@@ -22,7 +22,7 @@ except Exception as e:
 
 # 2. Test database migration
 print("\n2. Testing database migration...")
-from data.database import get_database
+from data.supabase_database import get_database
 
 db = get_database()
 version = db.get_schema_version()

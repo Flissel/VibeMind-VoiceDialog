@@ -176,6 +176,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     scanLocalDirs: (paths) => ipcRenderer.invoke('projects:scan-local-dirs', paths),
     getREDetail: (projectPath) => ipcRenderer.invoke('projects:get-re-detail', projectPath),
   },
+
+  // ===== SERVICES (stub — prevents crash when no IPC handler is wired) =====
+  services: {
+    onStatusUpdate: (_callback) => {
+      // No-op: service status currently falls back to REST polling
+    },
+  },
+
+  // ===== DEBUG (stubs) =====
+  debug: {
+    getBrowserErrors: () => Promise.resolve([]),
+    getDockerLogs: (_id) => Promise.resolve(''),
+    captureScreenshot: () => Promise.resolve(null),
+  },
 });
 
 console.log('[Dashboard Preload] VibeMind + ElectronAPI exposed to dashboard');

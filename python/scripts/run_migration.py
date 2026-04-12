@@ -2,7 +2,7 @@
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
-from data.database import get_database, reset_database
+from data.supabase_database import get_database, reset_database
 
 # Reset to force re-initialization with new schema
 print("Resetting database connection...")

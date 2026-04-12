@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 import os
 import tempfile
 
-from data.database import Database
+from data.supabase_database import Database
 
 
 def _temp_db():

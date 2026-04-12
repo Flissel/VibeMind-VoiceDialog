@@ -1,7 +1,7 @@
 """Tests for Flowzen repository CRUD."""
 import os
 import tempfile
-from data.database import Database
+from data.supabase_database import Database
 from data.repository import FlowzenRepository, generate_id
 
 

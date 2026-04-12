@@ -378,8 +378,9 @@ class CanvasManager:
                                 cj = db_node.content_json
                                 if isinstance(cj, str):
                                     cj = json.loads(cj)
-                                node["content_json"] = cj
-                                node["format_type"] = cj.get("type", db_node.node_type)
+                                if isinstance(cj, dict):
+                                    node["content_json"] = cj
+                                    node["format_type"] = cj.get("type", db_node.node_type)
                             except Exception:
                                 pass
 

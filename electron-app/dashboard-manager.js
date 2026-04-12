@@ -19,7 +19,7 @@ class DashboardManager {
 
     // Dashboard source - use built files or dev server
     this.dashboardPath = process.env.DASHBOARD_DEV_URL ||
-      path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine', 'dashboard-app', 'dist-embedded', 'index.html');
+      path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine', 'web-app', 'front', 'dist', 'index.html');
 
     this.isDev = !!process.env.DASHBOARD_DEV_URL;
 
@@ -62,10 +62,16 @@ class DashboardManager {
       this.dashboardView.webContents.loadFile(this.dashboardPath);
     }
 
-    // Open DevTools in development
-    if (process.env.NODE_ENV === 'development' || this.isDev) {
-      this.dashboardView.webContents.openDevTools({ mode: 'detach' });
-    }
+    // Open DevTools always while debugging the embed
+    this.dashboardView.webContents.openDevTools({ mode: 'detach' });
+
+    // Log load failures explicitly
+    this.dashboardView.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      _dmLog('did-fail-load', code, desc, url);
+    });
+    this.dashboardView.webContents.on('console-message', (_e, level, message, line, source) => {
+      _dmLog(`[renderer:${level}] ${source}:${line} ${message}`);
+    });
 
     return this.dashboardView;
   }

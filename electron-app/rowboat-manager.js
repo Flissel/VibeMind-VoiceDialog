@@ -11,6 +11,8 @@
  */
 
 const { BrowserView } = require('electron');
+const { spawn } = require('child_process');
+const readline = require('readline');
 const path = require('path');
 const fs = require('fs');
 
@@ -28,6 +30,14 @@ class RowboatManager {
 
     // Renderer dist path (dev vs production)
     this.isDev = !!process.env.ROWBOAT_DEV_URL;
+
+    // Bridge (child process) state
+    this.bridgeProcess = null;
+    this.bridgeReady = false;
+    this.pendingRpc = new Map();
+    this.rpcCounter = 0;
+    this.bridgeRestartCount = 0;
+    this._bridgeReadyResolve = null;
 
     // Listen for window resize
     if (this.mainWindow) {
@@ -220,6 +230,207 @@ class RowboatManager {
     }
   }
 
+  // ═══════════════════════════════════════════════════════
+  // Bridge (Child Process) — runs @x/core in a separate
+  // Node.js process, communicates via JSON-RPC on stdio.
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * Start the core bridge process.
+   * Returns a promise that resolves when bridge:ready is received.
+   */
+  startBridge() {
+    if (this.bridgeProcess) return Promise.resolve();
+
+    // CWD must be apps/x/apps/main/ where pnpm workspace symlinks resolve @x/core, @x/shared
+    const coreDir = path.join(
+      __dirname, '..', 'python', 'spaces', 'rowboat', 'rowboat', 'apps', 'x', 'apps', 'main'
+    );
+    const bridgeScript = path.join(__dirname, 'rowboat-core-bridge.mjs');
+
+    if (!fs.existsSync(bridgeScript)) {
+      _rbLog('Bridge script not found:', bridgeScript);
+      return Promise.reject(new Error('Bridge script not found'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Bridge startup timed out (15s)'));
+      }, 15000);
+
+      this._bridgeReadyResolve = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      // Use the system Node.js (not Electron's, which may lack ESM support in packaged builds)
+      const nodeBin = process.env.ROWBOAT_NODE_BIN || 'node';
+
+      this.bridgeProcess = spawn(nodeBin, [bridgeScript], {
+        cwd: coreDir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, NODE_NO_WARNINGS: '1' },
+      });
+
+      // Parse stdout line by line (JSON-RPC messages)
+      const rl = readline.createInterface({ input: this.bridgeProcess.stdout });
+      rl.on('line', (line) => this._onBridgeLine(line));
+
+      // Forward stderr to console (bridge logging)
+      this.bridgeProcess.stderr.on('data', (chunk) => {
+        const text = chunk.toString().trimEnd();
+        if (text) _rbLog(text);
+      });
+
+      // Handle unexpected exit
+      this.bridgeProcess.on('close', (code) => {
+        this.bridgeProcess = null;
+        this.bridgeReady = false;
+
+        // Reject all pending RPCs
+        for (const [id, { reject: rej, timer }] of this.pendingRpc) {
+          clearTimeout(timer);
+          rej(new Error('Bridge process exited'));
+        }
+        this.pendingRpc.clear();
+
+        if (code !== 0 && code !== null) {
+          _rbLog(`Bridge exited with code ${code}`);
+          this._handleBridgeRestart();
+        }
+      });
+
+      this.bridgeProcess.on('error', (err) => {
+        clearTimeout(timeout);
+        _rbLog('Bridge spawn error:', err.message);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Stop the bridge process gracefully.
+   */
+  stopBridge() {
+    if (!this.bridgeProcess) return;
+
+    _rbLog('Stopping bridge...');
+    this.bridgeReady = false;
+
+    try {
+      this.bridgeProcess.stdin.end();
+    } catch { /* stdin may already be closed */ }
+
+    const proc = this.bridgeProcess;
+    setTimeout(() => {
+      try { proc.kill('SIGTERM'); } catch { /* already dead */ }
+    }, 3000);
+
+    this.bridgeProcess = null;
+  }
+
+  /**
+   * Send a JSON-RPC request to the bridge and wait for the response.
+   */
+  sendRpc(method, params, timeoutMs = 30000) {
+    if (!this.bridgeProcess || !this.bridgeReady) {
+      return Promise.reject(new Error('Rowboat bridge not ready'));
+    }
+
+    const id = String(++this.rpcCounter);
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRpc.delete(id);
+        reject(new Error(`RPC timeout for ${method} (${timeoutMs}ms)`));
+      }, timeoutMs);
+
+      this.pendingRpc.set(id, { resolve, reject, timer });
+
+      const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n';
+      try {
+        this.bridgeProcess.stdin.write(msg);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingRpc.delete(id);
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Parse a JSON line from bridge stdout.
+   * RPC responses have an `id`, push events have a `method`.
+   */
+  _onBridgeLine(line) {
+    if (!line.trim()) return;
+
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      _rbLog('Malformed bridge output:', line.slice(0, 120));
+      return;
+    }
+
+    // RPC response (has id)
+    if (msg.id !== undefined) {
+      const pending = this.pendingRpc.get(msg.id);
+      if (pending) {
+        this.pendingRpc.delete(msg.id);
+        clearTimeout(pending.timer);
+        if (msg.error) {
+          pending.reject(new Error(msg.error.message || 'Bridge RPC error'));
+        } else {
+          pending.resolve(msg.result);
+        }
+      }
+      return;
+    }
+
+    // Push event (notification)
+    if (msg.method === 'bridge:ready') {
+      this.bridgeReady = true;
+      this.bridgeRestartCount = 0;
+      _rbLog('Bridge ready');
+      if (this._bridgeReadyResolve) {
+        this._bridgeReadyResolve();
+        this._bridgeReadyResolve = null;
+      }
+      return;
+    }
+
+    if (msg.method === 'runs:events') {
+      this.relayEvent('runs:events', msg.params);
+      return;
+    }
+
+    if (msg.method === 'services:events') {
+      this.relayEvent('services:events', msg.params);
+      return;
+    }
+  }
+
+  /**
+   * Auto-restart bridge with exponential backoff (max 3 attempts).
+   */
+  _handleBridgeRestart() {
+    if (this.bridgeRestartCount >= 3) {
+      _rbLog('Bridge restart limit reached (3) — giving up');
+      return;
+    }
+
+    const delay = Math.pow(2, this.bridgeRestartCount) * 1000; // 1s, 2s, 4s
+    this.bridgeRestartCount++;
+    _rbLog(`Restarting bridge in ${delay}ms (attempt ${this.bridgeRestartCount}/3)`);
+
+    setTimeout(() => {
+      this.startBridge().catch((err) => {
+        _rbLog('Bridge restart failed:', err.message);
+      });
+    }, delay);
+  }
+
   /**
    * Reload the Rowboat renderer
    */
@@ -230,9 +441,10 @@ class RowboatManager {
   }
 
   /**
-   * Destroy the Rowboat view
+   * Destroy the Rowboat view and stop the bridge.
    */
   destroy() {
+    this.stopBridge();
     if (this.rowboatView) {
       this.hide();
       this.rowboatView = null;

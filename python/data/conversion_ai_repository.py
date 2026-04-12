@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 
 logger = logging.getLogger(__name__)
 

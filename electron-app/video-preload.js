@@ -77,7 +77,8 @@ contextBridge.exposeInMainWorld('vibemindVideo', {
     ipcRenderer.invoke('video:delete', { video_id: videoId, delete_disk: !!deleteDisk }),
 
   // ── Video file URL helper ──
-  // Serve via local media server (http://localhost:9877/) for reliable playback
+  // Serve via local media server (http://localhost:8977/) for reliable playback
+  // NOTE: Port 8977 (nicht 9877) weil Windows 9846-9945 für Hyper-V reserviert hat (WinError 10013).
   toVideoURL: (filePath) => {
     if (!filePath) return '';
     const normalized = filePath.replace(/\\/g, '/');
@@ -85,7 +86,7 @@ contextBridge.exposeInMainWorld('vibemindVideo', {
     const rowboatBase = require('os').homedir().replace(/\\/g, '/') + '/.rowboat/Videos/';
     if (normalized.includes('.rowboat/Videos/')) {
       const relative = normalized.split('.rowboat/Videos/')[1];
-      return `http://localhost:9877/${relative}`;
+      return `http://localhost:8977/${relative}`;
     }
     // Fallback: file:// for paths outside Rowboat
     return `file:///${normalized.replace(/^\/+/, '')}`;

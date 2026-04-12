@@ -133,7 +133,163 @@ TOOLS = [
             "properties": {}
         }
     },
+    # ─── Phase 7 Split: Bridge Tools from desktop-automation ─────────
+    {
+        "name": "vibemind_bubble_create",
+        "description": "Erstellt eine neue Bubble/Idea in VibeMind direkt via IdeasRepository + Electron UI Broadcast.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "description": {"type": "string", "default": ""},
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "vibemind_bubble_update",
+        "description": "Aktualisiert eine bestehende Bubble/Idea nach ID. Aenderungen werden an Electron UI gebroadcastet.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "bubble_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "score": {"type": "number"},
+            },
+            "required": ["bubble_id"]
+        }
+    },
+    {
+        "name": "vibemind_ui_command",
+        "description": "Sendet einen IPC-Command direkt an die VibeMind Electron UI. Bekannte Commands: node_added, node_removed, node_updated, space_changed, canvas_refresh, navigate_to_space, show_notification.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "IPC message type (z.B. 'canvas_refresh', 'navigate_to_space')"},
+                "params": {"type": "object", "description": "Zusaetzliche Parameter fuer den Command"},
+            },
+            "required": ["command"]
+        }
+    },
+    {
+        "name": "vibemind_agent_dispatch",
+        "description": "Dispatcht einen Task an einen VibeMind Agent via Minibook. Nutze @agent Mentions fuer spezifische Spaces (z.B. @coding, @research, @ideas).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string"},
+                "agent": {"type": "string", "description": "Ziel-Agent/Space (z.B. 'coding', 'research', 'ideas')"},
+                "context": {"type": "object"},
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "vibemind_agents_list",
+        "description": "Listet VibeMind's 14 Domain-Spaces mit Event-Prefixes, Streams und Live-Status von Minibook + Brain.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "vibemind_intent",
+        "description": "Routet Text durch die volle IntentOrchestrator Pipeline (classify → route → execute → respond). Wie vibemind_chat aber gibt strukturiertes JSON zurueck statt formatiertem Text.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Natural language Intent, z.B. 'erstelle eine Idee zum Thema KI'"},
+            },
+            "required": ["text"]
+        }
+    },
+    # ─── Space Debugging Tools ───────────────────────────────────────
+    {
+        "name": "vibemind_space_inspect",
+        "description": "Inspiziert einen Space: Agent-Name, Stream, TOOL_MAP, PARAM_MAPPING, geladene Tools. Zeigt alles was der Space kann.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "space": {
+                    "type": "string",
+                    "description": "Space-Name: bubbles, ideas, coding, desktop, rowboat, research, minibook, schedule, n8n, agentfarm, video, mirofish, flowzen",
+                    "enum": ["bubbles", "ideas", "coding", "desktop", "rowboat", "research", "minibook", "schedule", "n8n", "agentfarm", "video", "mirofish", "flowzen"]
+                }
+            },
+            "required": ["space"]
+        }
+    },
+    {
+        "name": "vibemind_space_test",
+        "description": "Fuehrt ein Tool direkt auf einem Space-Agent aus — ohne Intent-Routing. Perfekt zum Debuggen einzelner Space-Funktionen.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "space": {
+                    "type": "string",
+                    "description": "Space-Name",
+                    "enum": ["bubbles", "ideas", "coding", "desktop", "rowboat", "research", "minibook", "schedule", "n8n", "agentfarm", "video", "mirofish", "flowzen"]
+                },
+                "event_type": {"type": "string", "description": "Event type, z.B. 'bubble.list', 'idea.create', 'code.status'"},
+                "payload": {"type": "object", "description": "Parameter-Payload fuer das Tool"}
+            },
+            "required": ["space", "event_type"]
+        }
+    },
+    {
+        "name": "vibemind_spaces_overview",
+        "description": "Zeigt alle 13 Spaces auf einen Blick: Agent geladen? Wie viele Tools? Letzte Fehler? Stream aktiv?",
+        "inputSchema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "vibemind_space_health",
+        "description": "Reality-Check: testet JEDEN Space ob er tatsaechlich funktioniert (nicht nur Code vorhanden). Ruft pro Space ein einfaches Tool auf (list/status) und meldet Erfolg/Fehler. Zeigt was wirklich geht vs was nur Code ist.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "space": {
+                    "type": "string",
+                    "description": "Optional: nur einen Space testen. Ohne = alle testen.",
+                    "enum": ["bubbles", "ideas", "coding", "desktop", "rowboat", "research", "minibook", "schedule", "n8n", "agentfarm", "video", "mirofish", "flowzen", "all"]
+                }
+            }
+        }
+    },
 ]
+
+
+def _get_space_agent(space: str):
+    """Load a space's backend agent by name. Returns the agent or None."""
+    AGENT_GETTERS = {
+        "bubbles": "get_bubbles_agent",
+        "ideas": "get_ideas_agent",
+        "coding": "get_coding_agent",
+        "desktop": "get_desktop_agent",
+        "rowboat": "get_roarboot_agent",
+        "research": "get_zeroclaw_research_agent",
+        "minibook": "get_minibook_agent",
+        "schedule": "get_schedule_agent",
+        "n8n": "get_n8n_agent",
+        "agentfarm": "get_agentfarm_agent",
+        "video": "get_video_agent",
+        "mirofish": "get_mirofish_agent",
+        "flowzen": "get_flowzen_agent",
+    }
+    getter_name = AGENT_GETTERS.get(space)
+    if not getter_name:
+        return None
+    try:
+        import swarm.backend_agents as ba
+        getter = getattr(ba, getter_name, None)
+        if getter:
+            return getter()
+    except Exception:
+        pass
+    return None
 
 
 async def handle_tool(name: str, args: dict) -> str:
@@ -178,7 +334,7 @@ async def handle_tool(name: str, args: dict) -> str:
         try:
             import aiohttp
             async with aiohttp.ClientSession() as s:
-                _of_url = os.environ.get("OPENFANG_URL", "http://localhost:50051").rstrip("/")
+                _of_url = os.environ.get("OPENFANG_URL", "http://localhost:4200").rstrip("/")
                 r = await asyncio.wait_for(s.get(f"{_of_url}/api/health"), timeout=2)
                 lines.append(f"OpenFang: ✅ ({r.status})")
         except Exception:
@@ -282,6 +438,451 @@ async def handle_tool(name: str, args: dict) -> str:
                     return "\n".join(lines)
         except Exception as e:
             return f"Brain nicht erreichbar: {e}"
+
+    # ─── Phase 7 Split: Bridge Tool handlers ───────────────────────────
+
+    elif name == "vibemind_bubble_create":
+        title = args.get("title", "").strip()
+        description = args.get("description", "")
+        if not title:
+            return json.dumps({"success": False, "error": "title ist erforderlich"})
+        try:
+            from data import IdeasRepository
+            repo = IdeasRepository()
+            idea = repo.create(title=title, description=description)
+            idea_id = idea.id if hasattr(idea, "id") else None
+            # Broadcast to Electron
+            try:
+                from tools.workspace_tools import _broadcast_to_electron
+                _broadcast_to_electron({
+                    "type": "node_added",
+                    "node": {"id": str(idea_id), "title": title, "description": description},
+                })
+            except Exception:
+                pass
+            return json.dumps({"success": True, "idea_id": str(idea_id), "title": title})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    elif name == "vibemind_bubble_update":
+        bubble_id = args.get("bubble_id", "").strip()
+        if not bubble_id:
+            return json.dumps({"success": False, "error": "bubble_id ist erforderlich"})
+        try:
+            from data import IdeasRepository
+            repo = IdeasRepository()
+            updates = {}
+            for k in ["title", "description", "score"]:
+                if k in args and args[k] is not None:
+                    updates[k] = args[k]
+            if not updates:
+                return json.dumps({"success": False, "error": "keine Felder zum Update"})
+            if hasattr(repo, "update"):
+                repo.update(bubble_id, **updates)
+            try:
+                from tools.workspace_tools import _broadcast_to_electron
+                _broadcast_to_electron({"type": "node_updated", "node": {"id": bubble_id, **updates}})
+            except Exception:
+                pass
+            return json.dumps({"success": True, "bubble_id": bubble_id, "updated": list(updates.keys())})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    elif name == "vibemind_ui_command":
+        command = args.get("command", "").strip()
+        params = args.get("params", {})
+        if not command:
+            return json.dumps({"success": False, "error": "command ist erforderlich"})
+        message = {"type": command, **(params or {})}
+        delivered = False
+        # Try Python IPC
+        try:
+            from tools.workspace_tools import _electron_send_message
+            if _electron_send_message:
+                _electron_send_message(message)
+                delivered = True
+        except Exception:
+            pass
+        # Try CDP
+        if not delivered:
+            CDP_PORT = int(os.environ.get("ELECTRON_CDP_PORT", "9223"))
+            try:
+                import websockets
+                import urllib.request
+                resp = urllib.request.urlopen(f"http://localhost:{CDP_PORT}/json", timeout=2)
+                pages = json.loads(resp.read())
+                for p in pages:
+                    if "Multiverse" in p.get("title", "") or "renderer" in p.get("url", ""):
+                        ws_url = p.get("webSocketDebuggerUrl")
+                        if ws_url:
+                            async with websockets.connect(ws_url) as ws:
+                                js = f"window.postMessage({json.dumps(message)}, '*');"
+                                await ws.send(json.dumps({"id": 99, "method": "Runtime.evaluate", "params": {"expression": js}}))
+                                await asyncio.wait_for(ws.recv(), timeout=3)
+                                delivered = True
+                            break
+            except Exception:
+                pass
+        return json.dumps({"success": True, "delivered": delivered, "command": command})
+
+    elif name == "vibemind_agent_dispatch":
+        task = args.get("task", "").strip()
+        agent = args.get("agent")
+        if not task:
+            return json.dumps({"success": False, "error": "task ist erforderlich"})
+        minibook_url = os.environ.get("MINIBOOK_URL", "http://localhost:3480")
+        payload = {"content": f"@{agent} {task}" if agent else task, "metadata": args.get("context", {})}
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.post(f"{minibook_url}/api/tasks", json=payload, timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    data = await r.json()
+                    return json.dumps({"success": True, "source": "minibook", "agent": agent, "result": data})
+        except Exception:
+            # Fallback: route via process_intent
+            result = await _call_intent(task)
+            return json.dumps({"success": True, "source": "intent_fallback", "result": result})
+
+    elif name == "vibemind_agents_list":
+        spaces = [
+            {"name": "Bubbles", "stream": "events:tasks:bubbles", "prefix": "bubble.*"},
+            {"name": "Ideas", "stream": "events:tasks:ideas", "prefix": "idea.*"},
+            {"name": "Coding", "stream": "events:tasks:coding", "prefix": "code.*"},
+            {"name": "Desktop", "stream": "events:tasks:desktop", "prefix": "desktop.*"},
+            {"name": "Rowboat", "stream": "events:tasks:roarboot", "prefix": "roarboot.*"},
+            {"name": "Research", "stream": "events:tasks:zeroclaw", "prefix": "research.*"},
+            {"name": "Minibook", "stream": "events:tasks:minibook", "prefix": "minibook.*"},
+            {"name": "Schedule", "stream": "events:tasks:schedule", "prefix": "schedule.*"},
+            {"name": "N8n", "stream": "events:tasks:n8n", "prefix": "n8n.*"},
+            {"name": "AgentFarm", "stream": "events:tasks:agentfarm", "prefix": "agentfarm.*"},
+            {"name": "Video", "stream": "events:tasks:video", "prefix": "video.*"},
+            {"name": "MiroFish", "stream": "events:tasks:mirofish_pred", "prefix": "mirofish.*"},
+            {"name": "Flowzen", "stream": "via submodule", "prefix": "flowzen.*"},
+            {"name": "Brain", "stream": "standalone (port 5000)", "prefix": "brain.*"},
+        ]
+        brain_status = None
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.get("http://localhost:5000/api/cortex/classify/stats", timeout=aiohttp.ClientTimeout(total=2)) as r:
+                    if r.status == 200:
+                        brain_status = await r.json()
+        except Exception:
+            pass
+        return json.dumps({
+            "success": True,
+            "spaces": spaces,
+            "space_count": len(spaces),
+            "brain": {"reachable": brain_status is not None, "stats": brain_status},
+        })
+
+    elif name == "vibemind_intent":
+        text = args.get("text", "").strip()
+        if not text:
+            return json.dumps({"success": False, "error": "text ist erforderlich"})
+        result = await _call_intent(text)
+        return json.dumps(result)
+
+    # ─── Space Debugging Handlers ────────────────────────────────────
+
+    elif name == "vibemind_space_inspect":
+        space = args.get("space", "").strip().lower()
+        agent = _get_space_agent(space)
+        if agent is None:
+            return json.dumps({"success": False, "error": f"Space '{space}' nicht ladbar"})
+        try:
+            info = {
+                "success": True,
+                "space": space,
+                "agent_name": agent.name if hasattr(agent, "name") else type(agent).__name__,
+                "agent_class": type(agent).__name__,
+                "stream": agent.stream if hasattr(agent, "stream") else None,
+                "param_mapping": agent.PARAM_MAPPING if hasattr(agent, "PARAM_MAPPING") else {},
+            }
+            # Load tools
+            tools = agent.tools if hasattr(agent, "tools") else {}
+            info["tool_count"] = len(tools)
+            info["tools"] = sorted(tools.keys()) if isinstance(tools, dict) else []
+            # TOOL_MAP if available
+            if hasattr(agent, "TOOL_MAP"):
+                info["tool_map"] = agent.TOOL_MAP
+            # Try _get_tool_name for common events
+            if hasattr(agent, "_get_tool_name"):
+                test_events = [f"{space.replace('rowboat','roarboot')}.list", f"{space.replace('rowboat','roarboot')}.create", f"{space.replace('rowboat','roarboot')}.status"]
+                mappings = {}
+                for evt in test_events:
+                    try:
+                        tool_name = agent._get_tool_name(evt)
+                        if tool_name:
+                            mappings[evt] = tool_name
+                    except Exception:
+                        pass
+                if mappings:
+                    info["event_to_tool_samples"] = mappings
+            return json.dumps(info, default=str)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    elif name == "vibemind_space_test":
+        space = args.get("space", "").strip().lower()
+        event_type = args.get("event_type", "").strip()
+        payload = args.get("payload", {})
+        if not event_type:
+            return json.dumps({"success": False, "error": "event_type ist erforderlich"})
+        agent = _get_space_agent(space)
+        if agent is None:
+            return json.dumps({"success": False, "error": f"Space '{space}' nicht ladbar"})
+        try:
+            # Find the tool function
+            tool_name = None
+            if hasattr(agent, "_get_tool_name"):
+                tool_name = agent._get_tool_name(event_type)
+            if not tool_name and hasattr(agent, "TOOL_MAP"):
+                tool_name = agent.TOOL_MAP.get(event_type)
+            if not tool_name:
+                available = sorted(agent.tools.keys()) if hasattr(agent, "tools") else []
+                return json.dumps({
+                    "success": False,
+                    "error": f"Kein Tool fuer event_type '{event_type}' in Space '{space}'",
+                    "available_tools": available,
+                })
+            tools = agent.tools if hasattr(agent, "tools") else {}
+            tool_fn = tools.get(tool_name)
+            if not tool_fn:
+                return json.dumps({"success": False, "error": f"Tool '{tool_name}' nicht geladen"})
+            # Normalize params
+            if hasattr(agent, "PARAM_MAPPING") and event_type in agent.PARAM_MAPPING:
+                for src, dst in agent.PARAM_MAPPING[event_type].items():
+                    if src in payload:
+                        payload[dst] = payload.pop(src)
+            # Execute
+            if asyncio.iscoroutinefunction(tool_fn):
+                result = await tool_fn(payload) if payload else await tool_fn()
+            else:
+                result = tool_fn(payload) if payload else tool_fn()
+            return json.dumps({
+                "success": True,
+                "space": space,
+                "event_type": event_type,
+                "tool_name": tool_name,
+                "result": result,
+            }, default=str)
+        except Exception as e:
+            return json.dumps({"success": False, "space": space, "event_type": event_type, "error": str(e)})
+
+    elif name == "vibemind_spaces_overview":
+        overview = []
+        for space_name in ["bubbles", "ideas", "coding", "desktop", "rowboat",
+                           "research", "minibook", "schedule", "n8n", "agentfarm",
+                           "video", "mirofish", "flowzen"]:
+            entry = {"space": space_name, "loaded": False}
+            try:
+                agent = _get_space_agent(space_name)
+                if agent:
+                    entry["loaded"] = True
+                    entry["agent_class"] = type(agent).__name__
+                    entry["stream"] = agent.stream if hasattr(agent, "stream") else None
+                    tools = agent.tools if hasattr(agent, "tools") else {}
+                    entry["tool_count"] = len(tools)
+                    if hasattr(agent, "TOOL_MAP"):
+                        entry["event_types"] = len(agent.TOOL_MAP)
+            except Exception as e:
+                entry["error"] = str(e)[:100]
+            overview.append(entry)
+        return json.dumps({"success": True, "spaces": overview, "total": len(overview)}, default=str)
+
+    elif name == "vibemind_space_health":
+        space = args.get("space", "all").strip().lower()
+        # Read-only event patterns — safe to call with empty/default params
+        READ_ONLY_PATTERNS = {"list", "status", "get", "find", "search", "describe", "count"}
+        # Dangerous — never execute, only check existence
+        DANGEROUS_PATTERNS = {"delete", "cancel", "stop", "reset", "remove", "delete_all"}
+        # Write ops — check loadability but don't execute (avoids creating real data)
+        WRITE_PATTERNS = {"create", "update", "promote", "score", "enter", "connect",
+                          "generate", "run", "activate", "send", "type", "click",
+                          "open", "draft", "clone", "build", "move", "convert",
+                          "train", "modify", "publish", "evaluate", "accept", "reject"}
+
+        # Default test params per event pattern — so write ops actually get called
+        DEFAULT_TEST_PARAMS = {
+            "create": {"title": "[HEALTH_CHECK_TEST]", "description": "auto-test"},
+            "enter": {"bubble_name": "VibeMind"},
+            "exit": {},
+            "find": {"query": "test"},
+            "search": {"query": "test"},
+            "list": {},
+            "status": {},
+            "get": {},
+            "count": {},
+            "update": {"idea_name": "[HEALTH_CHECK_TEST]", "new_content": "test"},
+            "score": {"bubble_name": "VibeMind"},
+            "evaluate": {"bubble_name": "VibeMind"},
+            "promote": {"bubble_name": "VibeMind"},
+            "connect": {"idea1": "test1", "idea2": "test2"},
+            "format": {"idea_name": "test"},
+            "generate": {"description": "health check test"},
+            "open_app": {"app_name": "notepad"},
+            "click": {"element_description": "test"},
+            "type": {"text": "health_check"},
+            "query": {"subject": "test"},
+            "recommend": {},
+            "run": {"task": "health check"},
+            "activate": {"name": "test"},
+            "describe": {"name": "test"},
+            "execute": {"name": "test"},
+        }
+
+        spaces_to_test = [space] if space != "all" else [
+            "bubbles", "ideas", "desktop", "rowboat", "minibook", "n8n",
+            "coding", "research", "schedule", "agentfarm", "video", "mirofish", "flowzen",
+        ]
+
+        all_results = []
+        for sp in spaces_to_test:
+            space_result = {"space": sp, "agent_loaded": False, "events": [], "summary": {}}
+            agent = _get_space_agent(sp)
+            if not agent:
+                space_result["error"] = "Agent konnte nicht geladen werden"
+                all_results.append(space_result)
+                continue
+
+            space_result["agent_loaded"] = True
+            space_result["agent_class"] = type(agent).__name__
+            space_result["stream"] = agent.stream if hasattr(agent, "stream") else None
+
+            # Get TOOL_MAP
+            tool_map = {}
+            if hasattr(agent, "TOOL_MAP"):
+                tool_map = agent.TOOL_MAP
+            elif hasattr(agent, "_get_tool_name"):
+                # Build from tools dict
+                tools = agent.tools if hasattr(agent, "tools") else {}
+                for t_name in tools:
+                    tool_map[t_name] = t_name
+
+            tools_dict = agent.tools if hasattr(agent, "tools") else {}
+            ok_count = 0
+            error_count = 0
+            loadable_count = 0
+            skipped_count = 0
+
+            for event_type, tool_name in sorted(tool_map.items()):
+                entry = {
+                    "event": event_type,
+                    "tool": tool_name,
+                    "status": "unknown",
+                }
+
+                # Check if tool function exists
+                tool_fn = tools_dict.get(tool_name)
+                if not tool_fn:
+                    entry["status"] = "missing"
+                    entry["error"] = f"Tool '{tool_name}' nicht in tools dict geladen"
+                    error_count += 1
+                    space_result["events"].append(entry)
+                    continue
+
+                # Classify the event
+                event_parts = event_type.lower().split(".")
+                last_part = event_parts[-1] if event_parts else ""
+
+                is_dangerous = any(p in last_part for p in DANGEROUS_PATTERNS)
+
+                is_write = any(p in last_part for p in WRITE_PATTERNS)
+
+                if is_dangerous:
+                    entry["status"] = "exists"
+                    entry["note"] = "dangerous — nicht ausgefuehrt"
+                    skipped_count += 1
+                elif is_write:
+                    entry["status"] = "loadable"
+                    entry["note"] = "write op — Tool geladen, nicht ausgefuehrt (keine Seiteneffekte)"
+                    loadable_count += 1
+                else:
+                    # TRY calling it — find matching test params
+                    test_params = {}
+                    for pattern, params in DEFAULT_TEST_PARAMS.items():
+                        if pattern in last_part or pattern in event_type.lower():
+                            test_params = dict(params)
+                            break
+
+                    try:
+                        # Tools have different calling conventions:
+                        #   A) tool_fn(params_dict) — BaseBackendAgent style
+                        #   B) tool_fn(**kwargs) — direct keyword args
+                        #   C) tool_fn() — no args
+                        # Try A first, then B, then C.
+                        call_result = None
+                        call_ok = False
+                        # Try multiple calling conventions:
+                        # 1. fn(params_dict)     — BaseBackendAgent style
+                        # 2. fn(**kwargs)         — keyword args
+                        # 3. fn(first_string_val) — adapted tools expect a string
+                        # 4. fn()                 — no args
+                        attempts = []
+                        if test_params:
+                            attempts.append(("dict", lambda: tool_fn(test_params)))
+                            attempts.append(("kwargs", lambda: tool_fn(**test_params)))
+                            # Some tools expect a single string arg (title, query, etc.)
+                            first_val = next(iter(test_params.values()), None)
+                            if isinstance(first_val, str):
+                                attempts.append(("string", lambda fv=first_val: tool_fn(fv)))
+                        attempts.append(("none", lambda: tool_fn()))
+
+                        for style, caller in attempts:
+                            try:
+                                if asyncio.iscoroutinefunction(tool_fn):
+                                    call_result = await asyncio.wait_for(
+                                        caller() if not asyncio.iscoroutinefunction(caller) else caller(),
+                                        timeout=5.0
+                                    )
+                                else:
+                                    call_result = caller()
+                                call_ok = True
+                                entry["call_style"] = style
+                                break
+                            except (TypeError, AttributeError):
+                                continue  # wrong calling convention
+                        if not call_ok:
+                            raise TypeError(f"no calling convention worked for {tool_name}")
+                        result = call_result
+                        entry["status"] = "ok"
+                        if isinstance(result, str):
+                            entry["result_preview"] = result[:200]
+                        elif isinstance(result, dict):
+                            entry["result_preview"] = str(result)[:200]
+                        elif isinstance(result, list):
+                            entry["result_preview"] = f"{len(result)} items"
+                        else:
+                            entry["result_preview"] = str(result)[:150]
+                        if test_params:
+                            entry["test_params"] = test_params
+                        ok_count += 1
+                    except asyncio.TimeoutError:
+                        entry["status"] = "timeout"
+                        entry["error"] = "5s timeout"
+                        error_count += 1
+                    except Exception as e:
+                        entry["status"] = "error"
+                        entry["error"] = str(e)[:150]
+                        if test_params:
+                            entry["test_params"] = test_params
+                        error_count += 1
+
+                space_result["events"].append(entry)
+
+            space_result["summary"] = {
+                "total": len(tool_map),
+                "ok": ok_count,
+                "loadable": loadable_count,
+                "error": error_count,
+                "skipped": skipped_count,
+            }
+            all_results.append(space_result)
+
+        if len(all_results) == 1:
+            return json.dumps(all_results[0], default=str, ensure_ascii=False)
+        return json.dumps({"success": True, "spaces": all_results}, default=str, ensure_ascii=False)
 
     return f"Unbekanntes Tool: {name}"
 

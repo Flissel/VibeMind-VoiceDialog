@@ -3,7 +3,7 @@ import sys, os, uuid
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data.database import Database
+from data.supabase_database import Database
 
 db = Database()
 gen_id = lambda: uuid.uuid4().hex[:8]

@@ -1,5 +1,5 @@
 """Quick script to check ideas in Debug information space."""
-from data.database import get_database
+from data.supabase_database import get_database
 from data.repository import IdeasRepository, CanvasRepository
 
 db = get_database()

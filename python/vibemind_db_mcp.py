@@ -104,7 +104,95 @@ TOOLS = [
     {"name": "db_canvas_nodes", "description": "List canvas nodes.",
      "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "default": 50}}}},
 
-    # === Raw query (read-only via PostgREST RPC) ===
+    # === Projects Write ===
+    {"name": "db_projects_create", "description": "Create a new project.",
+     "inputSchema": {"type": "object", "properties": {
+         "name": {"type": "string"}, "description": {"type": "string", "default": ""},
+         "tech_stack": {"type": "string"}, "from_idea_id": {"type": "string"}},
+         "required": ["name"]}},
+    {"name": "db_projects_update", "description": "Update project by ID.",
+     "inputSchema": {"type": "object", "properties": {
+         "id": {"type": "string"}, "name": {"type": "string"}, "status": {"type": "string"},
+         "generation_status": {"type": "string"}, "progress": {"type": "number"}},
+         "required": ["id"]}},
+
+    # === Canvas Write ===
+    {"name": "db_canvas_create", "description": "Create a canvas node.",
+     "inputSchema": {"type": "object", "properties": {
+         "node_type": {"type": "string", "default": "note"}, "title": {"type": "string"},
+         "content": {"type": "string", "default": ""}, "x": {"type": "number", "default": 0},
+         "y": {"type": "number", "default": 0}, "linked_idea_id": {"type": "string"}},
+         "required": ["title"]}},
+    {"name": "db_canvas_edge_create", "description": "Create a canvas edge between two nodes.",
+     "inputSchema": {"type": "object", "properties": {
+         "from_node_id": {"type": "string"}, "to_node_id": {"type": "string"},
+         "edge_type": {"type": "string", "default": "default"}},
+         "required": ["from_node_id", "to_node_id"]}},
+
+    # === Conversation Write ===
+    {"name": "db_conversation_create", "description": "Create a new conversation session.",
+     "inputSchema": {"type": "object", "properties": {"agent_id": {"type": "string", "default": "rachel"}}}},
+    {"name": "db_conversation_add_message", "description": "Add a message to a conversation session.",
+     "inputSchema": {"type": "object", "properties": {
+         "session_id": {"type": "string"}, "speaker": {"type": "string"}, "text": {"type": "string"}},
+         "required": ["session_id", "speaker", "text"]}},
+
+    # === Schedule Write ===
+    {"name": "db_schedule_create", "description": "Create a scheduled task.",
+     "inputSchema": {"type": "object", "properties": {
+         "title": {"type": "string"}, "action_text": {"type": "string"},
+         "trigger_type": {"type": "string", "default": "cron"},
+         "trigger_config": {"type": "object"}, "timezone": {"type": "string", "default": "Europe/Berlin"}},
+         "required": ["title", "action_text"]}},
+
+    # === Flowzen Write ===
+    {"name": "db_flowzen_checkin", "description": "Create a Flowzen mood/energy checkin.",
+     "inputSchema": {"type": "object", "properties": {
+         "mood": {"type": "string"}, "energy": {"type": "integer", "default": 5},
+         "notes": {"type": "string", "default": ""}},
+         "required": ["mood"]}},
+    {"name": "db_flowzen_diary_create", "description": "Create a Flowzen diary entry.",
+     "inputSchema": {"type": "object", "properties": {
+         "entry_text": {"type": "string"}, "mood": {"type": "string", "default": "calm"},
+         "energy": {"type": "integer", "default": 5}, "category": {"type": "string", "default": ""}},
+         "required": ["entry_text"]}},
+
+    # === Shuttles Write ===
+    {"name": "db_shuttle_create", "description": "Create a shuttle (requirement evaluation pipeline).",
+     "inputSchema": {"type": "object", "properties": {
+         "shuttle_id": {"type": "string"}, "bubble_id": {"type": "string"},
+         "bubble_name": {"type": "string"}, "stage_type": {"type": "string", "default": "full"}},
+         "required": ["shuttle_id", "bubble_id", "bubble_name"]}},
+    {"name": "db_shuttle_update", "description": "Update shuttle status/progress.",
+     "inputSchema": {"type": "object", "properties": {
+         "id": {"type": "string"}, "status": {"type": "string"},
+         "current_stage": {"type": "string"}, "passed_count": {"type": "integer"},
+         "failed_count": {"type": "integer"}, "score": {"type": "number"}},
+         "required": ["id"]}},
+
+    # === Video Write ===
+    {"name": "db_video_project_create", "description": "Create a video project.",
+     "inputSchema": {"type": "object", "properties": {
+         "name": {"type": "string"}, "description": {"type": "string", "default": ""}},
+         "required": ["name"]}},
+
+    # === Generic Write (any table) ===
+    {"name": "db_insert", "description": "Insert a row into any table. Provide table name and key-value pairs.",
+     "inputSchema": {"type": "object", "properties": {
+         "table": {"type": "string"}, "data": {"type": "object"}},
+         "required": ["table", "data"]}},
+    {"name": "db_update", "description": "Update rows in any table by filter.",
+     "inputSchema": {"type": "object", "properties": {
+         "table": {"type": "string"}, "data": {"type": "object"},
+         "filter": {"type": "string", "description": "PostgREST filter, e.g. id=eq.abc123"}},
+         "required": ["table", "data", "filter"]}},
+    {"name": "db_delete", "description": "Delete rows from any table by filter.",
+     "inputSchema": {"type": "object", "properties": {
+         "table": {"type": "string"},
+         "filter": {"type": "string", "description": "PostgREST filter, e.g. id=eq.abc123"}},
+         "required": ["table", "filter"]}},
+
+    # === Raw query (read-only via PostgREST) ===
     {"name": "db_query", "description": "Query any table with PostgREST filters. Example: table=ideas, select=id,title, filters=status=eq.raw",
      "inputSchema": {"type": "object", "properties": {
          "table": {"type": "string"}, "select": {"type": "string", "default": "*"},
@@ -201,6 +289,86 @@ def handle_tool(name: str, args: dict) -> str:
             data = _api("GET", "canvas_nodes", params=f"select=*&limit={args.get('limit', 50)}")
             return json.dumps({"count": len(data) if isinstance(data, list) else 0, "nodes": data}, default=str, ensure_ascii=False)
 
+        # === Projects Write ===
+        elif name == "db_projects_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "projects", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_projects_update":
+            update = {k: v for k, v in args.items() if k != "id" and v is not None}
+            data = _api("PATCH", "projects", body=update, params=f"id=eq.{args['id']}")
+            return json.dumps({"updated": data}, default=str, ensure_ascii=False)
+
+        # === Canvas Write ===
+        elif name == "db_canvas_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "canvas_nodes", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_canvas_edge_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "canvas_edges", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Conversation Write ===
+        elif name == "db_conversation_create":
+            body = {"agent_id": args.get("agent_id", "rachel")}
+            data = _api("POST", "conversation_sessions", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_conversation_add_message":
+            body = {"session_id": args["session_id"], "speaker": args["speaker"], "text": args["text"]}
+            data = _api("POST", "conversation_history", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Schedule Write ===
+        elif name == "db_schedule_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "scheduled_tasks", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Flowzen Write ===
+        elif name == "db_flowzen_checkin":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "flowzen_checkins", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_flowzen_diary_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "flowzen_diary", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Shuttles Write ===
+        elif name == "db_shuttle_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "shuttles", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_shuttle_update":
+            update = {k: v for k, v in args.items() if k != "id" and v is not None}
+            data = _api("PATCH", "shuttles", body=update, params=f"id=eq.{args['id']}")
+            return json.dumps({"updated": data}, default=str, ensure_ascii=False)
+
+        # === Video Write ===
+        elif name == "db_video_project_create":
+            body = {k: v for k, v in args.items() if v is not None}
+            data = _api("POST", "video_projects", body=[body])
+            return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Generic Write ===
+        elif name == "db_insert":
+            data = _api("POST", args["table"], body=[args["data"]])
+            return json.dumps({"inserted": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_update":
+            data = _api("PATCH", args["table"], body=args["data"], params=args["filter"])
+            return json.dumps({"updated": data}, default=str, ensure_ascii=False)
+
+        elif name == "db_delete":
+            data = _api("DELETE", args["table"], params=args["filter"])
+            return json.dumps({"deleted": True}, default=str, ensure_ascii=False)
+
         # === Raw query ===
         elif name == "db_query":
             params = f"select={args.get('select', '*')}&limit={args.get('limit', 20)}"
@@ -213,10 +381,13 @@ def handle_tool(name: str, args: dict) -> str:
 
         # === Schema ===
         elif name == "db_schema":
-            tables = ["ideas", "projects", "persistent_tasks", "scheduled_tasks",
-                       "conversation_sessions", "conversation_history", "flowzen_activity",
-                       "flowzen_checkins", "flowzen_diary", "canvas_nodes", "canvas_edges",
-                       "video_projects", "videos", "user_preferences"]
+            tables = ["ideas", "projects", "canvas_nodes", "canvas_edges",
+                       "conversation_sessions", "conversation_history", "shuttles",
+                       "exploration_sessions", "exploration_nodes", "discovered_edges",
+                       "mermaid_diagrams", "scheduled_tasks", "flowzen_checkins",
+                       "flowzen_activity", "flowzen_diary", "videos", "video_projects",
+                       "video_project_persons", "video_pipeline_steps",
+                       "persistent_tasks", "user_preferences"]
             schema = {}
             for t in tables:
                 data = _api("GET", t, params="select=*&limit=0")

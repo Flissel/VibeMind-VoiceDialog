@@ -3,7 +3,7 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import CanvasNode, CanvasEdge
 from .repository_utils import generate_id
 

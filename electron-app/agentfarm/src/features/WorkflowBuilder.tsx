@@ -125,11 +125,23 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
     setCompleting(true); setError(null)
     try {
       const result = await api.n8nChatChecklist(sessionId, 'complete', '', '')
-      if (result?.success) {
-        setAutoChecks(result.auto_checks || [])
-        onComplete(sessionId, result.response || '')
-      } else {
+      if (!result?.success) {
         setError(result?.message || 'Fehler beim Abschliessen')
+        return
+      }
+      setAutoChecks(result.auto_checks || [])
+
+      // Hand off to Claude Code (uses n8n-MCP to build + deploy)
+      if (api?.n8nClaudeBuild) {
+        const build = await api.n8nClaudeBuild(sessionId)
+        if (build?.success) {
+          onComplete(sessionId, build.response || build.message || 'Workflow deployed.')
+        } else {
+          setError(build?.message || build?.error || 'Claude build fehlgeschlagen')
+          onComplete(sessionId, build?.response || build?.message || '')
+        }
+      } else {
+        onComplete(sessionId, result.response || '')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -324,7 +336,7 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
             transition: 'all 150ms ease',
           }}
         >
-          {completing ? 'Pruefe...' : 'VibeCoder starten'}
+          {completing ? 'Claude baut Workflow...' : 'VibeCoder starten'}
         </button>
       </div>
     </div>
@@ -336,7 +348,7 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
 function ChatPhase({ sessionId, initialMessage, onWorkflowDeployed }: {
   sessionId: string
   initialMessage: string
-  onWorkflowDeployed: () => void
+  onWorkflowDeployed: (workflowId?: string) => void
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(
     initialMessage ? [{ role: 'assistant', content: initialMessage }] : []
@@ -381,7 +393,7 @@ function ChatPhase({ sessionId, initialMessage, onWorkflowDeployed }: {
       const result = await api.n8nChatDeploy(sessionId)
       if (result?.response) setMessages(prev => [...prev, { role: 'assistant', content: result.response }])
       else if (result?.message) setMessages(prev => [...prev, { role: 'assistant', content: result.message }])
-      if (result?.workflow_id) { setWorkflowId(result.workflow_id); onWorkflowDeployed() }
+      if (result?.workflow_id) { setWorkflowId(result.workflow_id); onWorkflowDeployed(result.workflow_id) }
     } catch (e) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Deploy-Fehler: ${e}` }])
     } finally { setDeploying(false) }
@@ -496,7 +508,7 @@ function ChatPhase({ sessionId, initialMessage, onWorkflowDeployed }: {
 
 /* ── VibeCoder Container (Checklist → Chat) ──────────────── */
 
-function VibeCoderPanel({ onWorkflowDeployed }: { onWorkflowDeployed: () => void }) {
+function VibeCoderPanel({ onWorkflowDeployed }: { onWorkflowDeployed: (workflowId?: string) => void }) {
   const [phase, setPhase] = useState<'checklist' | 'chat'>('checklist')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [initialMsg, setInitialMsg] = useState('')
@@ -566,9 +578,21 @@ export function WorkflowBuilder() {
   const status = useN8nStatus()
   const { workflows, loading, error, refresh } = useN8nWorkflows()
   const [showVibeCoder, setShowVibeCoder] = useState(true)
+  const [showEditor, setShowEditor] = useState(false)
+  const [editorWorkflowId, setEditorWorkflowId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [authTick, setAuthTick] = useState(0)
+
+  const n8nBaseUrl = 'http://localhost:15678'
 
   useState(() => { status.refresh(); refresh() })
+
+  useEffect(() => {
+    const af = (window as any).vibemindAgentFarm
+    if (af && typeof af.onN8nAuthReady === 'function') {
+      af.onN8nAuthReady(() => setAuthTick((t) => t + 1))
+    }
+  }, [])
 
   const handleActivate = async (id: string) => {
     if (!api?.n8nActivate) return
@@ -616,11 +640,16 @@ export function WorkflowBuilder() {
           >
             VibeCoder
           </button>
-          <button onClick={() => api?.openN8nEditor?.()} className="hover-bg" style={{
-            padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--separator)', background: 'transparent',
-            color: 'var(--system-blue)', cursor: 'pointer', fontSize: 'var(--text-caption1)',
-          }}>
+          <button
+            onClick={() => { setShowEditor(!showEditor); if (!showEditor) setEditorWorkflowId(null) }}
+            style={{
+              padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--separator)',
+              background: showEditor ? 'var(--system-blue)' : 'transparent',
+              color: showEditor ? '#fff' : 'var(--system-blue)',
+              cursor: 'pointer', fontSize: 'var(--text-caption1)', fontWeight: 600,
+            }}
+          >
             n8n Editor
           </button>
           <button onClick={() => { status.refresh(); refresh() }} className="hover-bg" style={{
@@ -633,61 +662,131 @@ export function WorkflowBuilder() {
         </div>
       </div>
 
-      {/* Main: VibeCoder + Workflow List */}
+      {/* Main: VibeCoder + Editor/Workflow List */}
       <div style={{ flex: 1, display: 'flex', gap: 'var(--space-3)', overflow: 'hidden' }}>
+        {/* Left: VibeCoder Chat */}
         {showVibeCoder && (
-          <div style={{ flex: '0 0 50%', minHeight: 0 }}>
-            <VibeCoderPanel onWorkflowDeployed={refresh} />
+          <div style={{ flex: showEditor ? '0 0 50%' : '0 0 50%', minHeight: 0 }}>
+            <VibeCoderPanel onWorkflowDeployed={(wfId) => { refresh(); if (wfId) { setEditorWorkflowId(wfId); setShowEditor(true) } }} />
           </div>
         )}
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {error && (
-            <div style={{ padding: 'var(--space-3)', color: 'var(--system-red)', fontSize: 'var(--text-footnote)' }}>{error}</div>
-          )}
-          {loading && workflows.length === 0 ? (
-            <div>
-              {[1, 2, 3].map(i => (
-                <div key={i} style={{ height: 56, borderRadius: 'var(--radius-md)', background: 'var(--material-regular)', marginBottom: 'var(--space-2)' }} />
-              ))}
-            </div>
-          ) : workflows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center" style={{ height: 150, color: 'var(--text-secondary)', gap: 'var(--space-2)' }}>
-              <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Keine Workflows</span>
-              <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>Nutze den VibeCoder links um einen Workflow zu bauen</span>
+
+        {/* Right: n8n Editor iframe OR Workflow List */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {showEditor ? (
+            /* ── Embedded n8n Editor ── */
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+              border: '1px solid var(--separator)', background: 'var(--bg-primary)',
+            }}>
+              {/* Mini toolbar above iframe */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '4px var(--space-3)',
+                borderBottom: '1px solid var(--separator)',
+                background: 'var(--material-regular)', backdropFilter: 'blur(20px)',
+                flexShrink: 0,
+              }}>
+                <span style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+                  n8n Editor
+                  {editorWorkflowId && (
+                    <span style={{ marginLeft: 'var(--space-2)', color: 'var(--text-tertiary)', fontSize: 'var(--text-caption2)' }}>
+                      Workflow {editorWorkflowId}
+                    </span>
+                  )}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setEditorWorkflowId(null) }}
+                    className="hover-bg"
+                    title="n8n Home"
+                    style={{
+                      padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--separator)', background: 'transparent',
+                      color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 'var(--text-caption2)',
+                    }}
+                  >
+                    Home
+                  </button>
+                  <button
+                    onClick={() => api?.openN8nEditor?.(editorWorkflowId || undefined)}
+                    className="hover-bg"
+                    title="In eigenem Fenster oeffnen"
+                    style={{
+                      width: 24, height: 24, borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--separator)', background: 'transparent',
+                      color: 'var(--text-secondary)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
+                    }}
+                  >
+                    &#x2197;
+                  </button>
+                </div>
+              </div>
+              {/* iframe */}
+              <iframe
+                key={`${editorWorkflowId || '__home__'}:${authTick}`}
+                src={editorWorkflowId ? `${n8nBaseUrl}/workflow/${editorWorkflowId}` : n8nBaseUrl}
+                style={{
+                  flex: 1, width: '100%', border: 'none',
+                  background: '#262626',
+                }}
+                allow="clipboard-read; clipboard-write"
+              />
             </div>
           ) : (
-            <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--material-regular)', backdropFilter: 'blur(20px)' }}>
-              {workflows.map((wf, idx) => (
-                <div key={wf.id}>
-                  {idx > 0 && <div style={{ height: 1, background: 'var(--separator)', marginLeft: 'var(--space-4)', marginRight: 'var(--space-4)' }} />}
-                  <div className="flex items-center" style={{ minHeight: 56, padding: '0 var(--space-4)', gap: 'var(--space-3)' }}>
-                    <span className="flex-shrink-0 rounded-full" style={{ width: 8, height: 8, background: wf.active ? STATUS.active.color : STATUS.inactive.color }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate" style={{ fontSize: 'var(--text-footnote)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)' }}>{wf.name}</div>
-                      <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', marginTop: 1 }}>ID: {wf.id}</div>
-                    </div>
-                    <span className="flex-shrink-0" style={{
-                      fontSize: 'var(--text-caption2)', fontWeight: 'var(--weight-medium)',
-                      padding: '2px 8px', borderRadius: 4,
-                      background: `color-mix(in srgb, ${wf.active ? STATUS.active.color : STATUS.inactive.color} 15%, transparent)`,
-                      color: wf.active ? STATUS.active.color : STATUS.inactive.color,
-                    }}>
-                      {wf.active ? 'Active' : 'Inactive'}
-                    </span>
-                    <div className="flex-shrink-0 flex gap-1">
-                      <button onClick={() => wf.active ? handleDeactivate(wf.id) : handleActivate(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title={wf.active ? 'Deaktivieren' : 'Aktivieren'} style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: wf.active ? 'var(--system-orange)' : 'var(--system-green)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                        {wf.active ? '\u23F8' : '\u25B6'}
-                      </button>
-                      <button onClick={() => api?.openN8nEditor?.(wf.id)} className="hover-bg" title="In n8n oeffnen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-blue)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                        &#x2197;
-                      </button>
-                      <button onClick={() => handleDelete(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title="Loeschen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                        &#x2715;
-                      </button>
-                    </div>
-                  </div>
+            /* ── Workflow List (original) ── */
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {error && (
+                <div style={{ padding: 'var(--space-3)', color: 'var(--system-red)', fontSize: 'var(--text-footnote)' }}>{error}</div>
+              )}
+              {loading && workflows.length === 0 ? (
+                <div>
+                  {[1, 2, 3].map(i => (
+                    <div key={i} style={{ height: 56, borderRadius: 'var(--radius-md)', background: 'var(--material-regular)', marginBottom: 'var(--space-2)' }} />
+                  ))}
                 </div>
-              ))}
+              ) : workflows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center" style={{ height: 150, color: 'var(--text-secondary)', gap: 'var(--space-2)' }}>
+                  <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Keine Workflows</span>
+                  <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>Nutze den VibeCoder links um einen Workflow zu bauen</span>
+                </div>
+              ) : (
+                <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--material-regular)', backdropFilter: 'blur(20px)' }}>
+                  {workflows.map((wf, idx) => (
+                    <div key={wf.id}>
+                      {idx > 0 && <div style={{ height: 1, background: 'var(--separator)', marginLeft: 'var(--space-4)', marginRight: 'var(--space-4)' }} />}
+                      <div className="flex items-center" style={{ minHeight: 56, padding: '0 var(--space-4)', gap: 'var(--space-3)' }}>
+                        <span className="flex-shrink-0 rounded-full" style={{ width: 8, height: 8, background: wf.active ? STATUS.active.color : STATUS.inactive.color }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate" style={{ fontSize: 'var(--text-footnote)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)' }}>{wf.name}</div>
+                          <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', marginTop: 1 }}>ID: {wf.id}</div>
+                        </div>
+                        <span className="flex-shrink-0" style={{
+                          fontSize: 'var(--text-caption2)', fontWeight: 'var(--weight-medium)',
+                          padding: '2px 8px', borderRadius: 4,
+                          background: `color-mix(in srgb, ${wf.active ? STATUS.active.color : STATUS.inactive.color} 15%, transparent)`,
+                          color: wf.active ? STATUS.active.color : STATUS.inactive.color,
+                        }}>
+                          {wf.active ? 'Active' : 'Inactive'}
+                        </span>
+                        <div className="flex-shrink-0 flex gap-1">
+                          <button onClick={() => wf.active ? handleDeactivate(wf.id) : handleActivate(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title={wf.active ? 'Deaktivieren' : 'Aktivieren'} style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: wf.active ? 'var(--system-orange)' : 'var(--system-green)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                            {wf.active ? '\u23F8' : '\u25B6'}
+                          </button>
+                          <button onClick={() => { setEditorWorkflowId(wf.id); setShowEditor(true) }} className="hover-bg" title="Im Editor oeffnen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-blue)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                            &#x2197;
+                          </button>
+                          <button onClick={() => handleDelete(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title="Loeschen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                            &#x2715;
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

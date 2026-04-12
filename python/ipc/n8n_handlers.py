@@ -125,6 +125,30 @@ class N8nHandlers:
                 "message": str(e),
             })
 
+    async def handle_n8n_claude_build(self, message: dict):
+        """Delegate workflow build to Claude CLI with n8n-MCP."""
+        session_id = message.get("session_id", "")
+        if not session_id:
+            self.send_message({
+                "type": "n8n_claude_build_result",
+                "success": False,
+                "message": "session_id required.",
+            })
+            return
+        try:
+            from spaces.n8n.tools.workflow_chat import get_workflow_chat_manager
+            mgr = get_workflow_chat_manager()
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, mgr.claude_build, session_id)
+            self.send_message({"type": "n8n_claude_build_result", **result})
+        except Exception as e:
+            debug_log(f"n8n claude build error: {e}")
+            self.send_message({
+                "type": "n8n_claude_build_result",
+                "success": False,
+                "message": str(e),
+            })
+
     async def handle_n8n_chat_history(self, message: dict):
         """Get chat history for a session."""
         session_id = message.get("session_id", "")

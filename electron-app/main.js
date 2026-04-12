@@ -14,8 +14,12 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Load root .env so all config lives in one place
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Load .env files with priority: Vibemind_V1/.env (master) > vibemind-os/voice/.env (overrides)
+// First-win strategy: master keys are not overridden by voice-specific config
+const _rootEnv = path.join(__dirname, '..', '..', '..', '.env');  // Vibemind_V1/.env
+const _voiceEnv = path.join(__dirname, '..', '.env');              // vibemind-os/voice/.env
+require('dotenv').config({ path: _rootEnv });                      // master first
+require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
 
 // Coding Engine Dashboard Integration
 const DockerManager = require('./docker-manager');
@@ -33,6 +37,12 @@ const ClawPortManager = require('./clawport-manager');
 
 // Brain Dashboard Integration
 const BrainManager = require('./brain-manager');
+
+// OpenFang Agent OS Integration
+const OpenFangManager = require('./openfang-manager');
+
+// Supabase Realtime Subscriptions (live DB -> UI updates)
+const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -79,6 +89,8 @@ let clawportManager = null;
 
 // Brain Dashboard manager
 let brainManager = null;
+let openfangManager = null;
+let realtimeChannels = null;
 
 // Agent Farm manager
 let agentfarmManager = null;
@@ -98,15 +110,8 @@ let eyetermManager = null;
 // Pending Python response handlers (for request-response IPC pattern)
 const pendingPythonResponses = new Map();
 
-// Rowboat @x/core services (esbuild CJS bundle)
-let rowboatServices = null;
-try {
-    rowboatServices = require('./rowboat-services.cjs');
-    console.log('[Main] Rowboat services loaded successfully');
-} catch (e) {
-    console.warn('[Main] Rowboat services not found — run: npm run build:rowboat');
-    console.warn('[Main] Error:', e.message);
-}
+// Rowboat @x/core services — now handled by child-process bridge
+// (see rowboat-core-bridge.mjs, managed by RowboatManager)
 
 /**
  * Auto-configure Rowboat's ~/.rowboat/config/models.json from VibeMind .env
@@ -1853,6 +1858,165 @@ function setupIpcHandlers() {
     });
 
     // ========================================
+    // ROWBOAT IPC STUBS
+    // Rowboat renderer calls these — we stub them so it
+    // skips onboarding/login and runs in offline mode.
+    // ========================================
+    const _fs = require('fs');
+    const _path = require('path');
+    // Use the real Rowboat workspace where user data lives
+    const _rowboatWorkspace = _path.join(app.getPath('home'), '.rowboat');
+
+    // Skip onboarding/sign-in entirely
+    ipcMain.handle('onboarding:getStatus',  () => ({ showOnboarding: false }));
+    ipcMain.handle('onboarding:markComplete', () => ({}));
+
+    // OAuth — not connected, no providers
+    ipcMain.handle('oauth:getState',  () => ({ config: {}, providers: {} }));
+    ipcMain.handle('oauth:connect',   () => ({ success: false, error: 'OAuth not available in VibeMind' }));
+    ipcMain.handle('oauth:disconnect',() => ({}));
+    ipcMain.handle('oauth:didConnect',() => ({}));
+
+    // Workspace — serve files from rowboat workspace dir
+    _fs.mkdirSync(_rowboatWorkspace, { recursive: true });
+    _fs.mkdirSync(_path.join(_rowboatWorkspace, 'config'), { recursive: true });
+
+    ipcMain.handle('workspace:getRoot', () => ({ root: _rowboatWorkspace }));
+    ipcMain.handle('workspace:exists',  (_e, { path: p }) => ({
+        exists: _fs.existsSync(_path.join(_rowboatWorkspace, p))
+    }));
+    ipcMain.handle('workspace:readFile', (_e, { path: p, encoding }) => {
+        const full = _path.join(_rowboatWorkspace, p);
+        if (!_fs.existsSync(full)) throw new Error('File not found: ' + p);
+        const enc = encoding || 'utf8';
+        const data = _fs.readFileSync(full, enc);
+        const s = _fs.statSync(full);
+        return {
+            path: p,
+            encoding: enc,
+            data,
+            stat: { size: s.size, mtimeMs: s.mtimeMs, kind: s.isDirectory() ? 'dir' : 'file' },
+            etag: `${s.size}-${s.mtimeMs}`,
+        };
+    });
+    ipcMain.handle('workspace:writeFile', (_e, args) => {
+        const { path: p, data, content, opts } = args || {};
+        if (!p) throw new Error('No path provided');
+        const full = _path.join(_rowboatWorkspace, p);
+        _fs.mkdirSync(_path.dirname(full), { recursive: true });
+        _fs.writeFileSync(full, data ?? content ?? '', 'utf8');
+        const s = _fs.statSync(full);
+        return {
+            path: p,
+            stat: { size: s.size, mtimeMs: s.mtimeMs, kind: 'file' },
+            etag: `${s.size}-${s.mtimeMs}`,
+        };
+    });
+    ipcMain.handle('workspace:mkdir', (_e, args) => {
+        const { path: p, recursive } = args || {};
+        if (!p) return { success: false, error: 'No path' };
+        _fs.mkdirSync(_path.join(_rowboatWorkspace, p), { recursive: recursive !== false });
+        return { success: true };
+    });
+    // workspace:readdir — used by Rowboat to list directories
+    // Returns DirEntry[] directly (array, not object), with kind:'dir'|'file', optional stat
+    ipcMain.handle('workspace:readdir', (_e, args) => {
+        const { path: p, opts } = args || {};
+        const recursive = opts && opts.recursive;
+        const includeStats = opts && opts.includeStats;
+        const full = _path.join(_rowboatWorkspace, p || '');
+        if (!_fs.existsSync(full)) return [];
+        const collectEntries = (dir, relBase) => {
+            let results = [];
+            try {
+                const items = _fs.readdirSync(dir, { withFileTypes: true });
+                for (const e of items) {
+                    if (e.name.startsWith('.') && !(opts && opts.includeHidden)) continue;
+                    const entryRelPath = (relBase ? relBase + '/' + e.name : (p ? p + '/' + e.name : e.name)).replace(/\\/g, '/');
+                    const isDir = e.isDirectory();
+                    const entry = { name: e.name, path: entryRelPath, kind: isDir ? 'dir' : 'file' };
+                    if (includeStats) {
+                        try {
+                            const s = _fs.statSync(_path.join(dir, e.name));
+                            entry.stat = { size: s.size, mtimeMs: s.mtimeMs };
+                        } catch {}
+                    }
+                    results.push(entry);
+                    if (isDir && recursive) {
+                        results = results.concat(collectEntries(_path.join(dir, e.name), entryRelPath));
+                    }
+                }
+            } catch {}
+            return results;
+        };
+        return collectEntries(full, p || '');
+    });
+    // workspace:stat — file/dir metadata (match Rowboat schema: kind, stat)
+    ipcMain.handle('workspace:stat', (_e, args) => {
+        const { path: p } = args || {};
+        const full = _path.join(_rowboatWorkspace, p || '');
+        if (!_fs.existsSync(full)) throw new Error('Path not found: ' + p);
+        const s = _fs.statSync(full);
+        return {
+            kind: s.isDirectory() ? 'dir' : 'file',
+            stat: { size: s.size, mtimeMs: s.mtimeMs },
+        };
+    });
+    ipcMain.handle('workspace:remove', (_e, args) => {
+        const { path: p } = args || {};
+        if (p) {
+            const full = _path.join(_rowboatWorkspace, p);
+            if (_fs.existsSync(full)) _fs.rmSync(full, { recursive: true, force: true });
+        }
+        return { success: true };
+    });
+    ipcMain.handle('workspace:deleteFile', (_e, args) => {
+        const { path: p } = args || {};
+        if (p) { const full = _path.join(_rowboatWorkspace, p); if (_fs.existsSync(full)) _fs.unlinkSync(full); }
+        return { success: true };
+    });
+    ipcMain.handle('workspace:rename', (_e, args) => {
+        const { from: f, to: t } = args || {};
+        if (f && t) _fs.renameSync(_path.join(_rowboatWorkspace, f), _path.join(_rowboatWorkspace, t));
+        return { success: true };
+    });
+    // Stub remaining channels so they don't error-spam
+    ipcMain.handle('search:query',             () => ({ results: [] }));
+    ipcMain.handle('bases',                    () => ({ bases: [] }));
+    ipcMain.handle('knowledge:history',        () => ({ commits: [] }));
+    ipcMain.handle('knowledge:fileAtCommit',   () => ({ content: '' }));
+    ipcMain.handle('knowledge:restore',        () => ({ success: true }));
+    // runs:* — backed by Rowboat core bridge (child process)
+    const BRIDGE_RPC_CHANNELS = [
+        'runs:create', 'runs:createMessage', 'runs:list', 'runs:fetch',
+        'runs:stop', 'runs:delete', 'runs:provideHumanInput', 'runs:authorizePermission',
+    ];
+    for (const ch of BRIDGE_RPC_CHANNELS) {
+        ipcMain.handle(ch, async (_e, args) => {
+            if (!rowboatManager?.bridgeReady) {
+                throw new Error('Rowboat bridge not ready — services still loading');
+            }
+            return rowboatManager.sendRpc(ch, args);
+        });
+    }
+    // runs:events is push-only (bridge stdout → relayEvent → BrowserView)
+    ipcMain.handle('runs:events', () => ({ events: [] }));
+    ipcMain.handle('agent-schedule:getConfig', () => ({ schedules: [] }));
+    ipcMain.handle('export:note',              () => ({ success: true }));
+    ipcMain.handle('meeting:checkScreenPermission',       () => ({ granted: false }));
+    ipcMain.handle('meeting:openScreenRecordingSettings', () => ({}));
+    ipcMain.handle('meeting:summarize',        () => ({ summary: '' }));
+
+    // Integration configs — all disabled/unconfigured
+    const _stubConfig = () => ({ enabled: false, configured: false });
+    ipcMain.handle('composio:use-composio-for-google',          _stubConfig);
+    ipcMain.handle('composio:use-composio-for-google-calendar', _stubConfig);
+    ipcMain.handle('granola:getConfig',  _stubConfig);
+    ipcMain.handle('slack:getConfig',    _stubConfig);
+    ipcMain.handle('voice:getConfig',    () => ({ deepgram: null, elevenlabs: null }));
+    ipcMain.handle('agent-schedule:getState', () => ({ schedules: [] }));
+
+    // ========================================
     // CLAUDE CODE TOKEN (for Settings UI badge)
     // ========================================
 
@@ -2188,6 +2352,14 @@ function setupIpcHandlers() {
     ipcMain.handle('agentfarm:n8n-chat-deploy', async (_event, { sessionId }) => {
         try {
             return await sendToPythonAndWait({ type: 'n8n_chat_deploy', session_id: sessionId }, 'n8n_chat_deploy_result', 15000);
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('agentfarm:n8n-claude-build', async (_event, { sessionId }) => {
+        try {
+            return await sendToPythonAndWait({ type: 'n8n_claude_build', session_id: sessionId }, 'n8n_claude_build_result', 600000);
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -2954,6 +3126,20 @@ app.whenReady().then(async () => {
         console.warn('[Main] Container cleanup failed (Docker may not be running):', e.message);
     }
 
+    // Start media server container (video/audio playback for Rowboat)
+    try {
+        const { execSync } = require('child_process');
+        const mediaCompose = _path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
+        if (_fs.existsSync(mediaCompose)) {
+            execSync(`docker compose -f "${mediaCompose}" up -d media`, {
+                timeout: 15000, stdio: 'ignore',
+            });
+            console.log('[Main] Media server container started (port 9877)');
+        }
+    } catch (e) {
+        console.warn('[Main] Media server container failed (videos may not play):', e.message);
+    }
+
     setupIpcHandlers();
     createWindow();
 
@@ -2979,8 +3165,22 @@ app.whenReady().then(async () => {
     // Initialize ClawPort Dashboard Manager
     clawportManager = new ClawPortManager(mainWindow);
 
-    // Initialize Brain Dashboard Manager
+    // Initialize Brain Dashboard Manager + start server immediately (headless)
     brainManager = new BrainManager(mainWindow);
+    brainManager.startHeadless().catch(err =>
+      console.warn('[Main] Brain headless start failed:', err.message)
+    );
+
+    // Initialize OpenFang Agent OS + start daemon immediately
+    openfangManager = new OpenFangManager();
+    openfangManager.start().catch(err =>
+      console.warn('[Main] OpenFang start failed:', err.message)
+    );
+
+    // Initialize Supabase Realtime subscriptions (live DB -> UI)
+    // Subscribes to ideas, projects, canvas_nodes etc. and translates
+    // Postgres changes to the same IPC messages the Python backend sends.
+    realtimeChannels = initRealtimeSubscriptions(mainWindow);
 
     // Initialize Agent Farm Manager
     agentfarmManager = new AgentFarmManager(mainWindow);
@@ -3090,82 +3290,19 @@ app.whenReady().then(async () => {
     }
 
     // ========================================
-    // ROWBOAT @x/core SERVICES INITIALIZATION
+    // ROWBOAT CORE BRIDGE (child process)
     // ========================================
-    // Each phase is independent — a failure in one doesn't block the rest.
-    // The critical path is: initConfigs → setupIpcHandlers.
-    if (rowboatServices) {
-        // Call a function only if it exists on the bundle; warn if missing
-        const _rb = (name, ...args) => {
-            if (typeof rowboatServices[name] !== 'function') {
-                console.warn(`[Rowboat] ${name} not exported — rebuild: npm run build:rowboat`);
-                return undefined;
-            }
-            return rowboatServices[name](...args);
-        };
-
-        // Phase 1 — Config dirs (~/.rowboat/) + VibeMind model auto-config
-        try {
-            await _rb('initConfigs');
-            await autoConfigureRowboatModels();
-            console.log('[Rowboat] Phase 1/4: configs ready');
-        } catch (err) {
-            console.error('[Rowboat] Phase 1/4 (configs) failed:', err.message);
-        }
-
-        // Phase 2 — IPC handlers (critical: renderer can't function without these)
-        try {
-            _rb('setupIpcHandlers');
-            console.log('[Rowboat] Phase 2/4: IPC handlers registered');
-        } catch (err) {
-            console.error('[Rowboat] Phase 2/4 (IPC handlers) FAILED:', err.message);
-        }
-
-        // Phase 3 — File/run/service watchers
-        try {
-            _rb('startWorkspaceWatcher');
-            _rb('startRunsWatcher');
-            _rb('startServicesWatcher');
-            console.log('[Rowboat] Phase 3/4: watchers started');
-        } catch (err) {
-            console.error('[Rowboat] Phase 3/4 (watchers) failed:', err.message);
-        }
-
-        // Phase 4 — Background services (graph builder + optional syncs)
-        try { _rb('initGraphBuilder'); } catch (err) {
-            console.warn('[Rowboat] Graph builder failed (non-critical):', err.message);
-        }
-        for (const svc of ['initGmailSync', 'initCalendarSync', 'initFirefliesSync',
-                           'initGranolaSync', 'initPreBuiltRunner', 'initAgentRunner']) {
-            try { _rb(svc); } catch { /* optional sync */ }
-        }
-        console.log('[Rowboat] Phase 4/4: background services started');
-
-        // Push-Event Relay: BrowserView is not a BrowserWindow,
-        // so BrowserWindow.getAllWindows() in @x/core won't reach it.
-        const { bus, serviceBus, onWorkspaceChange, onOAuthConnect } = rowboatServices;
-        if (bus) {
-            bus.subscribe('*', (event) => {
-                rowboatManager?.relayEvent('runs:events', event);
-            });
-        }
-        if (serviceBus) {
-            serviceBus.subscribe((event) => {
-                rowboatManager?.relayEvent('services:events', event);
-            });
-        }
-        if (onWorkspaceChange) {
-            onWorkspaceChange((event) => {
-                rowboatManager?.relayEvent('workspace:didChange', event);
-            });
-        }
-        if (onOAuthConnect) {
-            onOAuthConnect((event) => {
-                console.log(`[Rowboat] OAuth event: ${event.provider} success=${event.success}`);
-                rowboatManager?.relayEvent('oauth:didConnect', event);
-            });
-        }
-        console.log('[Rowboat] Event relay configured');
+    // Starts @x/core as a separate Node.js process.
+    // initConfigs + bus subscriptions happen inside the bridge.
+    // Event relay (runs:events, services:events) is handled by
+    // RowboatManager._onBridgeLine → relayEvent().
+    try {
+        await rowboatManager.startBridge();
+        await autoConfigureRowboatModels();
+        console.log('[Rowboat] Core bridge started, models configured');
+    } catch (err) {
+        console.error('[Rowboat] Core bridge start failed:', err.message);
+        console.error('[Rowboat] Chat will not work — knowledge/graph view still functional');
     }
 
     startPythonBackend();
@@ -3250,19 +3387,13 @@ app.on('will-quit', () => {
         pythonProcess = null;
     }
 
-    // Stop Rowboat watchers (guard: may never have been started)
-    if (rowboatServices) {
-        for (const fn of ['stopWorkspaceWatcher', 'stopRunsWatcher', 'stopServicesWatcher']) {
-            try { if (typeof rowboatServices[fn] === 'function') rowboatServices[fn](); } catch { /* best-effort */ }
-        }
-        console.log('[Rowboat] Watchers stopped');
-    }
-
-    // Destroy BrowserView managers
+    // Destroy BrowserView managers (stopBridge is called inside destroy)
     if (rowboatManager) rowboatManager.destroy();
     if (sweDesignManager) sweDesignManager.destroy();
     if (clawportManager) clawportManager.destroy();
     if (brainManager) brainManager.destroy();
+    if (openfangManager) openfangManager.destroy();
+    destroyRealtimeSubscriptions(realtimeChannels);
 
     globalShortcut.unregisterAll();
 });

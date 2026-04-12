@@ -186,6 +186,24 @@ class BrainManager {
   }
 
   /**
+   * Start the Brain server without UI (headless mode).
+   * Called at app startup so routing + shadow training are available immediately.
+   */
+  async startHeadless() {
+    if (this._serverReady || this._starting) return;
+    this._starting = true;
+    try {
+      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Starting brain server (headless)...`);
+      this.port = await this._startServer();
+      this._starting = false;
+      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Brain server ready on port ${this.port} (headless)`);
+    } catch (err) {
+      this._starting = false;
+      console.warn(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Headless start failed: ${err.message}`);
+    }
+  }
+
+  /**
    * Show the Brain dashboard BrowserView.
    * Starts the Python server on first call.
    */
