@@ -190,6 +190,8 @@ class Project:
     def from_dict(cls, data: Dict[str, Any]) -> "Project":
         """Create Project from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         created_at = data.get("created_at")
         if isinstance(created_at, str):
@@ -273,6 +275,8 @@ class CanvasNode:
     def from_dict(cls, data: Dict[str, Any]) -> "CanvasNode":
         """Create CanvasNode from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         # Parse structured formatting fields
         format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
@@ -363,6 +367,8 @@ class ConversationMessage:
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationMessage":
         """Create ConversationMessage from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
@@ -409,6 +415,8 @@ class ConversationSession:
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationSession":
         """Create ConversationSession from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         started_at = data.get("started_at")
         if isinstance(started_at, str):
@@ -531,6 +539,8 @@ class Shuttle:
         """Create Shuttle from database row"""
         requirement_results = json.loads(data.get("requirement_results", "{}")) if isinstance(data.get("requirement_results"), str) else data.get("requirement_results", {})
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
         stage_data = json.loads(data.get("stage_data", "{}")) if isinstance(data.get("stage_data"), str) else data.get("stage_data", {})
 
         created_at = data.get("created_at")

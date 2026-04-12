@@ -1094,10 +1094,32 @@ class IntentOrchestrator:
                     # 2. LLM fallback (always reached when brain didn't hit)
                     if _classification is None:
                         try:
-                            from swarm.orchestrator.intent_classifier import IntentClassifier
-                            _classifier = IntentClassifier()
-                            _classification = await _classifier.classify(intent_text)
-                            _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                            # Phase 2: YAML-driven classifier for Ideas-Space intents.
+                            # When USE_YAML_CLASSIFIER=true, try YAML first. It covers 37
+                            # bubble.*/idea.* events with compact few-shots. If it returns
+                            # conversation.unknown, fall through to the legacy classifier
+                            # which covers the remaining 94 non-Ideas events.
+                            _use_yaml = (
+                                os.getenv("USE_YAML_CLASSIFIER", "false").lower() == "true"
+                            )
+                            if _use_yaml:
+                                from swarm.orchestrator.yaml_classifier import get_yaml_classifier
+                                _classifier = get_yaml_classifier()
+                                _classification = await _classifier.classify(intent_text)
+                                _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                                # YAML only covers Ideas-Space — if it returned unknown,
+                                # retry with legacy classifier which covers all 131 events.
+                                if _pre_event_type == "conversation.unknown":
+                                    logger.info(f"[YamlClassifier] unknown, falling back to legacy")
+                                    from swarm.orchestrator.intent_classifier import IntentClassifier
+                                    _legacy = IntentClassifier()
+                                    _classification = await _legacy.classify(intent_text)
+                                    _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                            else:
+                                from swarm.orchestrator.intent_classifier import IntentClassifier
+                                _classifier = IntentClassifier()
+                                _classification = await _classifier.classify(intent_text)
+                                _pre_event_type = _classification.get("event_type", "") if _classification else ""
                             # Brain learns from the LLM ground truth (shadow training),
                             # personalized to the current user when available.
                             if self._brain_event_shadow and _pre_event_type:
@@ -1141,7 +1163,7 @@ class IntentOrchestrator:
                         if tool_name in self._tool_executors:
                             tool_fn = self._tool_executors[tool_name]
                             try:
-                                tool_params = (_classification.get("parameters") or {}) if _classification else {}
+                                tool_params = ((_classification.get("parameters") or _classification.get("payload")) or {}) if _classification else {}
                                 # Patch 2: optionally route through OpenFang agent
                                 # when USE_OPENFANG_DIRECT=true AND the event
                                 # actually needs remote execution. Parameterless
@@ -1189,7 +1211,12 @@ class IntentOrchestrator:
                                     result = tool_fn(tool_params)
                                     if asyncio.iscoroutine(result):
                                         result = await result
-                                    response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                    if result is None:
+                                        response = f"[{tool_name}] returned no result"
+                                    elif isinstance(result, dict):
+                                        response = result.get("message", str(result))
+                                    else:
+                                        response = str(result)
                                 # Shadow: Brain observes this routing decision (space routing)
                                 if self._brain_shadow:
                                     asyncio.create_task(self._brain_shadow.observe(

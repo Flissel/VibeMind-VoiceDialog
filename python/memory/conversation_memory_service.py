@@ -79,13 +79,12 @@ class ConversationMemoryService:
             return None
 
         try:
-            # Format messages as content string (SDK uses memories.add, not conversations.ingest)
             conversation_content = "\n".join([
                 f"{msg.get('role', 'user')}: {msg.get('content', '')}"
                 for msg in messages
             ])
 
-            response = await self._client.memories.add(
+            response = await self._client.documents.add(
                 content=conversation_content,
                 container_tag=self.CONTAINER_TAG,
                 metadata={
