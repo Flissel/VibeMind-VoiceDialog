@@ -14,7 +14,7 @@
 services:
   mirofish:
     build:
-      context: ./python/spaces/mirofish/mirofish
+      context: ../spaces/mirofish/mirofish
       dockerfile: Dockerfile
     container_name: mirofish-app
     ports:

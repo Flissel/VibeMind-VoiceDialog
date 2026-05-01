@@ -2,10 +2,11 @@
 Embedding Service for Semantic Search
 
 Provides text embeddings using sentence-transformers for semantic bubble/idea search.
-Uses all-MiniLM-L6-v2 model (384 dimensions, fast, multilingual-capable).
+Uses Qwen/Qwen3-Embedding-0.6B model (1024 dimensions, multilingual DE/EN).
 """
 
 import json
+import os
 import hashlib
 import logging
 import threading
@@ -59,16 +60,16 @@ def _get_model():
             if _monitor:
                 op_id = _monitor.start_operation(
                     "model_load",
-                    "Loading embedding model all-MiniLM-L6-v2",
-                    {"model": "all-MiniLM-L6-v2"}
+                    "Loading embedding model Qwen/Qwen3-Embedding-0.6B",
+                    {"model": "Qwen/Qwen3-Embedding-0.6B"}
                 )
 
-            _logger.debug("[EmbeddingService] Loading model all-MiniLM-L6-v2...")
-            logger.info("[EmbeddingService] Loading model all-MiniLM-L6-v2...")
+            _logger.debug("[EmbeddingService] Loading model Qwen/Qwen3-Embedding-0.6B...")
+            logger.info("[EmbeddingService] Loading model Qwen/Qwen3-Embedding-0.6B...")
 
             # Load with timeout (60 seconds max)
             def load_model():
-                return SentenceTransformer('all-MiniLM-L6-v2')
+                return SentenceTransformer('Qwen/Qwen3-Embedding-0.6B')
 
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(load_model)
@@ -114,7 +115,7 @@ class HashBasedEmbedding:
     Not as good as real embeddings but works for basic similarity.
     """
 
-    EMBEDDING_DIM = 384
+    EMBEDDING_DIM = 1024
 
     def encode(self, texts, convert_to_numpy=True):
         """Generate hash-based embeddings for texts."""
@@ -173,15 +174,15 @@ class EmbeddingService:
     """
     Service for generating and comparing text embeddings.
 
-    Uses sentence-transformers all-MiniLM-L6-v2 model:
-    - 384 dimensions
-    - Fast inference (~14k sentences/sec on CPU)
-    - Good multilingual support (German + English)
+    Uses sentence-transformers Qwen/Qwen3-Embedding-0.6B model:
+    - 1024 dimensions
+    - GPU-friendly (Qwen runs ~640 emb/s on RTX 3060)
+    - Strong multilingual support (German + English)
 
     Falls back to hash-based embeddings if model fails to load.
     """
 
-    EMBEDDING_DIM = 384
+    EMBEDDING_DIM = 1024
 
     def __init__(self):
         """Initialize the embedding service."""
@@ -233,7 +234,10 @@ class EmbeddingService:
             text: Text to embed
 
         Returns:
-            List of floats (384 dimensions) or None if service unavailable
+            List of floats (1024 dimensions native, optionally truncated to
+            EMBEDDING_TARGET_DIM if set via env — used to fit Supabase's
+            vector(384) column without a schema migration). None if
+            service unavailable.
         """
         if not self.is_available:
             logger.debug("[EmbeddingService] Service unavailable, returning None")
@@ -252,6 +256,15 @@ class EmbeddingService:
             result = embedding.tolist()
             if isinstance(result, list) and len(result) == 1 and isinstance(result[0], list):
                 result = result[0]  # Flatten [[...]] to [...]
+
+            # Optional truncation for storage backends with fixed-dim columns.
+            # Qwen-Embedding-0.6B is 1024d, but Supabase schema uses vector(384)
+            # via HNSW index — taking the leading 384 dims preserves the highest-
+            # variance components and works as a pragmatic workaround for
+            # similarity search without a schema migration.
+            target_dim = int(os.environ.get("EMBEDDING_TARGET_DIM", "0") or 0)
+            if target_dim and len(result) > target_dim:
+                result = result[:target_dim]
 
             return result
         except Exception as e:

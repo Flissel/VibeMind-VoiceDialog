@@ -487,6 +487,44 @@ idea.list:
   - Show ideas
   - List notes
   - Alle Eintraege
+  - Zeig alle Ideen
+  - Meine Ideen anzeigen
+  - Alle Ideen auflisten
+  - Liste meine Ideen auf
+  - Welche Ideen habe ich?
+  - Was habe ich fÃ¼r Ideen?
+  - Wie viele Ideen habe ich?
+  - Zeig mir, was ich notiert habe
+  - Kannst du meine Ideen zeigen?
+  - Meine Ideen
+  - Alle Ideen
+  - Ãœbersicht meiner Ideen
+  - Ideen zeigen
+  - Zeig die Ideenliste
+  - Was habe ich bisher gesammelt?
+  - Zeig mir einen Ãœberblick
+  - Alle bisherigen Ideen
+  - Meine Sammlung
+  - Show all ideas
+  - Show me my ideas
+  - List my ideas
+  - Display all ideas
+  - List all ideas
+  - What ideas do I have?
+  - What have I noted?
+  - Can you show my ideas?
+  - How many ideas do I have?
+  - Show me everything I've collected
+  - My ideas
+  - All ideas
+  - Overview of my ideas
+  - List ideas
+  - What have I gathered so far?
+  - Show me a summary
+  - All my notes
+  - My collection
+  - Everything I've captured
+  - 'Casual: "Show my stuff", "Gib mir einen Ãœberblick'
   placeholders: {}
 idea.create:
   variants:
@@ -499,6 +537,46 @@ idea.create:
   - Create idea about {topic}
   - Add note {topic}
   - Mach eine Notiz zu {topic}
+  - 'Notiere: API Design'
+  - Erstelle eine Idee zu Machine Learning
+  - 'Schreib auf: Neue Features fÃ¼r die App'
+  - 'Erfasse: Kundenfeatures fÃ¼r nÃ¤chste Woche'
+  - 'Idee: Bessere Fehlerbehandlung'
+  - Ich hab eine Idee fÃ¼r ein Dashboard
+  - 'Das sollten wir festhalten: Microservices Migration'
+  - 'Lass mich das notieren: Security Audit Framework'
+  - 'Speicher diese Idee ab: AI Training Pipeline'
+  - 'Merke dir: WebSocket-basierte Echtzeit-Updates'
+  - Mach ne Notiz fÃ¼r spÃ¤ter
+  - Was ist mit dem Performance-Thema?
+  - 'Brainstorm: Neue UI fÃ¼r Bubbles'
+  - 'Collect: Alle offenen Bugs'
+  - 'Capture: Lessons learned aus dem Sprint'
+  - 'Notiere wichtig: Sicherheit muss oberste PrioritÃ¤t sein'
+  - 'Task-Idee: Code-Review-Prozess Ã¼berarbeiten'
+  - 'Research-Punkt: State Management Libraries vergleichen'
+  - 'Create an idea: API authentication strategy'
+  - 'Note: Refactor legacy code'
+  - 'Add idea: Implement caching layer'
+  - 'Write down: Mobile app redesign'
+  - 'Capture: Auto-scaling infrastructure'
+  - I have an idea about real-time notifications
+  - 'Let me capture: Docker optimization techniques'
+  - 'Save this: Database query optimization'
+  - 'Remember: GDPR compliance checklist'
+  - 'Store: DevOps pipeline improvements'
+  - Make a note for myself
+  - 'Let''s brainstorm: Frontend performance'
+  - 'Jot down: Team communication tools'
+  - 'Pin this: Testing best practices'
+  - 'Log: Customer feedback themes'
+  - 'Quick idea: Emergency response protocol'
+  - 'Urgent note: Budget allocation review'
+  - 'Critical: Data backup strategy'
+  - 'Notiere: Implement OAuth 2.0'
+  - 'Create idea: German localization'
+  - 'Schreib auf: REST API documentation'
+  - 'Capture: User onboarding flow'
   placeholders:
     topic:
     - KI Trends
@@ -516,6 +594,46 @@ idea.find:
   - Such nach {query}
   - Find idea {query}
   - Search notes {query}
+  - Suche nach API-Design
+  - Finde die Idee Ã¼ber Datenspeicherung
+  - Suche Idee mit Authentifizierung
+  - Finde meine Notiz zu Sicherheit
+  - Suche nach Machine Learning
+  - Wo ist die Idee zu Performance?
+  - Zeig mir die Idee Ã¼ber Datenbank
+  - Finde mir die Idee mit Caching
+  - Suche die Notiz zu Logging
+  - Wo hab ich ModularitÃ¤t notiert?
+  - Suche nach Docker
+  - Finde alles Ã¼ber Testing
+  - Suche Microservices
+  - Finde Infrastruktur
+  - Such mir alles zu DevOps
+  - Suche die Idee in dieser Bubble Ã¼ber API
+  - Finde alte Notizen zu Architecture
+  - Suche nach verwandten Ideen zu UI/UX
+  - Finde alles was mit Datenbanken zu tun hat
+  - Suche das Konzept Ã¼ber Skalierbarkeit
+  - Find the idea about authentication
+  - Search for API design
+  - Look for the note on caching
+  - Find my idea regarding performance
+  - Search for database optimization
+  - Where's my idea on logging?
+  - Show me the note about security
+  - Find anything related to testing
+  - Got that idea about scalability?
+  - Where did I write about DevOps?
+  - Search for Docker
+  - Find anything about monitoring
+  - Look up infrastructure
+  - Search CI/CD
+  - Find all about microservices
+  - Find the idea in this bubble about architecture
+  - Search for concepts related to performance
+  - Look for notes containing "async
+  - Find everything mentioning error handling
+  - Search my ideas about deployment
   placeholders:
     query:
     - Marketing
@@ -529,6 +647,45 @@ idea.delete:
   - Delete idea {name}
   - Remove note {name}
   - Idee {name} loeschen
+  - LÃ¶sche die Idee
+  - LÃ¶sch das
+  - Entferne diese Idee
+  - Idee lÃ¶schen
+  - Weg damit
+  - SchmeiÃŸ die Idee raus
+  - ZerstÃ¶re die Idee
+  - Das weg
+  - Diese Idee weg
+  - LÃ¶sche die Idee zum Projekt X
+  - Entferne meine alte Idee
+  - LÃ¶sch die falsche Idee
+  - SchmeiÃŸ die Idee zum Brainstorming weg
+  - Ich will diese Idee nicht mehr
+  - Die Idee brauche ich nicht mehr
+  - LÃ¶sche meine letzte Idee
+  - Delete the idea
+  - Delete this idea
+  - Remove the idea
+  - Erase this
+  - Get rid of it
+  - Delete it
+  - Remove it
+  - Trash this idea
+  - Kill this idea
+  - Drop the idea
+  - Delete the marketing idea
+  - Remove that old idea
+  - Erase the wrong idea
+  - I don't want this idea anymore
+  - Delete my latest idea
+  - Get rid of this one
+  - Remove the brainstorm idea
+  - Throw away this idea
+  - Cancel this idea
+  - LÃ¶sche alles
+  - Delete everything
+  - Weg damit!
+  - Get that outta here
   placeholders:
     name:
     - Test
@@ -541,6 +698,46 @@ idea.update:
   - Aendere Notiz {name}
   - Update idea {name}
   - Fuege hinzu zu {name}
+  - Ã„ndere die Idee 'Marketing' in 'Digital Marketing
+  - Update den Titel der Idee
+  - Benenne die Idee um
+  - Bearbeite die Beschreibung der Idee
+  - Aktualisiere die Idee-Details
+  - Ã„ndere den Status auf erledigt
+  - Modifiziere die Tags
+  - Update die Metadaten
+  - Ã„ndere die PrioritÃ¤t der Idee
+  - Aktualisiere die Notiz
+  - ErgÃ¤nze die Beschreibung
+  - Ã„ndere die Kategorie
+  - Update die Idee 'API Design
+  - Modifiziere die Inhalte
+  - Ã„ndere die Idea-Informationen
+  - Aktualisiere den Namen
+  - Bearbeite die Metainformationen
+  - Ã„ndere den Content
+  - Update die Zusatzinfos
+  - Modifiziere die Eigenschaften
+  - Update the idea title
+  - Change idea 'Marketing' to 'Digital Marketing
+  - Edit the idea description
+  - Rename the idea
+  - Update the idea details
+  - Change the status to completed
+  - Modify the tags
+  - Update the metadata
+  - Change the priority
+  - Update the notes
+  - Add to the description
+  - Change the category
+  - Modify the content
+  - Update idea properties
+  - Change the information
+  - Rename idea 'API Design
+  - Modify the metadata fields
+  - Update the additional info
+  - Change the attributes
+  - Edit idea information
   placeholders:
     name:
     - Test
@@ -551,6 +748,46 @@ idea.connect:
   - Verbinde {a} mit {b}
   - Connect {a} to {b}
   - Link {a} und {b}
+  - Connect these ideas
+  - Link my ideas together
+  - Show me how these ideas connect
+  - Create a connection between these ideas
+  - Join the ideas
+  - Link idea A to idea B
+  - How are these ideas related?
+  - Make connections between the ideas
+  - Connect my ideas meaningfully
+  - Connect this to that idea
+  - Link them together
+  - Find connections between my ideas
+  - Show the relationships
+  - Connect all my ideas
+  - Link these together
+  - Create links between ideas
+  - Connect idea one with idea two
+  - Show me the connections
+  - Verbinde die Ideen
+  - VerknÃ¼pfe diese Ideen
+  - Zeige mir Verbindungen
+  - Erstelle eine Verbindung zwischen den Ideen
+  - Verbinde Idee A mit Idee B
+  - Wie sind diese Ideen verbunden?
+  - Verbinde meine Ideen sinnvoll
+  - Erstelle Links zwischen den Ideen
+  - Verlinke die Ideen
+  - Zeige mir die ZusammenhÃ¤nge
+  - Wie hÃ¤ngen diese Ideen zusammen?
+  - Verbinde alles miteinander
+  - Erstelle Verbindungen
+  - Zeige Beziehungen
+  - VerknÃ¼pfe meine Ideen
+  - Verbinde diese mit dieser Idee
+  - Erstelle eine Relation
+  - Zeige AbhÃ¤ngigkeiten
+  - Connect my stuff
+  - Link all of it
+  - Verbinde das miteinander
+  - Show connections between these
   placeholders:
     a:
     - API
@@ -567,6 +804,44 @@ idea.auto_link:
   - Finde Verbindungen zwischen den Ideen
   - Auto-link ideas
   - Verknuepfe die Notizen
+  - Verbinde die Ideen automatisch
+  - Erstelle automatische Verbindungen zwischen den Ideen
+  - VerknÃ¼pfe alle Ideen miteinander
+  - Automatische Verlinkung durchfÃ¼hren
+  - Alle Ideen vernetzen
+  - Link die Ideen
+  - Ideen verlinken
+  - Mach die Verbindungen
+  - Verbinde alles miteinander
+  - Auto-Link aktivieren
+  - Ideen zusammenbringen
+  - Kannst du die Ideen verlinken?
+  - Verlinkst du die Ideen?
+  - Wie sind die Ideen verbunden?
+  - Kannst du semantische Verbindungen finden?
+  - Finde ZusammenhÃ¤nge zwischen den Ideen
+  - Verlinke verwandte Ideen
+  - Erstelle semantische Verbindungen
+  - Ideen mit Ã¤hnlichen Themen verbinden
+  - Link the ideas automatically
+  - Auto-link all ideas
+  - Create automatic connections between ideas
+  - Connect all ideas together
+  - Link related ideas
+  - Link the ideas
+  - Auto-link them
+  - Connect everything
+  - Link 'em up
+  - Make connections
+  - Wire it all together
+  - Can you link the ideas?
+  - Auto-link the ideas?
+  - Connect these ideas for me
+  - Find connections between ideas
+  - Find semantic connections
+  - Link related concepts
+  - Connect similar ideas
+  - Show relationships between ideas
   placeholders: {}
 idea.analyze_links:
   variants:
@@ -574,6 +849,46 @@ idea.analyze_links:
   - Welche Ideen sollten verlinkt werden
   - Zeig Verlinkungs-Vorschlaege
   - Show link suggestions
+  - Analysiere die Verbindungen zwischen den Ideen
+  - Zeig mir die VerknÃ¼pfungen
+  - Welche Ideen sind miteinander verbunden?
+  - Finde ZusammenhÃ¤nge zwischen meinen Ideen
+  - Wie hÃ¤ngen diese Ideen zusammen?
+  - Analysiere die Beziehungen
+  - Zeig die Links zwischen den Konzepten
+  - Welche Ideen beeinflussen sich gegenseitig?
+  - Verbindungen anzeigen
+  - Analyse der Vernetzung
+  - Zeig mir, welche Ideen zusammenhÃ¤ngen
+  - Finde semantische Links zwischen den Bubbles
+  - Wie sind diese Konzepte verknÃ¼pft?
+  - Analyze the links between my ideas
+  - Show me the connections
+  - Find relationships between ideas
+  - What ideas are connected?
+  - Analyze how these ideas relate to each other
+  - Show the network of my ideas
+  - How do these concepts link together?
+  - Find idea connections
+  - What connections exist between these ideas?
+  - Analyze the idea relationships
+  - Show semantic links between concepts
+  - Which ideas are related?
+  - Visualize how my ideas connect
+  - Link analysis
+  - Show connections
+  - Analyze my idea network
+  - Find related ideas
+  - What's connected here?
+  - Find all links between ideas
+  - How are these linked?
+  - Zeig die Netzwerk-Analyse
+  - Connections please
+  - Analyze this web of ideas
+  - Find the relationships
+  - Show idea links
+  - Welche ZusammenhÃ¤nge gibt es?
+  - Analysiere die Ideen auf Verbindungen
   placeholders: {}
 idea.expand:
   variants:
@@ -581,6 +896,46 @@ idea.expand:
   - Mach die Idee {name} groesser
   - Expand {name}
   - Vertiefe {name}
+  - Erweitere diese Idee
+  - Elaboriere auf der Idee
+  - Mache die Idee grÃ¶ÃŸer
+  - FÃ¼ge Details hinzu
+  - Baue die Idee aus
+  - ErzÃ¤hle mir mehr
+  - Gib mir mehr Details
+  - Was sind die Details?
+  - KÃ¶nnen wir das vertiefen?
+  - Lass mich mehr darÃ¼ber wissen
+  - Zerlege diese Idee
+  - Breche das herunter
+  - Entwickle das weiter
+  - Mache einen Plan daraus
+  - Unterteile die Idee in Schritte
+  - Sag mir mehr dazu
+  - Und was noch?
+  - Wie kÃ¶nnte das aussehen?
+  - Was sind die nÃ¤chsten Schritte?
+  - Expand this idea
+  - Elaborate on it
+  - Make it bigger
+  - Add more details
+  - Break it down
+  - Tell me more
+  - Give me details
+  - What's involved?
+  - Can we dive deeper?
+  - Let me understand better
+  - Decompose this
+  - Develop it further
+  - Create a plan from this
+  - Split this into steps
+  - What does this entail?
+  - And then what?
+  - How would that work?
+  - What comes next?
+  - What are the components?
+  - Erweitere es, bitte" / "Expand it, please
+  - Mehr darÃ¼ber erzÃ¤hlen" / "Tell me more about it
   placeholders:
     name:
     - Roadmap
@@ -591,6 +946,46 @@ idea.summarize:
   - Fasse Idee {name} zusammen
   - Summarize {name}
   - Zusammenfassung von {name}
+  - Fasse die Idee zusammen
+  - Zusammenfasse diese Idee
+  - Zusammenfassung bitte
+  - Mach eine Zusammenfassung
+  - Zusammenfassungen erstellen
+  - Fass mir das kurz zusammen
+  - Gib mir eine Zusammenfassung
+  - Kurz zusammengefasst, was ist das?
+  - Was ist das Wichtigste?
+  - Was sind die Hauptpunkte?
+  - Kannst du die Idee zusammenfassen?
+  - Wie lautet die Zusammenfassung?
+  - Was ist die Essenz dieser Idee?
+  - Gib mir die Kurzversion
+  - Erstelle eine Zusammenfassung
+  - Generiere eine Zusammenfassung
+  - Zusammenfassung in Stichpunkten
+  - Kondensierte Fassung erstellen
+  - TL;DR dieser Idee
+  - Mach mir eine Kurzfassung
+  - Nur die wichtigsten Punkte
+  - Das Wichtigste in KÃ¼rze
+  - Summarize this idea
+  - Summarize it
+  - Make a summary
+  - Create a summary
+  - Give me a summary
+  - Can you summarize that?
+  - What's the summary?
+  - Sum that up for me
+  - Give me the gist
+  - What are the main points?
+  - How would you summarize this?
+  - What's the essence of this idea?
+  - Can you give me a brief overview?
+  - What's the key takeaway?
+  - Generate a summary
+  - Create a concise summary
+  - Summarize in bullet points
+  - Produce an executive summary
   placeholders:
     name:
     - Roadmap
@@ -601,6 +996,46 @@ idea.explain:
   - Erklaere Idee {name}
   - Was bedeutet {name}
   - Explain {name}
+  - ErklÃ¤r mir diese Idee
+  - Was ist das nochmal?
+  - ErlÃ¤utere die API Design Idee
+  - Gib mir mehr Details zur Marketing-Strategie
+  - Wie funktioniert das genau?
+  - ErklÃ¤re mir das bitte
+  - Was bedeutet diese Idee konkret?
+  - Kannst du die Architektur-Idee ausfÃ¼hrlicher erklÃ¤ren?
+  - Beschreib mir das nochmal in Detail
+  - Was sind die Hauptpunkte dieser Idee?
+  - Mach mir das verstÃ¤ndlicher
+  - Zerleg die Idee fÃ¼r mich
+  - Gib mir eine ausfÃ¼hrliche ErklÃ¤rung
+  - Worum geht es bei dieser Idee?
+  - Fass das nochmal zusammen
+  - Zeig mir mehr Ã¼ber die Infrastruktur-Idee
+  - Wie soll das funktionieren?
+  - ErklÃ¤r mir die Details
+  - Explain this idea to me
+  - What does this idea mean?
+  - Break down the API design concept
+  - Give me more details about this
+  - How does this work exactly?
+  - Can you elaborate on this idea?
+  - What's the main point here?
+  - Explain the architecture in detail
+  - Tell me more about this concept
+  - What's the purpose of this idea?
+  - Summarize this idea for me
+  - Walk me through this
+  - Explain the key components
+  - Was is denn das?
+  - ErklÃ¤r mir das mal
+  - ErzÃ¤hl mir mehr davon
+  - Wie geht denn das ab?
+  - Die Idee? ErklÃ¤r mal
+  - ErklÃ¤r mir die [idea_title]
+  - Was bedeutet [idea_name]?
+  - Explain [idea_name] to me
+  - Gib mir mehr Ã¼ber [bubble_name]
   placeholders:
     name:
     - API
@@ -611,6 +1046,46 @@ idea.whitepaper:
   - Mach ein Whitepaper aus {name}
   - Whitepaper fuer {name}
   - Schreibe ein Whitepaper ueber {name}
+  - 'Based on VibeMind''s intent classification pattern, here are diverse user phrases that should trigger `idea.whitepaper`:'
+  - Erstelle ein Whitepaper
+  - Generiere ein Whitepaper
+  - Schreib ein Whitepaper
+  - Mach ein Whitepaper aus dieser Idee
+  - Konvertiere zu Whitepaper
+  - Formatiere als Whitepaper
+  - Exportiere als Whitepaper
+  - Whitepaperversion erstellen
+  - Create a whitepaper
+  - Generate a whitepaper
+  - Write a whitepaper
+  - Turn this into a whitepaper
+  - Convert to whitepaper
+  - Export as whitepaper
+  - Make a whitepaper
+  - Whitepaper from this idea
+  - Erstelle Whitepaper zu KI-Architektur
+  - Generiere Whitepaper Ã¼ber Machine Learning
+  - Schreib ein Whitepaper zum Thema API Design
+  - Whitepaper fÃ¼r die Suchmaschine
+  - Mach ein Whitepaper aus dem API-Konzept
+  - Create a whitepaper on AI architecture
+  - Generate whitepaper about machine learning
+  - Write a whitepaper for API design
+  - Make a whitepaper on blockchain
+  - Whitepaper about the current project
+  - Ich mÃ¶chte ein Whitepaper daraus machen
+  - Can you make a whitepaper from this?
+  - Lass mich ein Whitepaper schreiben
+  - Build a whitepaper for me
+  - Erstelle bitte ein Whitepaper
+  - Generate me a whitepaper please
+  - Ich brauche ein Whitepaper
+  - KÃ¶nntest du ein Whitepaper generieren?
+  - Whitepaper im Standard-Format
+  - Whitepaper mit Executive Summary
+  - Erstelle ausfÃ¼hrliches Whitepaper
+  - Whitepaper fÃ¼r Stakeholder
+  - Professional whitepaper format
   placeholders:
     name:
     - Roadmap
@@ -621,6 +1096,46 @@ idea.generate_doc:
   - Generiere Dokumentation fuer {name}
   - Erstelle Doku zu {name}
   - Generate docs for {name}
+  - 'idea.generate_doc": ['
+  - Generate documentation for this idea",
+  - Create a document from this idea",
+  - Make documentation out of my idea",
+  - Document this for me",
+  - Turn this into documentation",
+  - Generate docs",
+  - Create docs from this",
+  - Write documentation",
+  - Generate technical documentation",
+  - Make a doc",
+  - Doc from idea",
+  - Build documentation",
+  - Generate a markdown document",
+  - Create comprehensive documentation",
+  - Document the idea",
+  - Generiere Dokumentation fÃ¼r diese Idee",
+  - Erstelle Dokumentation aus dieser Idee",
+  - Dokumentiere diese Idee",
+  - Mache Dokumentation daraus",
+  - Generiere Docs",
+  - Erstelle Dokumentation",
+  - Schreib eine Dokumentation",
+  - Aus dieser Idee Dokumentation machen",
+  - Umwandle die Idee in Dokumentation",
+  - Dokumentation generieren",
+  - Erstelle technische Dokumentation",
+  - Mache ein Dokument",
+  - Dokumentation erstellen",
+  - Generiere eine Dokumentation",
+  - Schreib die Dokumentation",
+  - Can you document this idea?",
+  - Please generate documentation",
+  - I need docs for this",
+  - Make me a document",
+  - Document my idea",
+  - Generate a doc from this",
+  - Create documentation please",
+  - Write docs for this",
+  - KÃ¶nntest du Dokumentation generieren?",
   placeholders:
     name:
     - API
@@ -632,6 +1147,39 @@ idea.current_space:
   - Aktueller Space
   - Current space
   - Welcher Bereich bin ich in
+  - Zeig mir die aktuelle Idee
+  - Was ist im aktuellen Space?
+  - Welche Ideen sind hier?
+  - Aktuelle Ideen anzeigen
+  - Zeig den aktuellen Raum
+  - Welche Bubbles sind aktiv?
+  - Aktuelle Space-Inhalte
+  - Was gibt es hier?
+  - Zeig mir alles hier
+  - Aktuelle Ideen
+  - Was ist in meinem aktuellen Space?
+  - Show me the current space
+  - What's in this space?
+  - List current ideas
+  - Show current ideas
+  - What ideas are here?
+  - Current space contents
+  - Display this space
+  - Show me what's here
+  - Current space overview
+  - What's in the current space?
+  - List ideas in this space
+  - Current space ideas
+  - Zeig mir den current space
+  - Was sind die current ideas?
+  - Show me the aktuelle Ideen
+  - List alle Ideen im current space
+  - Aktuelle ideas anzeigen
+  - Hier anzeigen" (Show here)
+  - Aktuelle Liste" (Current list)
+  - Dieser Space" (This space)
+  - Jetzt hier" (Right here/now)
+  - Ãœbersicht" (Overview)
   placeholders: {}
 idea.to_project:
   variants:
@@ -639,6 +1187,45 @@ idea.to_project:
   - Promote idea to project
   - Erstelle Projekt aus Idee
   - Befoerdere {name} zum Projekt
+  - Konvertiere diese Idee zu einem Projekt
+  - Starte ein Projekt aus dieser Idee
+  - Verwandle die Idee in ein Projekt
+  - Erstelle ein Projekt fÃ¼r diese Idee
+  - Promoviere diese Idee zum Projekt
+  - Turn this idea into a project
+  - Convert this idea to a project
+  - Make a project from this idea
+  - Create a project based on this idea
+  - Promote this idea to a project
+  - Start a coding project from this idea
+  - Mach ein Projekt aus Marketing-App
+  - Verwandle die API-Design-Idee in ein Projekt
+  - Starte Projekt fÃ¼r E-Commerce-Plattform
+  - 'Erstelle Projekt: Dashboard fÃ¼r Analytics'
+  - Konvertiere 'Chat-Anwendung' zum Projekt
+  - Create a project from the Dashboard idea
+  - Turn E-Commerce Platform into a project
+  - 'Make a coding project: API Gateway'
+  - Convert Mobile App idea to project
+  - Start project for React Todo App
+  - KÃ¶nnen wir die Idee als Projekt starten?
+  - Sollen wir daraus ein Projekt machen?
+  - Lass uns ein Projekt aus der Idee bauen
+  - Wollen wir das als Projekt implementieren?
+  - Can we turn this into a project?
+  - Should we make a project from this idea?
+  - Let's turn that into a coding project
+  - Ready to turn this idea into code?
+  - Can you create a project for this?
+  - Diese Idee â†’ Projekt
+  - Idee zur Projekt-Erstellung
+  - Von Idee zu Projekt
+  - Projekterstellung aus Idee
+  - Idea to project
+  - Start coding from this idea
+  - Make this a coding project
+  - Create a dev project
+  - Initialize project from idea
   placeholders:
     name:
     - API
@@ -649,6 +1236,41 @@ idea.add_image:
   - Fuege Bild zu {name} hinzu
   - Add image to {name}
   - Bild in Notiz {name}
+  - FÃ¼ge ein Bild hinzu
+  - Lade ein Bild hoch
+  - Setze ein Foto fÃ¼r diese Idee
+  - Bild hochladen
+  - AnhÃ¤nge ein Bild an die Idee
+  - Mache einen Screenshot und speichere ihn
+  - FÃ¼ge ein Vorschaubild ein
+  - Wende ein Bild auf diese Bubble an
+  - Lade das Bild von meinem Desktop
+  - Verwende diesen Screenshot als Bild
+  - ErgÃ¤nze die Idee mit einem Bild
+  - Setze ein Thumbnail fÃ¼r die Idee
+  - FÃ¼ge eine Grafik hinzu
+  - Lade ein Bild aus der Galerie
+  - Illustriere die Idee mit einem Bild
+  - Add an image to this idea
+  - Upload a picture
+  - Attach an image to the bubble
+  - Set an image for this idea
+  - Add a thumbnail
+  - Upload a photo
+  - Insert an image here
+  - Add a screenshot as the image
+  - Use this image for the idea
+  - Upload an image from my desktop
+  - Add a visual to this bubble
+  - Attach a picture to this idea
+  - Load an image
+  - Add artwork to this idea
+  - Set a cover image
+  - Hast du ein Bild? Lade es fÃ¼r die Idee
+  - Add image please
+  - Bild da rein
+  - Kannst du ein Bild hinzufÃ¼gen?
+  - Please add a picture
   placeholders:
     name:
     - Design
@@ -658,6 +1280,41 @@ idea.format_note:
   - Format als Notiz
   - Make it a note
   - Als Notiz formatieren
+  - 'I''ll generate diverse user phrases for the "idea.format_note" intent in both German and English:'
+  - Formatiere als Notiz
+  - Mach eine Notiz draus
+  - Strukturiere als Notiz
+  - Wandle in eine Notiz um
+  - Erstelle eine formatierte Notiz
+  - Notiz-Format anwenden
+  - In Notiz-Format umwandeln
+  - Formatiere im Notiz-Stil
+  - Speichere als Notiz
+  - Notiz-Layout verwenden
+  - Formatiere als Notizeintrag
+  - Organisiere als Notiz
+  - Konvertiere zu Notiz
+  - Notiz-Struktur anwenden
+  - Format as note
+  - Format this note
+  - Create a formatted note
+  - Format in note style
+  - Apply note formatting
+  - Convert to note format
+  - Structure as a note
+  - Format like a note
+  - Turn into a note
+  - Format as a note entry
+  - Save as note
+  - Use note format
+  - Apply note structure
+  - Format note-style
+  - note format
+  - als notiz" (mixed intent)
+  - Question-style ("Mach eine Notiz draus?")
+  - Technical terms ("Format-Note")
+  - Action verbs (formatieren, umwandeln, strukturieren, anwenden)
+  - Various object references (es, das, this, etc.)
   placeholders: {}
 idea.format_action_list:
   variants:
@@ -665,12 +1322,87 @@ idea.format_action_list:
   - Mach eine TODO Liste
   - Als Tasks formatieren
   - Format as action list
+  - Formatiere in Aktionslisten
+  - Wandle in Aktionslisten um
+  - Konvertiere zu Aktionslisten
+  - Mache Aktionslisten daraus
+  - 'Format: Aktionslisten'
+  - Erstelle Aktionslisten aus meinen Ideen
+  - Konvertiere meine Ideen zu Aktionslisten
+  - Strukturiere als Aufgabenlisten
+  - Mach daraus Checklisten
+  - Formatiere als To-Do Listen
+  - In Aktionslisten umwandeln
+  - Als Aktionslisten anzeigen
+  - Zeige mir Aktionslisten-Format
+  - Aktionslisten-Format anwenden
+  - Pack die Ideen in Aktionslisten
+  - Lass mich alles als Aktionslisten sehen
+  - Aktionsplan daraus machen
+  - Mach das zu einer Aufgabenliste
+  - Format as action lists
+  - Convert to action lists
+  - Turn into action lists
+  - Make action lists
+  - 'Format: action lists'
+  - Convert my ideas to action lists
+  - Create action lists from these ideas
+  - Structure as action lists
+  - Make checklists from this
+  - Format as task lists
+  - Show me in action list format
+  - Apply action list formatting
+  - Transform into checklists
+  - Format zu Action Lists
+  - Mach Action-Listen daraus
+  - Erstelle Action Lists
+  - 'Format: Task Lists'
   placeholders: {}
 idea.format_pros_cons:
   variants:
   - Pro und Contra
   - Vor- und Nachteile
   - Pros and cons
+  - Erstelle eine Pro/Contra Liste
+  - Formatiere als Vor- und Nachteile
+  - Mach eine Pro/Contra Analyse
+  - Teile in Pros und Cons auf
+  - Erstelle ein Pros-Cons Format
+  - Zeige mir die Vor- und Nachteile
+  - Wie sieht es mit Pro und Contra aus?
+  - Kannst du das als Vorteile und Nachteile darstellen?
+  - Was sind die Argumente dafÃ¼r und dagegen?
+  - WÃ¤ge die Pros und Cons ab
+  - Pro und Contra, bitte
+  - GegensÃ¤tzlich formatiert
+  - Vorteile/Nachteile Ãœbersicht
+  - Lass mich die Vor- und Nachteile sehen
+  - AbwÃ¤gung erstellen
+  - GegenÃ¼berstellung erstellen
+  - Nutzen und Risiken aufzeigen
+  - StÃ¤rken und SchwÃ¤chen aufzÃ¤hlen
+  - DafÃ¼r und dagegen auflisten
+  - Create a pros and cons list
+  - Format as advantages and disadvantages
+  - Make a pros/cons breakdown
+  - Show the pros and cons
+  - Create a benefits and drawbacks list
+  - What are the pros and cons?
+  - Can you list the pros and cons?
+  - Show me the advantages and disadvantages
+  - How would this look as pros and cons?
+  - What are the benefits and risks?
+  - Pros and cons, please
+  - Give me a pros/cons view
+  - List the pros and cons
+  - Break it down into pros and cons
+  - Compare pros and cons
+  - Weigh the pros and cons
+  - Create a for and against comparison
+  - Show strengths and weaknesses
+  - Make a comparison list
+  - Benefits vs. risks analysis
+  - '**Total: 46 diverse utterances** covering formal, casual, question-based, and imperative styles across both languages.'
   placeholders: {}
 idea.format_hierarchy:
   variants:
@@ -678,18 +1410,129 @@ idea.format_hierarchy:
   - Baumstruktur
   - As hierarchy
   - Verschachtelt
+  - Formatiere die Ideen hierarchisch
+  - Organisiere die Ideen in einer Hierarchie
+  - Ordne die Ideen als Baum
+  - Erstelle eine Baumstruktur aus den Ideen
+  - Strukturiere die Ideen hierarchisch
+  - Mach eine Hierarchie aus meinen Ideen
+  - Ordne die Ideen von oben nach unten
+  - Formatiere als Hierarchie
+  - Zeig die Ideen in Baumform
+  - Organisiere nach Ebenen
+  - Erstelle eine Struktur mit Hauptideen und Unterideen
+  - Formatiere mit Hierarchie
+  - Ordne die Beziehungen hierarchisch
+  - Zeig die Ideen als Baumstufen
+  - Mach eine Ebenen-Struktur
+  - Strukturiere als Organigramm
+  - Formatiere die VerknÃ¼pfungen hierarchisch
+  - Ordne Parent-Child-Beziehungen
+  - Zeig die AbhÃ¤ngigkeiten als Baum
+  - Erstelle eine mehrstufige Struktur
+  - Format the ideas hierarchically
+  - Organize the ideas in a hierarchy
+  - Arrange the ideas as a tree
+  - Create a tree structure from the ideas
+  - Structure the ideas hierarchically
+  - Make a hierarchy from my ideas
+  - Order the ideas top to bottom
+  - Format as hierarchy
+  - Show the ideas in tree form
+  - Organize by levels
+  - Create a structure with main ideas and sub-ideas
+  - Format with hierarchy
+  - Arrange the relationships hierarchically
+  - Show the ideas as tree levels
+  - Make a layered structure
+  - Structure as organization chart
+  - Format the connections hierarchically
+  - Arrange parent-child relationships
+  - Show the dependencies as a tree
+  - Create a multi-level structure
   placeholders: {}
 idea.format_specs:
   variants:
   - Als Spezifikation
   - Specs format
   - Technische Specs
+  - Formatiere als Spezifikationen
+  - Mache eine technische Spezifikation daraus
+  - Konvertiere zu Specs
+  - Erstelle eine Anforderungsspezifikation
+  - Formatiere in Spec-Format
+  - Schreib das als Specification auf
+  - Wandle in Spezifikationsformat um
+  - 'Format: Anforderungsspecs'
+  - Formatiere als technische Anforderungen
+  - Mache daraus eine Spec-Liste
+  - Format as specifications
+  - Convert to specs format
+  - Make it a technical spec
+  - Create specification format
+  - Format as technical specifications
+  - Turn into a spec document
+  - Format as requirements spec
+  - Generate spec format
+  - Format these as specs
+  - Specification format please
+  - Specs Format bitte
+  - 'Format: Technical Specs'
+  - Mache Specifications draus
+  - Convert to specification format
+  - '**Direct requests** ("Format as specifications")'
+  - '**Action-oriented** ("Convert to specs", "Turn into")'
+  - '**Command variations** ("Format:", "Make it a")'
+  - '**Formal/Technical** ("technical specification", "requirements spec")'
+  - '**Casual/Short** ("Specs please", "Spec format")'
+  - '**Bidirectional German/English** (mix of both languages as typical in bilingual usage)'
+  - Would you like me to add these to `config/training_variants.yml` or refine them further?
   placeholders: {}
 idea.convert_format:
   variants:
   - Konvertiere Format
   - Anderes Format
   - Change format
+  - Convert this idea to a timeline
+  - Format as a mind map
+  - Turn this into an action list
+  - Make it a Kanban board
+  - Show as a table
+  - Display as a flowchart
+  - Convert to bullet points
+  - Format as a narrative
+  - Change to a checklist
+  - Visualize as a diagram
+  - Format my idea as steps
+  - Convert the idea to a checklist
+  - Reformat as a mind map
+  - Transform into a timeline
+  - Make this a table view
+  - Display as a Gantt chart
+  - Restructure as bullet points
+  - Can you format this as a mind map?
+  - How would this look as a timeline?
+  - Can you convert this to an action list?
+  - What if I format it as a flowchart?
+  - Can you show this as a table?
+  - Make it more structured
+  - Format it better
+  - I'd like to see this differently
+  - Can we visualize this?
+  - Let's organize this better
+  - Turn it into something more actionable
+  - Konvertiere diese Idee zu einer Zeitlinie
+  - Formatiere als Mind Map
+  - Mach daraus eine Aktionsliste
+  - Zeige als Tabelle
+  - Formatiere als Checkliste
+  - Stelle als Diagramm dar
+  - Konvertiere zu Bullet Points
+  - Formatiere als Narrative
+  - Zeige als Kanban Board
+  - Visualisiere als Flowchart
+  - Formatiere meine Idee als Schritte
+  - Konvertiere die Idee zu einer Checkliste
   placeholders: {}
 idea.explore.start:
   variants:
@@ -697,12 +1540,92 @@ idea.explore.start:
   - Erkunde Ideen
   - Start exploration
   - Finde verwandte Ideen
+  - Starte die Ideen-Erkundung
+  - Erkunde diese Idee
+  - Beginne die Exploration
+  - Starte eine Exploration
+  - Zeig mir verwandte Ideen
+  - Finde zusammenhÃ¤ngende Konzepte
+  - Erkunde, was mit dieser Idee verknÃ¼pft ist
+  - Welche anderen Ideen gehÃ¶ren dazu?
+  - Lass mich die Idee tiefer erkunden
+  - Entdecke neue ZusammenhÃ¤nge
+  - Finde Verbindungen zwischen den Ideen
+  - Nutze KI, um verwandte Themen zu finden
+  - Analysiere die Idee umfassend
+  - Starte eine intelligente Ideenerkundung
+  - Los geht's mit der Exploration
+  - Lass uns diese Idee erforschen
+  - Ich will mehr Ã¼ber diese Idee erfahren
+  - Untersuche das Thema
+  - Mach eine Analyse dieser Idee
+  - Start exploring
+  - Begin idea exploration
+  - Explore this idea
+  - Start an exploration
+  - Explore ideas
+  - Find related ideas
+  - Show me connected concepts
+  - What else is connected to this?
+  - Find similar ideas
+  - Discover related topics
+  - Find connections
+  - Map out related ideas
+  - Use AI to explore this concept
+  - Analyze this idea comprehensively
+  - Start intelligent exploration
+  - Let's explore
+  - Help me understand the connections
+  - Investigate this idea
+  - Search for related concepts
+  - Deep dive into this topic
+  - Erkunde die Marketing-Blase tiefergehend
   placeholders: {}
 idea.explore.stop:
   variants:
   - Stoppe Exploration
   - Beende Erkundung
   - Stop exploration
+  - Stopp die Erkundung
+  - Beende die Exploration
+  - HÃ¶re auf zu erkunden
+  - Brich ab
+  - Halt an
+  - Lass das sein
+  - Nein, Stopp
+  - Genug erforscht
+  - Stop exploring
+  - End the exploration
+  - Stop the research
+  - Halt the search
+  - Cancel the analysis
+  - Abort the exploration
+  - Stop that
+  - Cease exploration
+  - Ich bin fertig mit der Erkundung
+  - Bitte stoppe die Exploration
+  - Ich mÃ¶chte nicht mehr erforschen
+  - KÃ¶nnen Sie die Ideensuche beenden?
+  - Nicht mehr weitersuchen, bitte
+  - Nein danke, nicht mehr erkunden
+  - I'm done exploring
+  - Please stop the exploration
+  - I don't want to explore anymore
+  - Can you stop the research?
+  - Stop looking for more ideas
+  - I'd like to stop now
+  - Stopp, ich bin ready
+  - Nein, stop exploring
+  - Halt, das ist genug
+  - Stop die Erkundung
+  - End the Ideensuche
+  - Abort the analysis, danke
+  - Ich mÃ¶chte diese Exploration jetzt beenden
+  - Die Ideenerkundung kann aufhÃ¶ren
+  - HÃ¶r bitte auf mit der Analyse
+  - Ich will nicht mehr in dieser Richtung forschen
+  - Stop the idea exploration now
+  - I want to halt this research
   placeholders: {}
 code.generate:
   variants:
@@ -1511,6 +2434,55 @@ bubble.promote:
   - Launch the Development bubble
   - Upgrade diese Innovation
   - Make the Research-Bubble a project
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+idea.format_table:
+  variants:
+  - Formatiere in Tabelle
+  - Mache eine Tabelle
+  - Stelle als Tabelle dar
+  - Konvertiere zu Tabelle
+  - Tabellarische Ansicht
+  - Tabelle erstellen
+  - Organisiere in Tabellenform
+  - Zeige als Tabelle
+  - In eine Tabelle umwandeln
+  - Tabellarisch anordnen
+  - Strukturiere in Tabelle
+  - Als Tabelle formatieren
+  - Meine Ideen in einer Tabelle
+  - Erstelle eine Ãœbersichtstabelle
+  - Mach mir eine Ãœbersicht in Tabellenform
+  - Versetze in Tabellenformat
+  - Tabelle der Ideen
+  - Tabellierung der Konzepte
+  - Formatiere diese Ideen als Tabelle
+  - KÃ¶nnen die Ideen tabellarisch werden?
+  - Zeige die Ideen in Tabellenform
+  - Format as table
+  - Format as a table
+  - Create a table
+  - Make it a table
+  - Display as table
+  - Show in table format
+  - Convert to table
+  - Make a table view
+  - Organize in table
+  - Table format please
+  - Turn this into a table
+  - Create table view
+  - Put in table format
+  - Show as table
+  - Table arrangement
+  - Make a table of these ideas
+  - Show my ideas in a table
+  - Create a table view
+  - Table layout
   placeholders:
     name:
     - Marketing

@@ -304,10 +304,10 @@ models:
     description: "MiroFish simulation LLM (local Ollama)"
 
   mirofish_eval:
-    provider: "openrouter"
-    model: "openai/gpt-oss-20b:free"
+    provider: "openai"
+    model: "gpt-5.5"
     max_tokens: 4096
-    description: "MiroFish evaluation model"
+    description: "MiroFish 5-spaces readiness evaluation (used by evaluate_bubble_readiness)"
 
   mirofish_openrouter:
     provider: "openrouter"

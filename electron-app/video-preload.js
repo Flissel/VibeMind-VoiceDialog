@@ -4,9 +4,20 @@
  * Same API as agentfarm-preload.js video methods, plus videoList() for gallery.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('vibemindVideo', {
+  // ── Drag & drop file path resolution ──
+  // With contextIsolation: true, File.path is always empty in Electron 32+.
+  // Renderer must call getPathForFile(file) to get the absolute path.
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      // Fallback for older Electron — file.path may still work
+      return file?.path || '';
+    }
+  },
   // ── Video tools ──
   videoStatus: () =>
     ipcRenderer.invoke('agentfarm:video-status'),

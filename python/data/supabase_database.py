@@ -156,8 +156,8 @@ _SELECT_RE = re.compile(
     r"SELECT\s+(.+?)\s+FROM\s+(\w+)"
     r"(?:\s+WHERE\s+(.+?))?"
     r"(?:\s+ORDER\s+BY\s+(.+?))?"
-    r"(?:\s+LIMIT\s+(\d+))?"
-    r"(?:\s+OFFSET\s+(\d+))?"
+    r"(?:\s+LIMIT\s+(\d+|\?))?"      # accept literal int OR parameterized ?
+    r"(?:\s+OFFSET\s+(\d+|\?))?"
     r"\s*;?\s*$",
     re.IGNORECASE | re.DOTALL,
 )
@@ -519,13 +519,41 @@ class SupabaseDatabase:
         if order_by:
             parts.append("order=" + _sql_order_to_postgrest(order_by))
 
+        # LIMIT/OFFSET can be literal ints or parameterized "?". For "?",
+        # resolve against params in SQL order: WHERE placeholders consumed
+        # first (already handled by _sql_where_to_postgrest), then LIMIT,
+        # then OFFSET — the same order they appear in the SQL string.
+        where_qs = (where or "").count("?")
+        tail_params = list(params or [])[where_qs:]
+
+        # Walk LIMIT then OFFSET, popping from the front of tail_params
+        # (NOT the back — SQL order is LIMIT before OFFSET, and params
+        # were appended in that same order).
+        tail_idx = 0
+
+        def _resolve(token):
+            nonlocal tail_idx
+            if token != "?":
+                return token
+            if tail_idx < len(tail_params):
+                v = tail_params[tail_idx]
+                tail_idx += 1
+                return v
+            return None
+
         if limit:
-            parts.append(f"limit={limit}")
+            v = _resolve(str(limit))
+            if v is not None:
+                parts.append(f"limit={v}")
         elif limit_hint:
             parts.append(f"limit={limit_hint}")
 
         if offset:
-            parts.append(f"offset={offset}")
+            v = _resolve(str(offset))
+            # PostgREST chokes on offset=0 with non-zero limit on some queries;
+            # only emit when truthy to match historical behavior.
+            if v not in (None, 0, "0"):
+                parts.append(f"offset={v}")
 
         params_str = "&".join(parts)
         result = _api("GET", table, params=params_str)

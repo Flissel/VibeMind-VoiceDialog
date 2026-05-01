@@ -162,7 +162,7 @@ export function VideoProduction() {
   const [result, setResult] = useState<VideoToolResult | null>(null)
 
   // Project / Pipeline state
-  const [viewMode, setViewMode] = useState<'pipeline' | 'gallery'>('pipeline')
+  const [viewMode, setViewMode] = useState<'pipeline' | 'gallery' | 'live'>('pipeline')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -241,9 +241,18 @@ export function VideoProduction() {
         >
           Gallery
         </button>
+        <button
+          onClick={() => setViewMode('live')}
+          style={{
+            ...tabBtnStyle,
+            ...(viewMode === 'live' ? tabBtnActiveStyle : {}),
+          }}
+        >
+          Live
+        </button>
       </div>
 
-      {viewMode === 'pipeline' ? (
+      {viewMode === 'pipeline' && (
         <>
           <PipelineReferenceView />
           <ProjectList
@@ -254,9 +263,9 @@ export function VideoProduction() {
             <ProjectPipelineMatrix projectId={selectedProjectId} />
           )}
         </>
-      ) : (
-        <VideoGallery />
       )}
+      {viewMode === 'gallery' && <VideoGallery />}
+      {viewMode === 'live' && <LiveCapture />}
     </div>
   )
 }
@@ -846,9 +855,16 @@ function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
     setUploading(true)
     for (const file of files) {
       const name = personName || file.name.replace(/\.[^.]+$/, '')
+      // Electron 32+ with contextIsolation: file.path is always empty.
+      // Use the preload bridge to resolve the absolute filesystem path.
+      const filePath = api()?.getPathForFile?.(file) || (file as any).path || ''
+      if (!filePath) {
+        setStatus(`Fehler: Pfad nicht auflösbar für ${file.name}`)
+        continue
+      }
       setStatus(`Uploade ${file.name}...`)
       try {
-        const res = await api()?.videoUpload?.((file as any).path, name)
+        const res = await api()?.videoUpload?.(filePath, name)
         if (res?.success) {
           setStatus(`${file.name} hochgeladen`)
         } else {
@@ -1028,11 +1044,18 @@ function VideoCard({ video, onClick }: { video: VideoFileInfo; onClick: () => vo
 function VideoPlayerModal({ video, onClose, onDelete }: { video: VideoFileInfo; onClose: () => void; onDelete?: () => void }) {
   const videoSrc = toVideoURL(video.path)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showFaceswap, setShowFaceswap] = useState(false)
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (confirmDelete) setConfirmDelete(false); else onClose() } }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (confirmDelete) setConfirmDelete(false)
+        else if (showFaceswap) setShowFaceswap(false)
+        else onClose()
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose, confirmDelete])
+  }, [onClose, confirmDelete, showFaceswap])
 
   return (
     <div onClick={onClose} style={{
@@ -1040,10 +1063,21 @@ function VideoPlayerModal({ video, onClose, onDelete }: { video: VideoFileInfo; 
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: 'var(--space-6)',
     }}>
+      {showFaceswap && (
+        <FaceswapDialog
+          video={video}
+          onClose={() => setShowFaceswap(false)}
+        />
+      )}
       <div onClick={e => e.stopPropagation()} style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: '#fff' }}>{video.filename}</span>
           <div className="flex items-center gap-2">
+            <button onClick={() => setShowFaceswap(true)} style={{
+              background: 'rgba(120,80,255,0.15)', border: '1px solid rgba(120,80,255,0.5)', color: '#b9a4ff',
+              fontSize: 'var(--text-caption1)', cursor: 'pointer', padding: '4px 12px', borderRadius: 'var(--radius-sm)',
+              fontWeight: 600,
+            }}>🎭 Face Swap</button>
             {onDelete && !confirmDelete && (
               <button onClick={() => setConfirmDelete(true)} style={{
                 background: 'none', border: '1px solid rgba(255,80,80,0.4)', color: 'rgba(255,80,80,0.8)',
@@ -1078,6 +1112,430 @@ function VideoPlayerModal({ video, onClose, onDelete }: { video: VideoFileInfo; 
           <span>{video.size_human}</span>
           <span>{new Date(video.modified_iso).toLocaleString()}</span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Face Swap Dialog ──────────────────────────────────────────
+
+interface FaceswapPreset { id: string; name: string }
+
+interface FaceswapJob {
+  id: string
+  state: 'starting' | 'running' | 'done' | 'failed'
+  percent: number
+  frame: number
+  total_frames: number
+  fps: number
+  eta_s: number
+  output_path: string
+  error?: string | null
+  log_tail?: string[]
+}
+
+const VIDEO_API_BASE =
+  (typeof window !== 'undefined' && (window as any).VIBEMIND_BACKEND_URL) ||
+  'http://localhost:8007'
+
+function FaceswapDialog({ video, onClose }: { video: VideoFileInfo; onClose: () => void }) {
+  const [presets, setPresets] = useState<FaceswapPreset[]>([])
+  const [target, setTarget] = useState<string>('__random__')
+  const [keepAudio, setKeepAudio] = useState(true)
+  const [job, setJob] = useState<FaceswapJob | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const pollRef = useRef<number | null>(null)
+
+  // Load presets once
+  useEffect(() => {
+    fetch(`${VIDEO_API_BASE}/api/video/presets`)
+      .then(r => r.json())
+      .then(data => setPresets(data.presets || []))
+      .catch(e => setError(`Cannot load presets: ${e.message}`))
+  }, [])
+
+  // Poll job status while running
+  useEffect(() => {
+    if (!job?.id) return
+    if (job.state === 'done' || job.state === 'failed') {
+      if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null }
+      return
+    }
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const r = await fetch(`${VIDEO_API_BASE}/api/video/job/${job.id}`)
+        if (!r.ok) return
+        const j: FaceswapJob = await r.json()
+        setJob(j)
+      } catch { /* ignore transient */ }
+    }, 1000)
+    return () => {
+      if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null }
+    }
+  }, [job?.id, job?.state])
+
+  const startSwap = async () => {
+    setError(null)
+    let chosenTarget = target
+    if (chosenTarget === '__random__') {
+      if (presets.length === 0) {
+        setError('No presets available')
+        return
+      }
+      chosenTarget = presets[Math.floor(Math.random() * presets.length)].id
+    }
+    try {
+      const r = await fetch(`${VIDEO_API_BASE}/api/video/faceswap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input_path: video.path,
+          target: chosenTarget,
+          no_audio: !keepAudio,
+        }),
+      })
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '')
+        setError(`HTTP ${r.status}: ${txt.slice(0, 200)}`)
+        return
+      }
+      const data = await r.json()
+      // Pre-populate job stub so polling kicks in
+      setJob({
+        id: data.job_id,
+        state: 'starting',
+        percent: 0,
+        frame: 0,
+        total_frames: 0,
+        fps: 0,
+        eta_s: 0,
+        output_path: data.output_path,
+      })
+    } catch (e: any) {
+      setError(`Request failed: ${e?.message ?? e}`)
+    }
+  }
+
+  const isRunning = job && (job.state === 'starting' || job.state === 'running')
+  const isDone = job?.state === 'done'
+  const isFailed = job?.state === 'failed'
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.92)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-6)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+        padding: 'var(--space-5)', maxWidth: 520, width: '100%',
+        display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+        border: '1px solid rgba(120,80,255,0.3)',
+      }}>
+        <div className="flex items-center justify-between">
+          <div style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: 'var(--text-primary)' }}>
+            🎭 Face Swap
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+          Input: <code style={{ color: 'var(--accent)' }}>{video.filename}</code>
+        </div>
+
+        {/* Target selection */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+            Target face
+          </label>
+          <select
+            value={target}
+            onChange={e => setTarget(e.target.value)}
+            disabled={isRunning || isDone}
+            style={{
+              padding: '6px 10px', fontSize: 'var(--text-footnote)',
+              background: 'var(--bg-primary)', color: 'var(--text-primary)',
+              border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <option value="__random__">🎲 Random</option>
+            {presets.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+          <input
+            type="checkbox"
+            checked={keepAudio}
+            onChange={e => setKeepAudio(e.target.checked)}
+            disabled={isRunning || isDone}
+          />
+          Audio aus Original übernehmen
+        </label>
+
+        {error && (
+          <div style={{ background: 'rgba(255,60,60,0.1)', color: '#ff8080', padding: 'var(--space-2)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-caption1)' }}>
+            {error}
+          </div>
+        )}
+
+        {/* Progress */}
+        {job && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="flex items-center justify-between" style={{ fontSize: 'var(--text-caption1)', color: 'var(--text-secondary)' }}>
+              <span>{job.state === 'starting' ? 'Initialisiere...' :
+                     job.state === 'running' ? `Frame ${job.frame}/${job.total_frames} · ${job.fps.toFixed(1)} fps · eta ${Math.round(job.eta_s)}s` :
+                     job.state === 'done' ? '✓ Fertig' : '✗ Fehlgeschlagen'}</span>
+              <span>{job.percent.toFixed(1)}%</span>
+            </div>
+            <div style={{ height: 6, background: 'var(--fill-quaternary)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(2, Math.min(100, job.percent))}%`,
+                background: isFailed ? '#ff5555' : (isDone ? '#22cc88' : '#7e5cff'),
+                transition: 'width 300ms ease',
+              }} />
+            </div>
+            {isDone && (
+              <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', marginTop: 4 }}>
+                Output: <code>{job.output_path.split(/[/\\]/).pop()}</code> — taucht in 30s in der Gallery auf
+              </div>
+            )}
+            {isFailed && job.error && (
+              <div style={{ fontSize: 'var(--text-caption2)', color: '#ff8080', marginTop: 4 }}>
+                {job.error}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2" style={{ marginTop: 'var(--space-2)' }}>
+          {isDone || isFailed ? (
+            <button onClick={onClose} style={{
+              padding: '6px 14px', fontSize: 'var(--text-footnote)',
+              background: 'var(--accent)', color: '#fff', border: 'none',
+              borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+            }}>Schließen</button>
+          ) : (
+            <>
+              <button onClick={onClose} disabled={!!isRunning} style={{
+                padding: '6px 12px', fontSize: 'var(--text-footnote)',
+                background: 'none', color: 'var(--text-secondary)',
+                border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+                cursor: isRunning ? 'not-allowed' : 'pointer', opacity: isRunning ? 0.5 : 1,
+              }}>Abbrechen</button>
+              <button onClick={startSwap} disabled={!!isRunning} style={{
+                padding: '6px 14px', fontSize: 'var(--text-footnote)',
+                background: '#7e5cff', color: '#fff', border: 'none',
+                borderRadius: 'var(--radius-sm)', cursor: isRunning ? 'wait' : 'pointer', fontWeight: 600,
+                opacity: isRunning ? 0.7 : 1,
+              }}>
+                {isRunning ? 'Läuft...' : '🎭 Swap starten'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Live Capture (eyeTerm webcam → MP4) ──────────────────────
+
+interface LiveRecState {
+  active: boolean
+  duration_s?: number
+  output_path?: string
+  size_mb?: number
+  source?: string
+}
+
+function LiveCapture() {
+  const [streamOk, setStreamOk] = useState<boolean | null>(null)
+  const [rec, setRec] = useState<LiveRecState>({ active: false })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [hint, setHint] = useState('')
+  const [tick, setTick] = useState(0)
+
+  // Probe eyeTerm status on mount
+  useEffect(() => {
+    fetch('http://127.0.0.1:8099/status', { signal: AbortSignal.timeout(2000) })
+      .then(r => setStreamOk(r.ok))
+      .catch(() => setStreamOk(false))
+  }, [])
+
+  // Poll recording status while active
+  useEffect(() => {
+    if (!rec.active) return
+    const iv = window.setInterval(async () => {
+      try {
+        const r = await fetch(`${VIDEO_API_BASE}/api/video/live-record/status`)
+        if (!r.ok) return
+        const data: LiveRecState = await r.json()
+        setRec(data)
+        setTick(t => t + 1)
+      } catch { /* ignore */ }
+    }, 1000)
+    return () => window.clearInterval(iv)
+  }, [rec.active])
+
+  // Stream cache-buster to force refresh on remount
+  const streamSrc = `http://127.0.0.1:8099/stream?t=${tick}`
+
+  const startRec = async () => {
+    setBusy(true); setError(null)
+    try {
+      const r = await fetch(`${VIDEO_API_BASE}/api/video/live-record/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'eyeterm', name_hint: hint || null }),
+      })
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '')
+        setError(`HTTP ${r.status}: ${txt.slice(0, 200)}`)
+        return
+      }
+      const data = await r.json()
+      setRec({ active: true, ...data })
+    } catch (e: any) {
+      setError(`Request failed: ${e?.message ?? e}`)
+    } finally { setBusy(false) }
+  }
+
+  const stopRec = async () => {
+    setBusy(true); setError(null)
+    try {
+      const r = await fetch(`${VIDEO_API_BASE}/api/video/live-record/stop`, { method: 'POST' })
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '')
+        setError(`HTTP ${r.status}: ${txt.slice(0, 200)}`)
+        return
+      }
+      const data = await r.json()
+      setRec({ active: false, ...data })
+    } catch (e: any) {
+      setError(`Request failed: ${e?.message ?? e}`)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+    }}>
+      <div style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: 'var(--text-primary)' }}>
+        Live Capture
+        <span style={{ marginLeft: 8, fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)', fontWeight: 400 }}>
+          eyeTerm webcam · realtime → MP4 → Gallery
+        </span>
+      </div>
+
+      {/* Stream preview */}
+      <div style={{
+        width: '100%', aspectRatio: '16/9', maxHeight: 480,
+        background: '#000', borderRadius: 'var(--radius-md)', overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative',
+      }}>
+        {streamOk === false ? (
+          <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', fontSize: 'var(--text-caption1)' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
+            <div>eyeTerm Stream nicht erreichbar (:8099)</div>
+            <div style={{ marginTop: 4, fontSize: 'var(--text-caption2)' }}>
+              eyeTerm muss laufen — startet automatisch mit Vibemind
+            </div>
+          </div>
+        ) : (
+          <img
+            src={streamSrc}
+            alt="eyeTerm live stream"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onError={() => setStreamOk(false)}
+            onLoad={() => setStreamOk(true)}
+          />
+        )}
+        {rec.active && (
+          <div style={{
+            position: 'absolute', top: 12, left: 12,
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(255,40,40,0.85)', color: '#fff',
+            padding: '4px 10px', borderRadius: 999, fontSize: 'var(--text-caption2)',
+            fontWeight: 600, animation: 'pulse 1.5s ease-in-out infinite',
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />
+            REC · {Math.floor(rec.duration_s || 0)}s
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-3" style={{ flexWrap: 'wrap' }}>
+        {!rec.active ? (
+          <>
+            <input
+              type="text"
+              placeholder="Name (optional)"
+              value={hint}
+              onChange={e => setHint(e.target.value)}
+              style={{
+                padding: '6px 12px', fontSize: 'var(--text-footnote)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+                width: 200,
+              }}
+            />
+            <button
+              onClick={startRec}
+              disabled={busy || streamOk === false}
+              style={{
+                padding: '8px 16px', fontSize: 'var(--text-footnote)',
+                background: '#ef4444', color: '#fff', border: 'none',
+                borderRadius: 'var(--radius-sm)', cursor: busy ? 'wait' : 'pointer',
+                fontWeight: 600, opacity: (busy || streamOk === false) ? 0.5 : 1,
+              }}
+            >
+              ● Aufnahme starten
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={stopRec}
+            disabled={busy}
+            style={{
+              padding: '8px 16px', fontSize: 'var(--text-footnote)',
+              background: '#444', color: '#fff', border: '1px solid #ef4444',
+              borderRadius: 'var(--radius-sm)', cursor: busy ? 'wait' : 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            ■ Stop
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div style={{
+          background: 'rgba(255,60,60,0.1)', color: '#ff8080',
+          padding: 'var(--space-2)', borderRadius: 'var(--radius-sm)',
+          fontSize: 'var(--text-caption1)',
+        }}>{error}</div>
+      )}
+
+      {!rec.active && rec.output_path && rec.size_mb !== undefined && (
+        <div style={{
+          background: 'rgba(34,204,136,0.08)', color: '#22cc88',
+          padding: 'var(--space-3)', borderRadius: 'var(--radius-sm)',
+          fontSize: 'var(--text-caption1)',
+        }}>
+          ✓ Aufnahme gespeichert: <code>{rec.output_path.split(/[/\\]/).pop()}</code> ({rec.size_mb} MB).
+          Erscheint in 30s in der Gallery — dort kannst du Face Swap anwenden.
+        </div>
+      )}
+
+      <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
+        Hinweis: Audio wird nicht aufgenommen (MJPEG hat keine Tonspur). Output landet in <code>~/.rowboat/Videos/</code>.
       </div>
     </div>
   )
