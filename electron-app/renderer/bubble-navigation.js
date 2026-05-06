@@ -52,16 +52,25 @@
             window.isEnteringBubble = true;
             window.pendingBubbleContent = null;  // Clear any old pending content
 
-            // Hide bubble hover tooltip and reset multiverse state
+            // Hide bubble hover tooltip and reset multiverse state.
+            // info-panel, bubble-info, and enter-btn are independently
+            // hidden-able — hide all three so no part of the card lingers.
             var infoPanel = document.getElementById('info-panel');
+            var bubbleInfo = document.getElementById('bubble-info');
+            var enterBtnEl = document.getElementById('enter-btn');
             if (infoPanel) infoPanel.classList.add('hidden');
+            if (bubbleInfo) bubbleInfo.classList.add('hidden');
+            if (enterBtnEl) enterBtnEl.classList.add('hidden');
             if (window.multiverseApp) {
                 window.multiverseApp.tooltipPinned = false;
                 window.multiverseApp.hoveredBubbleIndex = -1;
+                window.multiverseApp.selectedBubbleIndex = -1;
             }
 
             var bubble = window.multiverseApp ? window.multiverseApp.getBubbleById(bubbleId) : null;
-            var bubbleTitle = bubble ? bubble.title : 'Space';
+            var bubbleTitle = (bubble && bubble.userData && (bubble.userData.title || bubble.userData.data && bubble.userData.data.title))
+                || (bubble && bubble.title)
+                || 'Space';
             document.getElementById('space-title').textContent = bubbleTitle;
             // Show space name in titlebar
             var titlebarSpace = document.getElementById('titlebar-space');

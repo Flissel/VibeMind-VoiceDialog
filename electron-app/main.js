@@ -43,6 +43,7 @@ const OpenFangManager = require('./openfang-manager');
 
 // Supabase Realtime Subscriptions (live DB -> UI updates)
 const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
+const { initBrainEventBridge } = require('./brain-event-bridge');
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -3181,6 +3182,16 @@ app.whenReady().then(async () => {
     // Subscribes to ideas, projects, canvas_nodes etc. and translates
     // Postgres changes to the same IPC messages the Python backend sends.
     realtimeChannels = initRealtimeSubscriptions(mainWindow);
+
+    // Phase 11.G — Brain Space-Event Bridge
+    // Subscribes to Brain's /api/events/stream SSE and forwards bubble.* /
+    // idea.* events to the renderer as bubble_created/node_added/etc IPC
+    // messages. Works regardless of Supabase-Realtime status.
+    try {
+        initBrainEventBridge(mainWindow);
+    } catch (e) {
+        console.warn('[Main] BrainEventBridge init failed:', e.message);
+    }
 
     // Initialize Agent Farm Manager
     agentfarmManager = new AgentFarmManager(mainWindow);

@@ -11,12 +11,19 @@ services:
     build:
       context: ./external/openclaw
       dockerfile: Dockerfile
+      args:
+        # Only extensions that actually exist under ./external/openclaw/extensions/.
+        # Removed (reason):
+        #   - coding-engine-bridge: not in repo; Coding Engine bridges via Python only.
+        #   - hotel-concierge: lives in vibemind-os/openclaw, not in this build context;
+        #     to be replaced by a future "mailcow-integration" extension.
+        OPENCLAW_EXTENSIONS: "discord whatsapp ollama"
     container_name: vibemind-openclaw
     command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
     user: "root"
     ports:
-      - "${OPENCLAW_PORT:-18791}:18789"   # Gateway WebSocket API (18791 to avoid conflict with coding-engine-openclaw on 18789)
-      - "18792:18790"                      # WebChat UI (optional)
+      - "${OPENCLAW_PORT:-18789}:18789"   # Gateway WebSocket API
+      - "18790:18790"                     # WebChat UI (optional)
     volumes:
       # OpenClaw config + state
       - openclaw-data:/root/.openclaw

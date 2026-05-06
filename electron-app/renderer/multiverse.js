@@ -3943,6 +3943,18 @@ class MultiverseApp {
         raycaster.setFromCamera(mouse, this.camera);
 
         if (this.currentSpace === 'ideas') {
+            // Suppress all hover work while we are mid-enter into a bubble,
+            // and also while the inside-bubble view is showing. The 3D
+            // multiverse canvas keeps existing under the hidden container,
+            // so without this guard a stray pointer event re-shows the
+            // bubble card on top of the space view.
+            if (window.isEnteringBubble) {
+                return;
+            }
+            var spaceViewEl = document.getElementById('space-view');
+            if (spaceViewEl && !spaceViewEl.classList.contains('hidden')) {
+                return;
+            }
             const bubbles = (this.spaces.ideas?.objects || []).filter(
                 obj => obj.userData && obj.userData.type === 'bubble'
             );

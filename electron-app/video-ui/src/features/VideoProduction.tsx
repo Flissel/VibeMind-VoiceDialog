@@ -939,9 +939,27 @@ function VideoGallery() {
   const [selectedVideo, setSelectedVideo] = useState<VideoFileInfo | null>(null)
 
   const refresh = useCallback(async () => {
+    // Try Electron IPC first (faster, has DB-aware metadata), then fall back
+    // to the HTTP backend (works even when electron_backend.py is restarted
+    // out-of-band and IPC stdio is broken).
     try {
-      const res: VideoListResponse = await api()?.videoList?.()
-      setVideos(res?.videos ?? [])
+      const res: VideoListResponse = await Promise.race([
+        api()?.videoList?.() as Promise<VideoListResponse>,
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('ipc timeout')), 4000)),
+      ])
+      if (res?.videos) {
+        setVideos(res.videos)
+        setLoading(false)
+        return
+      }
+    } catch { /* fall through to HTTP */ }
+    try {
+      const r = await fetch(`${VIDEO_API_BASE}/api/video/gallery`,
+        { signal: AbortSignal.timeout(5000) })
+      if (r.ok) {
+        const data = await r.json()
+        setVideos(data?.videos ?? [])
+      } else { setVideos([]) }
     } catch { setVideos([]) }
     setLoading(false)
   }, [])
@@ -1359,12 +1377,31 @@ function LiveCapture() {
   const [hint, setHint] = useState('')
   const [tick, setTick] = useState(0)
 
-  // Probe eyeTerm status on mount
+  // Probe eyeTerm status — retries with backoff so transient slow responses
+  // (eyeTerm is starting up, MJPEG handler busy, etc.) don't permanently mark
+  // the stream as offline. Triggers on mount and again whenever streamOk is
+  // reset to null (manual "Erneut verbinden" button).
   useEffect(() => {
-    fetch('http://127.0.0.1:8099/status', { signal: AbortSignal.timeout(2000) })
-      .then(r => setStreamOk(r.ok))
-      .catch(() => setStreamOk(false))
-  }, [])
+    if (streamOk !== null) return
+    let cancelled = false
+    let attempt = 0
+    const probe = async () => {
+      while (!cancelled && attempt < 5) {
+        attempt++
+        try {
+          const r = await fetch(`${VIDEO_API_BASE}/api/eyeterm/status`,
+            { signal: AbortSignal.timeout(5000) })
+          if (cancelled) return
+          if (r.ok) { setStreamOk(true); return }
+        } catch { /* retry */ }
+        if (cancelled) return
+        await new Promise(res => setTimeout(res, attempt * 1500))
+      }
+      if (!cancelled) setStreamOk(false)
+    }
+    probe()
+    return () => { cancelled = true }
+  }, [streamOk])
 
   // Poll recording status while active
   useEffect(() => {
@@ -1381,8 +1418,10 @@ function LiveCapture() {
     return () => window.clearInterval(iv)
   }, [rec.active])
 
-  // Stream cache-buster to force refresh on remount
-  const streamSrc = `http://127.0.0.1:8099/stream?t=${tick}`
+  // Stream via backend same-origin proxy — Chromium refuses cross-origin
+  // <img> from a file:// renderer in some configs even with CORS=*. The
+  // backend proxy on :8007 keeps this same-origin and always works.
+  const streamSrc = `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
 
   const startRec = async () => {
     setBusy(true); setError(null)
@@ -1439,21 +1478,38 @@ function LiveCapture() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative',
       }}>
-        {streamOk === false ? (
+        {streamOk === null && (
+          <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', fontSize: 'var(--text-caption1)' }}>
+            <div style={{ fontSize: 32, marginBottom: 8, opacity: 0.6 }}>📷</div>
+            <div>Verbinde mit eyeTerm…</div>
+          </div>
+        )}
+        {streamOk === false && (
           <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', fontSize: 'var(--text-caption1)' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
-            <div>eyeTerm Stream nicht erreichbar (:8099)</div>
+            <div>eyeTerm Stream nicht erreichbar</div>
             <div style={{ marginTop: 4, fontSize: 'var(--text-caption2)' }}>
               eyeTerm muss laufen — startet automatisch mit Vibemind
             </div>
+            <button
+              onClick={() => setStreamOk(null)}
+              style={{
+                marginTop: 12, padding: '4px 12px', fontSize: 'var(--text-caption2)',
+                background: 'rgba(100,140,255,0.15)', border: '1px solid var(--accent)',
+                color: 'var(--accent)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+              }}
+            >Erneut verbinden</button>
           </div>
-        ) : (
+        )}
+        {streamOk === true && (
           <img
             src={streamSrc}
             alt="eyeTerm live stream"
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onError={() => setStreamOk(false)}
-            onLoad={() => setStreamOk(true)}
+            // Single onError marks down — but only if we never had a successful
+            // load. Once an MJPEG stream is live, transient frame errors
+            // shouldn't kill the view.
+            onError={() => setStreamOk(prev => prev === true ? true : false)}
           />
         )}
         {rec.active && (
@@ -1535,7 +1591,7 @@ function LiveCapture() {
       )}
 
       <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
-        Hinweis: Audio wird nicht aufgenommen (MJPEG hat keine Tonspur). Output landet in <code>~/.rowboat/Videos/</code>.
+        Audio wird vom Default-Mikrofon mit aufgenommen. Output landet in <code>~/.rowboat/Videos/</code>.
       </div>
     </div>
   )

@@ -102,3 +102,8 @@ n8n-workflow-generated.png
 python/spaces/autogen/config/swarm_agents.json
 python/spaces/autogen/config/domino_agents.json
 python/spaces/autogen/config/forge_state.json
+
+# === Phase wipe backups (DB snapshots) ===
+python/supabase-ideas-backup-*.json
+python/rowboat-backup-*/
+python/vibemind.db.before-wipe-*.db

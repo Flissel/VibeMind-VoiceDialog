@@ -32,10 +32,18 @@ class BrainManager {
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
-    // Python path: prefer .venv312 from project root
+    // Python path: prefer repo-root .venv (Python 3.11 — verified working)
+    // over voice/.venv312 (Python 3.12 — has qdrant_kg init bug).
+    // Falls back to system 'python' as last resort.
     const projectRoot = path.resolve(__dirname, '..');
-    const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
-    this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
+    const repoRoot = path.resolve(projectRoot, '..', '..');  // .../Vibemind_V1
+    const candidates = [
+      path.join(repoRoot, '.venv', 'Scripts', 'python.exe'),       // repo .venv (3.11) — preferred
+      path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),    // voice/.venv if any
+      path.join(projectRoot, '.venv312', 'Scripts', 'python.exe'), // voice/.venv312 (3.12) — fallback
+    ];
+    this.pythonPath = candidates.find(p => fs.existsSync(p)) || 'python';
+    console.log(`[BrainManager] Using python: ${this.pythonPath}`);
 
     // Brain project root — try root-level brain/ first, then legacy submodule, then standalone
     const rootBrainPath = path.join(projectRoot, '..', 'brain', 'the_brain');
@@ -67,32 +75,77 @@ class BrainManager {
   }
 
   /**
-   * Start the Brain FastAPI server with port retry.
+   * Start the Brain FastAPI server. Stays on port 5000 (the canonical Brain
+   * port that everything else points at) and retries up to 6 times with
+   * 3-second back-off when the port is busy. Only falls back to the next
+   * port as a last resort. This avoids the race where a previous brain
+   * shutdown is still cleaning up TCP state and a fresh-spawn fails.
    */
   async _startServer() {
     if (this._serverReady) return this.port;
 
     const serverModule = 'web.brain_server';
+    const basePort = this.port;
+    const portRetries = 6;            // retries on basePort
+    const backoffMs = 3000;
+    const fallbackPorts = [basePort + 1, basePort + 2];
 
-    // Try up to 3 ports
-    const maxRetries = 3;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const tryPort = this.port + attempt;
+    // First: keep trying basePort with back-off
+    for (let attempt = 0; attempt < portRetries; attempt++) {
       try {
-        await this._tryStartOnPort(serverModule, tryPort);
-        this.port = tryPort;
-        return this.port;
+        await this._tryStartOnPort(serverModule, basePort);
+        this.port = basePort;
+        return basePort;
       } catch (err) {
         const isPortConflict = err.message.includes('10048') ||
                                err.message.includes('address already in use') ||
                                err.message.includes('EADDRINUSE');
-        if (isPortConflict && attempt < maxRetries - 1) {
-          console.log(`[BrainManager] Port ${tryPort} busy, trying ${tryPort + 1}...`);
+        if (isPortConflict) {
+          console.log(`[BrainManager] Port ${basePort} busy (attempt ${attempt + 1}/${portRetries}), waiting ${backoffMs}ms...`);
+          // Probe: maybe an earlier brain is already running on this port
+          // (race-condition where vibemind starts twice). If health check
+          // says yes, skip spawn entirely and adopt the existing instance.
+          try {
+            const ok = await this._probeHealth(basePort);
+            if (ok) {
+              console.log(`[BrainManager] Existing brain detected on ${basePort} — adopting`);
+              this.port = basePort;
+              this._serverReady = true;
+              return basePort;
+            }
+          } catch (_) {}
+          await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
+        // Non-port error — propagate
         throw err;
       }
     }
+
+    // Last resort — try next port
+    for (const tryPort of fallbackPorts) {
+      try {
+        await this._tryStartOnPort(serverModule, tryPort);
+        this.port = tryPort;
+        console.log(`[BrainManager] Fell back to port ${tryPort}`);
+        return tryPort;
+      } catch (_) {}
+    }
+    throw new Error(`Brain server could not start on ${basePort} after ${portRetries} retries`);
+  }
+
+  async _probeHealth(port) {
+    return new Promise((resolve) => {
+      const http = require('http');
+      const req = http.get({
+        host: '127.0.0.1', port, path: '/api/health', timeout: 2000,
+      }, (res) => {
+        resolve(res.statusCode === 200);
+        res.resume();
+      });
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+    });
   }
 
   /**
@@ -103,13 +156,25 @@ class BrainManager {
       console.log(`[BrainManager] Starting brain server on port ${port}...`);
       console.log(`[BrainManager] CWD: ${this.brainProjectRoot}`);
 
+      // Phase 11 — ensure brain has the right env defaults so KG init,
+      // ollama fallback, and PYTHONPATH-driven imports all work.
+      const repoRoot = path.resolve(this.brainProjectRoot, '..', '..', '..');
+      const envOverrides = {
+        // Default Qdrant to the docker-mapped port (16333 is the python-default
+        // but the project uses 6340; keep what's already in env if set)
+        QDRANT_URL: process.env.QDRANT_URL || 'http://127.0.0.1:6340',
+        // Phase 10 — local Ollama as last-resort planner when cloud LLMs fail
+        PLANNER_OLLAMA_FALLBACK: process.env.PLANNER_OLLAMA_FALLBACK || 'llama3.1:latest',
+        // Make sure brain.the_brain package + spaces siblings are importable
+        PYTHONPATH: process.env.PYTHONPATH || this.brainProjectRoot,
+      };
       const proc = spawn(this.pythonPath, [
         '-m', serverModule,
         '--port', String(port),
       ], {
         cwd: this.brainProjectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: { ...process.env, ...envOverrides },
       });
 
       this._serverProcess = proc;
@@ -180,6 +245,17 @@ class BrainManager {
           resolved = true;
           clearTimeout(timeout);
           reject(new Error(`Brain server exited with code ${code}: ${stderrBuf.slice(-300)}`));
+        } else if (!this._shuttingDown) {
+          // Auto-restart on unexpected exit (e.g. crash mid-execution).
+          // Schedule with back-off; user can stop it via this._shuttingDown=true.
+          console.log(`[BrainManager] Auto-restart in 5s (exit code ${code})`);
+          setTimeout(() => {
+            if (!this._shuttingDown) {
+              this._startServer().catch(e =>
+                console.warn('[BrainManager] Auto-restart failed:', e.message)
+              );
+            }
+          }, 5000);
         }
       });
     });

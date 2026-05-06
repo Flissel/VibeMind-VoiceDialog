@@ -46,7 +46,47 @@ bubble.list:
   - âœ… Different verb choices (show, list, display, tell)
   - âœ… "All" vs. "my" scope indicators
   - Would you like me to generate phrases for other intents (e.g., `bubble.create`, `idea.list`, `code.status`)?
-  placeholders: {}
+  - what bubbles do I have
+  - show all bubbles
+  - get bubbles
+  - show bubble list
+  - fetch my bubbles
+  - what are my bubbles
+  - display bubbles
+  - show my bubble list
+  - get my bubbles
+  - Blasen auflisten
+  - zeige meine Blasen
+  - zeige Blasen
+  - welche Blasen habe ich
+  - Blasen anzeigen
+  - meine Blasen auflisten
+  - alle Blasen anzeigen
+  - meine Blasen anzeigen
+  - zeige alle Blasen
+  - Blasenliste anzeigen
+  - alle meine Blasen zeigen
+  - Blasen abrufen
+  - welche Blasen sind das
+  - meine Blasenliste
+  - Blasen zusammenfassen
+  placeholders: &id001
+    name:
+    - Marketing
+    - Test
+    - Forschung
+    - Ideen
+    - Arbeit
+    - Privat
+    - Notizen
+    - Projects
+    topic:
+    - AI
+    - Marketing
+    - Coding
+    query:
+    - latest news
+    - AI trends
 bubble.create:
   variants:
   - Erstelle Bubble {name}
@@ -100,6 +140,38 @@ bubble.create:
   - Create bubble called project timeline
   - New bubble for architecture decisions
   - Create workspace named team resources
+  - Create a new space for cooking
+  - Make a bubble for project ideas
+  - Create a new bubble | Erstelle eine neue Bubble
+  - Add a bubble | FÃ¼ge eine Bubble hinzu
+  - New bubble | Neue Bubble
+  - Make a bubble | Mache eine Bubble
+  - Start a bubble | Starte eine Bubble
+  - Open a new bubble | Ã–ffne eine neue Bubble
+  - Create bubble | Erstelle Bubble
+  - Add a new idea | FÃ¼ge eine neue Idee hinzu
+  - New idea | Neue Idee
+  - Make an idea | Mache eine Idee
+  - Start an idea | Starte eine Idee
+  - Create an idea | Erstelle eine Idee
+  - Add idea | FÃ¼ge Idee hinzu
+  - Can you create a bubble | Kannst du eine Bubble erstellen
+  - Please create a bubble | Bitte erstelle eine Bubble
+  - Create a new bubble for me | Erstelle eine neue Bubble fÃ¼r mich
+  - I want to create a bubble | Ich mÃ¶chte eine Bubble erstellen
+  - Let me create a bubble | Lass mich eine Bubble erstellen
+  - Create bubble with title | Erstelle Bubble mit Titel
+  - New bubble please | Neue Bubble bitte
+  - I need a new bubble | Ich brauche eine neue Bubble
+  - Make a new bubble | Mache eine neue Bubble
+  - Start creating | Starte die Erstellung
+  - Open a bubble | Ã–ffne eine Bubble
+  - Add a new bubble | FÃ¼ge eine neue Bubble hinzu
+  - Create workspace bubble | Erstelle Workspace Bubble
+  - Begin a bubble | Beginne eine Bubble
+  - Spawn a bubble | Erzeuge eine Bubble
+  - Generate a bubble | Generiere eine Bubble
+  - Create a fresh bubble | Erstelle eine frische Bubble
   placeholders:
     name:
     - Marketing
@@ -166,6 +238,40 @@ bubble.enter:
   - Zeig mir die Sales Bubble
   - Switch me to Research, bitte
   - Open Ideas, danke
+  - Enter cooking space
+  - Go into my project ideas
+  - Open the recipes bubble
+  - Geh in 2
+  - Enter bubble / Blase betreten
+  - Open bubble / Blase Ã¶ffnen
+  - Jump into bubble / In die Blase springen
+  - Dive into this bubble / In diese Blase eintauchen
+  - Go to bubble / Zur Blase gehen
+  - Let me into the bubble / Lass mich in die Blase
+  - Navigate to bubble / Zur Blase navigieren
+  - Take me to the bubble / Bring mich zur Blase
+  - Switch to bubble / Zur Blase wechseln
+  - Focus on this bubble / Auf diese Blase konzentrieren
+  - Enter the bubble / Betrete die Blase
+  - Open this bubble / Ã–ffne diese Blase
+  - Explore this bubble / Erkunde diese Blase
+  - Go inside the bubble / Geh in die Blase
+  - Let's enter the bubble / Lassen Sie uns die Blase betreten
+  - Move to bubble / Zur Blase wechseln
+  - Access bubble / Auf Blase zugreifen
+  - Launch bubble / Blase starten
+  - Start exploring bubble / Beginne mit der Erkundung der Blase
+  - Enter the space / Den Raum betreten
+  - Get into bubble / Geh in die Blase
+  - Bring up bubble / Blase anzeigen
+  - Show me the bubble / Zeige mir die Blase
+  - Let's dive into bubble / Lassen Sie uns in die Blase eintauchen
+  - Enter my bubble / Betrete meine Blase
+  - Access this bubble / Auf diese Blase zugreifen
+  - Jump to bubble / Zur Blase springen
+  - Open the bubble / Ã–ffne die Blase
+  - Take me into bubble / Bring mich in die Blase
+  - Let's go into this bubble / Lassen Sie uns in diese Blase gehen
   placeholders:
     name:
     - Marketing
@@ -216,6 +322,9 @@ bubble.find:
   - Add parameter extraction examples (e.g., extracting bubble names)?
   - Generate phrases for other bubble intents (`.list`, `.enter`, `.create`)?
   - Create a training dataset file?
+  - Such nach Bubble Marketing
+  - Finde Bubble Swarm Team
+  - Wo ist die Bubble Finanzen?
   placeholders:
     name:
     - Marketing
@@ -270,7 +379,38 @@ bubble.exit:
   - Move on
   - That's it
   - See you
-  placeholders: {}
+  - Exit this space
+  - Return to multiverse
+  - Leave
+  - exit bubble|exit_bubble
+  - leave bubble|bubble verlassen
+  - go back|zurÃ¼ck gehen
+  - back to main|zurÃ¼ck zur Hauptseite
+  - close bubble|bubble schlieÃŸen
+  - exit space|space verlassen
+  - return home|zur Startseite
+  - done here|fertig hier
+  - go home|nach Hause gehen
+  - leave space|raum verlassen
+  - close this|schlieÃŸe das
+  - exit now|jetzt verlassen
+  - get out of here|hier rausgehen
+  - finish bubble|bubble beenden
+  - close space|raum schlieÃŸen
+  - return to main|zurÃ¼ck zum HauptmenÃ¼
+  - escape bubble|aus bubble entkommen
+  - leave this space|diesen raum verlassen
+  - back to start|zurÃ¼ck zum Start
+  - previous screen|vorheriger Bildschirm
+  - close current|aktuelle schlieÃŸen
+  - exit this|das verlassen
+  - back out|aussteigen
+  - leave now|jetzt gehen
+  - go back home|zurÃ¼ck nach Hause gehen
+  - end bubble|bubble beenden
+  - close this bubble|diese bubble schlieÃŸen
+  - main menu|HauptmenÃ¼
+  placeholders: *id001
 bubble.delete:
   variants:
   - Loesche Bubble {name}
@@ -324,6 +464,62 @@ bubble.delete:
   - Drop this bubble
   - Forget about this
   - Clear this bubble
+  - Delete this space
+  - Remove the cooking bubble
+  - remove bubble
+  - trash this bubble
+  - get rid of this bubble
+  - clear bubble
+  - erase bubble
+  - delete idea
+  - discard bubble
+  - delete current bubble
+  - take out this bubble
+  - destroy bubble
+  - Blase lÃ¶schen
+  - Blase entfernen
+  - Diese Blase lÃ¶schen
+  - Idee lÃ¶schen
+  - Blase weg
+  - Blase raus
+  - Diesen Bubble lÃ¶schen
+  - Blase lÃ¶schen bitte
+  - Weg mit der Blase
+  - LÃ¶sch die Blase
+  - Entfern diese Blase
+  - LÃ¶sch diese Idee
+  - Blase auslÃ¶schen
+  - Aus mit der Blase
+  - Delete all bubbles except
+  - Keep only
+  - Remove all bubbles except
+  - Clear all bubbles except
+  - Keep these bubbles
+  - Delete everything except
+  - LÃ¶sche alle Bubbles auÃŸer
+  - Behalte nur
+  - Entferne alle Bubbles auÃŸer
+  - Alle Bubbles auÃŸer lÃ¶schen
+  - Nur diese Bubbles behalten
+  - LÃ¶sche alles auÃŸer
+  - Remove all except these
+  - Keep just
+  - Purge all bubbles except
+  - Alle auÃŸer lÃ¶schen
+  - Behalte alles auÃŸer
+  - Entferne alles auÃŸer
+  - Delete all but
+  - Keep these
+  - Wipe all bubbles except
+  - Alle Bubbles lÃ¶schen auÃŸer
+  - Nur diese behalten
+  - Alles lÃ¶schen auÃŸer
+  - Clear everything except
+  - Preserve only
+  - Remove other bubbles
+  - Alle anderen Bubbles lÃ¶schen
+  - Behalte nur diese
+  - Entferne alle anderen
   placeholders:
     name:
     - Marketing
@@ -380,7 +576,9 @@ bubble.stats:
   - Zeig mir die Bubble-Statistiken",
   - Bubble metrics",
   - Would you like me to integrate these phrases into the classifier or check the current `bubble.stats` implementation?
-  placeholders: {}
+  - How developed is this idea?
+  - What
+  placeholders: *id001
 bubble.current:
   variants:
   - Wo bin ich
@@ -473,6 +671,12 @@ bubble.update:
   - Update description fÃ¼r Coding
   - Ã„ndere zu Neue Idee
   - Modify bubble name zu Dashboard
+  - Rename this space to X
+  - Update bubble name
+  - Change the title to X
+  - Benenne den Space um
+  - Aendere den Namen zu X
+  - Update den Bubble-Namen
   placeholders:
     name:
     - Marketing
@@ -2294,6 +2498,67 @@ bubble.delete_all_except:
   - 'event_type": "bubble.delete_all_except",'
   - 'payload": {'
   - 'keep_bubble_names": ["Marketing", "Design"],'
+  - Delete this space
+  - Remove the cooking bubble
+  - delete bubble
+  - remove bubble
+  - delete this bubble
+  - remove this idea
+  - trash this bubble
+  - get rid of this bubble
+  - clear bubble
+  - erase bubble
+  - delete the bubble
+  - remove this bubble
+  - delete idea
+  - discard bubble
+  - delete current bubble
+  - take out this bubble
+  - destroy bubble
+  - Blase lÃ¶schen
+  - Blase entfernen
+  - Diese Blase lÃ¶schen
+  - Idee lÃ¶schen
+  - Blase weg
+  - Blase raus
+  - Diesen Bubble lÃ¶schen
+  - Blase lÃ¶schen bitte
+  - Weg mit der Blase
+  - LÃ¶sch die Blase
+  - Entfern diese Blase
+  - LÃ¶sch diese Idee
+  - Blase auslÃ¶schen
+  - Aus mit der Blase
+  - Delete all bubbles except
+  - Keep only
+  - Remove all bubbles except
+  - Clear all bubbles except
+  - Keep these bubbles
+  - Delete everything except
+  - LÃ¶sche alle Bubbles auÃŸer
+  - Behalte nur
+  - Entferne alle Bubbles auÃŸer
+  - Alle Bubbles auÃŸer lÃ¶schen
+  - Nur diese Bubbles behalten
+  - LÃ¶sche alles auÃŸer
+  - Remove all except these
+  - Keep just
+  - Purge all bubbles except
+  - Alle auÃŸer lÃ¶schen
+  - Behalte alles auÃŸer
+  - Entferne alles auÃŸer
+  - Delete all but
+  - Keep these
+  - Wipe all bubbles except
+  - Alle Bubbles lÃ¶schen auÃŸer
+  - Nur diese behalten
+  - Alles lÃ¶schen auÃŸer
+  - Clear everything except
+  - Preserve only
+  - Remove other bubbles
+  - Alle anderen Bubbles lÃ¶schen
+  - Behalte nur diese
+  - Entferne alle anderen
   placeholders:
     name:
     - Marketing
@@ -2340,6 +2605,39 @@ bubble.score:
   - Vergleich die Bewertungen
   - Zeig mir alle Bewertungen
   - Would you like me to refine these phrases or add more variations for specific use cases?
+  - Evaluate this idea
+  - Score this space
+  - How good is this idea?
+  - Rate this bubble / Diese Blase bewerten
+  - Score this idea / Diese Idee bewerten
+  - Give it a score / Gib ihr eine Punktzahl
+  - Rate it / Bewerte es
+  - Score this / Bewerte das
+  - How would you rate this / Wie wÃ¼rdest du das bewerten
+  - Evaluate this bubble / Bewerte diese Blase
+  - Can you score this / Kannst du das bewerten
+  - I want to rate this / Ich mÃ¶chte das bewerten
+  - What's your score / Was ist deine Bewertung
+  - Rate the bubble / Bewerte die Blase
+  - Give it points / Gib ihm Punkte
+  - Score please / Bewertung bitte
+  - How's this idea / Wie ist diese Idee
+  - Assess this / Bewerte das
+  - Score this for me / Bewerte das fÃ¼r mich
+  - Let's rate it / Lass uns das bewerten
+  - What's the score / Was ist die Bewertung
+  - I'd like to rate this bubble / Ich mÃ¶chte diese Blase bewerten
+  - Rate me on this / Bewerte mich darin
+  - Score bubble / Blase bewerten
+  - Evaluate this idea / Bewerte diese Idee
+  - Can I rate this / Kann ich das bewerten
+  - Let me score this / Lass mich das bewerten
+  - Scoring time / Zeit zu bewerten
+  - Give it a rating / Gib ihm eine Bewertung
+  - What do you think of this / Was hÃ¤ltst du davon
+  - Score this bubble / Bewerte diese Blase
+  - I want to score this bubble / Ich mÃ¶chte diese Blase bewerten
+  - Bubble score / Blasenbewertung
   placeholders:
     name:
     - Marketing
@@ -2389,6 +2687,39 @@ bubble.evaluate:
   - Ist dieser Bubble bereit?",
   - Passt diese Idee zu den Kriterien?",
   - Validiere diese Bubble",
+  - Evaluate this bubble
+  - How complete is this idea?
+  - Score the evolution of this space
+  - evaluate bubble evolution
+  - Bewerte Bubble Evolution
+  - How is my bubble evolving?
+  - Wie entwickelt sich meine Blase?
+  - Analyze bubble growth
+  - Analysiere Bubble Wachstum
+  - Show me the bubble status
+  - Zeige mir den Bubble Status
+  - Track bubble changes
+  - Verfolge Bubble Ã„nderungen
+  - What's the evolution of this idea?
+  - Wie hat sich diese Idee entwickelt?
+  - Assess bubble progress
+  - Bewerte Ideen Fortschritt
+  - Display bubble development
+  - Zeige Bubble Entwicklung
+  - How has this bubble changed?
+  - Wie hat sich diese Blase verÃ¤ndert?
+  - Evaluate idea evolution
+  - Bewerte Ideen Evolution
+  - Monitor bubble growth
+  - Ãœberwache Bubble Wachstum
+  - Show bubble transformation
+  - Zeige Bubble Transformation
+  - Analyze how this bubble has grown
+  - Analysiere wie diese Blase gewachsen ist
+  - Check bubble status
+  - ÃœberprÃ¼fe Bubble Status
+  - Rate bubble evolution
+  - Bewerte Bubble Entwicklung
   placeholders:
     name:
     - Marketing
@@ -2434,6 +2765,38 @@ bubble.promote:
   - Launch the Development bubble
   - Upgrade diese Innovation
   - Make the Research-Bubble a project
+  - Turn this into a project
+  - Make this a project
+  - promote this bubble | diesen bubble hochstufen
+  - boost this idea | diese Idee ankurbeln
+  - make it more visible | mach es sichtbarer
+  - elevate this | heb das hervor
+  - push this higher | schieb das nach oben
+  - feature this bubble | prÃ¤sentiere diesen bubble
+  - highlight this | markiere das
+  - promote the bubble | fÃ¶rder den bubble
+  - move it up | verschieb es nach oben
+  - increase visibility | erhÃ¶he die Sichtbarkeit
+  - amplify this | verstÃ¤rke das
+  - give it more prominence | gib dem mehr Gewicht
+  - this bubble needs promotion | dieser bubble braucht FÃ¶rderung
+  - make this stand out | mach das hervorstechend
+  - prioritize this bubble | priorisiere diesen bubble
+  - push to the top | nach oben pushen
+  - bring this forward | bring das nach vorne
+  - highlight this concept | markiere dieses Konzept
+  - promote this idea | fÃ¶rder diese Idee
+  - boost visibility | steigere die Sichtbarkeit
+  - make this more important | mach das wichtiger
+  - elevate this concept | heb dieses Konzept hervor
+  - increase prominence | erhÃ¶he die Prominenz
+  - feature this idea | prÃ¤sentiere diese Idee
+  - put this in the spotlight | setz das in den Fokus
+  - bring attention to this | lenk Aufmerksamkeit auf das
+  - promote and boost | fÃ¶rdern und verstÃ¤rken
+  - make it stand out | mach es prominenter
+  - lift this bubble | heb diesen bubble an
+  - I want to promote this | ich mÃ¶chte das fÃ¶rdern
   placeholders:
     name:
     - Marketing

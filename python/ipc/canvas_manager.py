@@ -319,12 +319,55 @@ class CanvasManager:
     # BUBBLE NAVIGATION
     # ========================================================================
 
-    def enter_bubble(self, bubble_id: int):
-        """Enter a bubble to view its canvas."""
+    def enter_bubble(self, bubble_id):
+        """Enter a bubble to view its canvas.
+        Phase 11.G — accept either local-int id OR DB UUID id (Brain-Bridge
+        passes DB UUIDs from /api/events/stream)."""
         from electron_backend import HAS_BUBBLE_TOOLS, bubble_tools_module
 
+        # If it's a string that's NOT a digit, treat as DB UUID and translate
+        if isinstance(bubble_id, str) and not bubble_id.isdigit():
+            db_uuid = bubble_id
+            mapped = self.backend.bubble_id_map.get(db_uuid)
+            if mapped is None:
+                # Unknown DB id — reload then try again
+                try:
+                    logger.info(
+                        f"Bubble db_uuid={db_uuid} unknown — reloading from DB"
+                    )
+                    self._load_bubbles_from_db()
+                except Exception as e:
+                    logger.warning(f"DB reload failed: {e}")
+                mapped = self.backend.bubble_id_map.get(db_uuid)
+            if mapped is None:
+                logger.warning(
+                    f"Bubble db_uuid={db_uuid} still not found "
+                    f"(known db_ids={list(self.backend.bubble_id_map.keys())[:5]})"
+                )
+                return
+            bubble_id = mapped
+        else:
+            # local-int path
+            try:
+                bubble_id = int(bubble_id)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid bubble_id: {bubble_id!r}")
+                return
+
         if bubble_id not in self.backend.bubbles:
-            return
+            try:
+                logger.info(
+                    f"Bubble {bubble_id} unknown — re-loading bubbles from DB"
+                )
+                self._load_bubbles_from_db()
+            except Exception as e:
+                logger.warning(f"DB reload failed: {e}")
+            if bubble_id not in self.backend.bubbles:
+                logger.warning(
+                    f"Bubble {bubble_id} still not found after DB reload "
+                    f"(known={list(self.backend.bubbles.keys())[:10]})"
+                )
+                return
 
         self.backend.current_bubble_id = bubble_id
         electron_backend._current_bubble_id = bubble_id  # Sync module-level state
