@@ -214,8 +214,34 @@ class CanvasManager:
             return True
         return False
 
-    def get_all_bubbles(self) -> List[dict]:
-        """Get all bubbles as dictionaries with numbered titles."""
+    def get_all_bubbles(self, force_reload: bool = True) -> List[dict]:
+        """Get all bubbles as dictionaries with numbered titles.
+
+        Phase 11.P — by default, force-reload from DB so external wipes
+        (Brain `bubble_delete_all`, direct Supabase delete) are reflected
+        without an Electron-restart. Renderer's `requestBubbles()` IPC now
+        always sees fresh state.
+
+        Set ``force_reload=False`` for hot-path callers that have already
+        kept the cache in sync (e.g., right after a single create/delete).
+        """
+        if force_reload and self.backend.ideas_repo:
+            try:
+                # Clear in-memory cache before re-loading so deletions in
+                # the DB are honoured (the loader appends, never removes).
+                self.backend.bubbles.clear()
+                self.backend.bubble_id_map.clear()
+                # Also reset the module-level map mirroring this state.
+                try:
+                    electron_backend._bubble_id_map.clear()
+                except Exception:
+                    pass
+                # Reset numbering so freshly-loaded bubbles get small IDs.
+                self.backend.next_bubble_id = 1
+                self._load_bubbles_from_db()
+            except Exception as e:
+                debug_log(f"get_all_bubbles force_reload failed: {e}")
+
         bubbles_list = []
         for i, bubble in enumerate(self.backend.bubbles.values(), 1):
             bubble_dict = bubble.to_dict()

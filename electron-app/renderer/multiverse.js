@@ -432,6 +432,26 @@ class MultiverseApp {
         const group = this.spaces.ideas.group;
         if (!group) return;
 
+        // Phase 11.P — DUPLICATE PROTECTION (same reasoning as addBubble).
+        // node_added IPC arrives from voice-subprocess _load_bubbles_from_db
+        // AND from supabase-realtime listener. Without dedup we'd render
+        // each bubble multiple times.
+        const incomingId = node.id;
+        if (incomingId !== undefined && incomingId !== null) {
+            const existing = this.spaces.ideas.objects.find(b =>
+                b.userData && (
+                    b.userData.id === incomingId ||
+                    b.userData.db_id === incomingId ||
+                    String(b.userData.id) === String(incomingId) ||
+                    String(b.userData.db_id) === String(incomingId)
+                )
+            );
+            if (existing) {
+                console.log('[Multiverse] addBubbleTo3D: skipping duplicate id=' + incomingId);
+                return existing;
+            }
+        }
+
         const radius = node.radius || 0.7;
         const color = node.color || 0x4488ff;
 
@@ -4363,14 +4383,38 @@ class MultiverseApp {
             console.warn('[Multiverse] addBubble: Invalid bubble data');
             return;
         }
-        
-        console.log('[Multiverse] Adding bubble:', bubbleData.title || bubbleData.id);
-        
+
         const ideasGroup = this.spaces.ideas.group;
         if (!ideasGroup) {
             console.warn('[Multiverse] addBubble: Ideas group not initialized');
             return;
         }
+
+        // Phase 11.P — DUPLICATE PROTECTION
+        // bubble_created IPC can arrive multiple times for the same bubble:
+        //   - Brain-event-bridge SSE (Phase 11.O event publish)
+        //   - Voice subprocess _broadcast_to_electron (Phase 11.A path)
+        //   - Supabase-Realtime postgres-changes listener (when enabled)
+        // Without this check, each duplicate creates a new Three.js mesh,
+        // so the user sees N copies of the same bubble.
+        const incomingDbId = bubbleData.db_id || bubbleData.id;
+        if (incomingDbId !== undefined && incomingDbId !== null) {
+            const existing = this.spaces.ideas.objects.find(b =>
+                b.userData && (
+                    b.userData.db_id === incomingDbId ||
+                    b.userData.id === incomingDbId ||
+                    String(b.userData.db_id) === String(incomingDbId) ||
+                    String(b.userData.id) === String(incomingDbId)
+                )
+            );
+            if (existing) {
+                console.log('[Multiverse] addBubble: skipping duplicate id=' + incomingDbId +
+                            ' title=' + (bubbleData.title || '?'));
+                return existing;
+            }
+        }
+
+        console.log('[Multiverse] Adding bubble:', bubbleData.title || bubbleData.id);
         
         const radius = bubbleData.radius || 0.7;
         

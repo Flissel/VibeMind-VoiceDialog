@@ -76,6 +76,12 @@ class IdeasRepository:
         row = self.db.fetch_one("SELECT * FROM ideas WHERE id = ?", (idea_id,))
         return Idea.from_dict(dict(row)) if row else None
 
+    # Phase 11.P — alias for callers that expect SQLAlchemy-style naming.
+    # bubble_tools.update_bubble + several others call get_by_id(); without
+    # this alias they crashed with AttributeError.
+    def get_by_id(self, idea_id: str) -> Optional[Idea]:
+        return self.get(idea_id)
+
     def get_by_title(self, title: str) -> Optional[Idea]:
         """Get idea by title (case-insensitive partial match)"""
         row = self.db.fetch_one(
