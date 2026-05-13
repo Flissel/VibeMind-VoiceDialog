@@ -83,7 +83,10 @@ class IdeasPublisher(BasePublisher):
                     "node_type": "idea",
                 })
 
-        # Source 2: Canvas nodes linked to this bubble
+        # Source 2: Canvas nodes linked to this bubble.
+        # Prefer content_json (structured: specs/SWOT/flowchart/etc.) over the
+        # plain `node.content` so Rowboat/Obsidian sees actual formatted
+        # content rather than just titles. Falls back to plain content/summary.
         all_nodes = canvas_repo.list_nodes(limit=2000)
         bubble_nodes = [n for n in all_nodes if n.linked_idea_id == bubble_id]
         for node in bubble_nodes:
@@ -91,10 +94,23 @@ class IdeasPublisher(BasePublisher):
             if not title or title in seen_titles:
                 continue
             seen_titles.add(title)
+            # Render structured content if available
+            rendered_content = ""
+            cj = getattr(node, "content_json", None)
+            if isinstance(cj, dict) and cj:
+                try:
+                    from spaces.mirofish.tools.mirofish_tools import _flatten_content_json
+                    fmt_type = cj.get("type") or node.node_type
+                    rendered_content = f"_Format: {fmt_type}_\n\n" + _flatten_content_json(cj, max_chars=3000)
+                except Exception:
+                    import json as _json
+                    rendered_content = "```json\n" + _json.dumps(cj, ensure_ascii=False, indent=2)[:3000] + "\n```"
+            if not rendered_content:
+                rendered_content = node.content or node.summary or ""
             notes.append({
                 "id": node.id,
                 "title": title,
-                "content": node.content or "",
+                "content": rendered_content,
                 "tags": [],
                 "node_type": node.node_type or "note",
             })
@@ -114,9 +130,12 @@ class IdeasPublisher(BasePublisher):
 
         slug = _slugify(bubble.title or "untitled")
 
-        # ── JSON manifest (unchanged) ──
+        # ── JSON manifest (schema 1.1: + eval, score, status) ──
+        # Include eval-history + last MiroFish readiness scores so Rowboat/
+        # Obsidian readers see the project maturity without hitting the DB.
+        bubble_meta = bubble.metadata if isinstance(bubble.metadata, dict) else {}
         manifest = {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "space": "ideas",
             "type": "bubble",
             "published_at": datetime.now().isoformat(),
@@ -124,8 +143,20 @@ class IdeasPublisher(BasePublisher):
                 "id": bubble.id,
                 "title": bubble.title or "",
                 "description": bubble.description or "",
+                "status": bubble.status or "",
+                "score": getattr(bubble, "score", None),
                 "created_at": str(bubble.created_at) if bubble.created_at else None,
                 "updated_at": str(getattr(bubble, 'updated_at', None)) if getattr(bubble, 'updated_at', None) else None,
+            },
+            "eval": {
+                "last_eval": bubble_meta.get("last_eval"),
+                "history": bubble_meta.get("eval_history") or [],
+                "dimensions": {
+                    "feasibility": getattr(bubble, "feasibility", None),
+                    "impact": getattr(bubble, "impact", None),
+                    "novelty": getattr(bubble, "novelty", None),
+                    "urgency": getattr(bubble, "urgency", None),
+                },
             },
             "notes": notes,
             "edges": edges,
@@ -151,24 +182,58 @@ class IdeasPublisher(BasePublisher):
         if old_flat.exists():
             old_flat.unlink()
 
-        # _overview.md — bubble metadata
+        # _overview.md — bubble metadata + MiroFish eval summary
         key_facts = [f"{len(notes)} ideas/notes"]
         if edges:
             key_facts.append(f"{len(edges)} connections")
+        last_eval = bubble_meta.get("last_eval") or {}
+        if last_eval.get("total_score") is not None:
+            key_facts.append(f"MiroFish readiness: {last_eval['total_score']}/100 — {last_eval.get('prediction','')}")
+        history = bubble_meta.get("eval_history") or []
+        if history:
+            key_facts.append(f"{len(history)} eval-runs tracked")
         if bubble.description:
             key_facts.append(bubble.description[:300])
+
+        # Build eval summary appendix for the overview
+        eval_appendix = ""
+        if last_eval:
+            from datetime import datetime as _dt
+            ts = last_eval.get("ts")
+            ts_str = _dt.fromtimestamp(ts).isoformat() if ts else "?"
+            eval_appendix = "\n\n## MiroFish Evaluation\n\n"
+            eval_appendix += f"- **Last run:** {ts_str}\n"
+            eval_appendix += f"- **Score:** {last_eval.get('total_score', '?')}/100\n"
+            eval_appendix += f"- **Prediction:** {last_eval.get('prediction', '?')}\n"
+            per_agent = last_eval.get("per_agent_full") or {}
+            if per_agent:
+                eval_appendix += "\n### Per-Agent Breakdown\n\n"
+                for agent, data in per_agent.items():
+                    if isinstance(data, dict):
+                        sc = data.get("score", 0)
+                        eval_appendix += f"- **{agent}** [{sc}/25]: {data.get('assessment', '')[:200]}\n"
+            missing = last_eval.get("missing_items") or []
+            if missing:
+                eval_appendix += f"\n### Top Missing Items ({len(missing)} total)\n\n"
+                for m in missing[:15]:
+                    eval_appendix += f"- {m}\n"
+            if len(history) > 1:
+                eval_appendix += "\n### Score History\n\n"
+                for h in history[-10:]:
+                    h_ts = _dt.fromtimestamp(h.get("ts", 0)).isoformat() if h.get("ts") else "?"
+                    eval_appendix += f"- {h_ts}: {h.get('total_score', '?')}/100 ({h.get('prediction', '?')})\n"
 
         overview_md = build_project_note(
             title=f"VibeMind - {bubble_title}",
             project_type="idea-bubble",
-            status="active",
+            status=bubble.status or "active",
             summary=bubble.description or f"Idea bubble with {len(notes)} notes.",
             started=str(bubble.created_at)[:10] if bubble.created_at else "",
             last_activity=str(getattr(bubble, 'updated_at', None))[:10] if getattr(bubble, 'updated_at', None) else "",
             key_facts=key_facts,
             source_space="Ideas",
         )
-        (bubble_dir / "_overview.md").write_text(overview_md, encoding="utf-8")
+        (bubble_dir / "_overview.md").write_text(overview_md + eval_appendix, encoding="utf-8")
 
         # Track which files we write so we can prune stale ones
         written_files = {"_overview.md"}

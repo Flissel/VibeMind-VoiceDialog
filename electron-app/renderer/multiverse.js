@@ -4222,12 +4222,22 @@ class MultiverseApp {
                 db_id: data.db_id || data.id,
                 data: data
             };
-            
+
             ideasGroup.add(bubble);
             this.spaces.ideas.objects.push(bubble);
+
+            // Phase 11.U.L — initial score-fill from DB
+            // (syncBubbles is the bootstrap path; addBubble is for new bubbles
+            // created at runtime. Both need fill, so call same helper here.)
+            try {
+                this._applyScoreFill(bubble, data.score, radius);
+            } catch (e) {
+                console.warn('[Multiverse] score fill failed for', data.title, e);
+            }
         });
-        
-        console.log('[Multiverse] Bubbles synced successfully:', bubbles.length);
+
+        console.log('[Multiverse] Bubbles synced successfully:', bubbles.length,
+                    '(with score-fills where score>0)');
     }
     
     /**
@@ -4460,7 +4470,7 @@ class MultiverseApp {
             transparent: true,
             opacity: 0.8,
         });
-        
+
         const bubble = new THREE.Mesh(geometry, material);
         bubble.position.copy(pos);
         bubble.userData = {
@@ -4470,13 +4480,90 @@ class MultiverseApp {
             db_id: bubbleData.db_id || bubbleData.id,
             data: bubbleData
         };
-        
+
         ideasGroup.add(bubble);
         this.spaces.ideas.objects.push(bubble);
-        
+
+        // Phase 11.U.L — Score-based fill visualization.
+        // Renders a smaller inner sphere whose Y-position depends on the
+        // bubble's eval score (0-100). High score → fill rises to the top;
+        // low score → fill sits at the bottom like an empty glass.
+        // Color shifts red(<33) → yellow(<66) → green(>=66).
+        this._applyScoreFill(bubble, bubbleData.score, radius);
+
         console.log('[Multiverse] Bubble added successfully:', bubble.userData.title);
 
         return bubble;
+    }
+
+    /**
+     * Render or update the score-fill inside a bubble.
+     * Reads score from 0..100; renders an inner cap-sphere whose vertical
+     * position rises with the score. Re-callable safely (replaces existing
+     * fill mesh if present so realtime UPDATE works).
+     */
+    _applyScoreFill(bubble, score, radius) {
+        if (!bubble || score === undefined || score === null) return;
+        const s = Math.max(0, Math.min(100, Number(score) || 0));
+        const r = radius || 0.7;
+
+        // Remove old fill if present (idempotent update)
+        const old = bubble.userData._fillMesh;
+        if (old) {
+            bubble.remove(old);
+            if (old.geometry) old.geometry.dispose();
+            if (old.material) old.material.dispose();
+            bubble.userData._fillMesh = null;
+        }
+        if (s <= 0) return;
+
+        // Color by score band
+        let fillColor = 0xff4444;   // red
+        if (s >= 66)      fillColor = 0x44ff66;   // green
+        else if (s >= 33) fillColor = 0xffcc33;   // yellow
+
+        // Inner cap-sphere: only the lower (-Y) half visible, scaled by fill
+        // We use a full sphere slightly smaller than the shell, then offset
+        // it downward so the visible top sits at level (s/100) of the bubble.
+        const innerRadius = r * 0.92;
+        const fillGeo = new THREE.SphereGeometry(innerRadius, 24, 20);
+        const fillMat = new THREE.MeshPhysicalMaterial({
+            color: fillColor,
+            metalness: 0.0,
+            roughness: 0.3,
+            transmission: 0.4,
+            transparent: true,
+            opacity: 0.85,
+            emissive: fillColor,
+            emissiveIntensity: 0.15,
+        });
+        const fill = new THREE.Mesh(fillGeo, fillMat);
+        // Map score 0..100 to fill-top range: top of fill at y = -r + (s/100)*2r
+        // Sphere center then sits at fillTopY - innerRadius (so its top reaches fillTopY)
+        const fillTopY = -r + (s / 100) * (2 * r);
+        fill.position.y = fillTopY - innerRadius;
+        fill.userData = { type: 'score_fill', score: s };
+        bubble.add(fill);
+        bubble.userData._fillMesh = fill;
+        bubble.userData.score = s;
+    }
+
+    /**
+     * Update an existing bubble's score-fill (called on Realtime UPDATE).
+     */
+    updateBubbleScore(idOrDbId, newScore) {
+        const objects = this.spaces.ideas?.objects || [];
+        const bubble = objects.find(b =>
+            b.userData?.db_id === idOrDbId ||
+            b.userData?.id === idOrDbId ||
+            String(b.userData?.db_id) === String(idOrDbId) ||
+            String(b.userData?.id) === String(idOrDbId)
+        );
+        if (!bubble) return false;
+        // Recover original radius from geometry (icosahedron stores it)
+        const radius = bubble.geometry?.parameters?.radius || 0.7;
+        this._applyScoreFill(bubble, newScore, radius);
+        return true;
     }
 
     /**

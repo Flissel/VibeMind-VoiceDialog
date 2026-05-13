@@ -948,6 +948,40 @@
                     }
                     break;
 
+                // Phase 11.U.L — bubble eval result from Mirofish panel.
+                // Updates the 3D bubble fill + opens the right side-panel
+                // with score breakdown + TODO bubble-cards.
+                case 'mirofish_result':
+                    if (message.action === 'evaluate_readiness') {
+                        const score = message.total_score;
+                        const bubbleName = message.bubble_name;
+                        console.log(`[UI] Eval result: ${bubbleName} = ${score}/100`);
+
+                        // 1) Update 3D bubble fill
+                        if (window.multiverseApp && typeof window.multiverseApp.updateBubbleScore === 'function') {
+                            const objects = window.multiverseApp.spaces?.ideas?.objects || [];
+                            const found = objects.find(b =>
+                                b.userData?.title === bubbleName ||
+                                String(b.userData?.title).toLowerCase() === String(bubbleName).toLowerCase()
+                            );
+                            if (found) {
+                                const dbId = found.userData.db_id || found.userData.id;
+                                window.multiverseApp.updateBubbleScore(dbId, score);
+                            }
+                        }
+
+                        // 2) Open eval side-panel
+                        if (typeof window.showEvalPanel === 'function') {
+                            window.showEvalPanel(message);
+                        }
+
+                        // 3) Transcript pulse
+                        const pred = message.prediction || '';
+                        const icon = score >= 66 ? '🟢' : score >= 33 ? '🟡' : '🔴';
+                        showTranscript('Eval', `${icon} ${bubbleName}: ${score}/100 — ${pred}`);
+                    }
+                    break;
+
                 case 'bubbles_listed':
                     // Update bubbles with index numbers for voice reference
                     if (window.multiverseApp && message.bubbles) {
@@ -1913,6 +1947,404 @@
         // Flowzen Panel — now in flowzen-panel.js
         // Summaries Panel — now in summaries-panel.js
         // White Paper Panel — now in whitepaper-panel.js
+    </script>
+
+    <!-- Phase 11.U.L — Eval Side-Panel (right, persistent toggle) ── -->
+    <style>
+        /* Persistent toggle tab on right edge (always visible) */
+        #eval-toggle {
+            position: fixed;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+            z-index: 9001;
+            background: rgba(15, 18, 30, 0.92);
+            color: #c0c8d8;
+            border: 1px solid rgba(120, 180, 255, 0.25);
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+            padding: 14px 8px;
+            cursor: pointer;
+            font-family: -apple-system, system-ui, sans-serif;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            transition: background 0.2s, right 0.3s ease;
+            backdrop-filter: blur(8px);
+        }
+        #eval-toggle:hover {
+            background: rgba(30, 40, 60, 0.95);
+            color: #fff;
+        }
+        #eval-toggle.panel-open { right: 380px; }
+        #eval-toggle .toggle-score {
+            display: block;
+            writing-mode: horizontal-tb;
+            text-orientation: mixed;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #ffcc33;
+        }
+        #eval-toggle .toggle-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-bottom: 4px;
+            background: #888;
+        }
+        #eval-toggle .toggle-dot.green { background: #44ff66; }
+        #eval-toggle .toggle-dot.yellow { background: #ffcc33; }
+        #eval-toggle .toggle-dot.red { background: #ff4444; }
+
+        #eval-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 380px;
+            height: 100vh;
+            background: rgba(15, 18, 30, 0.95);
+            color: #e0e6ed;
+            backdrop-filter: blur(12px);
+            border-left: 1px solid rgba(120, 180, 255, 0.2);
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+            font-family: -apple-system, system-ui, sans-serif;
+            z-index: 9000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            overflow-y: auto;
+            padding: 16px 20px;
+            box-sizing: border-box;
+        }
+        #eval-panel.open { transform: translateX(0); }
+        #eval-panel .eval-close {
+            position: absolute; top: 12px; right: 14px;
+            background: transparent; border: none; color: #888;
+            font-size: 20px; cursor: pointer; padding: 4px 8px;
+        }
+        #eval-panel .eval-close:hover { color: #fff; }
+        #eval-panel .eval-empty {
+            text-align: center;
+            color: #6a7488;
+            font-size: 13px;
+            padding: 40px 20px;
+            line-height: 1.5;
+        }
+        #eval-panel .eval-empty-hint {
+            font-size: 11px;
+            color: #4a5468;
+            margin-top: 12px;
+            font-style: italic;
+        }
+        #eval-panel .eval-title {
+            font-size: 16px; font-weight: 600;
+            margin: 0 0 4px 0; color: #fff;
+        }
+        #eval-panel .eval-subtitle {
+            font-size: 12px; color: #8a94a6;
+            margin: 0 0 16px 0;
+        }
+        #eval-panel .score-display {
+            display: flex; align-items: baseline; gap: 8px;
+            margin-bottom: 6px;
+        }
+        #eval-panel .score-number {
+            font-size: 42px; font-weight: 700; line-height: 1;
+        }
+        #eval-panel .score-max { font-size: 16px; color: #8a94a6; }
+        #eval-panel .score-prediction {
+            display: inline-block; padding: 3px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 600; margin-bottom: 14px;
+        }
+        #eval-panel .score-bar {
+            height: 6px; background: rgba(255,255,255,0.08);
+            border-radius: 3px; overflow: hidden; margin-bottom: 18px;
+        }
+        #eval-panel .score-bar-fill {
+            height: 100%; transition: width 0.5s ease;
+            background: linear-gradient(90deg, #ff4444 0%, #ffcc33 33%, #44ff66 66%);
+        }
+        #eval-panel .section-title {
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: #8a94a6; margin: 18px 0 8px 0; font-weight: 600;
+        }
+        #eval-panel .agent-row {
+            display: flex; align-items: center; gap: 8px;
+            margin: 6px 0; font-size: 12px;
+        }
+        #eval-panel .agent-name {
+            flex: 0 0 105px; color: #c0c8d8; text-overflow: ellipsis;
+            overflow: hidden; white-space: nowrap;
+        }
+        #eval-panel .agent-bar {
+            flex: 1; height: 6px; background: rgba(255,255,255,0.06);
+            border-radius: 3px; overflow: hidden;
+        }
+        #eval-panel .agent-bar-fill {
+            height: 100%; background: #6bb0ff; transition: width 0.4s ease;
+        }
+        #eval-panel .agent-score {
+            flex: 0 0 38px; text-align: right; font-variant-numeric: tabular-nums;
+            color: #8a94a6; font-size: 11px;
+        }
+        #eval-panel .todo-list {
+            display: flex; flex-direction: column; gap: 6px;
+            margin-top: 4px;
+        }
+        #eval-panel .todo-bubble {
+            background: rgba(255, 200, 100, 0.08);
+            border: 1px solid rgba(255, 200, 100, 0.18);
+            border-radius: 8px; padding: 8px 11px;
+            font-size: 12px; line-height: 1.4;
+            color: #d8d2c4;
+            cursor: default;
+            transition: background 0.15s;
+        }
+        #eval-panel .todo-bubble:hover {
+            background: rgba(255, 200, 100, 0.14);
+        }
+        #eval-panel .todo-bubble.high-prio {
+            background: rgba(255, 100, 100, 0.1);
+            border-color: rgba(255, 100, 100, 0.22);
+            color: #f0d4d4;
+        }
+        #eval-panel .todo-count {
+            font-size: 11px; color: #8a94a6; font-weight: normal;
+            margin-left: 4px;
+        }
+        #eval-panel .history-row {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 11px; color: #8a94a6; margin: 4px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        #eval-panel .history-bar {
+            flex: 1; height: 4px; background: rgba(255,255,255,0.05);
+            border-radius: 2px; overflow: hidden;
+        }
+        #eval-panel .history-bar-fill {
+            height: 100%; background: rgba(107, 176, 255, 0.5);
+        }
+    </style>
+    <!-- Persistent toggle tab — always visible, shows current score -->
+    <button id="eval-toggle" onclick="window.toggleEvalPanel()" title="Toggle Eval Panel">
+        <span class="toggle-dot" id="eval-toggle-dot"></span>
+        <span class="toggle-score" id="eval-toggle-score">—</span>
+        Eval
+    </button>
+
+    <div id="eval-panel" aria-hidden="true">
+        <button class="eval-close" onclick="window.closeEvalPanel()" title="Close (Esc)">×</button>
+        <div id="eval-panel-content">
+            <div class="eval-empty">
+                No evaluation yet for the current bubble.
+                <div class="eval-empty-hint">
+                    Trigger via voice or chat:<br>
+                    "Evaluate bubble &lt;name&gt;"
+                </div>
+            </div>
+        </div>
+        <div id="eval-panel-data" style="display:none">
+            <div class="eval-title" id="eval-bubble-title">Eval</div>
+            <div class="eval-subtitle" id="eval-timestamp"></div>
+
+            <div class="score-display">
+                <span class="score-number" id="eval-score">—</span>
+                <span class="score-max">/100</span>
+            </div>
+            <div class="score-bar"><div class="score-bar-fill" id="eval-score-bar" style="width:0%"></div></div>
+            <span class="score-prediction" id="eval-prediction"></span>
+
+            <div class="section-title">Per-Agent</div>
+            <div id="eval-agents"></div>
+
+            <div class="section-title">Top Missing<span class="todo-count" id="eval-todo-count"></span></div>
+            <div class="todo-list" id="eval-todos"></div>
+
+            <div class="section-title" id="eval-history-title" style="display:none">History</div>
+            <div id="eval-history"></div>
+        </div>
+    </div>
+    <script>
+        // Side-panel controller.
+        // - Persistent toggle tab on the right edge (always visible)
+        // - Auto-opens on new mirofish_result
+        // - Re-opens with last-known data after page reload (localStorage)
+        // - Esc / × / toggle-click close it but state survives
+
+        const EVAL_STORAGE_KEY = 'vibemind.evalPanel.lastResult';
+
+        function _updateToggleBadge(score) {
+            const dot = document.getElementById('eval-toggle-dot');
+            const scoreEl = document.getElementById('eval-toggle-score');
+            if (!dot || !scoreEl) return;
+            if (score === null || score === undefined || isNaN(score)) {
+                scoreEl.textContent = '—';
+                dot.className = 'toggle-dot';
+                return;
+            }
+            const s = Number(score);
+            scoreEl.textContent = Math.round(s);
+            dot.className = 'toggle-dot ' + (s >= 66 ? 'green' : s >= 33 ? 'yellow' : 'red');
+        }
+
+        function _renderEvalContent(msg) {
+            // Hide empty-state, show data
+            document.getElementById('eval-panel-content').style.display = 'none';
+            document.getElementById('eval-panel-data').style.display = '';
+
+            const score = Number(msg.total_score) || 0;
+            const pred = msg.prediction || '?';
+
+            document.getElementById('eval-bubble-title').textContent = msg.bubble_name || 'Bubble';
+            document.getElementById('eval-timestamp').textContent = new Date(msg._renderedAt || Date.now()).toLocaleString();
+            document.getElementById('eval-score').textContent = score;
+            document.getElementById('eval-score-bar').style.width = Math.min(100, Math.max(0, score)) + '%';
+
+            const predEl = document.getElementById('eval-prediction');
+            predEl.textContent = pred;
+            predEl.style.background = score >= 66 ? 'rgba(68,255,102,0.18)'
+                                    : score >= 33 ? 'rgba(255,204,51,0.18)'
+                                                  : 'rgba(255,68,68,0.18)';
+            predEl.style.color = score >= 66 ? '#44ff66'
+                              : score >= 33 ? '#ffcc33'
+                                            : '#ff7070';
+
+            // Per-agent bars
+            const agentsEl = document.getElementById('eval-agents');
+            agentsEl.innerHTML = '';
+            const per = msg.per_agent || {};
+            const order = ['vibemind_coding','vibemind_swe_design','vibemind_research','vibemind_rowboat','vibemind_ideas'];
+            const labels = {
+                vibemind_coding:'Coding',
+                vibemind_swe_design:'SWE Design',
+                vibemind_research:'Research',
+                vibemind_rowboat:'Rowboat',
+                vibemind_ideas:'Ideas',
+            };
+            order.forEach(k => {
+                const data = per[k] || {};
+                const s = Number(data.score) || 0;
+                const row = document.createElement('div');
+                row.className = 'agent-row';
+                row.title = (data.assessment || '').slice(0, 400);
+                row.innerHTML = `
+                    <span class="agent-name">${labels[k] || k}</span>
+                    <span class="agent-bar"><span class="agent-bar-fill" style="width:${(s/25)*100}%"></span></span>
+                    <span class="agent-score">${s}/25</span>
+                `;
+                agentsEl.appendChild(row);
+            });
+
+            // TODO bubbles (top 15)
+            const todosEl = document.getElementById('eval-todos');
+            todosEl.innerHTML = '';
+            const missing = msg.missing_items || [];
+            document.getElementById('eval-todo-count').textContent = missing.length ? ` (${missing.length} total)` : '';
+            missing.slice(0, 15).forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'todo-bubble' + (idx < 5 ? ' high-prio' : '');
+                div.textContent = item;
+                todosEl.appendChild(div);
+            });
+
+            // History bars (last 5 from eval_history if available)
+            const hist = msg.eval_history || [];
+            const histEl = document.getElementById('eval-history');
+            const histTitle = document.getElementById('eval-history-title');
+            histEl.innerHTML = '';
+            if (hist.length > 1) {
+                histTitle.style.display = '';
+                hist.slice(-5).forEach(h => {
+                    const s = Number(h.total_score) || 0;
+                    const row = document.createElement('div');
+                    row.className = 'history-row';
+                    const ts = h.ts ? new Date(h.ts * 1000).toLocaleDateString() : '?';
+                    row.innerHTML = `
+                        <span>${ts}</span>
+                        <span class="history-bar"><span class="history-bar-fill" style="width:${s}%"></span></span>
+                        <span class="agent-score">${s}</span>
+                    `;
+                    histEl.appendChild(row);
+                });
+            } else {
+                histTitle.style.display = 'none';
+            }
+
+            _updateToggleBadge(score);
+        }
+
+        window.showEvalPanel = function(msg) {
+            const panel = document.getElementById('eval-panel');
+            if (!panel) return;
+
+            // Stamp render-time and persist for reload
+            msg._renderedAt = Date.now();
+            try {
+                localStorage.setItem(EVAL_STORAGE_KEY, JSON.stringify(msg));
+            } catch (e) { /* quota or private mode — skip */ }
+
+            _renderEvalContent(msg);
+
+            panel.classList.add('open');
+            panel.setAttribute('aria-hidden', 'false');
+            document.getElementById('eval-toggle').classList.add('panel-open');
+        };
+
+        window.closeEvalPanel = function() {
+            const panel = document.getElementById('eval-panel');
+            if (panel) {
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+            }
+            const toggle = document.getElementById('eval-toggle');
+            if (toggle) toggle.classList.remove('panel-open');
+        };
+
+        window.toggleEvalPanel = function() {
+            const panel = document.getElementById('eval-panel');
+            if (!panel) return;
+            if (panel.classList.contains('open')) {
+                window.closeEvalPanel();
+            } else {
+                // Re-render from cache if available
+                try {
+                    const cached = localStorage.getItem(EVAL_STORAGE_KEY);
+                    if (cached) {
+                        const msg = JSON.parse(cached);
+                        _renderEvalContent(msg);
+                    } else {
+                        // Show empty state
+                        document.getElementById('eval-panel-content').style.display = '';
+                        document.getElementById('eval-panel-data').style.display = 'none';
+                    }
+                } catch (e) { /* ignore */ }
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                document.getElementById('eval-toggle').classList.add('panel-open');
+            }
+        };
+
+        // Esc closes panel
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                const panel = document.getElementById('eval-panel');
+                if (panel && panel.classList.contains('open')) window.closeEvalPanel();
+            }
+        });
+
+        // On page load: restore last eval to the toggle-badge so user sees
+        // the score immediately even without opening the panel
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const cached = localStorage.getItem(EVAL_STORAGE_KEY);
+                if (cached) {
+                    const msg = JSON.parse(cached);
+                    _updateToggleBadge(msg.total_score);
+                }
+            } catch (e) { /* ignore */ }
+        });
     </script>
 </body>
 </html>
