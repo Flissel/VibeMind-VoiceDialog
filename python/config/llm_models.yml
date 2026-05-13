@@ -29,20 +29,20 @@ providers:
 models:
   # --- Core Orchestrator ---
   classifier:
-    provider: "claude-code"
-    model: "claude-haiku-4-5-20251001"
+    provider: "openrouter"
+    model: "openrouter/free"
     max_tokens: 2048
-    description: "Intent classification — routed through claude CLI (Max subscription)"
+    description: "Intent classification — free fallback (Brain handles most events)"
 
   rag_classifier:
-    provider: "claude-code"
-    model: "claude-haiku-4-5-20251001"
+    provider: "openrouter"
+    model: "openrouter/free"
     max_tokens: 4096
     description: "RAG-based semantic classification (Supermemory)"
 
   response:
-    provider: "claude-code"
-    model: "claude-haiku-4-5-20251001"
+    provider: "openrouter"
+    model: "openrouter/free"
     max_tokens: 2048
     description: "Response generation for voice output"
 
@@ -193,7 +193,7 @@ models:
   # --- Ideas Content ---
   format_dispatcher:
     provider: "openrouter"
-    model: "anthropic/claude-sonnet-4-5"
+    model: "openrouter/free"
     max_tokens: 4096
     description: "Ideas format dispatcher (structured formatting)"
 
@@ -304,10 +304,10 @@ models:
     description: "MiroFish simulation LLM (local Ollama)"
 
   mirofish_eval:
-    provider: "openrouter"
-    model: "openai/gpt-oss-20b:free"
+    provider: "openai"
+    model: "gpt-5.5"
     max_tokens: 4096
-    description: "MiroFish evaluation model"
+    description: "MiroFish 5-spaces readiness evaluation (used by evaluate_bubble_readiness)"
 
   mirofish_openrouter:
     provider: "openrouter"

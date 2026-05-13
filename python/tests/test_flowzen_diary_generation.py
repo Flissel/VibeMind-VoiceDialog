@@ -1,7 +1,7 @@
 """Tests for diary entry generation in periodic summary."""
 import os, tempfile
 from unittest.mock import patch, AsyncMock
-from data.database import Database
+from data.supabase_database import Database
 
 
 def _temp_db():

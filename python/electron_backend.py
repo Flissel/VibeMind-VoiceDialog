@@ -34,19 +34,31 @@ _vibemind_root = str(Path(__file__).parent.parent.parent)
 if _vibemind_root not in sys.path:
     sys.path.insert(0, _vibemind_root)
 
-# Load .env file FIRST before any other imports that might need env vars
+# Load .env files FIRST before any other imports that might need env vars
+# Priority: root Vibemind_V1/.env (master) → voice/.env (feature flags) → vibemind-os/.env
 try:
     from dotenv import load_dotenv
-    # Load from project root .env
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-        # Debug: log key env vars
-        force_sync = os.getenv("FORCE_SYNC_MODE", "false")
-        use_v2 = os.getenv("USE_VOICE_BRIDGE_V2", "false")
-        # Log before SpaceLogger is set up — emit JSON so main.js can parse it
-        import json as _j
-        print(_j.dumps({"log":True,"s":"system","l":"DEBUG","t":"","m":f".env loaded: FORCE_SYNC_MODE={force_sync}, USE_VOICE_BRIDGE_V2={use_v2}","n":"electron_backend"}), file=sys.stderr)
+    # Load order: root master first, then voice-specific overrides
+    _root_env = Path(__file__).parent.parent.parent.parent / ".env"      # Vibemind_V1/.env
+    _os_env = Path(__file__).parent.parent.parent / ".env"                # vibemind-os/.env
+    _voice_env = Path(__file__).parent.parent / ".env"                    # vibemind-os/voice/.env
+
+    _loaded = []
+    for env_path in [_root_env, _os_env, _voice_env]:
+        if env_path.exists():
+            load_dotenv(env_path, override=False)  # override=False: first-win (root wins)
+            _loaded.append(str(env_path.name) + ":" + str(env_path.parent.name))
+
+    # Debug: log key env vars
+    force_sync = os.getenv("FORCE_SYNC_MODE", "false")
+    use_v2 = os.getenv("USE_VOICE_BRIDGE_V2", "false")
+    has_openai = bool(os.getenv("OPENAI_API_KEY"))
+    import json as _j
+    print(_j.dumps({
+        "log": True, "s": "system", "l": "DEBUG", "t": "",
+        "m": f".env loaded: {','.join(_loaded)} | OPENAI_KEY={has_openai} FORCE_SYNC={force_sync}",
+        "n": "electron_backend"
+    }), file=sys.stderr)
 except ImportError:
     pass  # dotenv not installed — system env vars used
 
@@ -243,6 +255,8 @@ class Bubble:
     radius: float = 0.7
     content: List[Dict] = field(default_factory=list)  # Canvas nodes inside bubble
     db_id: Optional[str] = None  # Database UUID for this bubble
+    score: float = 0.0  # MiroFish readiness score (0-100) — drives 3D fill viz
+    status: str = ""    # 'scored' / 'raw' / 'promoted' etc.
 
     def to_dict(self) -> dict:
         result = {
@@ -251,6 +265,8 @@ class Bubble:
             "position": self.position,
             "color": self.color,
             "radius": self.radius,
+            "score": self.score,
+            "status": self.status,
         }
         # Include db_id for delete/update matching
         if self.db_id:
@@ -609,7 +625,7 @@ class ElectronBackend:
             debug_log(f"Rowboat update checker init error: {e}")
 
         # Automation_ui auto-start (Vapi Voice Control + MCP + Clawdbot)
-        # Starts the FastAPI backend at localhost:8009 if server.py exists
+        # Starts the FastAPI backend at localhost:8007 if server.py exists
         self._automation_ui_proc = None
         def _autostart_automation_ui():
             import time
@@ -724,7 +740,7 @@ class ElectronBackend:
                     for attempt in range(15):
                         time.sleep(2)
                         try:
-                            r = httpx.get("http://localhost:8009/api/health/health", timeout=2)
+                            r = httpx.get("http://localhost:8007/api/health/health", timeout=2)
                             if r.status_code == 200:
                                 debug_log("Automation_ui backend is healthy")
                                 self.send_message({"type": "automation_ui_status", "status": "running"})
@@ -856,6 +872,47 @@ class ElectronBackend:
                 message.get("bubble_id"),
                 message.get("node_id")
             )
+
+        elif msg_type == "submit_issue":
+            # Phase 11.U.I — debug-agent toast "Post to VibeMind" button.
+            # Append to the vibemind-issue-detector inbox so the issue surfaces
+            # in the user's dashboard. Best-effort: never blocks the renderer.
+            try:
+                from pathlib import Path
+                from datetime import datetime
+                title = (message.get("title") or "Error from debug-agent toast")[:200]
+                body = message.get("body") or ""
+                severity = (message.get("severity") or "ALERT").upper()
+                source = message.get("source") or "debug-agent"
+                inbox = Path(
+                    r"C:/Users/User/Desktop/Vibemind_V1/vibemind-os/issue-detector/vibemind_inbox.md"
+                )
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                icon = {"INFO": "ℹ️", "WARN": "⚠️", "ALERT": "🚨"}.get(severity, "🚨")
+                entry = (
+                    f"\n## {icon} [{severity}] {ts} — {title}\n\n"
+                    f"**Source:** {source}\n\n"
+                    f"{body}\n\n---\n"
+                )
+                if inbox.exists():
+                    existing = inbox.read_text(encoding="utf-8")
+                else:
+                    inbox.parent.mkdir(parents=True, exist_ok=True)
+                    existing = "# VibeMind Issue Detector — Notification Inbox\n"
+                inbox.write_text(existing + entry, encoding="utf-8")
+                self.send_message({
+                    "type": "issue_submitted",
+                    "ok": True,
+                    "inbox": str(inbox),
+                })
+                debug_log(f"[submit_issue] appended to {inbox}")
+            except Exception as e:
+                debug_log(f"[submit_issue] failed: {e}")
+                self.send_message({
+                    "type": "issue_submitted",
+                    "ok": False,
+                    "error": str(e),
+                })
         
         elif msg_type == "start_project_preview":
             project_id = message.get("project_id")
@@ -1290,6 +1347,9 @@ class ElectronBackend:
         elif msg_type == "n8n_chat_deploy":
             asyncio.create_task(self._n8n.handle_n8n_chat_deploy(message))
 
+        elif msg_type == "n8n_claude_build":
+            asyncio.create_task(self._n8n.handle_n8n_claude_build(message))
+
         elif msg_type == "n8n_chat_history":
             asyncio.create_task(self._n8n.handle_n8n_chat_history(message))
 
@@ -1690,7 +1750,7 @@ async def main():
     try:
         from spaces.video.media_server import start_media_server
         start_media_server()
-        debug_log("Media server started on port 9877")
+        debug_log("Media server started on port 8977")
     except Exception as e:
         debug_log(f"Media server failed to start: {e}")
 

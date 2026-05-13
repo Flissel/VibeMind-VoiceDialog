@@ -18,7 +18,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from data.database import get_database, reset_database
+from data.supabase_database import get_database, reset_database
 
 
 def flush_database(confirm: bool = False, reset_schema: bool = False) -> dict:

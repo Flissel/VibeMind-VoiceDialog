@@ -56,6 +56,13 @@
         }
     };
 
+    // Note: bubble_deleted handler lives in index.html:1189 (legacy dispatch).
+    // bubbles_sync handler lives in index.html:751 (calls multiverseApp.syncBubbles).
+    // Both already wire to multiverseApp.removeBubble() / .syncBubbles().
+    // Phase 11.P: backend-side fix is in canvas_manager.get_all_bubbles
+    // (force_reload from DB on every requestBubbles) so the existing UI
+    // path picks up external wipes correctly.
+
     H['ideas_listed'] = function(msg) {
         if (msg.ideas && msg.bubble_id) {
             console.log('[UI] Ideas listed with indices:', msg.ideas.length, 'in bubble', msg.bubble_id);

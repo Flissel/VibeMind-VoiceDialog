@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from data.video_project_repository import VideoProjectRepository
 from data.video_repository import VideoRepository
-from data.database import get_database, reset_database
+from data.supabase_database import get_database, reset_database
 
 VIDEO_TEAM_DIR = r"C:\Users\User\Desktop\Video_Team"
 

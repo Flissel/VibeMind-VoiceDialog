@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import Idea
 from .repository_utils import generate_id, normalize_text, _levenshtein
 
@@ -76,11 +76,32 @@ class IdeasRepository:
         row = self.db.fetch_one("SELECT * FROM ideas WHERE id = ?", (idea_id,))
         return Idea.from_dict(dict(row)) if row else None
 
+    # Phase 11.P — alias for callers that expect SQLAlchemy-style naming.
+    # bubble_tools.update_bubble + several others call get_by_id(); without
+    # this alias they crashed with AttributeError.
+    def get_by_id(self, idea_id: str) -> Optional[Idea]:
+        return self.get(idea_id)
+
     def get_by_title(self, title: str) -> Optional[Idea]:
         """Get idea by title (case-insensitive partial match)"""
         row = self.db.fetch_one(
             "SELECT * FROM ideas WHERE LOWER(title) LIKE LOWER(?) LIMIT 1",
             (f"%{title}%",)
+        )
+        return Idea.from_dict(dict(row)) if row else None
+
+    # Phase 11.U — exact-match lookup for system bubbles (Inbox, etc).
+    # The fuzzy LIKE in get_by_title was creating duplicates: under
+    # parallel load two callers could both search for "Inbox", both get
+    # None back, both create one. With exact-match + small probability
+    # of dup we can at least catch it.
+    def get_by_title_exact(self, title: str) -> Optional[Idea]:
+        """Get idea by exact title (case-insensitive). Used for system
+        bubbles like Inbox where partial-match would over-match."""
+        row = self.db.fetch_one(
+            "SELECT * FROM ideas WHERE LOWER(title) = LOWER(?) "
+            "AND parent_id IS NULL LIMIT 1",
+            (title,),
         )
         return Idea.from_dict(dict(row)) if row else None
 

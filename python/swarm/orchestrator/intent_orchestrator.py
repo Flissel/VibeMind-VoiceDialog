@@ -975,6 +975,36 @@ class IntentOrchestrator:
                     except Exception:
                         pass
 
+                    # 0. REGEX FAST-PATH — match obvious command patterns without LLM/Brain.
+                    # Saves us when OpenRouter is rate-limited or Brain is undertrained.
+                    # Runs BEFORE Brain/LLM so it short-circuits quickly.
+                    _regex_fast_paths = [
+                        # (event_type, param_key, pattern)
+                        ("bubble.delete", "bubble_name",
+                         r"^\s*(?:l[öo]esche|entferne|delete|remove)\s+(?:die\s+|the\s+)?(?:bubble|space)\s+(.+?)\s*[.!?]?\s*$"),
+                        ("bubble.enter", "bubble_name",
+                         r"^\s*(?:geh|oeffne|open|enter|wechsle|betrete)\s+(?:in\s+|zu\s+|to\s+|die\s+)?(?:bubble|space)\s+(.+?)\s*[.!?]?\s*$"),
+                        ("bubble.find", "query",
+                         r"^\s*(?:finde|suche|find|search)\s+(?:bubble|space)\s+(.+?)\s*[.!?]?\s*$"),
+                    ]
+                    import re as _re_mod
+                    for _evt, _pkey, _pat in _regex_fast_paths:
+                        _m = _re_mod.match(_pat, intent_text, _re_mod.IGNORECASE)
+                        if _m:
+                            _val = _m.group(1).strip().rstrip(".,!?").strip()
+                            if _val:
+                                _pre_event_type = _evt
+                                _classification = {
+                                    "event_type": _evt,
+                                    "parameters": {_pkey: _val},
+                                    "payload": {_pkey: _val},
+                                }
+                                logger.info(
+                                    f"[RegexFastPath] '{_evt}' param {_pkey}='{_val}' "
+                                    f"— skipping Brain/LLM entirely"
+                                )
+                                break
+
                     # 1. Brain-first attempt (only when graduated AND single-step
                     #    AND the event doesn't need LLM-extracted parameters).
                     #
@@ -986,7 +1016,7 @@ class IntentOrchestrator:
                     # safe to execute without LLM params — they're lists,
                     # stats, greetings, toggles, etc.
                     _user_id_for_brain = getattr(context, 'user_id', None) if context else None
-                    if (not _is_multi_step
+                    if (_classification is None and not _is_multi_step
                             and self._brain_event_shadow
                             and (self._brain_event_shadow.brain_active
                                  or self._brain_event_force_active)):
@@ -995,10 +1025,56 @@ class IntentOrchestrator:
                                 intent_text,
                                 user_id=_user_id_for_brain,
                             )
+                            # Fast-path: Brain says bubble.delete / bubble.enter / idea.delete
+                            # → extract name with regex, skip LLM entirely.
+                            # This avoids LLM rate limits for simple "Lösche Bubble X" commands.
+                            _regex_extractable = {
+                                "bubble.delete": ("bubble_name", [
+                                    r"(?:l[öo]esche|entferne|delete|remove)\s+(?:die\s+|the\s+)?(?:bubble|space)\s+(.+?)(?:\s*$|[,.!?])",
+                                    r"(?:bubble|space)\s+(.+?)\s+(?:l[öo]eschen|entfernen|delete|remove)",
+                                ]),
+                                "bubble.enter": ("bubble_name", [
+                                    r"(?:geh|oeffne|open|enter|wechsle|betrete)\s+(?:in\s+|zu\s+|to\s+|die\s+)?(?:bubble|space)\s+(.+?)(?:\s*$|[,.!?])",
+                                ]),
+                                "bubble.find": ("query", [
+                                    r"(?:finde|suche|find|such)\s+(?:bubble|space)\s+(.+?)(?:\s*$|[,.!?])",
+                                ]),
+                                "idea.delete": ("idea_name", [
+                                    r"(?:l[öo]esche|entferne|delete|remove)\s+(?:die\s+|the\s+)?(?:idee|idea|note|notiz)\s+(.+?)(?:\s*$|[,.!?])",
+                                ]),
+                            }
+                            _bc_event = brain_cls.get("event_type", "") if brain_cls else ""
+                            _bc_conf = brain_cls.get("confidence", 0) if brain_cls else 0
+
                             if (brain_cls
-                                    and brain_cls.get("confidence", 0) >= self._BRAIN_EVENT_MIN_CONFIDENCE
-                                    and brain_cls.get("event_type", "") in _BRAIN_PARAMETERLESS_EVENTS):
-                                _pre_event_type = brain_cls.get("event_type", "")
+                                    and _bc_conf >= self._BRAIN_EVENT_MIN_CONFIDENCE
+                                    and _bc_event in _regex_extractable):
+                                import re as _re
+                                param_key, patterns = _regex_extractable[_bc_event]
+                                extracted = None
+                                for pat in patterns:
+                                    m = _re.search(pat, intent_text, _re.IGNORECASE)
+                                    if m:
+                                        extracted = m.group(1).strip().rstrip(".,!?").strip()
+                                        break
+                                if extracted:
+                                    _pre_event_type = _bc_event
+                                    _brain_routing_id = brain_cls.get("routing_id", "")
+                                    _classification = {
+                                        "event_type": _pre_event_type,
+                                        "parameters": {param_key: extracted},
+                                        "payload": {param_key: extracted},
+                                        "_brain_routing_id": _brain_routing_id,
+                                    }
+                                    logger.info(
+                                        f"[BrainEvent+Regex] '{_pre_event_type}' ({_bc_conf:.0%}) "
+                                        f"param {param_key}='{extracted}' — skipping LLM"
+                                    )
+
+                            if (_classification is None and brain_cls
+                                    and _bc_conf >= self._BRAIN_EVENT_MIN_CONFIDENCE
+                                    and _bc_event in _BRAIN_PARAMETERLESS_EVENTS):
+                                _pre_event_type = _bc_event
                                 _brain_routing_id = brain_cls.get("routing_id", "")
                                 _classification = {
                                     "event_type": _pre_event_type,
@@ -1094,10 +1170,32 @@ class IntentOrchestrator:
                     # 2. LLM fallback (always reached when brain didn't hit)
                     if _classification is None:
                         try:
-                            from swarm.orchestrator.intent_classifier import IntentClassifier
-                            _classifier = IntentClassifier()
-                            _classification = await _classifier.classify(intent_text)
-                            _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                            # Phase 2: YAML-driven classifier for Ideas-Space intents.
+                            # When USE_YAML_CLASSIFIER=true, try YAML first. It covers 37
+                            # bubble.*/idea.* events with compact few-shots. If it returns
+                            # conversation.unknown, fall through to the legacy classifier
+                            # which covers the remaining 94 non-Ideas events.
+                            _use_yaml = (
+                                os.getenv("USE_YAML_CLASSIFIER", "false").lower() == "true"
+                            )
+                            if _use_yaml:
+                                from swarm.orchestrator.yaml_classifier import get_yaml_classifier
+                                _classifier = get_yaml_classifier()
+                                _classification = await _classifier.classify(intent_text)
+                                _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                                # YAML only covers Ideas-Space — if it returned unknown,
+                                # retry with legacy classifier which covers all 131 events.
+                                if _pre_event_type == "conversation.unknown":
+                                    logger.info(f"[YamlClassifier] unknown, falling back to legacy")
+                                    from swarm.orchestrator.intent_classifier import IntentClassifier
+                                    _legacy = IntentClassifier()
+                                    _classification = await _legacy.classify(intent_text)
+                                    _pre_event_type = _classification.get("event_type", "") if _classification else ""
+                            else:
+                                from swarm.orchestrator.intent_classifier import IntentClassifier
+                                _classifier = IntentClassifier()
+                                _classification = await _classifier.classify(intent_text)
+                                _pre_event_type = _classification.get("event_type", "") if _classification else ""
                             # Brain learns from the LLM ground truth (shadow training),
                             # personalized to the current user when available.
                             if self._brain_event_shadow and _pre_event_type:
@@ -1141,7 +1239,7 @@ class IntentOrchestrator:
                         if tool_name in self._tool_executors:
                             tool_fn = self._tool_executors[tool_name]
                             try:
-                                tool_params = (_classification.get("parameters") or {}) if _classification else {}
+                                tool_params = ((_classification.get("parameters") or _classification.get("payload")) or {}) if _classification else {}
                                 # Patch 2: optionally route through OpenFang agent
                                 # when USE_OPENFANG_DIRECT=true AND the event
                                 # actually needs remote execution. Parameterless
@@ -1189,7 +1287,12 @@ class IntentOrchestrator:
                                     result = tool_fn(tool_params)
                                     if asyncio.iscoroutine(result):
                                         result = await result
-                                    response = result.get("message", str(result)) if isinstance(result, dict) else str(result)
+                                    if result is None:
+                                        response = f"[{tool_name}] returned no result"
+                                    elif isinstance(result, dict):
+                                        response = result.get("message", str(result))
+                                    else:
+                                        response = str(result)
                                 # Shadow: Brain observes this routing decision (space routing)
                                 if self._brain_shadow:
                                     asyncio.create_task(self._brain_shadow.observe(

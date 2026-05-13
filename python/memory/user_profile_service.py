@@ -88,7 +88,7 @@ class UserProfileService:
         content = f"User preference: {key} = {value}"
 
         try:
-            await self._client.documents.create(
+            await self._client.documents.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"pref_{self.user_id}_{key}",
@@ -158,7 +158,7 @@ class UserProfileService:
         sanitized_intent = intent_type.replace(".", "_")
 
         try:
-            await self._client.memories.add(
+            await self._client.documents.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"habit_{self.user_id}_{sanitized_intent}_{now.strftime('%Y%m%d%H%M%S')}",

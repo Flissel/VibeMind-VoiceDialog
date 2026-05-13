@@ -1,0 +1,2855 @@
+bubble.list:
+  variants:
+  - Liste alle Bubbles
+  - Zeig mir meine Bubbles
+  - Zeige alle Spaces
+  - Welche Bubbles habe ich
+  - Was für Bereiche gibt es
+  - List bubbles
+  - Show all spaces
+  - Show my bubbles
+  - Liste der Spaces
+  - Uebersicht Bubbles
+  - list all bubbles
+  - Gib mir alle Bubbles
+  - Zeig mir alle Bubbles
+  - Zeig Bubbles
+  - Liste meine Bubbles auf
+  - Liste alle Bubbles auf
+  - Welche Bubbles habe ich?
+  - Was sind meine Bubbles?
+  - Wie viele Bubbles gibt es?
+  - Wie heiÃŸen meine Bubbles?
+  - Was habe ich an Bubbles?
+  - Gib mir eine Ãœbersicht der Bubbles
+  - Zeige meine Bubble-Liste
+  - Alle Bubbles anzeigen
+  - Meine Bubbles bitte
+  - Bubbles anzeigen
+  - Show me my bubbles
+  - Show all my bubbles
+  - Show bubbles
+  - List my bubbles
+  - What bubbles do I have?
+  - What are my bubbles?
+  - How many bubbles do I have?
+  - Which bubbles are there?
+  - Can you show me my bubbles?
+  - Display my bubbles
+  - Tell me my bubbles
+  - My bubbles
+  - Let me see my bubbles
+  - Give me a bubble overview
+  - âœ… Imperative vs. interrogative forms
+  - âœ… Formal vs. casual language
+  - âœ… Full vs. abbreviated utterances
+  - âœ… Different verb choices (show, list, display, tell)
+  - âœ… "All" vs. "my" scope indicators
+  - Would you like me to generate phrases for other intents (e.g., `bubble.create`, `idea.list`, `code.status`)?
+  - what bubbles do I have
+  - show all bubbles
+  - get bubbles
+  - show bubble list
+  - fetch my bubbles
+  - what are my bubbles
+  - display bubbles
+  - show my bubble list
+  - get my bubbles
+  - Blasen auflisten
+  - zeige meine Blasen
+  - zeige Blasen
+  - welche Blasen habe ich
+  - Blasen anzeigen
+  - meine Blasen auflisten
+  - alle Blasen anzeigen
+  - meine Blasen anzeigen
+  - zeige alle Blasen
+  - Blasenliste anzeigen
+  - alle meine Blasen zeigen
+  - Blasen abrufen
+  - welche Blasen sind das
+  - meine Blasenliste
+  - Blasen zusammenfassen
+  placeholders: &id001
+    name:
+    - Marketing
+    - Test
+    - Forschung
+    - Ideen
+    - Arbeit
+    - Privat
+    - Notizen
+    - Projects
+    topic:
+    - AI
+    - Marketing
+    - Coding
+    query:
+    - latest news
+    - AI trends
+bubble.create:
+  variants:
+  - Erstelle Bubble {name}
+  - Erstelle eine Bubble {name}
+  - Erstelle einen Space {name}
+  - Neue Bubble {name}
+  - Neuer Space {name}
+  - Lege Bubble {name} an
+  - Mach einen Space {name}
+  - Bubble {name} erstellen
+  - Create bubble {name}
+  - New space {name}
+  - Add bubble {name}
+  - Erstelle eine neue Bubble Marketing
+  - Erstelle eine Bubble fÃ¼r Projektmanagement
+  - Mach mir eine Bubble namens "Teamkommunikation
+  - 'Neue Bubble: KI-Integration'
+  - Bubble erstellen fÃ¼r Dokumentation
+  - Erstelle ein Workspace fÃ¼r die neue Kampagne
+  - Neue Bubble mit dem Namen Design-System
+  - Erstelle mir eine Blase fÃ¼r die Roadmap
+  - Mach eine neue Bubble namens Brainstorming
+  - Erstelle ein neues Space fÃ¼r das Team
+  - Bubble fÃ¼r API-Design erstellen
+  - 'Neue Bubble: Customer Feedback'
+  - Erstelle mir eine Bubble fÃ¼r die PrÃ¤sentation
+  - Workspace erstellen fÃ¼r Q2-Planung
+  - Neue Bubble namens Anforderungssammlung
+  - Erstelle einen neuen Bubble-Space
+  - Bubble fÃ¼r Sprint Planning erstellen
+  - Mach mir eine neue Bubble fÃ¼r Meetings
+  - 'Erstelle eine Bubble: Kundenkommunikation'
+  - Neue Bubble fÃ¼r die Recherche
+  - Create a new bubble for marketing
+  - Create a bubble called product roadmap
+  - Make me a workspace named analytics
+  - 'Create a new bubble: team collaboration'
+  - Create bubble for API documentation
+  - 'New bubble: customer requirements'
+  - Create a bubble for design system
+  - Make a new bubble named project planning
+  - Create workspace for brainstorming
+  - Bubble for sprint tracking create
+  - New bubble called stakeholder feedback
+  - 'Create a bubble: research findings'
+  - Make me a new bubble for meeting notes
+  - Create bubble named competitive analysis
+  - New workspace for team sync
+  - Create a bubble for onboarding
+  - 'Make a new bubble: technical specs'
+  - Create bubble called project timeline
+  - New bubble for architecture decisions
+  - Create workspace named team resources
+  - Create a new space for cooking
+  - Make a bubble for project ideas
+  - Create a new bubble | Erstelle eine neue Bubble
+  - Add a bubble | FÃ¼ge eine Bubble hinzu
+  - New bubble | Neue Bubble
+  - Make a bubble | Mache eine Bubble
+  - Start a bubble | Starte eine Bubble
+  - Open a new bubble | Ã–ffne eine neue Bubble
+  - Create bubble | Erstelle Bubble
+  - Add a new idea | FÃ¼ge eine neue Idee hinzu
+  - New idea | Neue Idee
+  - Make an idea | Mache eine Idee
+  - Start an idea | Starte eine Idee
+  - Create an idea | Erstelle eine Idee
+  - Add idea | FÃ¼ge Idee hinzu
+  - Can you create a bubble | Kannst du eine Bubble erstellen
+  - Please create a bubble | Bitte erstelle eine Bubble
+  - Create a new bubble for me | Erstelle eine neue Bubble fÃ¼r mich
+  - I want to create a bubble | Ich mÃ¶chte eine Bubble erstellen
+  - Let me create a bubble | Lass mich eine Bubble erstellen
+  - Create bubble with title | Erstelle Bubble mit Titel
+  - New bubble please | Neue Bubble bitte
+  - I need a new bubble | Ich brauche eine neue Bubble
+  - Make a new bubble | Mache eine neue Bubble
+  - Start creating | Starte die Erstellung
+  - Open a bubble | Ã–ffne eine Bubble
+  - Add a new bubble | FÃ¼ge eine neue Bubble hinzu
+  - Create workspace bubble | Erstelle Workspace Bubble
+  - Begin a bubble | Beginne eine Bubble
+  - Spawn a bubble | Erzeuge eine Bubble
+  - Generate a bubble | Generiere eine Bubble
+  - Create a fresh bubble | Erstelle eine frische Bubble
+  placeholders:
+    name:
+    - Marketing
+    - Projects
+    - Arbeit
+    - Privat
+    - Forschung
+    - Ideen
+    - Notizen
+    - Test
+    - KI
+    - Design
+    - Coding
+    - Finanzen
+bubble.enter:
+  variants:
+  - Geh in Bubble {name}
+  - Oeffne Bubble {name}
+  - Oeffne Space {name}
+  - Wechsle zu {name}
+  - Betrete {name}
+  - Zeig mir {name}
+  - Enter bubble {name}
+  - Go to {name}
+  - In den Bereich {name}
+  - Geh zu {name}
+  - Geh in Marketing
+  - Ã–ffne Marketing
+  - Navigiere zu Design
+  - Wechsel zu Research
+  - Gehe zu Sales
+  - Betrete die Ideas Bubble
+  - Zeig mir Marketing
+  - Lass mich in Design
+  - Gib mir Zugang zu Marketing
+  - Bitte navigiere zu Research
+  - Ã–ffne die Marketing Bubble
+  - Zeige mir die Sales Bubble
+  - Tritt der Design Bubble bei
+  - Geh rein in Coding
+  - Nimm mich zu Strategy
+  - Zeig die Brainstorm Bubble
+  - Lass mich zu Production
+  - Schalt auf Marketing um
+  - Open Marketing
+  - Go to Design
+  - Enter Sales
+  - Navigate to Research
+  - Switch to Ideas
+  - Open the Marketing bubble
+  - Take me to Coding
+  - Show me Design
+  - Can I open the Marketing bubble?
+  - Can you take me to Research?
+  - May I enter Design?
+  - Could you show me Sales?
+  - Please open Marketing
+  - Take me to the Ideas bubble, please
+  - I'd like to enter Coding
+  - Could you navigate to Research?
+  - Show me the Design bubble, please
+  - Geh zu Marketing (Go to Marketing)
+  - Lass mich zu Design (Let me to Design)
+  - Zeig mir die Sales Bubble
+  - Switch me to Research, bitte
+  - Open Ideas, danke
+  - Enter cooking space
+  - Go into my project ideas
+  - Open the recipes bubble
+  - Geh in 2
+  - Enter bubble / Blase betreten
+  - Open bubble / Blase Ã¶ffnen
+  - Jump into bubble / In die Blase springen
+  - Dive into this bubble / In diese Blase eintauchen
+  - Go to bubble / Zur Blase gehen
+  - Let me into the bubble / Lass mich in die Blase
+  - Navigate to bubble / Zur Blase navigieren
+  - Take me to the bubble / Bring mich zur Blase
+  - Switch to bubble / Zur Blase wechseln
+  - Focus on this bubble / Auf diese Blase konzentrieren
+  - Enter the bubble / Betrete die Blase
+  - Open this bubble / Ã–ffne diese Blase
+  - Explore this bubble / Erkunde diese Blase
+  - Go inside the bubble / Geh in die Blase
+  - Let's enter the bubble / Lassen Sie uns die Blase betreten
+  - Move to bubble / Zur Blase wechseln
+  - Access bubble / Auf Blase zugreifen
+  - Launch bubble / Blase starten
+  - Start exploring bubble / Beginne mit der Erkundung der Blase
+  - Enter the space / Den Raum betreten
+  - Get into bubble / Geh in die Blase
+  - Bring up bubble / Blase anzeigen
+  - Show me the bubble / Zeige mir die Blase
+  - Let's dive into bubble / Lassen Sie uns in die Blase eintauchen
+  - Enter my bubble / Betrete meine Blase
+  - Access this bubble / Auf diese Blase zugreifen
+  - Jump to bubble / Zur Blase springen
+  - Open the bubble / Ã–ffne die Blase
+  - Take me into bubble / Bring mich in die Blase
+  - Let's go into this bubble / Lassen Sie uns in diese Blase gehen
+  placeholders:
+    name:
+    - Marketing
+    - Projects
+    - Arbeit
+    - Privat
+    - Forschung
+    - Ideen
+    - Test
+bubble.find:
+  variants:
+  - Suche Bubble {name}
+  - Finde Bubble {name}
+  - Wo ist Bubble {name}
+  - Such nach Bubble {name}
+  - Find bubble {name}
+  - Search bubble {name}
+  - Finde Bubble Marketing
+  - Wo ist meine Bubble Projekt X?
+  - Zeig mir die Bubble mit dem Namen Design
+  - Suche Bubble API
+  - Gibt es eine Bubble namens Research?
+  - Finde alle Bubbles mit Code
+  - Welche Bubble enthÃ¤lt meine Notizen?
+  - Kann ich die Bubble Dashboard finden?
+  - Zeig mir Bubble zum Thema KI
+  - Finde meine wichtigste Bubble
+  - Wo ist die Bubble Brainstorm?
+  - Suche nach Bubble Workflow
+  - Find bubble Marketing
+  - Where is my bubble Project X?
+  - Show me the bubble named Design
+  - Search for bubble API
+  - Do I have a bubble called Research?
+  - Find all bubbles with Code
+  - Which bubble contains my notes?
+  - Can I find the Dashboard bubble?
+  - Show me bubbles about AI
+  - Find my most important bubble
+  - Where's the Brainstorm bubble?
+  - Search for bubble Workflow
+  - '**Mixed Intent Variations** (might need disambiguation):'
+  - Finde die Bubble
+  - Show me that bubble
+  - Welche Bubbles passen zu X?
+  - Find bubbles related to Y
+  - 'Would you like me to:'
+  - Add parameter extraction examples (e.g., extracting bubble names)?
+  - Generate phrases for other bubble intents (`.list`, `.enter`, `.create`)?
+  - Create a training dataset file?
+  - Such nach Bubble Marketing
+  - Finde Bubble Swarm Team
+  - Wo ist die Bubble Finanzen?
+  placeholders:
+    name:
+    - Marketing
+    - Projects
+    - Arbeit
+    - Forschung
+bubble.exit:
+  variants:
+  - Zurueck
+  - Raus
+  - Verlasse Bubble
+  - Verlasse Space
+  - Zur Uebersicht
+  - Schliessen
+  - Exit
+  - Back
+  - Beende Bubble
+  - Geh zurÃ¼ck
+  - Raus hier
+  - Ich geh raus
+  - Mach mich raus
+  - Bring mich zurÃ¼ck
+  - Geh nach oben
+  - Zur Ãœbersicht
+  - ZurÃ¼ck zum Ãœberblick
+  - Aus dieser Bubble raus
+  - Ich will raus
+  - SchlieÃŸ die aktuelle Bubble
+  - Verlasse den aktuellen Space
+  - Geh aus dieser Bubble
+  - Lass mich diese Bubble verlassen
+  - Ich mÃ¶chte diesen Bubble verlassen
+  - Beende diese Bubble-Sitzung
+  - Weg hier
+  - Fertig damit
+  - Lass mich raus hier
+  - Go back
+  - Back to the overview
+  - Get me out of here
+  - I'm out
+  - Let me out
+  - Close this bubble
+  - Back up
+  - Close the current bubble
+  - Leave this space
+  - Exit the current bubble
+  - I want to leave this bubble
+  - End this bubble session
+  - Take me out of here
+  - Get out
+  - Done here
+  - Move on
+  - That's it
+  - See you
+  - Exit this space
+  - Return to multiverse
+  - Leave
+  - exit bubble|exit_bubble
+  - leave bubble|bubble verlassen
+  - go back|zurÃ¼ck gehen
+  - back to main|zurÃ¼ck zur Hauptseite
+  - close bubble|bubble schlieÃŸen
+  - exit space|space verlassen
+  - return home|zur Startseite
+  - done here|fertig hier
+  - go home|nach Hause gehen
+  - leave space|raum verlassen
+  - close this|schlieÃŸe das
+  - exit now|jetzt verlassen
+  - get out of here|hier rausgehen
+  - finish bubble|bubble beenden
+  - close space|raum schlieÃŸen
+  - return to main|zurÃ¼ck zum HauptmenÃ¼
+  - escape bubble|aus bubble entkommen
+  - leave this space|diesen raum verlassen
+  - back to start|zurÃ¼ck zum Start
+  - previous screen|vorheriger Bildschirm
+  - close current|aktuelle schlieÃŸen
+  - exit this|das verlassen
+  - back out|aussteigen
+  - leave now|jetzt gehen
+  - go back home|zurÃ¼ck nach Hause gehen
+  - end bubble|bubble beenden
+  - close this bubble|diese bubble schlieÃŸen
+  - main menu|HauptmenÃ¼
+  placeholders: *id001
+bubble.delete:
+  variants:
+  - Loesche Bubble {name}
+  - Loesche die Bubble {name}
+  - Loesche Space {name}
+  - Entferne Bubble {name}
+  - Entferne Space {name}
+  - Bubble {name} loeschen
+  - Delete bubble {name}
+  - Remove space {name}
+  - Bubble {name} weg
+  - Kille Bubble {name}
+  - Loesch den Space {name}
+  - 'I''ll generate diverse phrases for the `bubble.delete` intent in both German and English:'
+  - LÃ¶sche diese Bubble
+  - Entferne diese Bubble
+  - Bubble lÃ¶schen
+  - Diese Bubble weg
+  - Mach diese Bubble weg
+  - LÃ¶sch das
+  - Entferne das
+  - LÃ¶sche den Marketing Bubble
+  - Entfern die Idee
+  - Dieser Bubble soll weg
+  - ZerstÃ¶re diese Bubble
+  - Bubble entfernen
+  - Diese Workspace lÃ¶schen
+  - SchmeiÃŸ das weg
+  - Raus damit
+  - Vergiss das
+  - LÃ¶sche alles hier
+  - Entferne den aktuellen Bubble
+  - Weg mit dem Bubble
+  - Delete this bubble
+  - Remove this bubble
+  - Delete bubble
+  - Get rid of this
+  - Remove this idea
+  - Erase this bubble
+  - Delete the bubble
+  - Trash this
+  - Remove it
+  - Get rid of it
+  - Destroy this bubble
+  - Delete the Marketing bubble
+  - Remove the current bubble
+  - Wipe this out
+  - Kill this bubble
+  - Discard this
+  - Remove the workspace
+  - Drop this bubble
+  - Forget about this
+  - Clear this bubble
+  - Delete this space
+  - Remove the cooking bubble
+  - remove bubble
+  - trash this bubble
+  - get rid of this bubble
+  - clear bubble
+  - erase bubble
+  - delete idea
+  - discard bubble
+  - delete current bubble
+  - take out this bubble
+  - destroy bubble
+  - Blase lÃ¶schen
+  - Blase entfernen
+  - Diese Blase lÃ¶schen
+  - Idee lÃ¶schen
+  - Blase weg
+  - Blase raus
+  - Diesen Bubble lÃ¶schen
+  - Blase lÃ¶schen bitte
+  - Weg mit der Blase
+  - LÃ¶sch die Blase
+  - Entfern diese Blase
+  - LÃ¶sch diese Idee
+  - Blase auslÃ¶schen
+  - Aus mit der Blase
+  - Delete all bubbles except
+  - Keep only
+  - Remove all bubbles except
+  - Clear all bubbles except
+  - Keep these bubbles
+  - Delete everything except
+  - LÃ¶sche alle Bubbles auÃŸer
+  - Behalte nur
+  - Entferne alle Bubbles auÃŸer
+  - Alle Bubbles auÃŸer lÃ¶schen
+  - Nur diese Bubbles behalten
+  - LÃ¶sche alles auÃŸer
+  - Remove all except these
+  - Keep just
+  - Purge all bubbles except
+  - Alle auÃŸer lÃ¶schen
+  - Behalte alles auÃŸer
+  - Entferne alles auÃŸer
+  - Delete all but
+  - Keep these
+  - Wipe all bubbles except
+  - Alle Bubbles lÃ¶schen auÃŸer
+  - Nur diese behalten
+  - Alles lÃ¶schen auÃŸer
+  - Clear everything except
+  - Preserve only
+  - Remove other bubbles
+  - Alle anderen Bubbles lÃ¶schen
+  - Behalte nur diese
+  - Entferne alle anderen
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Forschung
+    - Ideen
+    - Projects
+    - Arbeit
+bubble.stats:
+  variants:
+  - Wie viele Ideen hab ich
+  - Bubble Info
+  - Zusammenfassung dieses Bereichs
+  - Statistik Bubble
+  - Bubble stats
+  - Wie gross ist der Space
+  - Zeig mir die Bubble-Statistiken
+  - Wie viele Bubbles habe ich?
+  - Gib mir einen Ãœberblick Ã¼ber meine Bubbles
+  - Statistiken fÃ¼r die Bubbles
+  - Bubble-Metriken anzeigen
+  - Wie aktiv sind meine Bubbles?
+  - Bubble-Performance anzeigen
+  - Ich mÃ¶chte Statistiken sehen
+  - Show me bubble statistics
+  - How many bubbles do I have?
+  - Give me an overview of my bubbles
+  - Show bubble metrics
+  - Display bubble stats
+  - What's my bubble activity?
+  - Show me bubble performance
+  - I want to see statistics
+  - Welche Bubbles sind am aktivsten?
+  - Zeig mir die Top-Bubbles
+  - Statistik meiner Bubbles
+  - Wie geht es meinen Bubbles?
+  - Which bubbles are most active?
+  - Show me the top bubbles
+  - Bubble summary
+  - Statistics of my bubbles
+  - How are my bubbles doing?
+  - Stats fÃ¼r Bubbles
+  - Bubble-Status bitte
+  - Gib mir die Zahlen
+  - Wie sieht's aus mit meinen Bubbles?
+  - Bubble stats, please
+  - Give me the numbers
+  - What's the status of my bubbles?
+  - Show me my bubble data
+  - '**To implement this in your classifier**, add to `CLASSIFIER_PROMPT_TEMPLATE` in `intent_classifier.py`:'
+  - 'bubble.stats": ['
+  - Show me bubble statistics",
+  - How many bubbles do I have?",
+  - Zeig mir die Bubble-Statistiken",
+  - Bubble metrics",
+  - Would you like me to integrate these phrases into the classifier or check the current `bubble.stats` implementation?
+  - How developed is this idea?
+  - What
+  placeholders: *id001
+bubble.current:
+  variants:
+  - Wo bin ich
+  - Welcher Space
+  - Welche Bubble
+  - Aktueller Bereich
+  - Current bubble
+  - Where am I
+  - 'I''ll generate diverse German and English phrases that should trigger the `bubble.current` intent:'
+  - What bubble am I in?
+  - Which bubble is active?
+  - Show me my current bubble
+  - What's the current bubble?
+  - Show current
+  - Where am I?
+  - What space am I in?
+  - My current bubble
+  - Which bubble am I in right now?
+  - Tell me the current bubble
+  - What's my location?
+  - Show the active bubble
+  - Current space
+  - Am I in a bubble?
+  - Welche Bubble bin ich gerade drin?
+  - Welche Bubble ist aktiv?
+  - Zeig mir meine aktuelle Bubble
+  - Was ist die aktuelle Bubble?
+  - Aktuelle Bubble
+  - Zeig aktuelle
+  - Wo bin ich?
+  - In welcher Bubble bin ich?
+  - Meine aktuelle Bubble
+  - Welche Bubble ist gerade offen?
+  - Sag mir die aktuelle Bubble
+  - Wo befinde ich mich?
+  - Zeige die aktive Bubble
+  - Aktueller Raum
+  - Bin ich in einer Bubble?
+  - Current?" (English)
+  - Aktuelle?" (German)
+  - Show where I am
+  - Zeig wo ich bin
+  - What's my bubble?
+  - Meine Bubble?
+  - '**Direct questions** - "What bubble am I in?'
+  - '**Imperatives** - "Show me", "Tell me'
+  - '**Single word triggers** - "Current?", "Aktuelle?'
+  placeholders: {}
+bubble.update:
+  variants:
+  - Benenne Bubble {name} um
+  - Aendere Bubble {name}
+  - Update bubble {name}
+  - Rename space {name}
+  - Benenne Marketing um zu Marketing-Strategie
+  - Ã„ndere den Titel von Sales zu Sales-Prozess
+  - Update die Beschreibung von API Design
+  - Aktualisiere die Bubble und schreib neu
+  - Schreib den Namen um in Produktentwicklung
+  - Gib der Bubble einen neuen Namen
+  - Ã„ndere Marketing auf Marketing V2
+  - 'Update: Neue Beschreibung fÃ¼r Design'
+  - Modifiziere die Bubble Details
+  - Aktualisier den Namen zu Kundenanalyse
+  - Rename die aktuelle Bubble
+  - Ã„ndere die Bubble Eigenschaften
+  - 'Schreib um: Marketing â†’ Marketing-Kampagne'
+  - Update die Metadaten
+  - Gib neue Beschreibung ein
+  - Update the bubble title to Marketing Strategy
+  - Change the name from Design to UI Design
+  - Rename this bubble to Product Roadmap
+  - Update the description for API
+  - Modify the bubble properties
+  - Change the title to Project Manager
+  - Update bubble metadata
+  - Rename Sales to Sales Pipeline
+  - Update the current bubble
+  - Change the description
+  - Edit the bubble title
+  - Modify this bubble
+  - Update bubble information
+  - Change bubble details
+  - Rename to Development Phase
+  - Update die Bubble zu New Strategy
+  - 'Benenne um: Ideas â†’ Product Ideas'
+  - Change den Namen zu German Translation
+  - Rename the bubble Konzeption
+  - Aktualisiere den Bubble Title
+  - Update description fÃ¼r Coding
+  - Ã„ndere zu Neue Idee
+  - Modify bubble name zu Dashboard
+  - Rename this space to X
+  - Update bubble name
+  - Change the title to X
+  - Benenne den Space um
+  - Aendere den Namen zu X
+  - Update den Bubble-Namen
+  placeholders:
+    name:
+    - Marketing
+    - Projects
+    - Test
+idea.list:
+  variants:
+  - Zeig mir meine Ideen
+  - Liste alle Ideen
+  - Welche Ideen gibt es hier
+  - Alle Notizen
+  - Show ideas
+  - List notes
+  - Alle Eintraege
+  - Zeig alle Ideen
+  - Meine Ideen anzeigen
+  - Alle Ideen auflisten
+  - Liste meine Ideen auf
+  - Welche Ideen habe ich?
+  - Was habe ich fÃ¼r Ideen?
+  - Wie viele Ideen habe ich?
+  - Zeig mir, was ich notiert habe
+  - Kannst du meine Ideen zeigen?
+  - Meine Ideen
+  - Alle Ideen
+  - Ãœbersicht meiner Ideen
+  - Ideen zeigen
+  - Zeig die Ideenliste
+  - Was habe ich bisher gesammelt?
+  - Zeig mir einen Ãœberblick
+  - Alle bisherigen Ideen
+  - Meine Sammlung
+  - Show all ideas
+  - Show me my ideas
+  - List my ideas
+  - Display all ideas
+  - List all ideas
+  - What ideas do I have?
+  - What have I noted?
+  - Can you show my ideas?
+  - How many ideas do I have?
+  - Show me everything I've collected
+  - My ideas
+  - All ideas
+  - Overview of my ideas
+  - List ideas
+  - What have I gathered so far?
+  - Show me a summary
+  - All my notes
+  - My collection
+  - Everything I've captured
+  - 'Casual: "Show my stuff", "Gib mir einen Ãœberblick'
+  placeholders: {}
+idea.create:
+  variants:
+  - Erstelle eine Idee zu {topic}
+  - Notiere {topic}
+  - Merke dir {topic}
+  - Schreib auf {topic}
+  - Neue Idee {topic}
+  - Erstelle Notiz {topic}
+  - Create idea about {topic}
+  - Add note {topic}
+  - Mach eine Notiz zu {topic}
+  - 'Notiere: API Design'
+  - Erstelle eine Idee zu Machine Learning
+  - 'Schreib auf: Neue Features fÃ¼r die App'
+  - 'Erfasse: Kundenfeatures fÃ¼r nÃ¤chste Woche'
+  - 'Idee: Bessere Fehlerbehandlung'
+  - Ich hab eine Idee fÃ¼r ein Dashboard
+  - 'Das sollten wir festhalten: Microservices Migration'
+  - 'Lass mich das notieren: Security Audit Framework'
+  - 'Speicher diese Idee ab: AI Training Pipeline'
+  - 'Merke dir: WebSocket-basierte Echtzeit-Updates'
+  - Mach ne Notiz fÃ¼r spÃ¤ter
+  - Was ist mit dem Performance-Thema?
+  - 'Brainstorm: Neue UI fÃ¼r Bubbles'
+  - 'Collect: Alle offenen Bugs'
+  - 'Capture: Lessons learned aus dem Sprint'
+  - 'Notiere wichtig: Sicherheit muss oberste PrioritÃ¤t sein'
+  - 'Task-Idee: Code-Review-Prozess Ã¼berarbeiten'
+  - 'Research-Punkt: State Management Libraries vergleichen'
+  - 'Create an idea: API authentication strategy'
+  - 'Note: Refactor legacy code'
+  - 'Add idea: Implement caching layer'
+  - 'Write down: Mobile app redesign'
+  - 'Capture: Auto-scaling infrastructure'
+  - I have an idea about real-time notifications
+  - 'Let me capture: Docker optimization techniques'
+  - 'Save this: Database query optimization'
+  - 'Remember: GDPR compliance checklist'
+  - 'Store: DevOps pipeline improvements'
+  - Make a note for myself
+  - 'Let''s brainstorm: Frontend performance'
+  - 'Jot down: Team communication tools'
+  - 'Pin this: Testing best practices'
+  - 'Log: Customer feedback themes'
+  - 'Quick idea: Emergency response protocol'
+  - 'Urgent note: Budget allocation review'
+  - 'Critical: Data backup strategy'
+  - 'Notiere: Implement OAuth 2.0'
+  - 'Create idea: German localization'
+  - 'Schreib auf: REST API documentation'
+  - 'Capture: User onboarding flow'
+  placeholders:
+    topic:
+    - KI Trends
+    - Marketing Plan
+    - API Design
+    - Refactoring
+    - Auth Flow
+    - Meeting Notizen
+    - Projekt X
+    - Roadmap
+idea.find:
+  variants:
+  - Suche Idee {query}
+  - Finde Notiz {query}
+  - Such nach {query}
+  - Find idea {query}
+  - Search notes {query}
+  - Suche nach API-Design
+  - Finde die Idee Ã¼ber Datenspeicherung
+  - Suche Idee mit Authentifizierung
+  - Finde meine Notiz zu Sicherheit
+  - Suche nach Machine Learning
+  - Wo ist die Idee zu Performance?
+  - Zeig mir die Idee Ã¼ber Datenbank
+  - Finde mir die Idee mit Caching
+  - Suche die Notiz zu Logging
+  - Wo hab ich ModularitÃ¤t notiert?
+  - Suche nach Docker
+  - Finde alles Ã¼ber Testing
+  - Suche Microservices
+  - Finde Infrastruktur
+  - Such mir alles zu DevOps
+  - Suche die Idee in dieser Bubble Ã¼ber API
+  - Finde alte Notizen zu Architecture
+  - Suche nach verwandten Ideen zu UI/UX
+  - Finde alles was mit Datenbanken zu tun hat
+  - Suche das Konzept Ã¼ber Skalierbarkeit
+  - Find the idea about authentication
+  - Search for API design
+  - Look for the note on caching
+  - Find my idea regarding performance
+  - Search for database optimization
+  - Where's my idea on logging?
+  - Show me the note about security
+  - Find anything related to testing
+  - Got that idea about scalability?
+  - Where did I write about DevOps?
+  - Search for Docker
+  - Find anything about monitoring
+  - Look up infrastructure
+  - Search CI/CD
+  - Find all about microservices
+  - Find the idea in this bubble about architecture
+  - Search for concepts related to performance
+  - Look for notes containing "async
+  - Find everything mentioning error handling
+  - Search my ideas about deployment
+  placeholders:
+    query:
+    - Marketing
+    - API
+    - Design
+    - Auth
+idea.delete:
+  variants:
+  - Loesche Idee {name}
+  - Entferne Notiz {name}
+  - Delete idea {name}
+  - Remove note {name}
+  - Idee {name} loeschen
+  - LÃ¶sche die Idee
+  - LÃ¶sch das
+  - Entferne diese Idee
+  - Idee lÃ¶schen
+  - Weg damit
+  - SchmeiÃŸ die Idee raus
+  - ZerstÃ¶re die Idee
+  - Das weg
+  - Diese Idee weg
+  - LÃ¶sche die Idee zum Projekt X
+  - Entferne meine alte Idee
+  - LÃ¶sch die falsche Idee
+  - SchmeiÃŸ die Idee zum Brainstorming weg
+  - Ich will diese Idee nicht mehr
+  - Die Idee brauche ich nicht mehr
+  - LÃ¶sche meine letzte Idee
+  - Delete the idea
+  - Delete this idea
+  - Remove the idea
+  - Erase this
+  - Get rid of it
+  - Delete it
+  - Remove it
+  - Trash this idea
+  - Kill this idea
+  - Drop the idea
+  - Delete the marketing idea
+  - Remove that old idea
+  - Erase the wrong idea
+  - I don't want this idea anymore
+  - Delete my latest idea
+  - Get rid of this one
+  - Remove the brainstorm idea
+  - Throw away this idea
+  - Cancel this idea
+  - LÃ¶sche alles
+  - Delete everything
+  - Weg damit!
+  - Get that outta here
+  placeholders:
+    name:
+    - Test
+    - Draft
+    - Alt
+    - Entwurf
+idea.update:
+  variants:
+  - Aktualisiere Idee {name}
+  - Aendere Notiz {name}
+  - Update idea {name}
+  - Fuege hinzu zu {name}
+  - Ã„ndere die Idee 'Marketing' in 'Digital Marketing
+  - Update den Titel der Idee
+  - Benenne die Idee um
+  - Bearbeite die Beschreibung der Idee
+  - Aktualisiere die Idee-Details
+  - Ã„ndere den Status auf erledigt
+  - Modifiziere die Tags
+  - Update die Metadaten
+  - Ã„ndere die PrioritÃ¤t der Idee
+  - Aktualisiere die Notiz
+  - ErgÃ¤nze die Beschreibung
+  - Ã„ndere die Kategorie
+  - Update die Idee 'API Design
+  - Modifiziere die Inhalte
+  - Ã„ndere die Idea-Informationen
+  - Aktualisiere den Namen
+  - Bearbeite die Metainformationen
+  - Ã„ndere den Content
+  - Update die Zusatzinfos
+  - Modifiziere die Eigenschaften
+  - Update the idea title
+  - Change idea 'Marketing' to 'Digital Marketing
+  - Edit the idea description
+  - Rename the idea
+  - Update the idea details
+  - Change the status to completed
+  - Modify the tags
+  - Update the metadata
+  - Change the priority
+  - Update the notes
+  - Add to the description
+  - Change the category
+  - Modify the content
+  - Update idea properties
+  - Change the information
+  - Rename idea 'API Design
+  - Modify the metadata fields
+  - Update the additional info
+  - Change the attributes
+  - Edit idea information
+  placeholders:
+    name:
+    - Test
+    - Roadmap
+    - Auth
+idea.connect:
+  variants:
+  - Verbinde {a} mit {b}
+  - Connect {a} to {b}
+  - Link {a} und {b}
+  - Connect these ideas
+  - Link my ideas together
+  - Show me how these ideas connect
+  - Create a connection between these ideas
+  - Join the ideas
+  - Link idea A to idea B
+  - How are these ideas related?
+  - Make connections between the ideas
+  - Connect my ideas meaningfully
+  - Connect this to that idea
+  - Link them together
+  - Find connections between my ideas
+  - Show the relationships
+  - Connect all my ideas
+  - Link these together
+  - Create links between ideas
+  - Connect idea one with idea two
+  - Show me the connections
+  - Verbinde die Ideen
+  - VerknÃ¼pfe diese Ideen
+  - Zeige mir Verbindungen
+  - Erstelle eine Verbindung zwischen den Ideen
+  - Verbinde Idee A mit Idee B
+  - Wie sind diese Ideen verbunden?
+  - Verbinde meine Ideen sinnvoll
+  - Erstelle Links zwischen den Ideen
+  - Verlinke die Ideen
+  - Zeige mir die ZusammenhÃ¤nge
+  - Wie hÃ¤ngen diese Ideen zusammen?
+  - Verbinde alles miteinander
+  - Erstelle Verbindungen
+  - Zeige Beziehungen
+  - VerknÃ¼pfe meine Ideen
+  - Verbinde diese mit dieser Idee
+  - Erstelle eine Relation
+  - Zeige AbhÃ¤ngigkeiten
+  - Connect my stuff
+  - Link all of it
+  - Verbinde das miteinander
+  - Show connections between these
+  placeholders:
+    a:
+    - API
+    - Auth
+    - Marketing
+    b:
+    - Design
+    - Users
+    - Launch
+idea.auto_link:
+  variants:
+  - Verlinke die Ideen sinnvoll
+  - Verbinde alle Ideen automatisch
+  - Finde Verbindungen zwischen den Ideen
+  - Auto-link ideas
+  - Verknuepfe die Notizen
+  - Verbinde die Ideen automatisch
+  - Erstelle automatische Verbindungen zwischen den Ideen
+  - VerknÃ¼pfe alle Ideen miteinander
+  - Automatische Verlinkung durchfÃ¼hren
+  - Alle Ideen vernetzen
+  - Link die Ideen
+  - Ideen verlinken
+  - Mach die Verbindungen
+  - Verbinde alles miteinander
+  - Auto-Link aktivieren
+  - Ideen zusammenbringen
+  - Kannst du die Ideen verlinken?
+  - Verlinkst du die Ideen?
+  - Wie sind die Ideen verbunden?
+  - Kannst du semantische Verbindungen finden?
+  - Finde ZusammenhÃ¤nge zwischen den Ideen
+  - Verlinke verwandte Ideen
+  - Erstelle semantische Verbindungen
+  - Ideen mit Ã¤hnlichen Themen verbinden
+  - Link the ideas automatically
+  - Auto-link all ideas
+  - Create automatic connections between ideas
+  - Connect all ideas together
+  - Link related ideas
+  - Link the ideas
+  - Auto-link them
+  - Connect everything
+  - Link 'em up
+  - Make connections
+  - Wire it all together
+  - Can you link the ideas?
+  - Auto-link the ideas?
+  - Connect these ideas for me
+  - Find connections between ideas
+  - Find semantic connections
+  - Link related concepts
+  - Connect similar ideas
+  - Show relationships between ideas
+  placeholders: {}
+idea.analyze_links:
+  variants:
+  - Analysiere die Ideen und schlage Verlinkungen vor
+  - Welche Ideen sollten verlinkt werden
+  - Zeig Verlinkungs-Vorschlaege
+  - Show link suggestions
+  - Analysiere die Verbindungen zwischen den Ideen
+  - Zeig mir die VerknÃ¼pfungen
+  - Welche Ideen sind miteinander verbunden?
+  - Finde ZusammenhÃ¤nge zwischen meinen Ideen
+  - Wie hÃ¤ngen diese Ideen zusammen?
+  - Analysiere die Beziehungen
+  - Zeig die Links zwischen den Konzepten
+  - Welche Ideen beeinflussen sich gegenseitig?
+  - Verbindungen anzeigen
+  - Analyse der Vernetzung
+  - Zeig mir, welche Ideen zusammenhÃ¤ngen
+  - Finde semantische Links zwischen den Bubbles
+  - Wie sind diese Konzepte verknÃ¼pft?
+  - Analyze the links between my ideas
+  - Show me the connections
+  - Find relationships between ideas
+  - What ideas are connected?
+  - Analyze how these ideas relate to each other
+  - Show the network of my ideas
+  - How do these concepts link together?
+  - Find idea connections
+  - What connections exist between these ideas?
+  - Analyze the idea relationships
+  - Show semantic links between concepts
+  - Which ideas are related?
+  - Visualize how my ideas connect
+  - Link analysis
+  - Show connections
+  - Analyze my idea network
+  - Find related ideas
+  - What's connected here?
+  - Find all links between ideas
+  - How are these linked?
+  - Zeig die Netzwerk-Analyse
+  - Connections please
+  - Analyze this web of ideas
+  - Find the relationships
+  - Show idea links
+  - Welche ZusammenhÃ¤nge gibt es?
+  - Analysiere die Ideen auf Verbindungen
+  placeholders: {}
+idea.expand:
+  variants:
+  - Erweitere Idee {name}
+  - Mach die Idee {name} groesser
+  - Expand {name}
+  - Vertiefe {name}
+  - Erweitere diese Idee
+  - Elaboriere auf der Idee
+  - Mache die Idee grÃ¶ÃŸer
+  - FÃ¼ge Details hinzu
+  - Baue die Idee aus
+  - ErzÃ¤hle mir mehr
+  - Gib mir mehr Details
+  - Was sind die Details?
+  - KÃ¶nnen wir das vertiefen?
+  - Lass mich mehr darÃ¼ber wissen
+  - Zerlege diese Idee
+  - Breche das herunter
+  - Entwickle das weiter
+  - Mache einen Plan daraus
+  - Unterteile die Idee in Schritte
+  - Sag mir mehr dazu
+  - Und was noch?
+  - Wie kÃ¶nnte das aussehen?
+  - Was sind die nÃ¤chsten Schritte?
+  - Expand this idea
+  - Elaborate on it
+  - Make it bigger
+  - Add more details
+  - Break it down
+  - Tell me more
+  - Give me details
+  - What's involved?
+  - Can we dive deeper?
+  - Let me understand better
+  - Decompose this
+  - Develop it further
+  - Create a plan from this
+  - Split this into steps
+  - What does this entail?
+  - And then what?
+  - How would that work?
+  - What comes next?
+  - What are the components?
+  - Erweitere es, bitte" / "Expand it, please
+  - Mehr darÃ¼ber erzÃ¤hlen" / "Tell me more about it
+  placeholders:
+    name:
+    - Roadmap
+    - Auth
+    - API
+idea.summarize:
+  variants:
+  - Fasse Idee {name} zusammen
+  - Summarize {name}
+  - Zusammenfassung von {name}
+  - Fasse die Idee zusammen
+  - Zusammenfasse diese Idee
+  - Zusammenfassung bitte
+  - Mach eine Zusammenfassung
+  - Zusammenfassungen erstellen
+  - Fass mir das kurz zusammen
+  - Gib mir eine Zusammenfassung
+  - Kurz zusammengefasst, was ist das?
+  - Was ist das Wichtigste?
+  - Was sind die Hauptpunkte?
+  - Kannst du die Idee zusammenfassen?
+  - Wie lautet die Zusammenfassung?
+  - Was ist die Essenz dieser Idee?
+  - Gib mir die Kurzversion
+  - Erstelle eine Zusammenfassung
+  - Generiere eine Zusammenfassung
+  - Zusammenfassung in Stichpunkten
+  - Kondensierte Fassung erstellen
+  - TL;DR dieser Idee
+  - Mach mir eine Kurzfassung
+  - Nur die wichtigsten Punkte
+  - Das Wichtigste in KÃ¼rze
+  - Summarize this idea
+  - Summarize it
+  - Make a summary
+  - Create a summary
+  - Give me a summary
+  - Can you summarize that?
+  - What's the summary?
+  - Sum that up for me
+  - Give me the gist
+  - What are the main points?
+  - How would you summarize this?
+  - What's the essence of this idea?
+  - Can you give me a brief overview?
+  - What's the key takeaway?
+  - Generate a summary
+  - Create a concise summary
+  - Summarize in bullet points
+  - Produce an executive summary
+  placeholders:
+    name:
+    - Roadmap
+    - Meeting
+    - API
+idea.explain:
+  variants:
+  - Erklaere Idee {name}
+  - Was bedeutet {name}
+  - Explain {name}
+  - ErklÃ¤r mir diese Idee
+  - Was ist das nochmal?
+  - ErlÃ¤utere die API Design Idee
+  - Gib mir mehr Details zur Marketing-Strategie
+  - Wie funktioniert das genau?
+  - ErklÃ¤re mir das bitte
+  - Was bedeutet diese Idee konkret?
+  - Kannst du die Architektur-Idee ausfÃ¼hrlicher erklÃ¤ren?
+  - Beschreib mir das nochmal in Detail
+  - Was sind die Hauptpunkte dieser Idee?
+  - Mach mir das verstÃ¤ndlicher
+  - Zerleg die Idee fÃ¼r mich
+  - Gib mir eine ausfÃ¼hrliche ErklÃ¤rung
+  - Worum geht es bei dieser Idee?
+  - Fass das nochmal zusammen
+  - Zeig mir mehr Ã¼ber die Infrastruktur-Idee
+  - Wie soll das funktionieren?
+  - ErklÃ¤r mir die Details
+  - Explain this idea to me
+  - What does this idea mean?
+  - Break down the API design concept
+  - Give me more details about this
+  - How does this work exactly?
+  - Can you elaborate on this idea?
+  - What's the main point here?
+  - Explain the architecture in detail
+  - Tell me more about this concept
+  - What's the purpose of this idea?
+  - Summarize this idea for me
+  - Walk me through this
+  - Explain the key components
+  - Was is denn das?
+  - ErklÃ¤r mir das mal
+  - ErzÃ¤hl mir mehr davon
+  - Wie geht denn das ab?
+  - Die Idee? ErklÃ¤r mal
+  - ErklÃ¤r mir die [idea_title]
+  - Was bedeutet [idea_name]?
+  - Explain [idea_name] to me
+  - Gib mir mehr Ã¼ber [bubble_name]
+  placeholders:
+    name:
+    - API
+    - Auth
+    - Design
+idea.whitepaper:
+  variants:
+  - Mach ein Whitepaper aus {name}
+  - Whitepaper fuer {name}
+  - Schreibe ein Whitepaper ueber {name}
+  - 'Based on VibeMind''s intent classification pattern, here are diverse user phrases that should trigger `idea.whitepaper`:'
+  - Erstelle ein Whitepaper
+  - Generiere ein Whitepaper
+  - Schreib ein Whitepaper
+  - Mach ein Whitepaper aus dieser Idee
+  - Konvertiere zu Whitepaper
+  - Formatiere als Whitepaper
+  - Exportiere als Whitepaper
+  - Whitepaperversion erstellen
+  - Create a whitepaper
+  - Generate a whitepaper
+  - Write a whitepaper
+  - Turn this into a whitepaper
+  - Convert to whitepaper
+  - Export as whitepaper
+  - Make a whitepaper
+  - Whitepaper from this idea
+  - Erstelle Whitepaper zu KI-Architektur
+  - Generiere Whitepaper Ã¼ber Machine Learning
+  - Schreib ein Whitepaper zum Thema API Design
+  - Whitepaper fÃ¼r die Suchmaschine
+  - Mach ein Whitepaper aus dem API-Konzept
+  - Create a whitepaper on AI architecture
+  - Generate whitepaper about machine learning
+  - Write a whitepaper for API design
+  - Make a whitepaper on blockchain
+  - Whitepaper about the current project
+  - Ich mÃ¶chte ein Whitepaper daraus machen
+  - Can you make a whitepaper from this?
+  - Lass mich ein Whitepaper schreiben
+  - Build a whitepaper for me
+  - Erstelle bitte ein Whitepaper
+  - Generate me a whitepaper please
+  - Ich brauche ein Whitepaper
+  - KÃ¶nntest du ein Whitepaper generieren?
+  - Whitepaper im Standard-Format
+  - Whitepaper mit Executive Summary
+  - Erstelle ausfÃ¼hrliches Whitepaper
+  - Whitepaper fÃ¼r Stakeholder
+  - Professional whitepaper format
+  placeholders:
+    name:
+    - Roadmap
+    - API
+    - Product
+idea.generate_doc:
+  variants:
+  - Generiere Dokumentation fuer {name}
+  - Erstelle Doku zu {name}
+  - Generate docs for {name}
+  - 'idea.generate_doc": ['
+  - Generate documentation for this idea",
+  - Create a document from this idea",
+  - Make documentation out of my idea",
+  - Document this for me",
+  - Turn this into documentation",
+  - Generate docs",
+  - Create docs from this",
+  - Write documentation",
+  - Generate technical documentation",
+  - Make a doc",
+  - Doc from idea",
+  - Build documentation",
+  - Generate a markdown document",
+  - Create comprehensive documentation",
+  - Document the idea",
+  - Generiere Dokumentation fÃ¼r diese Idee",
+  - Erstelle Dokumentation aus dieser Idee",
+  - Dokumentiere diese Idee",
+  - Mache Dokumentation daraus",
+  - Generiere Docs",
+  - Erstelle Dokumentation",
+  - Schreib eine Dokumentation",
+  - Aus dieser Idee Dokumentation machen",
+  - Umwandle die Idee in Dokumentation",
+  - Dokumentation generieren",
+  - Erstelle technische Dokumentation",
+  - Mache ein Dokument",
+  - Dokumentation erstellen",
+  - Generiere eine Dokumentation",
+  - Schreib die Dokumentation",
+  - Can you document this idea?",
+  - Please generate documentation",
+  - I need docs for this",
+  - Make me a document",
+  - Document my idea",
+  - Generate a doc from this",
+  - Create documentation please",
+  - Write docs for this",
+  - KÃ¶nntest du Dokumentation generieren?",
+  placeholders:
+    name:
+    - API
+    - Auth
+    - SDK
+idea.current_space:
+  variants:
+  - Wo bin ich gerade
+  - Aktueller Space
+  - Current space
+  - Welcher Bereich bin ich in
+  - Zeig mir die aktuelle Idee
+  - Was ist im aktuellen Space?
+  - Welche Ideen sind hier?
+  - Aktuelle Ideen anzeigen
+  - Zeig den aktuellen Raum
+  - Welche Bubbles sind aktiv?
+  - Aktuelle Space-Inhalte
+  - Was gibt es hier?
+  - Zeig mir alles hier
+  - Aktuelle Ideen
+  - Was ist in meinem aktuellen Space?
+  - Show me the current space
+  - What's in this space?
+  - List current ideas
+  - Show current ideas
+  - What ideas are here?
+  - Current space contents
+  - Display this space
+  - Show me what's here
+  - Current space overview
+  - What's in the current space?
+  - List ideas in this space
+  - Current space ideas
+  - Zeig mir den current space
+  - Was sind die current ideas?
+  - Show me the aktuelle Ideen
+  - List alle Ideen im current space
+  - Aktuelle ideas anzeigen
+  - Hier anzeigen" (Show here)
+  - Aktuelle Liste" (Current list)
+  - Dieser Space" (This space)
+  - Jetzt hier" (Right here/now)
+  - Ãœbersicht" (Overview)
+  placeholders: {}
+idea.to_project:
+  variants:
+  - Mach aus der Idee ein Projekt
+  - Promote idea to project
+  - Erstelle Projekt aus Idee
+  - Befoerdere {name} zum Projekt
+  - Konvertiere diese Idee zu einem Projekt
+  - Starte ein Projekt aus dieser Idee
+  - Verwandle die Idee in ein Projekt
+  - Erstelle ein Projekt fÃ¼r diese Idee
+  - Promoviere diese Idee zum Projekt
+  - Turn this idea into a project
+  - Convert this idea to a project
+  - Make a project from this idea
+  - Create a project based on this idea
+  - Promote this idea to a project
+  - Start a coding project from this idea
+  - Mach ein Projekt aus Marketing-App
+  - Verwandle die API-Design-Idee in ein Projekt
+  - Starte Projekt fÃ¼r E-Commerce-Plattform
+  - 'Erstelle Projekt: Dashboard fÃ¼r Analytics'
+  - Konvertiere 'Chat-Anwendung' zum Projekt
+  - Create a project from the Dashboard idea
+  - Turn E-Commerce Platform into a project
+  - 'Make a coding project: API Gateway'
+  - Convert Mobile App idea to project
+  - Start project for React Todo App
+  - KÃ¶nnen wir die Idee als Projekt starten?
+  - Sollen wir daraus ein Projekt machen?
+  - Lass uns ein Projekt aus der Idee bauen
+  - Wollen wir das als Projekt implementieren?
+  - Can we turn this into a project?
+  - Should we make a project from this idea?
+  - Let's turn that into a coding project
+  - Ready to turn this idea into code?
+  - Can you create a project for this?
+  - Diese Idee â†’ Projekt
+  - Idee zur Projekt-Erstellung
+  - Von Idee zu Projekt
+  - Projekterstellung aus Idee
+  - Idea to project
+  - Start coding from this idea
+  - Make this a coding project
+  - Create a dev project
+  - Initialize project from idea
+  placeholders:
+    name:
+    - API
+    - Roadmap
+    - Design
+idea.add_image:
+  variants:
+  - Fuege Bild zu {name} hinzu
+  - Add image to {name}
+  - Bild in Notiz {name}
+  - FÃ¼ge ein Bild hinzu
+  - Lade ein Bild hoch
+  - Setze ein Foto fÃ¼r diese Idee
+  - Bild hochladen
+  - AnhÃ¤nge ein Bild an die Idee
+  - Mache einen Screenshot und speichere ihn
+  - FÃ¼ge ein Vorschaubild ein
+  - Wende ein Bild auf diese Bubble an
+  - Lade das Bild von meinem Desktop
+  - Verwende diesen Screenshot als Bild
+  - ErgÃ¤nze die Idee mit einem Bild
+  - Setze ein Thumbnail fÃ¼r die Idee
+  - FÃ¼ge eine Grafik hinzu
+  - Lade ein Bild aus der Galerie
+  - Illustriere die Idee mit einem Bild
+  - Add an image to this idea
+  - Upload a picture
+  - Attach an image to the bubble
+  - Set an image for this idea
+  - Add a thumbnail
+  - Upload a photo
+  - Insert an image here
+  - Add a screenshot as the image
+  - Use this image for the idea
+  - Upload an image from my desktop
+  - Add a visual to this bubble
+  - Attach a picture to this idea
+  - Load an image
+  - Add artwork to this idea
+  - Set a cover image
+  - Hast du ein Bild? Lade es fÃ¼r die Idee
+  - Add image please
+  - Bild da rein
+  - Kannst du ein Bild hinzufÃ¼gen?
+  - Please add a picture
+  placeholders:
+    name:
+    - Design
+    - Meeting
+idea.format_note:
+  variants:
+  - Format als Notiz
+  - Make it a note
+  - Als Notiz formatieren
+  - 'I''ll generate diverse user phrases for the "idea.format_note" intent in both German and English:'
+  - Formatiere als Notiz
+  - Mach eine Notiz draus
+  - Strukturiere als Notiz
+  - Wandle in eine Notiz um
+  - Erstelle eine formatierte Notiz
+  - Notiz-Format anwenden
+  - In Notiz-Format umwandeln
+  - Formatiere im Notiz-Stil
+  - Speichere als Notiz
+  - Notiz-Layout verwenden
+  - Formatiere als Notizeintrag
+  - Organisiere als Notiz
+  - Konvertiere zu Notiz
+  - Notiz-Struktur anwenden
+  - Format as note
+  - Format this note
+  - Create a formatted note
+  - Format in note style
+  - Apply note formatting
+  - Convert to note format
+  - Structure as a note
+  - Format like a note
+  - Turn into a note
+  - Format as a note entry
+  - Save as note
+  - Use note format
+  - Apply note structure
+  - Format note-style
+  - note format
+  - als notiz" (mixed intent)
+  - Question-style ("Mach eine Notiz draus?")
+  - Technical terms ("Format-Note")
+  - Action verbs (formatieren, umwandeln, strukturieren, anwenden)
+  - Various object references (es, das, this, etc.)
+  placeholders: {}
+idea.format_action_list:
+  variants:
+  - Format als Aktionsliste
+  - Mach eine TODO Liste
+  - Als Tasks formatieren
+  - Format as action list
+  - Formatiere in Aktionslisten
+  - Wandle in Aktionslisten um
+  - Konvertiere zu Aktionslisten
+  - Mache Aktionslisten daraus
+  - 'Format: Aktionslisten'
+  - Erstelle Aktionslisten aus meinen Ideen
+  - Konvertiere meine Ideen zu Aktionslisten
+  - Strukturiere als Aufgabenlisten
+  - Mach daraus Checklisten
+  - Formatiere als To-Do Listen
+  - In Aktionslisten umwandeln
+  - Als Aktionslisten anzeigen
+  - Zeige mir Aktionslisten-Format
+  - Aktionslisten-Format anwenden
+  - Pack die Ideen in Aktionslisten
+  - Lass mich alles als Aktionslisten sehen
+  - Aktionsplan daraus machen
+  - Mach das zu einer Aufgabenliste
+  - Format as action lists
+  - Convert to action lists
+  - Turn into action lists
+  - Make action lists
+  - 'Format: action lists'
+  - Convert my ideas to action lists
+  - Create action lists from these ideas
+  - Structure as action lists
+  - Make checklists from this
+  - Format as task lists
+  - Show me in action list format
+  - Apply action list formatting
+  - Transform into checklists
+  - Format zu Action Lists
+  - Mach Action-Listen daraus
+  - Erstelle Action Lists
+  - 'Format: Task Lists'
+  placeholders: {}
+idea.format_pros_cons:
+  variants:
+  - Pro und Contra
+  - Vor- und Nachteile
+  - Pros and cons
+  - Erstelle eine Pro/Contra Liste
+  - Formatiere als Vor- und Nachteile
+  - Mach eine Pro/Contra Analyse
+  - Teile in Pros und Cons auf
+  - Erstelle ein Pros-Cons Format
+  - Zeige mir die Vor- und Nachteile
+  - Wie sieht es mit Pro und Contra aus?
+  - Kannst du das als Vorteile und Nachteile darstellen?
+  - Was sind die Argumente dafÃ¼r und dagegen?
+  - WÃ¤ge die Pros und Cons ab
+  - Pro und Contra, bitte
+  - GegensÃ¤tzlich formatiert
+  - Vorteile/Nachteile Ãœbersicht
+  - Lass mich die Vor- und Nachteile sehen
+  - AbwÃ¤gung erstellen
+  - GegenÃ¼berstellung erstellen
+  - Nutzen und Risiken aufzeigen
+  - StÃ¤rken und SchwÃ¤chen aufzÃ¤hlen
+  - DafÃ¼r und dagegen auflisten
+  - Create a pros and cons list
+  - Format as advantages and disadvantages
+  - Make a pros/cons breakdown
+  - Show the pros and cons
+  - Create a benefits and drawbacks list
+  - What are the pros and cons?
+  - Can you list the pros and cons?
+  - Show me the advantages and disadvantages
+  - How would this look as pros and cons?
+  - What are the benefits and risks?
+  - Pros and cons, please
+  - Give me a pros/cons view
+  - List the pros and cons
+  - Break it down into pros and cons
+  - Compare pros and cons
+  - Weigh the pros and cons
+  - Create a for and against comparison
+  - Show strengths and weaknesses
+  - Make a comparison list
+  - Benefits vs. risks analysis
+  - '**Total: 46 diverse utterances** covering formal, casual, question-based, and imperative styles across both languages.'
+  placeholders: {}
+idea.format_hierarchy:
+  variants:
+  - Als Hierarchie
+  - Baumstruktur
+  - As hierarchy
+  - Verschachtelt
+  - Formatiere die Ideen hierarchisch
+  - Organisiere die Ideen in einer Hierarchie
+  - Ordne die Ideen als Baum
+  - Erstelle eine Baumstruktur aus den Ideen
+  - Strukturiere die Ideen hierarchisch
+  - Mach eine Hierarchie aus meinen Ideen
+  - Ordne die Ideen von oben nach unten
+  - Formatiere als Hierarchie
+  - Zeig die Ideen in Baumform
+  - Organisiere nach Ebenen
+  - Erstelle eine Struktur mit Hauptideen und Unterideen
+  - Formatiere mit Hierarchie
+  - Ordne die Beziehungen hierarchisch
+  - Zeig die Ideen als Baumstufen
+  - Mach eine Ebenen-Struktur
+  - Strukturiere als Organigramm
+  - Formatiere die VerknÃ¼pfungen hierarchisch
+  - Ordne Parent-Child-Beziehungen
+  - Zeig die AbhÃ¤ngigkeiten als Baum
+  - Erstelle eine mehrstufige Struktur
+  - Format the ideas hierarchically
+  - Organize the ideas in a hierarchy
+  - Arrange the ideas as a tree
+  - Create a tree structure from the ideas
+  - Structure the ideas hierarchically
+  - Make a hierarchy from my ideas
+  - Order the ideas top to bottom
+  - Format as hierarchy
+  - Show the ideas in tree form
+  - Organize by levels
+  - Create a structure with main ideas and sub-ideas
+  - Format with hierarchy
+  - Arrange the relationships hierarchically
+  - Show the ideas as tree levels
+  - Make a layered structure
+  - Structure as organization chart
+  - Format the connections hierarchically
+  - Arrange parent-child relationships
+  - Show the dependencies as a tree
+  - Create a multi-level structure
+  placeholders: {}
+idea.format_specs:
+  variants:
+  - Als Spezifikation
+  - Specs format
+  - Technische Specs
+  - Formatiere als Spezifikationen
+  - Mache eine technische Spezifikation daraus
+  - Konvertiere zu Specs
+  - Erstelle eine Anforderungsspezifikation
+  - Formatiere in Spec-Format
+  - Schreib das als Specification auf
+  - Wandle in Spezifikationsformat um
+  - 'Format: Anforderungsspecs'
+  - Formatiere als technische Anforderungen
+  - Mache daraus eine Spec-Liste
+  - Format as specifications
+  - Convert to specs format
+  - Make it a technical spec
+  - Create specification format
+  - Format as technical specifications
+  - Turn into a spec document
+  - Format as requirements spec
+  - Generate spec format
+  - Format these as specs
+  - Specification format please
+  - Specs Format bitte
+  - 'Format: Technical Specs'
+  - Mache Specifications draus
+  - Convert to specification format
+  - '**Direct requests** ("Format as specifications")'
+  - '**Action-oriented** ("Convert to specs", "Turn into")'
+  - '**Command variations** ("Format:", "Make it a")'
+  - '**Formal/Technical** ("technical specification", "requirements spec")'
+  - '**Casual/Short** ("Specs please", "Spec format")'
+  - '**Bidirectional German/English** (mix of both languages as typical in bilingual usage)'
+  - Would you like me to add these to `config/training_variants.yml` or refine them further?
+  placeholders: {}
+idea.convert_format:
+  variants:
+  - Konvertiere Format
+  - Anderes Format
+  - Change format
+  - Convert this idea to a timeline
+  - Format as a mind map
+  - Turn this into an action list
+  - Make it a Kanban board
+  - Show as a table
+  - Display as a flowchart
+  - Convert to bullet points
+  - Format as a narrative
+  - Change to a checklist
+  - Visualize as a diagram
+  - Format my idea as steps
+  - Convert the idea to a checklist
+  - Reformat as a mind map
+  - Transform into a timeline
+  - Make this a table view
+  - Display as a Gantt chart
+  - Restructure as bullet points
+  - Can you format this as a mind map?
+  - How would this look as a timeline?
+  - Can you convert this to an action list?
+  - What if I format it as a flowchart?
+  - Can you show this as a table?
+  - Make it more structured
+  - Format it better
+  - I'd like to see this differently
+  - Can we visualize this?
+  - Let's organize this better
+  - Turn it into something more actionable
+  - Konvertiere diese Idee zu einer Zeitlinie
+  - Formatiere als Mind Map
+  - Mach daraus eine Aktionsliste
+  - Zeige als Tabelle
+  - Formatiere als Checkliste
+  - Stelle als Diagramm dar
+  - Konvertiere zu Bullet Points
+  - Formatiere als Narrative
+  - Zeige als Kanban Board
+  - Visualisiere als Flowchart
+  - Formatiere meine Idee als Schritte
+  - Konvertiere die Idee zu einer Checkliste
+  placeholders: {}
+idea.explore.start:
+  variants:
+  - Starte Exploration
+  - Erkunde Ideen
+  - Start exploration
+  - Finde verwandte Ideen
+  - Starte die Ideen-Erkundung
+  - Erkunde diese Idee
+  - Beginne die Exploration
+  - Starte eine Exploration
+  - Zeig mir verwandte Ideen
+  - Finde zusammenhÃ¤ngende Konzepte
+  - Erkunde, was mit dieser Idee verknÃ¼pft ist
+  - Welche anderen Ideen gehÃ¶ren dazu?
+  - Lass mich die Idee tiefer erkunden
+  - Entdecke neue ZusammenhÃ¤nge
+  - Finde Verbindungen zwischen den Ideen
+  - Nutze KI, um verwandte Themen zu finden
+  - Analysiere die Idee umfassend
+  - Starte eine intelligente Ideenerkundung
+  - Los geht's mit der Exploration
+  - Lass uns diese Idee erforschen
+  - Ich will mehr Ã¼ber diese Idee erfahren
+  - Untersuche das Thema
+  - Mach eine Analyse dieser Idee
+  - Start exploring
+  - Begin idea exploration
+  - Explore this idea
+  - Start an exploration
+  - Explore ideas
+  - Find related ideas
+  - Show me connected concepts
+  - What else is connected to this?
+  - Find similar ideas
+  - Discover related topics
+  - Find connections
+  - Map out related ideas
+  - Use AI to explore this concept
+  - Analyze this idea comprehensively
+  - Start intelligent exploration
+  - Let's explore
+  - Help me understand the connections
+  - Investigate this idea
+  - Search for related concepts
+  - Deep dive into this topic
+  - Erkunde die Marketing-Blase tiefergehend
+  placeholders: {}
+idea.explore.stop:
+  variants:
+  - Stoppe Exploration
+  - Beende Erkundung
+  - Stop exploration
+  - Stopp die Erkundung
+  - Beende die Exploration
+  - HÃ¶re auf zu erkunden
+  - Brich ab
+  - Halt an
+  - Lass das sein
+  - Nein, Stopp
+  - Genug erforscht
+  - Stop exploring
+  - End the exploration
+  - Stop the research
+  - Halt the search
+  - Cancel the analysis
+  - Abort the exploration
+  - Stop that
+  - Cease exploration
+  - Ich bin fertig mit der Erkundung
+  - Bitte stoppe die Exploration
+  - Ich mÃ¶chte nicht mehr erforschen
+  - KÃ¶nnen Sie die Ideensuche beenden?
+  - Nicht mehr weitersuchen, bitte
+  - Nein danke, nicht mehr erkunden
+  - I'm done exploring
+  - Please stop the exploration
+  - I don't want to explore anymore
+  - Can you stop the research?
+  - Stop looking for more ideas
+  - I'd like to stop now
+  - Stopp, ich bin ready
+  - Nein, stop exploring
+  - Halt, das ist genug
+  - Stop die Erkundung
+  - End the Ideensuche
+  - Abort the analysis, danke
+  - Ich mÃ¶chte diese Exploration jetzt beenden
+  - Die Ideenerkundung kann aufhÃ¶ren
+  - HÃ¶r bitte auf mit der Analyse
+  - Ich will nicht mehr in dieser Richtung forschen
+  - Stop the idea exploration now
+  - I want to halt this research
+  placeholders: {}
+code.generate:
+  variants:
+  - Generiere Code fuer {topic}
+  - Erstelle Code {topic}
+  - Schreib Code fuer {topic}
+  - Generate code for {topic}
+  - Baue eine {topic}
+  - Generiere ein Programm fuer {topic}
+  - Code fuer {topic}
+  - Code {topic}
+  placeholders:
+    topic:
+    - HTTP Server
+    - REST API
+    - Login Form
+    - Database Query
+    - React Component
+    - CLI Tool
+    - Script
+code.modify:
+  variants:
+  - Aendere den Code
+  - Passe Code an
+  - Modify code
+  - Aendere {name}
+  placeholders:
+    name:
+    - Server
+    - API
+    - Component
+code.status:
+  variants:
+  - Status vom Code
+  - Code status
+  - Wie weit ist das Projekt
+  - Projekt Status
+  placeholders: {}
+code.list:
+  variants:
+  - Liste Projekte
+  - Welche Projekte gibt es
+  - List projects
+  - Show projects
+  placeholders: {}
+code.cancel:
+  variants:
+  - Breche Code ab
+  - Stoppe Generierung
+  - Cancel code generation
+  placeholders: {}
+code.preview.start:
+  variants:
+  - Zeig Preview
+  - Preview starten
+  - Show preview
+  - VNC anzeigen
+  placeholders: {}
+code.preview.stop:
+  variants:
+  - Preview stoppen
+  - Stop preview
+  - Schliesse Preview
+  placeholders: {}
+desktop.open_app:
+  variants:
+  - Oeffne {app}
+  - Starte {app}
+  - Open {app}
+  - Launch {app}
+  - Starte die App {app}
+  placeholders:
+    app:
+    - Chrome
+    - Firefox
+    - Notepad
+    - Terminal
+    - VSCode
+    - Spotify
+    - Edge
+desktop.click:
+  variants:
+  - Klicke auf {target}
+  - Click {target}
+  - Drueck auf {target}
+  - Betaetige {target}
+  placeholders:
+    target:
+    - Button
+    - OK
+    - Submit
+    - Cancel
+    - Login
+desktop.type:
+  variants:
+  - Tippe {text}
+  - Schreibe {text}
+  - Type {text}
+  - Eingabe {text}
+  placeholders:
+    text:
+    - hello
+    - test
+    - password
+    - email
+desktop.press_key:
+  variants:
+  - Druecke {key}
+  - Press {key}
+  - Enter druecken
+  - Escape
+  placeholders:
+    key:
+    - Enter
+    - Escape
+    - Tab
+    - Space
+desktop.screenshot:
+  variants:
+  - Mach einen Screenshot
+  - Screenshot
+  - Bildschirmfoto
+  - Take screenshot
+  - Zeig den Bildschirm
+  placeholders: {}
+desktop.scroll:
+  variants:
+  - Scrolle runter
+  - Scroll down
+  - Scrolle hoch
+  - Scroll up
+  placeholders: {}
+desktop.task:
+  variants:
+  - Mach eine Aufgabe
+  - Desktop Task
+  - Fuehre aus auf Desktop
+  placeholders: {}
+web.search:
+  variants:
+  - Suche im Internet nach {query}
+  - Google {query}
+  - Search web for {query}
+  - Such online {query}
+  placeholders:
+    query:
+    - KI News
+    - Python Tutorials
+    - OpenAI
+    - Rust
+web.fetch:
+  variants:
+  - Hole die Webseite {url}
+  - Fetch {url}
+  - Lade {url}
+  placeholders:
+    url:
+    - wikipedia.org
+    - github.com
+    - news.ycombinator.com
+messaging.send:
+  variants:
+  - Schicke Nachricht an {contact}
+  - Send message to {contact}
+  - Schreib {contact}
+  placeholders:
+    contact:
+    - Felix
+    - Anna
+    - Mom
+    - Team
+messaging.whatsapp:
+  variants:
+  - WhatsApp an {contact}
+  - Whatsapp-Nachricht {contact}
+  - Send whatsapp to {contact}
+  placeholders:
+    contact:
+    - Felix
+    - Anna
+messaging.telegram:
+  variants:
+  - Telegram an {contact}
+  - Telegram-Nachricht
+  - Send telegram {contact}
+  placeholders:
+    contact:
+    - Felix
+    - Anna
+research.web:
+  variants:
+  - Recherchiere {topic}
+  - Research {topic}
+  - Such im Netz nach {topic}
+  - Untersuche {topic}
+  - Finde Infos zu {topic}
+  - Research online {topic}
+  - Recherche zu {topic}
+  placeholders:
+    topic:
+    - KI Trends 2026
+    - Startups Berlin
+    - Rust vs Go
+    - LLM Benchmarks
+research.scrape:
+  variants:
+  - Scrape die Seite {url}
+  - Extrahiere Daten von {url}
+  - Scrape {url}
+  placeholders:
+    url:
+    - hn
+    - reddit
+    - wikipedia
+research.summarize:
+  variants:
+  - Fasse Recherche zusammen
+  - Summarize findings
+  - Zusammenfassung der Ergebnisse
+  placeholders: {}
+research.to_idea:
+  variants:
+  - Mach eine Idee aus der Recherche
+  - Convert research to idea
+  - Research als Notiz
+  placeholders: {}
+schedule.create:
+  variants:
+  - Erinnere mich an {what}
+  - Setze Timer fuer {what}
+  - Plane Termin {what}
+  - Schedule {what}
+  - Wecker fuer {what}
+  - Remind me to {what}
+  - Erstelle Erinnerung {what}
+  placeholders:
+    what:
+    - Meeting
+    - Mittagspause
+    - Standup
+    - Anruf
+    - Review
+schedule.list:
+  variants:
+  - Liste Termine
+  - Welche Erinnerungen habe ich
+  - Show schedule
+  - Alle geplanten Tasks
+  placeholders: {}
+schedule.cancel:
+  variants:
+  - Loesche Termin
+  - Cancel reminder
+  - Entferne Erinnerung
+  placeholders: {}
+schedule.modify:
+  variants:
+  - Aendere Termin
+  - Modify schedule
+  - Verschiebe Erinnerung
+  placeholders: {}
+schedule.status:
+  variants:
+  - Status Zeitplan
+  - Schedule status
+  - Was steht an
+  placeholders: {}
+schedule.snooze:
+  variants:
+  - Snooze
+  - Spaeter erinnern
+  - Verschiebe auf spaeter
+  placeholders: {}
+n8n.generate:
+  variants:
+  - Erstelle n8n Workflow {what}
+  - Generate n8n flow for {what}
+  - Baue Automatisierung {what}
+  - n8n workflow fuer {what}
+  placeholders:
+    what:
+    - Email Automation
+    - Slack Notify
+    - Daily Report
+n8n.list:
+  variants:
+  - Liste n8n Workflows
+  - Welche Workflows gibt es
+  - Show n8n flows
+  placeholders: {}
+n8n.status:
+  variants:
+  - n8n Status
+  - Status Workflows
+  - Wie laeuft n8n
+  placeholders: {}
+n8n.execute:
+  variants:
+  - Fuehre Workflow aus
+  - Run n8n workflow
+  - Trigger workflow
+  placeholders: {}
+n8n.activate:
+  variants:
+  - Aktiviere Workflow
+  - Enable n8n flow
+  - Schalte Workflow an
+  placeholders: {}
+n8n.deactivate:
+  variants:
+  - Deaktiviere Workflow
+  - Disable flow
+  - Workflow aus
+  placeholders: {}
+n8n.delete:
+  variants:
+  - Loesche Workflow
+  - Delete n8n flow
+  - Entferne Workflow
+  placeholders: {}
+n8n.describe:
+  variants:
+  - Beschreibe Workflow
+  - Describe flow
+  - Was macht der Workflow
+  placeholders: {}
+agentfarm.create_team:
+  variants:
+  - Erstelle Agent Team {what}
+  - Baue ein Team fuer {what}
+  - Create team for {what}
+  - Neues Agent-Team {what}
+  placeholders:
+    what:
+    - Research
+    - Coding
+    - Marketing
+    - Support
+agentfarm.run:
+  variants:
+  - Starte Agent Team
+  - Run agent farm
+  - Lass das Team laufen
+  placeholders: {}
+agentfarm.status:
+  variants:
+  - AgentFarm Status
+  - Team Status
+  - Wie laufen die Agents
+  placeholders: {}
+agentfarm.list_teams:
+  variants:
+  - Liste Teams
+  - Welche Teams gibt es
+  - Show teams
+  placeholders: {}
+agentfarm.stop:
+  variants:
+  - Stoppe Agent Team
+  - Stop agents
+  - Halte Farm an
+  placeholders: {}
+agentfarm.results:
+  variants:
+  - Ergebnisse der Agents
+  - Show results
+  - Was haben die Agents rausgefunden
+  placeholders: {}
+agentfarm.list_templates:
+  variants:
+  - Liste Templates
+  - Welche Templates gibt es
+  - Show agent templates
+  placeholders: {}
+video.status:
+  variants:
+  - Video Status
+  - Wie weit ist das Video
+  - Video progress
+  placeholders: {}
+video.team_status:
+  variants:
+  - Video Team Status
+  - Wie laeuft das Video-Team
+  placeholders: {}
+video.team_run:
+  variants:
+  - Starte Video Produktion
+  - Run video team
+  - Lass Video-Team arbeiten
+  placeholders: {}
+video.vision:
+  variants:
+  - Analysiere Video
+  - Video analysieren
+  - Verstehe das Video
+  placeholders: {}
+video.lipsync:
+  variants:
+  - Lipsync das Video
+  - Lip sync video
+  - Synchronisiere Lippen
+  placeholders: {}
+video.voice_clone:
+  variants:
+  - Klone Stimme
+  - Clone voice
+  - Stimmen-Klon
+  placeholders: {}
+video.voice_tts:
+  variants:
+  - Text to Speech
+  - Text vorlesen
+  - TTS
+  placeholders: {}
+roarboot.search:
+  variants:
+  - Suche in Knowledge Base
+  - Search knowledge graph
+  - Durchsuche Rowboat
+  - Frage die Wissensbasis
+  placeholders: {}
+roarboot.query:
+  variants:
+  - Frage Rowboat {query}
+  - Query knowledge {query}
+  - Frage Wissensbasis nach {query}
+  placeholders:
+    query:
+    - Kundenliste
+    - Projekte
+    - Team
+roarboot.email_draft:
+  variants:
+  - Entwurf fuer Email
+  - Draft email
+  - Email schreiben
+  placeholders: {}
+roarboot.meeting_brief:
+  variants:
+  - Briefing fuer Meeting
+  - Meeting brief
+  - Meeting-Zusammenfassung
+  placeholders: {}
+roarboot.deck:
+  variants:
+  - Erstelle Slide Deck
+  - Make presentation
+  - Praesentation
+  placeholders: {}
+roarboot.status:
+  variants:
+  - Rowboat Status
+  - Wie laeuft Rowboat
+  - Knowledge graph status
+  placeholders: {}
+minibook.discuss:
+  variants:
+  - Diskutiere ueber {topic}
+  - Lass die Agents diskutieren
+  - Debate {topic}
+  placeholders:
+    topic:
+    - Roadmap
+    - Architektur
+    - Strategy
+minibook.collaborate:
+  variants:
+  - Collaboration mit Agents
+  - Zusammenarbeit Agents
+  - Multi-agent work
+  placeholders: {}
+minibook.status:
+  variants:
+  - Minibook Status
+  - Discussion status
+  - Wie laeuft die Diskussion
+  placeholders: {}
+minibook.list_projects:
+  variants:
+  - Liste Projekte Minibook
+  - Show minibook projects
+  placeholders: {}
+mirofish.simulate:
+  variants:
+  - Simuliere {scenario}
+  - Run simulation {scenario}
+  - Fuehre Simulation aus {scenario}
+  placeholders:
+    scenario:
+    - MarktLaunch
+    - UserGrowth
+    - Competition
+mirofish.predict:
+  variants:
+  - Vorhersage fuer {topic}
+  - Predict {topic}
+  - Prognose {topic}
+  placeholders:
+    topic:
+    - Umsatz
+    - UserCount
+    - Marktanteil
+mirofish.graph.build:
+  variants:
+  - Baue Wissensgraph
+  - Build knowledge graph
+  - Erstelle Graph
+  placeholders: {}
+mirofish.graph.search:
+  variants:
+  - Durchsuche Graph
+  - Search knowledge graph mirofish
+  placeholders: {}
+mirofish.status:
+  variants:
+  - MiroFish Status
+  - Status Swarm
+  - Wie laeuft MiroFish
+  placeholders: {}
+mirofish.evaluate:
+  variants:
+  - Bewerte Prediction
+  - Evaluate simulation
+  - Evaluiere Simulation
+  placeholders: {}
+mirofish.interview:
+  variants:
+  - Interview Agents
+  - Frage die Sim-Agents
+  - Interview simulated users
+  placeholders: {}
+rose.recommend:
+  variants:
+  - Was soll ich machen
+  - Empfehl mir was
+  - Was passt gerade
+  - Recommend task
+  - Was sollte ich tun
+  - Gib mir eine Empfehlung
+  placeholders: {}
+rose.status:
+  variants:
+  - Rose Status
+  - Wie geht es mir
+  - Flowzen status
+  - Meine Stimmung
+  placeholders: {}
+rose.accept:
+  variants:
+  - Akzeptiere Empfehlung
+  - Accept recommendation
+  - Mach ich
+  - OK nehm ich
+  placeholders: {}
+conversation.greeting:
+  variants:
+  - Hallo
+  - Hi
+  - Hey
+  - Guten Morgen
+  - Guten Tag
+  - Hello
+  - Hi Rachel
+  - Hey du
+  placeholders: {}
+conversation.farewell:
+  variants:
+  - Tschuess
+  - Bye
+  - Bis spaeter
+  - See you
+  - Ciao
+  - Auf Wiedersehen
+  placeholders: {}
+conversation.help:
+  variants:
+  - Hilfe
+  - Help
+  - Was kannst du
+  - Wie geht das
+  - Was kann VibeMind
+  placeholders: {}
+bubble.back:
+  variants:
+  - Go back
+  - Leave this bubble
+  - Go back to previous
+  - Step back
+  - Close this
+  - Navigate back
+  - Get out of here
+  - I'm done here
+  - Exit bubble
+  - Back to main
+  - Get me out
+  - Let's go back
+  - Geh zurÃ¼ck
+  - Raus hier
+  - ZurÃ¼ck zum Vorherigen
+  - Beende das
+  - Weg von hier
+  - Bubble verlassen
+  - Ich bin fertig
+  - ZurÃ¼ck zu Anfang
+  - Verlasse die Bubble
+  - Beende Bubble
+  - Back out
+  - Never mind
+  - Actually go back
+  - Lass mich raus
+  - Nope, back
+  - I'm going back
+  - Out of here
+  - Kehrt um
+  - Wir gehen zurÃ¼ck
+  - 'Would you like me to:'
+  - Add these to your training data/utterances table?
+  - Refine any phrases?
+  - Generate phrases for other bubble events (enter, create, list)?
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+bubble.delete_all_except:
+  variants:
+  - 'Based on VibeMind''s classifier patterns, here are diverse user phrases that should trigger this intent:'
+  - LÃ¶sche alles auÃŸer Marketing
+  - LÃ¶sche alle Bubbles auÃŸer Projekt A
+  - Entferne alles auÃŸer den Ideen
+  - Behalte nur Marketing und lÃ¶sche den Rest
+  - LÃ¶sch alles auÃŸer Marketing und Sales
+  - Alles lÃ¶schen auÃŸer diesem hier
+  - Entferne alles auÃŸer den zwei wichtigsten
+  - Behalte nur Marketing
+  - Behalte nur diese Bubble
+  - Behalte nur Projekt A und B, lÃ¶sch den Rest
+  - Speichere nur Design, lÃ¶sche alles andere
+  - Nur Marketing behalten, alles andere weg
+  - Alle weg auÃŸer Design
+  - SchmeiÃŸ alles weg auÃŸer den Top 3
+  - Alles weg auÃŸer dieser Bubble hier
+  - Vernichte alle auÃŸer Marketing
+  - Behalt Marketing, schmeiss alles andere weg
+  - Nur die Marketing Bubble, rest weg
+  - Alles lÃ¶schen auÃŸer dem einen
+  - Weg damit, nur Marketing bleibt
+  - Delete all except Marketing
+  - Delete everything except Project A
+  - Remove all bubbles except Ideas
+  - Keep only Marketing and delete the rest
+  - Delete all except Marketing and Sales
+  - Remove everything but the important ones
+  - Keep only Marketing
+  - Keep this bubble, delete everything else
+  - Keep Marketing and Design, remove the rest
+  - Save only the main project
+  - Delete all but Marketing
+  - Get rid of everything except Design
+  - Throw away all except the first three
+  - Keep Marketing, bin everything else
+  - Only keep the important ones
+  - 'event_type": "bubble.delete_all_except",'
+  - 'payload": {'
+  - 'keep_bubble_names": ["Marketing", "Design"],'
+  - Delete this space
+  - Remove the cooking bubble
+  - delete bubble
+  - remove bubble
+  - delete this bubble
+  - remove this idea
+  - trash this bubble
+  - get rid of this bubble
+  - clear bubble
+  - erase bubble
+  - delete the bubble
+  - remove this bubble
+  - delete idea
+  - discard bubble
+  - delete current bubble
+  - take out this bubble
+  - destroy bubble
+  - Blase lÃ¶schen
+  - Blase entfernen
+  - Diese Blase lÃ¶schen
+  - Idee lÃ¶schen
+  - Blase weg
+  - Blase raus
+  - Diesen Bubble lÃ¶schen
+  - Blase lÃ¶schen bitte
+  - Weg mit der Blase
+  - LÃ¶sch die Blase
+  - Entfern diese Blase
+  - LÃ¶sch diese Idee
+  - Blase auslÃ¶schen
+  - Aus mit der Blase
+  - Delete all bubbles except
+  - Keep only
+  - Remove all bubbles except
+  - Clear all bubbles except
+  - Keep these bubbles
+  - Delete everything except
+  - LÃ¶sche alle Bubbles auÃŸer
+  - Behalte nur
+  - Entferne alle Bubbles auÃŸer
+  - Alle Bubbles auÃŸer lÃ¶schen
+  - Nur diese Bubbles behalten
+  - LÃ¶sche alles auÃŸer
+  - Remove all except these
+  - Keep just
+  - Purge all bubbles except
+  - Alle auÃŸer lÃ¶schen
+  - Behalte alles auÃŸer
+  - Entferne alles auÃŸer
+  - Delete all but
+  - Keep these
+  - Wipe all bubbles except
+  - Alle Bubbles lÃ¶schen auÃŸer
+  - Nur diese behalten
+  - Alles lÃ¶schen auÃŸer
+  - Clear everything except
+  - Preserve only
+  - Remove other bubbles
+  - Alle anderen Bubbles lÃ¶schen
+  - Behalte nur diese
+  - Entferne alle anderen
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+bubble.score:
+  variants:
+  - What's the score of this bubble?
+  - Show me the score
+  - What's my bubble's score?
+  - How is this bubble rated?
+  - Give me the score
+  - Check the score
+  - What score does this have?
+  - Score this bubble
+  - Rate this idea
+  - Give it a high score
+  - I'd rate this 8 out of 10
+  - This is a 9
+  - Score it highly
+  - Update the score to 7
+  - Set the score higher
+  - Is this bubble's score high?
+  - Compare bubble scores
+  - Which bubble has the highest score?
+  - Show me scores
+  - Zeig mir die Bewertung
+  - Wie ist die Punktzahl?
+  - Bewertung dieser Bubble?
+  - Was ist die Punktzahl?
+  - Wie viele Punkte hat das?
+  - Zeig die Bewertung
+  - Wie wird das bewertet?
+  - Bewerte diese Bubble
+  - Gib dem eine hohe Bewertung
+  - Score das mit 8
+  - Das verdient eine 9
+  - ErhÃ¶h die Bewertung
+  - Setz die Punktzahl auf 7
+  - 'Das ist eine sehr gute Idee (implizit: hohe Bewertung)'
+  - Welche Bubble hat die beste Bewertung?
+  - Vergleich die Bewertungen
+  - Zeig mir alle Bewertungen
+  - Would you like me to refine these phrases or add more variations for specific use cases?
+  - Evaluate this idea
+  - Score this space
+  - How good is this idea?
+  - Rate this bubble / Diese Blase bewerten
+  - Score this idea / Diese Idee bewerten
+  - Give it a score / Gib ihr eine Punktzahl
+  - Rate it / Bewerte es
+  - Score this / Bewerte das
+  - How would you rate this / Wie wÃ¼rdest du das bewerten
+  - Evaluate this bubble / Bewerte diese Blase
+  - Can you score this / Kannst du das bewerten
+  - I want to rate this / Ich mÃ¶chte das bewerten
+  - What's your score / Was ist deine Bewertung
+  - Rate the bubble / Bewerte die Blase
+  - Give it points / Gib ihm Punkte
+  - Score please / Bewertung bitte
+  - How's this idea / Wie ist diese Idee
+  - Assess this / Bewerte das
+  - Score this for me / Bewerte das fÃ¼r mich
+  - Let's rate it / Lass uns das bewerten
+  - What's the score / Was ist die Bewertung
+  - I'd like to rate this bubble / Ich mÃ¶chte diese Blase bewerten
+  - Rate me on this / Bewerte mich darin
+  - Score bubble / Blase bewerten
+  - Evaluate this idea / Bewerte diese Idee
+  - Can I rate this / Kann ich das bewerten
+  - Let me score this / Lass mich das bewerten
+  - Scoring time / Zeit zu bewerten
+  - Give it a rating / Gib ihm eine Bewertung
+  - What do you think of this / Was hÃ¤ltst du davon
+  - Score this bubble / Bewerte diese Blase
+  - I want to score this bubble / Ich mÃ¶chte diese Blase bewerten
+  - Bubble score / Blasenbewertung
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+bubble.evaluate:
+  variants:
+  - BUBBLE_EVALUATE_UTTERANCES = [
+  - Evaluate this bubble",
+  - Rate this idea",
+  - Check if this bubble meets the requirements",
+  - Evaluate the bubble",
+  - How does this idea score?",
+  - Assess this bubble",
+  - Give feedback on this idea",
+  - Run evaluation on this bubble",
+  - Check the quality of this idea",
+  - Score this bubble",
+  - Evaluate my idea",
+  - Is this bubble ready?",
+  - Does this idea meet the criteria?",
+  - What's the quality score?",
+  - Evaluate based on requirements",
+  - Check if we're ready to proceed",
+  - Validate this bubble",
+  - Run the evaluation pipeline",
+  - Score against the requirements",
+  - How well does this rate?",
+  - What do you think of this?",
+  - Is this good enough?",
+  - Can we move forward with this?",
+  - Analyze this bubble",
+  - Give me an assessment",
+  - Check the status",
+  - Evaluiere diese Blase",
+  - Bewerte diese Idee",
+  - Evaluiere diesen Bubble",
+  - PrÃ¼fe diesen Bubble",
+  - Wie schneidet diese Idee ab?",
+  - Benote diese Bubble",
+  - Gib mir Feedback zu dieser Idee",
+  - Evaluierung durchfÃ¼hren",
+  - ÃœberprÃ¼fe den Bubble",
+  - ErfÃ¼llt dieser Bubble die Anforderungen?",
+  - Ist dieser Bubble bereit?",
+  - Passt diese Idee zu den Kriterien?",
+  - Validiere diese Bubble",
+  - Evaluate this bubble
+  - How complete is this idea?
+  - Score the evolution of this space
+  - evaluate bubble evolution
+  - Bewerte Bubble Evolution
+  - How is my bubble evolving?
+  - Wie entwickelt sich meine Blase?
+  - Analyze bubble growth
+  - Analysiere Bubble Wachstum
+  - Show me the bubble status
+  - Zeige mir den Bubble Status
+  - Track bubble changes
+  - Verfolge Bubble Ã„nderungen
+  - What's the evolution of this idea?
+  - Wie hat sich diese Idee entwickelt?
+  - Assess bubble progress
+  - Bewerte Ideen Fortschritt
+  - Display bubble development
+  - Zeige Bubble Entwicklung
+  - How has this bubble changed?
+  - Wie hat sich diese Blase verÃ¤ndert?
+  - Evaluate idea evolution
+  - Bewerte Ideen Evolution
+  - Monitor bubble growth
+  - Ãœberwache Bubble Wachstum
+  - Show bubble transformation
+  - Zeige Bubble Transformation
+  - Analyze how this bubble has grown
+  - Analysiere wie diese Blase gewachsen ist
+  - Check bubble status
+  - ÃœberprÃ¼fe Bubble Status
+  - Rate bubble evolution
+  - Bewerte Bubble Entwicklung
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+bubble.promote:
+  variants:
+  - 'I''ll generate diverse phrases for the `bubble.promote` intent in German and English:'
+  - Promote die Marketing Bubble
+  - Mach die Bubble zur Projekt
+  - Erhebe das Bubble zu einem Projekt
+  - BefÃ¶rder Marketing zum Projekt
+  - Upgrade die Bubble
+  - Mach das Bubble Production-ready
+  - Starte das Bubble als Projekt
+  - Konvertiere das Bubble
+  - Das Bubble ist fertig, promoten
+  - Promote diese Idee
+  - 'Mach das zur Bubble Status: active'
+  - Bubble absegnen
+  - Marketing-Bubble launchen
+  - Das Bubble bewilligen
+  - Promote the Marketing bubble
+  - Convert this bubble to a project
+  - Launch the bubble
+  - Upgrade the bubble
+  - Make this bubble a project
+  - Promote this idea
+  - Move the bubble to projects
+  - Elevate this bubble
+  - Publish the bubble
+  - Approve and promote this bubble
+  - Advance the bubble
+  - Mark this bubble as ready
+  - Push the bubble to production
+  - Activate this bubble
+  - Promote Marketing to active status
+  - Promote die API-Design Bubble
+  - Marketing Bubble - go live!
+  - Das Frontend-Bubble promoten
+  - Launch the Development bubble
+  - Upgrade diese Innovation
+  - Make the Research-Bubble a project
+  - Turn this into a project
+  - Make this a project
+  - promote this bubble | diesen bubble hochstufen
+  - boost this idea | diese Idee ankurbeln
+  - make it more visible | mach es sichtbarer
+  - elevate this | heb das hervor
+  - push this higher | schieb das nach oben
+  - feature this bubble | prÃ¤sentiere diesen bubble
+  - highlight this | markiere das
+  - promote the bubble | fÃ¶rder den bubble
+  - move it up | verschieb es nach oben
+  - increase visibility | erhÃ¶he die Sichtbarkeit
+  - amplify this | verstÃ¤rke das
+  - give it more prominence | gib dem mehr Gewicht
+  - this bubble needs promotion | dieser bubble braucht FÃ¶rderung
+  - make this stand out | mach das hervorstechend
+  - prioritize this bubble | priorisiere diesen bubble
+  - push to the top | nach oben pushen
+  - bring this forward | bring das nach vorne
+  - highlight this concept | markiere dieses Konzept
+  - promote this idea | fÃ¶rder diese Idee
+  - boost visibility | steigere die Sichtbarkeit
+  - make this more important | mach das wichtiger
+  - elevate this concept | heb dieses Konzept hervor
+  - increase prominence | erhÃ¶he die Prominenz
+  - feature this idea | prÃ¤sentiere diese Idee
+  - put this in the spotlight | setz das in den Fokus
+  - bring attention to this | lenk Aufmerksamkeit auf das
+  - promote and boost | fÃ¶rdern und verstÃ¤rken
+  - make it stand out | mach es prominenter
+  - lift this bubble | heb diesen bubble an
+  - I want to promote this | ich mÃ¶chte das fÃ¶rdern
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen
+idea.format_table:
+  variants:
+  - Formatiere in Tabelle
+  - Mache eine Tabelle
+  - Stelle als Tabelle dar
+  - Konvertiere zu Tabelle
+  - Tabellarische Ansicht
+  - Tabelle erstellen
+  - Organisiere in Tabellenform
+  - Zeige als Tabelle
+  - In eine Tabelle umwandeln
+  - Tabellarisch anordnen
+  - Strukturiere in Tabelle
+  - Als Tabelle formatieren
+  - Meine Ideen in einer Tabelle
+  - Erstelle eine Ãœbersichtstabelle
+  - Mach mir eine Ãœbersicht in Tabellenform
+  - Versetze in Tabellenformat
+  - Tabelle der Ideen
+  - Tabellierung der Konzepte
+  - Formatiere diese Ideen als Tabelle
+  - KÃ¶nnen die Ideen tabellarisch werden?
+  - Zeige die Ideen in Tabellenform
+  - Format as table
+  - Format as a table
+  - Create a table
+  - Make it a table
+  - Display as table
+  - Show in table format
+  - Convert to table
+  - Make a table view
+  - Organize in table
+  - Table format please
+  - Turn this into a table
+  - Create table view
+  - Put in table format
+  - Show as table
+  - Table arrangement
+  - Make a table of these ideas
+  - Show my ideas in a table
+  - Create a table view
+  - Table layout
+  placeholders:
+    name:
+    - Marketing
+    - Test
+    - Projects
+    - Forschung
+    - Ideen

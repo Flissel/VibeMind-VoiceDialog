@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .repository_utils import generate_id
 
 logger = logging.getLogger(__name__)

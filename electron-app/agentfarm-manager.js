@@ -7,7 +7,7 @@
  * Pattern: identical to clawport-manager.js (ClawPort Dashboard).
  */
 
-const { BrowserView } = require('electron');
+const { BrowserView, session: electronSession } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -75,6 +75,23 @@ class AgentFarmManager {
       this.agentfarmView.webContents.loadFile(rendererPath);
     }
 
+    // Strip X-Frame-Options / CSP frame-ancestors from n8n responses
+    // so the embedded iframe can load n8n's UI
+    this.agentfarmView.webContents.session.webRequest.onHeadersReceived(
+      { urls: ['http://localhost:15678/*'] },
+      (details, callback) => {
+        const headers = { ...details.responseHeaders };
+        // Remove headers that block iframe embedding (case-insensitive keys)
+        for (const key of Object.keys(headers)) {
+          const lower = key.toLowerCase();
+          if (lower === 'x-frame-options' || lower === 'content-security-policy') {
+            delete headers[key];
+          }
+        }
+        callback({ responseHeaders: headers });
+      },
+    );
+
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
       this.agentfarmView.webContents.openDevTools({ mode: 'detach' });
@@ -108,7 +125,98 @@ class AgentFarmManager {
       console.error('[AgentFarmManager] Load failed:', errorCode, errorDescription);
     });
 
+    // Auto-login to n8n so the embedded iframe is authenticated
+    this._loginToN8n();
+
     return this.agentfarmView;
+  }
+
+  /**
+   * Login to n8n and set session cookie so iframe loads authenticated.
+   * Retries up to 6 times (n8n may still be booting).
+   */
+  _loginToN8n(attempt = 1) {
+    const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
+    const http = require('http');
+    const url = new URL(`${n8nUrl}/rest/login`);
+    const body = JSON.stringify({
+      emailOrLdapLoginId: 'admin@vibemind.local',
+      password: 'Vibemind1',
+    });
+
+    const req = http.request({
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          // Extract set-cookie header and inject into Electron session
+          const cookies = res.headers['set-cookie'];
+          if (cookies && this.agentfarmView) {
+            // Set cookie on BOTH the BrowserView session AND the default session,
+            // because the embedded n8n <iframe> may use a different partition.
+            const sessions = [
+              this.agentfarmView.webContents.session,
+              electronSession.defaultSession,
+            ];
+            for (const raw of cookies) {
+              // Parse cookie name=value from "n8n-auth=xxx; Path=/; ..."
+              const [nameValue] = raw.split(';');
+              const eqIdx = nameValue.indexOf('=');
+              if (eqIdx === -1) continue;
+              const name = nameValue.substring(0, eqIdx).trim();
+              const value = nameValue.substring(eqIdx + 1).trim();
+              for (const sess of sessions) {
+                sess.cookies.remove(n8nUrl, name)
+                  .catch(() => {})
+                  .then(() => sess.cookies.set({
+                    url: n8nUrl,
+                    name,
+                    value,
+                    path: '/',
+                    httpOnly: true,
+                    sameSite: 'no_restriction',
+                  }))
+                  .then(() => {
+                    _afLog(`n8n cookie "${name}" set in ${sess === electronSession.defaultSession ? 'default' : 'view'} session`);
+                  })
+                  .catch((err) => {
+                    console.warn('[AgentFarmManager] Failed to set n8n cookie:', err.message);
+                  });
+              }
+            }
+          }
+          _afLog('n8n auto-login successful');
+          // Notify the Agent Farm renderer so it can remount the n8n iframe
+          // with the cookie now present in the session.
+          setTimeout(() => {
+            if (this.agentfarmView && !this.agentfarmView.webContents.isDestroyed()) {
+              this.agentfarmView.webContents.send('n8n-auth-ready');
+            }
+          }, 300);
+        } else {
+          _afLog(`n8n login returned status ${res.statusCode}, attempt ${attempt}/6`);
+          if (attempt < 6) setTimeout(() => this._loginToN8n(attempt + 1), 5000);
+        }
+      });
+    });
+
+    req.on('error', () => {
+      if (attempt < 6) {
+        _afLog(`n8n not ready for login, retry ${attempt}/6...`);
+        setTimeout(() => this._loginToN8n(attempt + 1), 5000);
+      } else {
+        console.warn('[AgentFarmManager] n8n auto-login gave up after 6 attempts');
+      }
+    });
+
+    req.write(body);
+    req.end();
   }
 
   /**

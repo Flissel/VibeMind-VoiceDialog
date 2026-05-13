@@ -432,6 +432,26 @@ class MultiverseApp {
         const group = this.spaces.ideas.group;
         if (!group) return;
 
+        // Phase 11.P — DUPLICATE PROTECTION (same reasoning as addBubble).
+        // node_added IPC arrives from voice-subprocess _load_bubbles_from_db
+        // AND from supabase-realtime listener. Without dedup we'd render
+        // each bubble multiple times.
+        const incomingId = node.id;
+        if (incomingId !== undefined && incomingId !== null) {
+            const existing = this.spaces.ideas.objects.find(b =>
+                b.userData && (
+                    b.userData.id === incomingId ||
+                    b.userData.db_id === incomingId ||
+                    String(b.userData.id) === String(incomingId) ||
+                    String(b.userData.db_id) === String(incomingId)
+                )
+            );
+            if (existing) {
+                console.log('[Multiverse] addBubbleTo3D: skipping duplicate id=' + incomingId);
+                return existing;
+            }
+        }
+
         const radius = node.radius || 0.7;
         const color = node.color || 0x4488ff;
 
@@ -2608,11 +2628,17 @@ class MultiverseApp {
     // ========================================================================
 
     initGameConsole() {
-        this.gcVisible = false;
+        this.gcVisible = true;   // always open by default
         this.gcBusy = false;
         this.gcMessages = [];
         this.GC_MAX_MESSAGES = 5;
         this.GC_FADE_DELAY = 8000;
+
+        // Show console immediately and shift voice panel up
+        const gcEl = document.getElementById('game-console');
+        if (gcEl) gcEl.classList.remove('hidden');
+        const voicePanel = document.getElementById('voice-panel');
+        if (voicePanel) voicePanel.style.bottom = '90px';
 
         const input = document.getElementById('gc-input');
         const sendBtn = document.getElementById('gc-send-btn');
@@ -3428,42 +3454,10 @@ class MultiverseApp {
         panel = document.createElement('div');
         panel.id = 'vapi-panel';
 
-        // --- eyeTerm camera strip (top, fixed 25% height) ---
-        const eyetermStrip = document.createElement('div');
-        eyetermStrip.id = 'eyeterm-strip';
-
-        // Placeholder shown when MJPEG stream is offline
-        const eyetermPlaceholder = document.createElement('div');
-        eyetermPlaceholder.id = 'eyeterm-placeholder';
-        eyetermPlaceholder.textContent = 'eyeTerm — waiting for camera...';
-        eyetermStrip.appendChild(eyetermPlaceholder);
-
-        // MJPEG stream image (hidden until connected)
-        const eyetermImg = document.createElement('img');
-        eyetermImg.id = 'eyeterm-feed';
-        eyetermImg.alt = 'eyeTerm';
-        eyetermImg.style.display = 'none';
-        eyetermImg.addEventListener('load', () => {
-            eyetermImg.style.display = '';
-            eyetermPlaceholder.style.display = 'none';
-        });
-        eyetermImg.addEventListener('error', () => {
-            eyetermImg.style.display = 'none';
-            eyetermPlaceholder.style.display = '';
-            // Retry every 3s with cache-buster
-            setTimeout(() => {
-                eyetermImg.src = 'http://127.0.0.1:8099/stream?t=' + Date.now();
-            }, 3000);
-        });
-        // Start trying to connect
-        eyetermImg.src = 'http://127.0.0.1:8099/stream';
-        eyetermStrip.appendChild(eyetermImg);
-
-        const eyetermLabel = document.createElement('div');
-        eyetermLabel.id = 'eyeterm-strip-label';
-        eyetermLabel.textContent = 'eyeTerm';
-        eyetermStrip.appendChild(eyetermLabel);
-        panel.appendChild(eyetermStrip);
+        // (eyeTerm camera strip removed — moved to Video Studio "Live"-Tab.
+        // The MJPEG stream from :8099 is now consumed by video-ui's LiveCapture
+        // component, where it pairs with a record button for real-time deepfake
+        // captures. Desktop Space is back to pure desktop streaming.)
 
         // --- Desktop streams area (fills remaining space) ---
         const streamsArea = document.createElement('div');
@@ -3553,7 +3547,7 @@ class MultiverseApp {
                 document.body.appendChild(ripple);
                 setTimeout(() => ripple.remove(), 600);
                 try {
-                    await fetch('http://localhost:8009/api/automation/click', {
+                    await fetch('http://localhost:8007/api/automation/click', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ x: realX, y: realY, button }),
@@ -3607,7 +3601,7 @@ class MultiverseApp {
             // Wait for backend health
             const waitForHealth = () => new Promise((resolve) => {
                 const check = () => {
-                    fetch('http://localhost:8009/api/health/health', { signal: AbortSignal.timeout(2000) })
+                    fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
                         .then(r => { if (r.ok || r.status === 503) resolve(); else setTimeout(check, 3000); })
                         .catch(() => setTimeout(check, 3000));
                 };
@@ -3619,7 +3613,7 @@ class MultiverseApp {
             let monitorCount = 1;
             let monitorGeometries = {};
             try {
-                const mr = await fetch('http://localhost:8009/api/desktop/monitors', { signal: AbortSignal.timeout(3000) });
+                const mr = await fetch('http://localhost:8007/api/desktop/monitors', { signal: AbortSignal.timeout(3000) });
                 if (mr.ok) {
                     const mdata = await mr.json();
                     monitorCount = mdata.count || 1;
@@ -3654,7 +3648,7 @@ class MultiverseApp {
                 const pollMonitor = async () => {
                     if (!_desktopStreamActive) return;
                     try {
-                        const r = await fetch(`http://localhost:8009/api/desktop/screenshot?monitor=${i}`, {
+                        const r = await fetch(`http://localhost:8007/api/desktop/screenshot?monitor=${i}`, {
                             signal: AbortSignal.timeout(3000),
                         });
                         if (r.ok) {
@@ -3969,6 +3963,18 @@ class MultiverseApp {
         raycaster.setFromCamera(mouse, this.camera);
 
         if (this.currentSpace === 'ideas') {
+            // Suppress all hover work while we are mid-enter into a bubble,
+            // and also while the inside-bubble view is showing. The 3D
+            // multiverse canvas keeps existing under the hidden container,
+            // so without this guard a stray pointer event re-shows the
+            // bubble card on top of the space view.
+            if (window.isEnteringBubble) {
+                return;
+            }
+            var spaceViewEl = document.getElementById('space-view');
+            if (spaceViewEl && !spaceViewEl.classList.contains('hidden')) {
+                return;
+            }
             const bubbles = (this.spaces.ideas?.objects || []).filter(
                 obj => obj.userData && obj.userData.type === 'bubble'
             );
@@ -4216,12 +4222,22 @@ class MultiverseApp {
                 db_id: data.db_id || data.id,
                 data: data
             };
-            
+
             ideasGroup.add(bubble);
             this.spaces.ideas.objects.push(bubble);
+
+            // Phase 11.U.L — initial score-fill from DB
+            // (syncBubbles is the bootstrap path; addBubble is for new bubbles
+            // created at runtime. Both need fill, so call same helper here.)
+            try {
+                this._applyScoreFill(bubble, data.score, radius);
+            } catch (e) {
+                console.warn('[Multiverse] score fill failed for', data.title, e);
+            }
         });
-        
-        console.log('[Multiverse] Bubbles synced successfully:', bubbles.length);
+
+        console.log('[Multiverse] Bubbles synced successfully:', bubbles.length,
+                    '(with score-fills where score>0)');
     }
     
     /**
@@ -4377,14 +4393,38 @@ class MultiverseApp {
             console.warn('[Multiverse] addBubble: Invalid bubble data');
             return;
         }
-        
-        console.log('[Multiverse] Adding bubble:', bubbleData.title || bubbleData.id);
-        
+
         const ideasGroup = this.spaces.ideas.group;
         if (!ideasGroup) {
             console.warn('[Multiverse] addBubble: Ideas group not initialized');
             return;
         }
+
+        // Phase 11.P — DUPLICATE PROTECTION
+        // bubble_created IPC can arrive multiple times for the same bubble:
+        //   - Brain-event-bridge SSE (Phase 11.O event publish)
+        //   - Voice subprocess _broadcast_to_electron (Phase 11.A path)
+        //   - Supabase-Realtime postgres-changes listener (when enabled)
+        // Without this check, each duplicate creates a new Three.js mesh,
+        // so the user sees N copies of the same bubble.
+        const incomingDbId = bubbleData.db_id || bubbleData.id;
+        if (incomingDbId !== undefined && incomingDbId !== null) {
+            const existing = this.spaces.ideas.objects.find(b =>
+                b.userData && (
+                    b.userData.db_id === incomingDbId ||
+                    b.userData.id === incomingDbId ||
+                    String(b.userData.db_id) === String(incomingDbId) ||
+                    String(b.userData.id) === String(incomingDbId)
+                )
+            );
+            if (existing) {
+                console.log('[Multiverse] addBubble: skipping duplicate id=' + incomingDbId +
+                            ' title=' + (bubbleData.title || '?'));
+                return existing;
+            }
+        }
+
+        console.log('[Multiverse] Adding bubble:', bubbleData.title || bubbleData.id);
         
         const radius = bubbleData.radius || 0.7;
         
@@ -4430,7 +4470,7 @@ class MultiverseApp {
             transparent: true,
             opacity: 0.8,
         });
-        
+
         const bubble = new THREE.Mesh(geometry, material);
         bubble.position.copy(pos);
         bubble.userData = {
@@ -4440,13 +4480,129 @@ class MultiverseApp {
             db_id: bubbleData.db_id || bubbleData.id,
             data: bubbleData
         };
-        
+
         ideasGroup.add(bubble);
         this.spaces.ideas.objects.push(bubble);
-        
+
+        // Phase 11.U.L — Score-based fill visualization.
+        // Renders a smaller inner sphere whose Y-position depends on the
+        // bubble's eval score (0-100). High score → fill rises to the top;
+        // low score → fill sits at the bottom like an empty glass.
+        // Color shifts red(<33) → yellow(<66) → green(>=66).
+        this._applyScoreFill(bubble, bubbleData.score, radius);
+
         console.log('[Multiverse] Bubble added successfully:', bubble.userData.title);
 
         return bubble;
+    }
+
+    /**
+     * Render or update the score-fill inside a bubble.
+     *
+     * Approach: build a spherical-cap geometry whose dome reaches exactly
+     * the fluid level. The cap is a partial sphere segment — we use
+     * SphereGeometry's `phiStart/phiLength/thetaStart/thetaLength` to cut
+     * only the bottom slice (from south pole up to the waterline angle).
+     *
+     * Score 0   → invisible (no cap)
+     * Score 50  → cap fills bottom half (hemisphere)
+     * Score 100 → cap fills entire inside (nearly full sphere)
+     *
+     * This avoids clipping-plane complexity and looks like real liquid.
+     */
+    _applyScoreFill(bubble, score, radius) {
+        if (!bubble) return;
+        const s = Math.max(0, Math.min(100, Number(score) || 0));
+        const r = radius || 0.7;
+
+        // Remove old fill if present (idempotent update)
+        const old = bubble.userData._fillMesh;
+        if (old) {
+            bubble.remove(old);
+            old.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            bubble.userData._fillMesh = null;
+        }
+        if (s <= 0) return;
+
+        // Color by score band
+        let fillColor = 0xff5566;   // red
+        if (s >= 66)      fillColor = 0x55dd77;   // green
+        else if (s >= 33) fillColor = 0xddbb44;   // amber
+
+        // Three.js SphereGeometry uses `thetaStart/thetaLength` to slice the
+        // sphere along Y. thetaStart=0 is north pole; theta=PI is south pole.
+        // We want the BOTTOM portion: from the waterline angle down to PI.
+        //   fluidLevelY = -r + (s/100) * 2r
+        //   waterline angle θ_w satisfies cos(θ_w) = fluidLevelY / r
+        //   so the visible cap occupies thetaStart = θ_w, thetaLength = PI - θ_w
+        const fillRadius = r * 0.96;
+        const cosTheta = (-r + (s / 100) * 2 * r) / r;       // = -1 + 2s/100 = (2s-100)/100
+        const thetaWaterline = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        const thetaLength = Math.PI - thetaWaterline;
+
+        // Cap geometry (bottom slice only)
+        const capGeo = new THREE.SphereGeometry(
+            fillRadius,
+            32, 20,
+            0, Math.PI * 2,                 // full revolution around Y
+            thetaWaterline, thetaLength      // only the bottom slice
+        );
+        const capMat = new THREE.MeshPhysicalMaterial({
+            color: fillColor,
+            metalness: 0.05,
+            roughness: 0.35,
+            transmission: 0.15,
+            transparent: true,
+            opacity: 0.82,
+            emissive: fillColor,
+            emissiveIntensity: 0.1,
+            side: THREE.DoubleSide,          // see underside through glass
+        });
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.renderOrder = 1;
+
+        // Surface disc (the meniscus at the waterline)
+        const surfaceR = fillRadius * Math.sin(thetaWaterline);
+        if (surfaceR > 0.02) {
+            const discGeo = new THREE.CircleGeometry(surfaceR, 48);
+            const discMat = new THREE.MeshBasicMaterial({
+                color: fillColor,
+                transparent: true,
+                opacity: 0.55,
+                side: THREE.DoubleSide,
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.rotation.x = -Math.PI / 2;
+            disc.position.y = fillRadius * Math.cos(thetaWaterline);
+            disc.renderOrder = 2;
+            cap.add(disc);
+        }
+
+        cap.userData = { type: 'score_fill', score: s };
+        bubble.add(cap);
+        bubble.userData._fillMesh = cap;
+        bubble.userData.score = s;
+    }
+
+    /**
+     * Update an existing bubble's score-fill (called on Realtime UPDATE).
+     */
+    updateBubbleScore(idOrDbId, newScore) {
+        const objects = this.spaces.ideas?.objects || [];
+        const bubble = objects.find(b =>
+            b.userData?.db_id === idOrDbId ||
+            b.userData?.id === idOrDbId ||
+            String(b.userData?.db_id) === String(idOrDbId) ||
+            String(b.userData?.id) === String(idOrDbId)
+        );
+        if (!bubble) return false;
+        // Recover original radius from geometry (icosahedron stores it)
+        const radius = bubble.geometry?.parameters?.radius || 0.7;
+        this._applyScoreFill(bubble, newScore, radius);
+        return true;
     }
 
     /**

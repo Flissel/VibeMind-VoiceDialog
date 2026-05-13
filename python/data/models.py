@@ -190,6 +190,8 @@ class Project:
     def from_dict(cls, data: Dict[str, Any]) -> "Project":
         """Create Project from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         created_at = data.get("created_at")
         if isinstance(created_at, str):
@@ -273,11 +275,26 @@ class CanvasNode:
     def from_dict(cls, data: Dict[str, Any]) -> "CanvasNode":
         """Create CanvasNode from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
-        # Parse structured formatting fields
-        format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
-        content_json = json.loads(data.get("content_json", "{}")) if isinstance(data.get("content_json"), str) and data.get("content_json") else None
-        previous_content_json = json.loads(data.get("previous_content_json", "{}")) if isinstance(data.get("previous_content_json"), str) and data.get("previous_content_json") else None
+        # Parse structured formatting fields. Supabase returns jsonb columns
+        # as dict already; SQLite returns string. Handle both.
+        def _parse_jsonb(field_name):
+            v = data.get(field_name)
+            if v is None:
+                return None
+            if isinstance(v, str):
+                try:
+                    return json.loads(v) if v else None
+                except (json.JSONDecodeError, ValueError):
+                    return None
+            if isinstance(v, dict) or isinstance(v, list):
+                return v
+            return None
+        format_schema = _parse_jsonb("format_schema")
+        content_json = _parse_jsonb("content_json")
+        previous_content_json = _parse_jsonb("previous_content_json")
 
         last_formatted = data.get("last_formatted")
         if isinstance(last_formatted, str):
@@ -363,6 +380,8 @@ class ConversationMessage:
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationMessage":
         """Create ConversationMessage from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
@@ -409,6 +428,8 @@ class ConversationSession:
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationSession":
         """Create ConversationSession from database row"""
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
 
         started_at = data.get("started_at")
         if isinstance(started_at, str):
@@ -531,6 +552,8 @@ class Shuttle:
         """Create Shuttle from database row"""
         requirement_results = json.loads(data.get("requirement_results", "{}")) if isinstance(data.get("requirement_results"), str) else data.get("requirement_results", {})
         metadata = json.loads(data.get("metadata", "{}")) if isinstance(data.get("metadata"), str) else data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
         stage_data = json.loads(data.get("stage_data", "{}")) if isinstance(data.get("stage_data"), str) else data.get("stage_data", {})
 
         created_at = data.get("created_at")

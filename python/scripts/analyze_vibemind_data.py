@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from data.repository import IdeasRepository, ProjectsRepository, CanvasRepository, ConversationRepository, ShuttlesRepository
-from data.database import get_database
+from data.supabase_database import get_database
 
 def analyze_vibemind_data():
     """Analysiere alle Daten in der VibeMind Datenbank"""

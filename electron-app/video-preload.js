@@ -4,9 +4,20 @@
  * Same API as agentfarm-preload.js video methods, plus videoList() for gallery.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('vibemindVideo', {
+  // ── Drag & drop file path resolution ──
+  // With contextIsolation: true, File.path is always empty in Electron 32+.
+  // Renderer must call getPathForFile(file) to get the absolute path.
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      // Fallback for older Electron — file.path may still work
+      return file?.path || '';
+    }
+  },
   // ── Video tools ──
   videoStatus: () =>
     ipcRenderer.invoke('agentfarm:video-status'),
@@ -77,7 +88,8 @@ contextBridge.exposeInMainWorld('vibemindVideo', {
     ipcRenderer.invoke('video:delete', { video_id: videoId, delete_disk: !!deleteDisk }),
 
   // ── Video file URL helper ──
-  // Serve via local media server (http://localhost:9877/) for reliable playback
+  // Serve via local media server (http://localhost:8977/) for reliable playback
+  // NOTE: Port 8977 (nicht 9877) weil Windows 9846-9945 für Hyper-V reserviert hat (WinError 10013).
   toVideoURL: (filePath) => {
     if (!filePath) return '';
     const normalized = filePath.replace(/\\/g, '/');
@@ -85,7 +97,7 @@ contextBridge.exposeInMainWorld('vibemindVideo', {
     const rowboatBase = require('os').homedir().replace(/\\/g, '/') + '/.rowboat/Videos/';
     if (normalized.includes('.rowboat/Videos/')) {
       const relative = normalized.split('.rowboat/Videos/')[1];
-      return `http://localhost:9877/${relative}`;
+      return `http://localhost:8977/${relative}`;
     }
     // Fallback: file:// for paths outside Rowboat
     return `file:///${normalized.replace(/^\/+/, '')}`;

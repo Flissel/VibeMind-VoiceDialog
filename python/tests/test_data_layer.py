@@ -11,7 +11,7 @@ def main():
     print()
 
     # Test database connection
-    from data.database import Database, get_database
+    from data.supabase_database import Database, get_database
     db = get_database()
     print(f'[OK] Database initialized: {db.db_path}')
     print(f'     Schema version: {db.get_schema_version()}')

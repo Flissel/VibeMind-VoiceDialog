@@ -1,11 +1,11 @@
 """
 Vibemind Data Layer
 
-SQLite persistence for Ideas, Projects, Canvas nodes, Conversation history,
-Shuttles, Tasks, and Scheduled Tasks.
+Persistence via Supabase (PostgreSQL + PostgREST + Realtime).
+All repositories use the SupabaseDatabase adapter — SQLite is gone.
 """
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import (
     Idea, Project, CanvasNode, CanvasEdge, ConversationMessage,
     ConversationSession, Shuttle, ShuttleStatus, ShuttleStage,

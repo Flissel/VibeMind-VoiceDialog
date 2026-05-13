@@ -52,16 +52,25 @@
             window.isEnteringBubble = true;
             window.pendingBubbleContent = null;  // Clear any old pending content
 
-            // Hide bubble hover tooltip and reset multiverse state
+            // Hide bubble hover tooltip and reset multiverse state.
+            // info-panel, bubble-info, and enter-btn are independently
+            // hidden-able — hide all three so no part of the card lingers.
             var infoPanel = document.getElementById('info-panel');
+            var bubbleInfo = document.getElementById('bubble-info');
+            var enterBtnEl = document.getElementById('enter-btn');
             if (infoPanel) infoPanel.classList.add('hidden');
+            if (bubbleInfo) bubbleInfo.classList.add('hidden');
+            if (enterBtnEl) enterBtnEl.classList.add('hidden');
             if (window.multiverseApp) {
                 window.multiverseApp.tooltipPinned = false;
                 window.multiverseApp.hoveredBubbleIndex = -1;
+                window.multiverseApp.selectedBubbleIndex = -1;
             }
 
             var bubble = window.multiverseApp ? window.multiverseApp.getBubbleById(bubbleId) : null;
-            var bubbleTitle = bubble ? bubble.title : 'Space';
+            var bubbleTitle = (bubble && bubble.userData && (bubble.userData.title || bubble.userData.data && bubble.userData.data.title))
+                || (bubble && bubble.title)
+                || 'Space';
             document.getElementById('space-title').textContent = bubbleTitle;
             // Show space name in titlebar
             var titlebarSpace = document.getElementById('titlebar-space');
@@ -69,6 +78,18 @@
 
             // Get bubble index for animation
             var bubbleIndex = window.multiverseApp ? window.multiverseApp.getBubbleIndexById(bubbleId) : undefined;
+
+            // Phase 11.U.L — notify eval-panel which bubble we're entering
+            // so the right-edge toggle becomes visible and reflects the
+            // cached score for THIS bubble (not the last globally evaluated).
+            // We pass BOTH the local int-id and the DB-UUID — the eval cache
+            // is keyed by UUID (because that's what mirofish_result emits).
+            if (typeof window.onEvalBubbleEnter === 'function') {
+                try {
+                    var dbId = (bubble && bubble.userData && bubble.userData.db_id) || null;
+                    window.onEvalBubbleEnter(dbId || bubbleId, { localId: bubbleId, dbId: dbId });
+                } catch (e) { /* non-fatal */ }
+            }
 
             if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
                 // Use animated entry
@@ -132,6 +153,11 @@
         try {
             console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ')');
             console.trace('[Exit] Call stack:');
+
+            // Phase 11.U.L — hide eval toggle & panel when leaving bubble
+            if (typeof window.onEvalBubbleExit === 'function') {
+                try { window.onEvalBubbleExit(); } catch (e) { /* non-fatal */ }
+            }
 
             // Clear space name from titlebar
             var titlebarSpace = document.getElementById('titlebar-space');

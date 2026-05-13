@@ -88,8 +88,7 @@ class TaskMemoryService:
         content = f"Task created: {intent_type} - {title}"
 
         try:
-            # SDK uses memories.add, not documents.create
-            response = await self._client.memories.add(
+            response = await self._client.documents.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_created",
@@ -126,8 +125,7 @@ class TaskMemoryService:
         content = f"Task completed: {intent_type} in {duration_ms}ms - Result: {result_preview}"
 
         try:
-            # SDK uses memories.add, not documents.create
-            response = await self._client.memories.add(
+            response = await self._client.documents.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_completed",
@@ -163,8 +161,7 @@ class TaskMemoryService:
         content = f"Task failed: {intent_type} - Error: {error}"
 
         try:
-            # SDK uses memories.add, not documents.create
-            response = await self._client.memories.add(
+            response = await self._client.documents.add(
                 content=content,
                 container_tag=self.CONTAINER_TAG,
                 custom_id=f"task_{task_id}_failed",

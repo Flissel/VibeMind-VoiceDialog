@@ -1,6 +1,6 @@
 """Tests for Flowzen diary entries."""
 import os, tempfile
-from data.database import Database
+from data.supabase_database import Database
 from data.flowzen_repository import FlowzenRepository
 
 

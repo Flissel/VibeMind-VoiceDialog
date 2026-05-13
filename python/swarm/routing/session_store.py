@@ -16,10 +16,11 @@ class SessionStore:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
             import os
-            # routing/ -> swarm/ -> python/  (3 levels up)
+            # Use a dedicated session-only SQLite file (not the legacy vibemind.db).
+            # Session routing is ephemeral — no need to migrate to Supabase.
             db_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                "vibemind.db"
+                os.path.expanduser("~"),
+                ".vibemind_sessions.db"
             )
         self._db_path = db_path
         self._ensure_tables()

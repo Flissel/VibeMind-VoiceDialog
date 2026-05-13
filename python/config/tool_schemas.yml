@@ -1,0 +1,609 @@
+# config/tool_schemas.yml — Single Source of Truth for Tool Semantics
+#
+# Purpose:
+#   1. Few-shot examples for LLM classifier (injected per event_type)
+#   2. Training data for Brain EventRoutingHead
+#   3. Param validation at execution time
+#   4. Auto-generated help/docs for users
+#
+# Schema per event:
+#   description:    What the tool does (1 line)
+#   params:         Required/optional parameters with types
+#   returns:        Expected return shape (string | dict | list)
+#   examples:       2-5 natural language → structured output pairs
+#   triggers:       Keywords that should match
+#   anti_triggers:  Keywords that should NOT match (disambiguation)
+
+# ════════════════════════════════════════════════════════════════════
+# BUBBLE EVENTS (7)
+# ════════════════════════════════════════════════════════════════════
+
+bubble.list:
+  description: "Listet alle Bubbles (Top-Level Spaces) auf."
+  params: {}
+  returns: string
+  examples:
+    - input: "Zeig mir meine Bubbles"
+      output: {}
+    - input: "Welche Spaces habe ich?"
+      output: {}
+    - input: "What bubbles do I have?"
+      output: {}
+    - input: "Liste alle Bubbles"
+      output: {}
+  triggers: ["bubbles", "spaces", "zeig", "list", "welche"]
+  anti_triggers: ["erstelle", "neu", "create"]
+
+bubble.create:
+  description: "Erstellt eine NEUE Bubble mit gegebenem Titel."
+  params:
+    title:
+      type: string
+      required: true
+      description: "Name der Bubble (aus User-Text extrahieren)"
+  returns: dict
+  examples:
+    - input: "Erstelle Bubble Marketing"
+      output: {title: "Marketing"}
+    - input: "Neuen Space namens Ideen"
+      output: {title: "Ideen"}
+    - input: "Leg einen Space für Projekte an"
+      output: {title: "Projekte"}
+    - input: "Create a bubble called Research"
+      output: {title: "Research"}
+  triggers: ["erstelle", "neu", "leg an", "create", "new"]
+  anti_triggers: ["betrete", "geh zu", "enter", "öffne"]
+
+bubble.enter:
+  description: "Wechselt in eine BESTEHENDE Bubble."
+  params:
+    bubble_name:
+      type: string
+      required: true
+      description: "Name der existierenden Bubble"
+  returns: dict
+  examples:
+    - input: "Geh zu Marketing"
+      output: {bubble_name: "Marketing"}
+    - input: "Betrete Ideen"
+      output: {bubble_name: "Ideen"}
+    - input: "Öffne Bubble Projekte"
+      output: {bubble_name: "Projekte"}
+    - input: "Enter Research"
+      output: {bubble_name: "Research"}
+  triggers: ["geh", "betrete", "öffne", "enter", "switch to"]
+  anti_triggers: ["erstelle", "neu", "create", "such"]
+
+bubble.find:
+  description: "Sucht eine Bubble per Fuzzy-Match und wechselt dann hinein."
+  params:
+    query:
+      type: string
+      required: true
+      description: "Suchbegriff"
+  returns: dict
+  examples:
+    - input: "Such nach Bubble Marketing"
+      output: {query: "Marketing"}
+    - input: "Wo ist die Projekte Bubble?"
+      output: {query: "Projekte"}
+    - input: "Find bubble about research"
+      output: {query: "research"}
+  triggers: ["such", "finde", "wo ist", "find"]
+  anti_triggers: ["idee", "notiz"]
+
+bubble.exit:
+  description: "Verlässt die aktuelle Bubble, zurück zur obersten Ebene."
+  params: {}
+  returns: string
+  examples:
+    - input: "Zurück"
+      output: {}
+    - input: "Verlasse die Bubble"
+      output: {}
+    - input: "Exit"
+      output: {}
+    - input: "Raus hier"
+      output: {}
+  triggers: ["zurück", "verlasse", "exit", "back", "raus"]
+
+bubble.delete:
+  description: "Löscht eine Bubble mit allen enthaltenen Ideen."
+  params:
+    bubble_name:
+      type: string
+      required: true
+  returns: dict
+  examples:
+    - input: "Lösche Bubble Marketing"
+      output: {bubble_name: "Marketing"}
+    - input: "Entferne Space Ideen"
+      output: {bubble_name: "Ideen"}
+    - input: "Delete bubble Research"
+      output: {bubble_name: "Research"}
+  triggers: ["lösche", "entferne", "delete", "remove"]
+  anti_triggers: ["idee", "notiz"]
+
+bubble.stats:
+  description: "Zeigt Statistik einer Bubble (Anzahl Ideen, Score)."
+  params:
+    bubble_name:
+      type: string
+      required: false
+      description: "Falls weggelassen: aktuelle Bubble"
+  returns: string
+  examples:
+    - input: "Statistik"
+      output: {}
+    - input: "Stats für Marketing"
+      output: {bubble_name: "Marketing"}
+    - input: "Wie ist der Score?"
+      output: {}
+  triggers: ["stats", "statistik", "score"]
+
+# ════════════════════════════════════════════════════════════════════
+# IDEA EVENTS — CORE (6)
+# ════════════════════════════════════════════════════════════════════
+
+idea.list:
+  description: "Listet alle Ideen in der aktuellen Bubble auf."
+  params: {}
+  returns: string
+  examples:
+    - input: "Zeig alle Ideen"
+      output: {}
+    - input: "Welche Notizen sind hier?"
+      output: {}
+    - input: "List ideas"
+      output: {}
+    - input: "Was hab ich notiert?"
+      output: {}
+  triggers: ["ideen", "notizen", "ideas", "notes"]
+  anti_triggers: ["erstelle", "notiere", "create", "verlinke"]
+
+idea.create:
+  description: "Erstellt eine neue Idee/Notiz in der aktuellen Bubble OHNE Recherche."
+  params:
+    title:
+      type: string
+      required: true
+      description: "Text/Titel der Notiz (aus User-Input extrahieren)"
+  returns: dict
+  examples:
+    - input: "Notiere: API Design"
+      output: {title: "API Design"}
+    - input: "Idee: wir brauchen bessere Tests"
+      output: {title: "wir brauchen bessere Tests"}
+    - input: "Merk dir: Meeting am Donnerstag"
+      output: {title: "Meeting am Donnerstag"}
+    - input: "Schreib auf: Projekt kickoff"
+      output: {title: "Projekt kickoff"}
+  triggers: ["notiere", "merk", "idee:", "note", "schreib auf"]
+  anti_triggers: ["liste", "zeig"]
+
+idea.find:
+  description: "Sucht nach einer Idee innerhalb der aktuellen Bubble."
+  params:
+    query:
+      type: string
+      required: true
+  returns: string
+  examples:
+    - input: "Finde Idee über API"
+      output: {query: "API"}
+    - input: "Such Notiz zu Tests"
+      output: {query: "Tests"}
+  triggers: ["finde idee", "such notiz", "find idea"]
+
+idea.update:
+  description: "Aktualisiert den Text einer bestehenden Idee."
+  params:
+    idea_id:
+      type: string
+      required: false
+    new_text:
+      type: string
+      required: true
+  returns: dict
+  examples:
+    - input: "Ändere Idee 3 zu: neuer Text"
+      output: {idea_id: "3", new_text: "neuer Text"}
+    - input: "Update die letzte Idee: anderer Inhalt"
+      output: {new_text: "anderer Inhalt"}
+  triggers: ["ändere", "update", "bearbeite"]
+
+idea.delete:
+  description: "Löscht eine Idee."
+  params:
+    idea_id:
+      type: string
+      required: true
+  returns: dict
+  examples:
+    - input: "Lösche Idee 2"
+      output: {idea_id: "2"}
+    - input: "Entferne Notiz über API"
+      output: {idea_id: "API"}
+  triggers: ["lösche idee", "entferne notiz", "delete idea"]
+  anti_triggers: ["bubble", "space"]
+
+idea.move:
+  description: "Verschiebt eine Idee in eine andere Bubble."
+  params:
+    idea_id:
+      type: string
+      required: true
+    target_bubble:
+      type: string
+      required: true
+  returns: dict
+  examples:
+    - input: "Verschiebe Idee 3 nach Marketing"
+      output: {idea_id: "3", target_bubble: "Marketing"}
+    - input: "Move idea API Design to Projects"
+      output: {idea_id: "API Design", target_bubble: "Projects"}
+  triggers: ["verschiebe", "move", "schieb"]
+
+# ════════════════════════════════════════════════════════════════════
+# IDEA EVENTS — LINKING (3)
+# ════════════════════════════════════════════════════════════════════
+
+idea.connect:
+  description: "Verbindet ZWEI spezifische Ideen (beide Namen genannt)."
+  params:
+    from_idea:
+      type: string
+      required: true
+    to_idea:
+      type: string
+      required: true
+  returns: dict
+  examples:
+    - input: "Verbinde API Design mit Tests"
+      output: {from_idea: "API Design", to_idea: "Tests"}
+    - input: "Connect Marketing and Sales"
+      output: {from_idea: "Marketing", to_idea: "Sales"}
+  triggers: ["verbinde X mit Y", "connect X and Y"]
+  anti_triggers: ["alle", "all", "auto"]
+
+idea.auto_link:
+  description: "Verlinkt ALLE Ideen in der aktuellen Bubble automatisch per KI."
+  params: {}
+  returns: string
+  examples:
+    - input: "Verlinke die Ideen sinnvoll"
+      output: {}
+    - input: "Auto-link"
+      output: {}
+    - input: "Verbinde alles was zusammengehört"
+      output: {}
+    - input: "Link everything"
+      output: {}
+  triggers: ["verlinke", "auto-link", "verbinde alles"]
+  anti_triggers: ["zeig", "analyze", "vorschläge"]
+
+idea.analyze_links:
+  description: "Zeigt Verlinkungsvorschläge OHNE sie auszuführen."
+  params: {}
+  returns: string
+  examples:
+    - input: "Welche Verbindungen schlägst du vor?"
+      output: {}
+    - input: "Analyze link suggestions"
+      output: {}
+    - input: "Zeig mir mögliche Links"
+      output: {}
+  triggers: ["vorschläge", "analyze", "möglich"]
+
+# ════════════════════════════════════════════════════════════════════
+# IDEA EVENTS — AI GENERATION (6)
+# ════════════════════════════════════════════════════════════════════
+
+idea.expand:
+  description: "Erweitert/generiert weitere Ideen per KI."
+  params:
+    base_idea:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Erweitere die Ideen"
+      output: {}
+    - input: "Generiere mehr zu API Design"
+      output: {base_idea: "API Design"}
+    - input: "Unterteile in Subtasks"
+      output: {}
+  triggers: ["erweitere", "generiere mehr", "expand", "unterteile"]
+
+idea.summarize:
+  description: "KI-Zusammenfassung einer Bubble oder Idee."
+  params:
+    bubble_name:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Fass zusammen"
+      output: {}
+    - input: "Zusammenfassung von Marketing"
+      output: {bubble_name: "Marketing"}
+    - input: "Summarize"
+      output: {}
+  triggers: ["fass zusammen", "zusammenfassung", "summarize"]
+
+idea.explain:
+  description: "KI erklärt eine Idee ausführlich."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Erkläre Idee 3"
+      output: {idea_id: "3"}
+    - input: "Was bedeutet API Design?"
+      output: {idea_id: "API Design"}
+  triggers: ["erkläre", "was bedeutet", "explain"]
+
+idea.whitepaper:
+  description: "Generiert ein White Paper aus verlinkten Ideen."
+  params: {}
+  returns: string
+  examples:
+    - input: "Erstelle ein White Paper"
+      output: {}
+    - input: "Generiere Whitepaper"
+      output: {}
+  triggers: ["whitepaper", "white paper"]
+
+idea.generate_doc:
+  description: "Exportiert die gesamte Bubble als Markdown-Projektdoku."
+  params:
+    output_path:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Generiere Projektdokumentation"
+      output: {}
+    - input: "Exportiere alles als Markdown"
+      output: {}
+    - input: "Generate docs"
+      output: {}
+  triggers: ["dokumentation", "generate doc", "markdown export"]
+
+idea.structure:
+  description: "Organisiert/strukturiert Ideen komplex (KI-basiert)."
+  params: {}
+  returns: string
+  examples:
+    - input: "Strukturiere die Ideen"
+      output: {}
+    - input: "Organisiere alles"
+      output: {}
+  triggers: ["strukturiere", "organisiere", "structure"]
+
+# ════════════════════════════════════════════════════════════════════
+# IDEA EVENTS — FORMATTING (8)
+# ════════════════════════════════════════════════════════════════════
+
+idea.format_note:
+  description: "Formatiert als einfache Notiz."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Als Notiz formatieren"
+      output: {}
+    - input: "Format as note"
+      output: {}
+  triggers: ["als notiz", "format note"]
+
+idea.format_action_list:
+  description: "Formatiert als Aktionsliste/Todo."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Als Aktionsliste"
+      output: {}
+    - input: "Mach eine Todo-Liste draus"
+      output: {}
+    - input: "Format as action list"
+      output: {}
+  triggers: ["aktionsliste", "todo", "action list"]
+
+idea.format_pros_cons:
+  description: "Formatiert als Pro/Contra-Liste."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Pro und Contra"
+      output: {}
+    - input: "Format as pros cons"
+      output: {}
+  triggers: ["pro contra", "pros cons", "vor nachteile"]
+
+idea.format_hierarchy:
+  description: "Formatiert als hierarchische Struktur."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Als Hierarchie"
+      output: {}
+    - input: "Format as hierarchy"
+      output: {}
+  triggers: ["hierarchie", "hierarchy", "baumstruktur"]
+
+idea.format_specs:
+  description: "Formatiert als technische Spezifikation."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Als technische Spec"
+      output: {}
+    - input: "Format as specs"
+      output: {}
+  triggers: ["spec", "technische spezifikation", "specs"]
+
+idea.convert_format:
+  description: "Konvertiert zwischen Formaten."
+  params:
+    target_format:
+      type: string
+      required: true
+  returns: string
+  examples:
+    - input: "Konvertiere zu Aktionsliste"
+      output: {target_format: "action_list"}
+    - input: "Mach es zu einer Hierarchie"
+      output: {target_format: "hierarchy"}
+  triggers: ["konvertiere", "mach es zu", "convert"]
+
+idea.list_formats:
+  description: "Zeigt verfügbare Formate."
+  params: {}
+  returns: string
+  examples:
+    - input: "Welche Formate gibt es?"
+      output: {}
+    - input: "List formats"
+      output: {}
+  triggers: ["welche formate", "list formats"]
+
+idea.format_revert:
+  description: "Setzt Formatierung zurück auf Note."
+  params:
+    idea_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Formatierung zurücksetzen"
+      output: {}
+    - input: "Revert format"
+      output: {}
+  triggers: ["zurücksetzen", "revert format"]
+
+# ════════════════════════════════════════════════════════════════════
+# IDEA EVENTS — EXPLORATION (7)
+# ════════════════════════════════════════════════════════════════════
+
+idea.explore.start:
+  description: "Startet tiefe KI-Verbindungssuche zwischen Ideen (AI-Scientist)."
+  params:
+    root_idea:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Starte Exploration"
+      output: {}
+    - input: "Erforsche Verbindungen zu API Design"
+      output: {root_idea: "API Design"}
+    - input: "Explore deep connections"
+      output: {}
+  triggers: ["exploration", "erforsche", "explore", "tiefe verbindungen"]
+
+idea.explore.stop:
+  description: "Stoppt laufende Exploration."
+  params: {}
+  returns: string
+  examples:
+    - input: "Stopp Exploration"
+      output: {}
+    - input: "Stop exploring"
+      output: {}
+  triggers: ["stopp exploration", "stop explor"]
+
+idea.explore.status:
+  description: "Status der laufenden Exploration."
+  params: {}
+  returns: string
+  examples:
+    - input: "Exploration Status"
+      output: {}
+    - input: "Wie weit ist die Exploration?"
+      output: {}
+  triggers: ["exploration status", "wie weit"]
+
+idea.explore.accept:
+  description: "Akzeptiert eine entdeckte Verbindung."
+  params:
+    connection_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Akzeptiere Verbindung 2"
+      output: {connection_id: "2"}
+    - input: "Accept connection"
+      output: {}
+  triggers: ["akzeptiere verbindung", "accept connection"]
+
+idea.explore.reject:
+  description: "Lehnt eine entdeckte Verbindung ab."
+  params:
+    connection_id:
+      type: string
+      required: false
+  returns: string
+  examples:
+    - input: "Lehne Verbindung 3 ab"
+      output: {connection_id: "3"}
+    - input: "Reject connection"
+      output: {}
+  triggers: ["lehne verbindung", "reject connection"]
+
+idea.explore.depth:
+  description: "Erkundet eine Ebene tiefer."
+  params: {}
+  returns: string
+  examples:
+    - input: "Eine Ebene tiefer"
+      output: {}
+    - input: "Deeper"
+      output: {}
+    - input: "Geh tiefer"
+      output: {}
+  triggers: ["tiefer", "deeper", "ebene"]
+
+idea.explore.visualize:
+  description: "Zeigt Exploration-Ergebnisse visuell."
+  params: {}
+  returns: string
+  examples:
+    - input: "Zeig Exploration"
+      output: {}
+    - input: "Visualize results"
+      output: {}
+  triggers: ["zeig exploration", "visualize"]
+
+# ════════════════════════════════════════════════════════════════════
+# MULTI-STEP PATTERNS (for classifier awareness)
+# ════════════════════════════════════════════════════════════════════
+#
+# Dependencies (for ordering in multi-step execution):
+#   bubble.create  →  BEFORE  →  idea.create        (idea needs bubble)
+#   bubble.enter   →  BEFORE  →  idea.list          (list needs active bubble)
+#   idea.create    →  BEFORE  →  idea.connect       (connect needs ideas)
+#   idea.create    →  BEFORE  →  idea.auto_link     (link needs ideas)
+#
+# Example multi-step intents:
+#   "Erstelle Space X und füge Idee Y hinzu"
+#     → [bubble.create{title:X}, idea.create{title:Y}]
+#   "Erstelle Space X, betrete ihn und verlinke Ideen"
+#     → [bubble.create{title:X}, bubble.enter{bubble_name:X}, idea.auto_link]

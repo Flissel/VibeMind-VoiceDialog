@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
   n8nChatDeploy: (sessionId) =>
     ipcRenderer.invoke('agentfarm:n8n-chat-deploy', { sessionId }),
 
+  n8nClaudeBuild: (sessionId) =>
+    ipcRenderer.invoke('agentfarm:n8n-claude-build', { sessionId }),
+
   n8nChatHistory: (sessionId) =>
     ipcRenderer.invoke('agentfarm:n8n-chat-history', { sessionId }),
 
@@ -119,4 +122,9 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
 
   // ── View control ──
   closeAgentFarm: () => ipcRenderer.send('hide-agentfarm'),
+
+  // ── n8n iframe auth signal ──
+  onN8nAuthReady: (callback) => {
+    ipcRenderer.on('n8n-auth-ready', () => callback());
+  },
 });

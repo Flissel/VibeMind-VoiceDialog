@@ -14,15 +14,16 @@
 services:
   mirofish:
     build:
-      context: ./python/spaces/mirofish/mirofish
+      context: ../spaces/mirofish/mirofish
       dockerfile: Dockerfile
     container_name: mirofish-app
     ports:
-      - "5001:5001"   # Flask API
+      - "5101:5001"   # Flask API (5101 external to avoid conflict with Brain API on 5001)
       - "3001:3000"   # Vue.js frontend (3001 to avoid conflict with Rowboat)
     environment:
       - LLM_API_KEY=${MIROFISH_LLM_API_KEY:-${OPENAI_API_KEY}}
       - LLM_BASE_URL=${MIROFISH_LLM_BASE_URL:-https://api.openai.com/v1}
+      - ZEP_API_KEY=${ZEP_API_KEY:-disabled}
       - LLM_MODEL_NAME=${MIROFISH_LLM_MODEL:-gpt-4o}
       - NEO4J_URI=bolt://neo4j-mirofish:7687
       - NEO4J_USER=${MIROFISH_NEO4J_USER:-neo4j}

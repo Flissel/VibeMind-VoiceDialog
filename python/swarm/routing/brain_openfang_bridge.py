@@ -20,6 +20,7 @@ Graceful degradation:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -29,14 +30,13 @@ import aiohttp
 
 from swarm.orchestrator.result_formatter import OrchestrationResult
 from swarm.routing.context_assembler import ContextAssembler, WorkspaceContext
+from swarm.routing.space_agent_registry import RoutingRecipe, SpaceAgentRegistry
 
 logger = logging.getLogger(__name__)
 
-# Default mapping: VibeMind space → OpenFang agent template name.
-# These agents are spawned on-demand in OpenFang when first needed.
-# Maps VibeMind spaces to existing OpenFang agents.
-# Agents that don't exist yet fall back to "vibemind" (general-purpose).
-SPACE_AGENT_MAP: Dict[str, str] = {
+# Legacy fallback map — used when registry YAML absent or VIBEMIND_ROUTING_REGISTRY=off.
+# New routing is driven by config/space_agent_registry.yml.
+LEGACY_SPACE_AGENT_MAP: Dict[str, str] = {
     "ideas": "vibemind",
     "bubbles": "vibemind",
     "coding": "brain-coder",
@@ -52,6 +52,9 @@ SPACE_AGENT_MAP: Dict[str, str] = {
     "minibook": "vibemind",
 }
 
+# Kept as alias for backwards-compat with any external import.
+SPACE_AGENT_MAP = LEGACY_SPACE_AGENT_MAP
+
 
 class BrainOpenFangBridge:
     """Routes intents via Brain and executes via OpenFang agents."""
@@ -66,12 +69,14 @@ class BrainOpenFangBridge:
     ):
         self._brain_url = brain_url.rstrip("/")
         self._openfang_url = openfang_url.rstrip("/")
-        self._space_map = space_agent_map or SPACE_AGENT_MAP
+        self._space_map = space_agent_map or LEGACY_SPACE_AGENT_MAP
         self._voice_timeout = voice_timeout_s
         self._min_confidence = min_confidence
         self._assembler = ContextAssembler()
         self._agent_cache: Dict[str, str] = {}  # agent_name → agent_id
         self._available = True
+        self._registry = SpaceAgentRegistry.load_or_legacy(legacy=self._space_map)
+        self._registry_mode = os.getenv("VIBEMIND_ROUTING_REGISTRY", "shadow").lower()
 
     # ------------------------------------------------------------------
     # Public API
@@ -118,8 +123,23 @@ class BrainOpenFangBridge:
         space = brain_result["space"]
         routing_id = brain_result.get("routing_id", "")
 
-        # 3. Map space → OpenFang agent
-        agent_name = self._space_map.get(space)
+        # 3. Map space → OpenFang agent (via registry; legacy dict when OFF)
+        recipe = None
+        if self._registry_mode != "off":
+            recipe = self._registry.lookup(space, pre_classification)
+            if recipe is None:
+                recipe = self._registry.fallback(space)
+
+            # Shadow mode: log divergence but still execute via registry
+            if self._registry_mode == "shadow":
+                legacy_agent = self._space_map.get(space, "")
+                if recipe.agent != legacy_agent:
+                    logger.info(
+                        f"[BrainBridge.shadow] divergence space={space} "
+                        f"legacy={legacy_agent} registry={recipe.agent}"
+                    )
+
+        agent_name = recipe.agent if recipe else self._space_map.get(space)
         if not agent_name:
             logger.warning(f"[BrainBridge] No agent mapped for space '{space}'")
             return None
@@ -128,14 +148,31 @@ class BrainOpenFangBridge:
         if not agent_id:
             return None
 
-        # 4. Build context-enriched message
-        context_block = ContextAssembler.to_openfang_block(workspace_ctx)
-        message = f"{context_block}\n\n{intent_text}"
+        # 4. Build structured JSON envelope (schema: vibemind.intent.v1)
+        if recipe and not recipe.is_fallback:
+            context_fields = recipe.context_fields or None
+            context_json = ContextAssembler.to_json_context(workspace_ctx, context_fields)
+            envelope = {
+                "schema": "vibemind.intent.v1",
+                "event_type": pre_classification,
+                "space": space,
+                "preferred_tool": recipe.tool_hint,
+                "required_params": recipe.required_params,
+                "mcp_scope": recipe.mcp_scope,
+                "context": context_json,
+                "user_text": intent_text,
+            }
+            message = json.dumps(envelope, ensure_ascii=False)
+        else:
+            # Fallback path — legacy markdown block for unknown/generic agents
+            context_block = ContextAssembler.to_openfang_block(workspace_ctx)
+            message = f"{context_block}\n\n{intent_text}"
 
+        tool_hint = recipe.tool_hint if recipe else ""
         logger.info(
             f"[BrainBridge] Routed \"{intent_text[:50]}...\" "
-            f"→ {space} ({brain_result['confidence']:.0%}) "
-            f"→ {agent_name}"
+            f"-> {space} ({brain_result['confidence']:.0%}) "
+            f"-> {agent_name} [tool={tool_hint or '-'}]"
         )
 
         # 5. Execute with voice timeout

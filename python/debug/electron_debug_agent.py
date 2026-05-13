@@ -731,6 +731,58 @@ When errors occur, analyze them and suggest fixes."""
                 toast.appendChild(aiBox);
             }}
 
+            // Phase 11.U.I — Action buttons row (Post to VibeMind / Copy / Dismiss)
+            var actions = document.createElement('div');
+            actions.style.cssText = 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;';
+
+            function makeBtn(label, bg, fn) {{
+                var b = document.createElement('button');
+                b.textContent = label;
+                b.style.cssText = 'flex:1;min-width:80px;padding:6px 10px;border:1px solid '
+                    + 'rgba(255,255,255,0.15);background:' + bg + ';color:#fff;'
+                    + 'border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;';
+                b.onmouseenter = function() {{ b.style.filter = 'brightness(1.2)'; }};
+                b.onmouseleave = function() {{ b.style.filter = ''; }};
+                b.onclick = fn;
+                return b;
+            }}
+
+            // Compose the issue body once for reuse
+            var issueBody = lines.join('\\n');
+            if (aiText) issueBody += '\\n\\n--- AI Diagnosis ---\\n' + aiText;
+            var issueTitle = (lines.length > 0 ? lines[0].slice(0, 100) : 'Debug-agent error');
+
+            // Post to VibeMind button
+            actions.appendChild(makeBtn('📨 Post to VibeMind', 'rgba(80,140,220,0.35)', function() {{
+                try {{
+                    if (window.vibemind && window.vibemind.sendToPython) {{
+                        window.vibemind.sendToPython({{
+                            type: 'submit_issue',
+                            title: issueTitle,
+                            body: issueBody,
+                            severity: '{severity}'.toUpperCase(),
+                            source: 'debug-agent-toast',
+                        }});
+                        var done = document.createElement('span');
+                        done.textContent = ' ✓ Sent';
+                        done.style.cssText = 'color:#7d7;font-size:11px;margin-left:6px;';
+                        actions.appendChild(done);
+                        setTimeout(function() {{ done.remove(); }}, 3000);
+                    }} else {{
+                        console.warn('vibemind.sendToPython not available');
+                    }}
+                }} catch (e) {{ console.error('submit_issue failed:', e); }}
+            }}));
+
+            // Copy to clipboard
+            actions.appendChild(makeBtn('📋 Copy', 'rgba(120,120,120,0.35)', function() {{
+                try {{
+                    navigator.clipboard.writeText(issueTitle + '\\n\\n' + issueBody);
+                }} catch (e) {{ /* ignore */ }}
+            }}));
+
+            toast.appendChild(actions);
+
             container.appendChild(toast);
             requestAnimationFrame(function() {{
                 toast.style.opacity = '1';

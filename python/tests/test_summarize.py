@@ -17,7 +17,7 @@ try:
         results.append("1. API Key: FEHLT!")
     
     # 2. Prüfe Datenbank
-    from data.database import Database
+    from data.supabase_database import Database
     db = Database(os.path.join(os.path.dirname(__file__), '..', 'vibemind.db'))
     bubbles = db.get_all_bubbles()
     results.append(f"2. Bubbles in DB: {len(bubbles)}")

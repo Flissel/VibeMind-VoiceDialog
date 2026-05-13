@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from .database import Database, get_database
+from .supabase_database import Database, get_database
 from .models import ConversationSession, ConversationMessage
 from .repository_utils import generate_id
 
