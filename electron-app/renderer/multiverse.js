@@ -4498,12 +4498,20 @@ class MultiverseApp {
 
     /**
      * Render or update the score-fill inside a bubble.
-     * Reads score from 0..100; renders an inner cap-sphere whose vertical
-     * position rises with the score. Re-callable safely (replaces existing
-     * fill mesh if present so realtime UPDATE works).
+     *
+     * Approach: build a spherical-cap geometry whose dome reaches exactly
+     * the fluid level. The cap is a partial sphere segment — we use
+     * SphereGeometry's `phiStart/phiLength/thetaStart/thetaLength` to cut
+     * only the bottom slice (from south pole up to the waterline angle).
+     *
+     * Score 0   → invisible (no cap)
+     * Score 50  → cap fills bottom half (hemisphere)
+     * Score 100 → cap fills entire inside (nearly full sphere)
+     *
+     * This avoids clipping-plane complexity and looks like real liquid.
      */
     _applyScoreFill(bubble, score, radius) {
-        if (!bubble || score === undefined || score === null) return;
+        if (!bubble) return;
         const s = Math.max(0, Math.min(100, Number(score) || 0));
         const r = radius || 0.7;
 
@@ -4511,40 +4519,71 @@ class MultiverseApp {
         const old = bubble.userData._fillMesh;
         if (old) {
             bubble.remove(old);
-            if (old.geometry) old.geometry.dispose();
-            if (old.material) old.material.dispose();
+            old.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
             bubble.userData._fillMesh = null;
         }
         if (s <= 0) return;
 
         // Color by score band
-        let fillColor = 0xff4444;   // red
-        if (s >= 66)      fillColor = 0x44ff66;   // green
-        else if (s >= 33) fillColor = 0xffcc33;   // yellow
+        let fillColor = 0xff5566;   // red
+        if (s >= 66)      fillColor = 0x55dd77;   // green
+        else if (s >= 33) fillColor = 0xddbb44;   // amber
 
-        // Inner cap-sphere: only the lower (-Y) half visible, scaled by fill
-        // We use a full sphere slightly smaller than the shell, then offset
-        // it downward so the visible top sits at level (s/100) of the bubble.
-        const innerRadius = r * 0.92;
-        const fillGeo = new THREE.SphereGeometry(innerRadius, 24, 20);
-        const fillMat = new THREE.MeshPhysicalMaterial({
+        // Three.js SphereGeometry uses `thetaStart/thetaLength` to slice the
+        // sphere along Y. thetaStart=0 is north pole; theta=PI is south pole.
+        // We want the BOTTOM portion: from the waterline angle down to PI.
+        //   fluidLevelY = -r + (s/100) * 2r
+        //   waterline angle θ_w satisfies cos(θ_w) = fluidLevelY / r
+        //   so the visible cap occupies thetaStart = θ_w, thetaLength = PI - θ_w
+        const fillRadius = r * 0.96;
+        const cosTheta = (-r + (s / 100) * 2 * r) / r;       // = -1 + 2s/100 = (2s-100)/100
+        const thetaWaterline = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        const thetaLength = Math.PI - thetaWaterline;
+
+        // Cap geometry (bottom slice only)
+        const capGeo = new THREE.SphereGeometry(
+            fillRadius,
+            32, 20,
+            0, Math.PI * 2,                 // full revolution around Y
+            thetaWaterline, thetaLength      // only the bottom slice
+        );
+        const capMat = new THREE.MeshPhysicalMaterial({
             color: fillColor,
-            metalness: 0.0,
-            roughness: 0.3,
-            transmission: 0.4,
+            metalness: 0.05,
+            roughness: 0.35,
+            transmission: 0.15,
             transparent: true,
-            opacity: 0.85,
+            opacity: 0.82,
             emissive: fillColor,
-            emissiveIntensity: 0.15,
+            emissiveIntensity: 0.1,
+            side: THREE.DoubleSide,          // see underside through glass
         });
-        const fill = new THREE.Mesh(fillGeo, fillMat);
-        // Map score 0..100 to fill-top range: top of fill at y = -r + (s/100)*2r
-        // Sphere center then sits at fillTopY - innerRadius (so its top reaches fillTopY)
-        const fillTopY = -r + (s / 100) * (2 * r);
-        fill.position.y = fillTopY - innerRadius;
-        fill.userData = { type: 'score_fill', score: s };
-        bubble.add(fill);
-        bubble.userData._fillMesh = fill;
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.renderOrder = 1;
+
+        // Surface disc (the meniscus at the waterline)
+        const surfaceR = fillRadius * Math.sin(thetaWaterline);
+        if (surfaceR > 0.02) {
+            const discGeo = new THREE.CircleGeometry(surfaceR, 48);
+            const discMat = new THREE.MeshBasicMaterial({
+                color: fillColor,
+                transparent: true,
+                opacity: 0.55,
+                side: THREE.DoubleSide,
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.rotation.x = -Math.PI / 2;
+            disc.position.y = fillRadius * Math.cos(thetaWaterline);
+            disc.renderOrder = 2;
+            cap.add(disc);
+        }
+
+        cap.userData = { type: 'score_fill', score: s };
+        bubble.add(cap);
+        bubble.userData._fillMesh = cap;
         bubble.userData.score = s;
     }
 

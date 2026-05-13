@@ -79,6 +79,18 @@
             // Get bubble index for animation
             var bubbleIndex = window.multiverseApp ? window.multiverseApp.getBubbleIndexById(bubbleId) : undefined;
 
+            // Phase 11.U.L — notify eval-panel which bubble we're entering
+            // so the right-edge toggle becomes visible and reflects the
+            // cached score for THIS bubble (not the last globally evaluated).
+            // We pass BOTH the local int-id and the DB-UUID — the eval cache
+            // is keyed by UUID (because that's what mirofish_result emits).
+            if (typeof window.onEvalBubbleEnter === 'function') {
+                try {
+                    var dbId = (bubble && bubble.userData && bubble.userData.db_id) || null;
+                    window.onEvalBubbleEnter(dbId || bubbleId, { localId: bubbleId, dbId: dbId });
+                } catch (e) { /* non-fatal */ }
+            }
+
             if (window.multiverseApp && bubbleIndex !== undefined && bubbleIndex >= 0) {
                 // Use animated entry
                 console.log('[Enter] Starting animated entry to bubble:', bubbleId);
@@ -141,6 +153,11 @@
         try {
             console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ')');
             console.trace('[Exit] Call stack:');
+
+            // Phase 11.U.L — hide eval toggle & panel when leaving bubble
+            if (typeof window.onEvalBubbleExit === 'function') {
+                try { window.onEvalBubbleExit(); } catch (e) { /* non-fatal */ }
+            }
 
             // Clear space name from titlebar
             var titlebarSpace = document.getElementById('titlebar-space');

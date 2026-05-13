@@ -255,6 +255,8 @@ class Bubble:
     radius: float = 0.7
     content: List[Dict] = field(default_factory=list)  # Canvas nodes inside bubble
     db_id: Optional[str] = None  # Database UUID for this bubble
+    score: float = 0.0  # MiroFish readiness score (0-100) — drives 3D fill viz
+    status: str = ""    # 'scored' / 'raw' / 'promoted' etc.
 
     def to_dict(self) -> dict:
         result = {
@@ -263,6 +265,8 @@ class Bubble:
             "position": self.position,
             "color": self.color,
             "radius": self.radius,
+            "score": self.score,
+            "status": self.status,
         }
         # Include db_id for delete/update matching
         if self.db_id:

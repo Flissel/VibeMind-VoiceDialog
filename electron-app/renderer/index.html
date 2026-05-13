@@ -1951,7 +1951,7 @@
 
     <!-- Phase 11.U.L — Eval Side-Panel (right, persistent toggle) ── -->
     <style>
-        /* Persistent toggle tab on right edge (always visible) */
+        /* Persistent toggle tab on right edge — ONLY visible while inside a bubble */
         #eval-toggle {
             position: fixed;
             top: 50%;
@@ -1971,9 +1971,11 @@
             text-transform: uppercase;
             writing-mode: vertical-rl;
             text-orientation: mixed;
-            transition: background 0.2s, right 0.3s ease;
+            transition: background 0.2s, right 0.3s ease, opacity 0.2s;
             backdrop-filter: blur(8px);
+            display: none;  /* hidden until inside a bubble */
         }
+        #eval-toggle.visible { display: block; }
         #eval-toggle:hover {
             background: rgba(30, 40, 60, 0.95);
             color: #fff;
@@ -2167,13 +2169,31 @@
         </div>
     </div>
     <script>
-        // Side-panel controller.
-        // - Persistent toggle tab on the right edge (always visible)
-        // - Auto-opens on new mirofish_result
-        // - Re-opens with last-known data after page reload (localStorage)
-        // - Esc / × / toggle-click close it but state survives
+        // Bubble-specific side-panel controller.
+        // - Toggle tab + panel ONLY visible while inside a bubble (space-view open)
+        // - Cache per bubble-id in localStorage (so each bubble has its own eval)
+        // - Auto-opens panel when a new mirofish_result arrives for the CURRENT bubble
+        // - Empty state when current bubble has no eval yet
 
-        const EVAL_STORAGE_KEY = 'vibemind.evalPanel.lastResult';
+        const EVAL_STORAGE_PREFIX = 'vibemind.evalPanel.';
+        const _evalKeyFor = id => id ? EVAL_STORAGE_PREFIX + String(id) : null;
+
+        function _getCachedEval(bubbleId) {
+            const key = _evalKeyFor(bubbleId);
+            if (!key) return null;
+            try {
+                const raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+
+        function _saveCachedEval(bubbleId, msg) {
+            const key = _evalKeyFor(bubbleId);
+            if (!key) return;
+            try {
+                localStorage.setItem(key, JSON.stringify(msg));
+            } catch (e) { /* quota — skip */ }
+        }
 
         function _updateToggleBadge(score) {
             const dot = document.getElementById('eval-toggle-dot');
@@ -2275,21 +2295,47 @@
             _updateToggleBadge(score);
         }
 
-        window.showEvalPanel = function(msg) {
-            const panel = document.getElementById('eval-panel');
-            if (!panel) return;
+        // Track the DB-UUID of the bubble we're inside (set by enterSpace).
+        // window.__currentBubbleId is the LOCAL int id (Python's Bubble.id),
+        // which is NOT what mirofish_result emits (UUID). We need both.
+        window.__currentEvalBubble = { dbId: null, localId: null, title: null };
 
-            // Stamp render-time and persist for reload
+        // Called by the IPC handler when mirofish_result arrives.
+        // Saves to per-bubble cache (keyed by DB-UUID, the field that mirofish
+        // populates). Only auto-opens the panel if the result is for the
+        // bubble the user is currently inside.
+        window.showEvalPanel = function(msg) {
+            if (!msg) return;
+            const evalId = msg.bubble_id || msg.bubble_name;   // UUID first, name as fallback
+            if (!evalId) return;
             msg._renderedAt = Date.now();
-            try {
-                localStorage.setItem(EVAL_STORAGE_KEY, JSON.stringify(msg));
-            } catch (e) { /* quota or private mode — skip */ }
+            _saveCachedEval(evalId, msg);
+            // Also cache by name so we can recover when enter-hook only has title
+            if (msg.bubble_name && msg.bubble_name !== evalId) {
+                _saveCachedEval(msg.bubble_name, msg);
+            }
+
+            const cur = window.__currentEvalBubble || {};
+            const isCurrent = (
+                (cur.dbId && (String(cur.dbId) === String(msg.bubble_id) ||
+                              String(cur.dbId).slice(0, 8) === String(msg.bubble_id || '').slice(0, 8))) ||
+                (cur.title && msg.bubble_name && cur.title === msg.bubble_name)
+            );
+            if (!isCurrent) {
+                // Not the current bubble — silent save (visible next time user
+                // enters that bubble).
+                return;
+            }
 
             _renderEvalContent(msg);
-
-            panel.classList.add('open');
-            panel.setAttribute('aria-hidden', 'false');
+            const panel = document.getElementById('eval-panel');
+            if (panel) {
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+            }
             document.getElementById('eval-toggle').classList.add('panel-open');
+            // Reflect new score on the always-visible badge
+            _updateToggleBadge(msg.total_score);
         };
 
         window.closeEvalPanel = function() {
@@ -2307,23 +2353,76 @@
             if (!panel) return;
             if (panel.classList.contains('open')) {
                 window.closeEvalPanel();
-            } else {
-                // Re-render from cache if available
-                try {
-                    const cached = localStorage.getItem(EVAL_STORAGE_KEY);
-                    if (cached) {
-                        const msg = JSON.parse(cached);
-                        _renderEvalContent(msg);
-                    } else {
-                        // Show empty state
-                        document.getElementById('eval-panel-content').style.display = '';
-                        document.getElementById('eval-panel-data').style.display = 'none';
-                    }
-                } catch (e) { /* ignore */ }
-                panel.classList.add('open');
-                panel.setAttribute('aria-hidden', 'false');
-                document.getElementById('eval-toggle').classList.add('panel-open');
+                return;
             }
+            // Opening — re-render from cache of CURRENT bubble, trying multiple keys
+            const cur = window.__currentEvalBubble || {};
+            const keys = [cur.dbId, cur.title, window.__currentBubbleId, cur.localId].filter(Boolean);
+            let cached = null;
+            for (const k of keys) {
+                cached = _getCachedEval(k);
+                if (cached) break;
+            }
+            if (cached) {
+                _renderEvalContent(cached);
+            } else {
+                document.getElementById('eval-panel-content').style.display = '';
+                document.getElementById('eval-panel-data').style.display = 'none';
+            }
+            panel.classList.add('open');
+            panel.setAttribute('aria-hidden', 'false');
+            document.getElementById('eval-toggle').classList.add('panel-open');
+        };
+
+        // Called from bubble-navigation.js enterSpace() so the toggle tab +
+        // panel reflect the bubble the user is currently in. Multi-key
+        // lookup: try DB-UUID first, then title (since mirofish caches by
+        // both), then fall back to local int-id.
+        window.onEvalBubbleEnter = function(primaryId, opts) {
+            opts = opts || {};
+            const toggle = document.getElementById('eval-toggle');
+            if (!toggle) return;
+            toggle.classList.add('visible');
+
+            // Resolve title from multiverseApp using whichever id we have
+            let title = null;
+            try {
+                const objs = window.multiverseApp?.spaces?.ideas?.objects || [];
+                const match = objs.find(b =>
+                    String(b.userData?.db_id) === String(opts.dbId || primaryId) ||
+                    String(b.userData?.id) === String(opts.localId || primaryId)
+                );
+                title = match?.userData?.title || null;
+            } catch (e) { /* ignore */ }
+
+            window.__currentEvalBubble = {
+                dbId: opts.dbId || primaryId,
+                localId: opts.localId || null,
+                title: title,
+            };
+
+            // Try cache keys in order
+            const keys = [opts.dbId, title, primaryId, opts.localId].filter(Boolean);
+            let cached = null;
+            for (const k of keys) {
+                cached = _getCachedEval(k);
+                if (cached) break;
+            }
+            if (cached) {
+                _updateToggleBadge(cached.total_score);
+            } else {
+                _updateToggleBadge(null);
+            }
+            // Don't auto-open here — wait for user click or new eval
+        };
+
+        window.onEvalBubbleExit = function() {
+            window.__currentEvalBubble = { dbId: null, localId: null, title: null };
+            const toggle = document.getElementById('eval-toggle');
+            if (toggle) {
+                toggle.classList.remove('visible', 'panel-open');
+            }
+            window.closeEvalPanel();
         };
 
         // Esc closes panel
@@ -2332,18 +2431,6 @@
                 const panel = document.getElementById('eval-panel');
                 if (panel && panel.classList.contains('open')) window.closeEvalPanel();
             }
-        });
-
-        // On page load: restore last eval to the toggle-badge so user sees
-        // the score immediately even without opening the panel
-        document.addEventListener('DOMContentLoaded', () => {
-            try {
-                const cached = localStorage.getItem(EVAL_STORAGE_KEY);
-                if (cached) {
-                    const msg = JSON.parse(cached);
-                    _updateToggleBadge(msg.total_score);
-                }
-            } catch (e) { /* ignore */ }
         });
     </script>
 </body>

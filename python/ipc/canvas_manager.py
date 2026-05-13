@@ -141,7 +141,9 @@ class CanvasManager:
                     position={"x": x, "y": y, "z": z},
                     color=colors[i % len(colors)],
                     radius=0.6 + (idea.score / 200),  # Bigger bubbles for higher scores
-                    db_id=idea.id  # Store the database UUID
+                    db_id=idea.id,  # Store the database UUID
+                    score=float(idea.score or 0.0),  # Phase 11.U.L — drives 3D fill viz
+                    status=idea.status or "",
                 )
 
                 # Store mappings (both instance and module-level)
