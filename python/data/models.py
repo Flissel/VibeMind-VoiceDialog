@@ -278,10 +278,23 @@ class CanvasNode:
         if metadata is None:
             metadata = {}
 
-        # Parse structured formatting fields
-        format_schema = json.loads(data.get("format_schema", "{}")) if isinstance(data.get("format_schema"), str) and data.get("format_schema") else None
-        content_json = json.loads(data.get("content_json", "{}")) if isinstance(data.get("content_json"), str) and data.get("content_json") else None
-        previous_content_json = json.loads(data.get("previous_content_json", "{}")) if isinstance(data.get("previous_content_json"), str) and data.get("previous_content_json") else None
+        # Parse structured formatting fields. Supabase returns jsonb columns
+        # as dict already; SQLite returns string. Handle both.
+        def _parse_jsonb(field_name):
+            v = data.get(field_name)
+            if v is None:
+                return None
+            if isinstance(v, str):
+                try:
+                    return json.loads(v) if v else None
+                except (json.JSONDecodeError, ValueError):
+                    return None
+            if isinstance(v, dict) or isinstance(v, list):
+                return v
+            return None
+        format_schema = _parse_jsonb("format_schema")
+        content_json = _parse_jsonb("content_json")
+        previous_content_json = _parse_jsonb("previous_content_json")
 
         last_formatted = data.get("last_formatted")
         if isinstance(last_formatted, str):

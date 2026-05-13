@@ -40,11 +40,50 @@ const SUBSCRIPTIONS = [
 
   // Canvas
   { table: 'canvas_nodes', event: 'INSERT', messageType: 'node_added',
-    transform: (row) => ({ node: { id: row.id, title: row.title, type: row.node_type, x: row.x, y: row.y, content: row.content } }) },
+    // Phase 11.U.F — nest x/y under position + use content.{title,text} so
+    // universe_canvas.js renderNode picks them up (it reads data.position?.x
+    // and data.content?.title, not flat row.x / row.title)
+    transform: (row) => ({ node: {
+      id: row.id, type: row.node_type || 'note',
+      position: { x: row.x || 100, y: row.y || 100 },
+      content: { title: row.title || '', text: row.content || '' },
+    } }) },
   { table: 'canvas_nodes', event: 'UPDATE', messageType: 'node_updated',
-    transform: (row) => ({ node: { id: row.id, title: row.title, x: row.x, y: row.y, content: row.content } }) },
-  { table: 'canvas_edges', event: 'INSERT', messageType: 'edge_created',
-    transform: (row) => ({ edge: { id: row.id, from: row.from_node_id, to: row.to_node_id, type: row.edge_type } }) },
+    // Renderer expects msg.updates (not msg.node) — see handlers/canvas-handlers.js:90
+    // Phase 11.U.N rev5 — content_json + format_schema in updates so the
+    // Mermaid renderer sees freshly-formatted nodes via realtime.
+    transform: (row) => ({
+      node_id: row.id,
+      updates: {
+        position: { x: row.x || 100, y: row.y || 100 },
+        title: row.title || '',
+        content: { title: row.title || '', text: row.content || '' },
+        content_json: row.content_json || null,
+        format_schema: row.format_schema || null,
+        format_type: (row.content_json && row.content_json.type) || null,
+      },
+    }) },
+  // Phase 11.U.I rev8 — DELETE subscription was missing; UI never refreshed
+  // after a node was removed. Renderer handler at index.html node_removed →
+  // onNodeDeleted → in mermaid-mode triggers _scheduleMermaidRefresh.
+  { table: 'canvas_nodes', event: 'DELETE', messageType: 'node_removed',
+    transform: (old) => ({ node_id: old.id }) },
+  { table: 'canvas_edges', event: 'INSERT', messageType: 'edge_added',
+    // Phase 11.U.H — emit `edge_added` (matches renderer handler at
+    // index.html:1142) with from_node_id/to_node_id shape that onEdgeAdded
+    // reads. The keys `from`/`to` and message-type `edge_created` were a
+    // mismatch with the rest of the system.
+    transform: (row) => ({ edge: {
+      id: row.id,
+      from_node_id: row.from_node_id,
+      to_node_id: row.to_node_id,
+      type: row.edge_type,
+    } }) },
+  // Phase 11.U.I rev8 — edge DELETE also missing
+  { table: 'canvas_edges', event: 'DELETE', messageType: 'edge_removed',
+    transform: (old) => ({
+      edge: { id: old.id, from_node_id: old.from_node_id, to_node_id: old.to_node_id },
+    }) },
 
   // Shuttles
   { table: 'shuttles', event: 'INSERT', messageType: 'shuttle_launched',

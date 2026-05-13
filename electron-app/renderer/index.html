@@ -26,6 +26,17 @@
     <!-- Three.js from local lib folder -->
     <script defer src="lib/three.min.js"></script>
     <script defer src="lib/OrbitControls.js"></script>
+    <!-- Phase 11.U.G — Cytoscape kept as fallback (fCoSE).
+         Phase 11.U.I — Mermaid added as PRIMARY layout (Rowboat-style dagre tree).
+         Load order matters: layout-base → cose-base → fcose → core → glue, then mermaid. -->
+    <script defer src="lib/layout-base.js"></script>
+    <script defer src="lib/cose-base.js"></script>
+    <script defer src="lib/cytoscape.umd.js"></script>
+    <script defer src="lib/cytoscape-fcose.js"></script>
+    <script defer src="cytoscape-layout.js"></script>
+    <script defer src="lib/mermaid.min.js"></script>
+    <script defer src="mermaid-layout.js"></script>
+    <script defer src="format-renderer.js"></script>
     <script defer src="shuttle_manager.js"></script>
     <script defer src="multiverse.js"></script>
     <script defer src="rich_content_renderer.js"></script>
@@ -744,8 +755,18 @@
 
 
         // Listen for Python messages
+        // Phase 11.U — noisy high-frequency events filtered from the
+        // generic [Python] log so the console stays readable.
+        const _NOISY_PYTHON_MESSAGES = new Set([
+            'eyeterm_gaze_cursor',
+            'eyeterm_click_dots',
+            'gaze_cursor',
+            'gaze_dot',
+        ]);
         window.vibemind.onPythonMessage((message) => {
-            console.log('[Python]', message);
+            if (message && !_NOISY_PYTHON_MESSAGES.has(message.type)) {
+                console.log('[Python]', message);
+            }
 
             switch (message.type) {
                 case 'bubbles_sync':
@@ -1024,6 +1045,10 @@
 
                 // Canvas events
                 case 'entered_bubble':
+                    // Phase 11.U.E — remember which bubble we're in so
+                    // force_resync_bubbles can re-fetch its nodes.
+                    window.__currentBubbleId = message.bubble_id;
+
                     // Hide bubble tooltip
                     const ipanel = document.getElementById('info-panel');
                     if (ipanel) ipanel.classList.add('hidden');
@@ -1125,9 +1150,42 @@
                     }
                     break;
 
+                // Phase 11.U.C — batched edges (from idea_connect_multi or auto_link)
+                case 'edge_batch_added':
+                    if (window.spaceCanvas && Array.isArray(message.edges)) {
+                        for (const edge of message.edges) {
+                            try { window.spaceCanvas.onEdgeAdded(edge); }
+                            catch (e) { console.warn('[edge_batch] one edge failed:', e); }
+                        }
+                        const auto = message.meta && message.meta.auto_linked;
+                        const note = auto ? `Auto-linked ${message.edges.length} ideas` :
+                                            `Linked ${message.edges.length} ideas`;
+                        showTranscript('System', note);
+                    }
+                    break;
+
+                // Phase 11.U.C — disconnect via brain-routing
+                // Phase 11.U.K — also accept `edge_removed` (Supabase Realtime DELETE)
+                case 'edge_deleted':
+                case 'edge_removed':
+                    if (window.spaceCanvas) {
+                        if (typeof window.spaceCanvas.onEdgeRemoved === 'function') {
+                            window.spaceCanvas.onEdgeRemoved({
+                                edge_id: message.edge_id || (message.edge && message.edge.id),
+                                from_node_id: message.from_node_id || (message.edge && message.edge.from_node_id),
+                                to_node_id: message.to_node_id || (message.edge && message.edge.to_node_id),
+                            });
+                        } else if (typeof window.spaceCanvas.refresh === 'function') {
+                            window.spaceCanvas.refresh();
+                        }
+                        showTranscript('System', 'Connection removed');
+                    }
+                    break;
+
                 // Handle exited_bubble from Python backend
                 case 'exited_bubble':
                     console.log('[Python] Received exited_bubble message');
+                    window.__currentBubbleId = null;  // Phase 11.U.E
                     window.bubbleNavigation.exitSpace(true);  // Pass true to indicate this came from Python
                     break;
 
@@ -1208,6 +1266,31 @@
                     if (window.spaceCanvas) {
                         window.spaceCanvas.refresh();
                     }
+                    break;
+
+                case 'force_resync_bubbles':
+                    // Phase 11.U — Brain published ui.refresh_bubbles, re-fetch from source-of-truth
+                    console.log('[Brain] force_resync_bubbles received');
+                    // Phase 11.U.E — debounce: many mutations in <500ms collapse
+                    // to one resync. Otherwise overlapping `enter_bubble` round-trips
+                    // race the DOM and stack stale placeholder nodes.
+                    if (window.__resyncTimer) clearTimeout(window.__resyncTimer);
+                    window.__resyncTimer = setTimeout(() => {
+                        window.__resyncTimer = null;
+                        try {
+                            if (window.vibemind && typeof window.vibemind.requestBubbles === 'function') {
+                                window.vibemind.requestBubbles();
+                            }
+                            const bid = window.__currentBubbleId;
+                            if (bid != null && window.vibemind?.sendToPython) {
+                                console.log('[Brain] debounced resync re-entering bubble', bid);
+                                window.vibemind.sendToPython({
+                                    type: 'enter_bubble',
+                                    bubble_id: bid,
+                                });
+                            }
+                        } catch (e) { console.warn('[Brain] resync failed:', e); }
+                    }, 350);
                     break;
 
                 case 'idea_summarized':

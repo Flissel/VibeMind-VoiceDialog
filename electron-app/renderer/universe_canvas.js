@@ -217,15 +217,276 @@ class UniverseCanvas {
 
     loadNodes(nodes, edges = []) {
         console.log('[UniverseCanvas] Loading nodes:', nodes?.length || 0, 'edges:', edges?.length || 0);
+        this._showBanner(`loadNodes: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`, '#666');
+
+        if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
+            this._stopMermaidPoll();
+            this.clear();
+            return;
+        }
+
+        // Phase 11.U.I rev2 — MERMAID DIRECT-RENDER MODE.
+        // Rather than positioning our DOM nodes via fCoSE/dagre output, we
+        // hand the whole container over to Mermaid and render its SVG straight
+        // — 1:1 Rowboat AgentGraphVisualizer pattern. Read-only (no drag/edit),
+        // but the radial-hub dagre layout is finally correct.
+        if (typeof window.renderMermaidIntoContainer === 'function' && typeof window.mermaid !== 'undefined') {
+            this._showBanner(`Rendering Mermaid (${nodes.length} nodes / ${edges.length} edges)...`, '#37c');
+            this._loadGen = (this._loadGen || 0) + 1;
+            const gen = this._loadGen;
+            window.renderMermaidIntoContainer(this.container, nodes, edges).then(ok => {
+                if (gen !== this._loadGen) return;
+                if (ok) {
+                    this._showBanner(`Mermaid rendered ${nodes.length} nodes`, '#3a7');
+                    // Phase 11.U.N rev5 — refresh any open format-card with fresh content_json
+                    if (typeof window.refreshOpenFormatPanel === 'function') {
+                        try { window.refreshOpenFormatPanel(); } catch (_) {}
+                    }
+                    this._mermaidMode = true;
+                    this.nodes.clear();  // legacy state cleanup
+                    this.edges = [];
+                    // Phase 11.U.I rev8 — Supabase Realtime broadcasts for
+                    // canvas_nodes/canvas_edges INSERT don't reliably reach
+                    // the renderer (channel-subscribe is timing-sensitive
+                    // and the MCP-tool-write-path may bypass voice-process
+                    // broadcast). Fall back to a 5-second poll while in
+                    // mermaid mode so user-driven creates show up promptly.
+                    this._startMermaidPoll();
+                } else {
+                    this._showBanner('Mermaid render failed, falling back to DOM canvas', '#c80');
+                    this._loadNodesFallback(nodes, edges);
+                }
+            }).catch(err => {
+                if (gen !== this._loadGen) return;
+                console.warn('[UniverseCanvas] mermaid render exception:', err);
+                this._showBanner('Mermaid exception: ' + err.message, '#c33');
+                this._loadNodesFallback(nodes, edges);
+            });
+            return;
+        }
+
+        // Fallback path (mermaid not loaded) — old fCoSE pipeline.
+        this._loadNodesFallback(nodes, edges);
+    }
+
+    _loadNodesFallback(nodes, edges) {
+        // Re-init DOM canvas if we were in mermaid mode previously
+        if (this._mermaidMode) {
+            this._stopMermaidPoll();
+            this.container.innerHTML = '';
+            this.init();
+            this._mermaidMode = false;
+        }
         this.clear();
 
-        if (nodes && Array.isArray(nodes)) {
-            nodes.forEach(node => this.renderNode(node));
+        this._loadGen = (this._loadGen || 0) + 1;
+        const gen = this._loadGen;
+        const needs = this._layoutNeeded(nodes);
+        if (needs) {
+            this._runAutoLayout(nodes, edges).then(positions => {
+                if (gen !== this._loadGen) {
+                    console.log(`[UniverseCanvas] dropping stale layout (gen ${gen} != ${this._loadGen})`);
+                    return;
+                }
+                this._applyPositionsAndRender(nodes, edges, positions);
+            }).catch(err => {
+                if (gen !== this._loadGen) return;
+                console.warn('[UniverseCanvas] auto-layout failed:', err);
+                this._applyPositionsAndRender(nodes, edges, null);
+            });
+        } else {
+            this._applyPositionsAndRender(nodes, edges, null);
+        }
+    }
+
+    _layoutNeeded(nodes) {
+        // Check 1: any node missing a position
+        for (const n of nodes) {
+            const px = n.position?.x ?? n.x;
+            const py = n.position?.y ?? n.y;
+            if (px == null || py == null) return true;
+        }
+        // Check 2: bounding box too small (all clustered at default 100,100)
+        // or any two nodes overlap (centre-to-centre < 200px)
+        for (let i = 0; i < nodes.length; i++) {
+            const a = nodes[i];
+            const ax = a.position?.x ?? a.x;
+            const ay = a.position?.y ?? a.y;
+            for (let j = i + 1; j < nodes.length; j++) {
+                const b = nodes[j];
+                const bx = b.position?.x ?? b.x;
+                const by = b.position?.y ?? b.y;
+                if (Math.abs(ax - bx) < 240 && Math.abs(ay - by) < 110) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    _showBanner(msg, color = '#3a7') {
+        // Phase 11.U.G — Visible status banner because DevTools sometimes
+        // refuses to open. Shows the cytoscape-layout pipeline state right
+        // at the top of the screen for 5 seconds.
+        try {
+            let b = document.getElementById('cy-debug-banner');
+            if (!b) {
+                b = document.createElement('div');
+                b.id = 'cy-debug-banner';
+                b.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
+                    'z-index:99999;padding:6px 14px;font:12px monospace;color:#fff;' +
+                    'border-radius:4px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.5)';
+                document.body.appendChild(b);
+            }
+            b.style.background = color;
+            b.textContent = msg;
+            clearTimeout(this.__bannerTimer);
+            this.__bannerTimer = setTimeout(() => {
+                if (b && b.parentNode) b.parentNode.removeChild(b);
+            }, 5000);
+        } catch (_) { /* ignore */ }
+    }
+
+    async _runAutoLayout(nodes, edges) {
+        // Phase 11.U.I — PRIMARY: Mermaid `graph LR` (dagre tree-layout, Rowboat-style).
+        // Falls back to Cytoscape fCoSE if Mermaid is unavailable. Mermaid produces
+        // the hierarchical-radial look the user wants; fCoSE was making organic
+        // clusters which looked wrong here.
+        if (typeof window.computeMermaidLayout === 'function' && typeof window.mermaid !== 'undefined') {
+            this._showBanner(`Running Mermaid on ${nodes.length} nodes / ${edges.length} edges...`, '#37c');
+            console.log('[UniverseCanvas] running mermaid auto-layout (primary)...');
+            const t0 = performance.now();
+            try {
+                const positions = await window.computeMermaidLayout(nodes, edges);
+                const dt = (performance.now() - t0).toFixed(0);
+                if (positions && positions.size > 0) {
+                    this._showBanner(`Mermaid done: ${positions.size} positions in ${dt}ms`, '#3a7');
+                    return positions;
+                }
+                console.warn('[UniverseCanvas] mermaid returned empty positions — falling back to fCoSE');
+                this._showBanner('Mermaid returned empty positions — using fCoSE fallback', '#c80');
+            } catch (err) {
+                console.warn('[UniverseCanvas] mermaid layout failed:', err);
+                this._showBanner('Mermaid failed: ' + err.message + ' — using fCoSE', '#c80');
+            }
+        } else {
+            console.log('[UniverseCanvas] mermaid not loaded — using fCoSE fallback');
         }
 
-        if (edges && Array.isArray(edges)) {
-            edges.forEach(edge => this.createEdge(edge.from_node_id, edge.to_node_id));
+        // Fallback: Cytoscape fCoSE (Phase 11.U.G)
+        if (typeof window.cytoscape === 'undefined') {
+            this._showBanner('cytoscape UMD not loaded (lib/cytoscape.umd.js missing?)', '#c33');
+            console.warn('[UniverseCanvas] cytoscape UMD not loaded');
+            return null;
         }
+        if (typeof window.cytoscapeFcose === 'undefined') {
+            this._showBanner('cytoscape-fcose not loaded', '#c33');
+            return null;
+        }
+        if (typeof window.computeCytoscapeLayout !== 'function') {
+            this._showBanner('computeCytoscapeLayout not registered', '#c33');
+            return null;
+        }
+        this._showBanner(`Running fCoSE on ${nodes.length} nodes / ${edges.length} edges...`, '#37c');
+        console.log('[UniverseCanvas] running cytoscape auto-layout...');
+        const t0 = performance.now();
+        try {
+            const positions = await window.computeCytoscapeLayout(nodes, edges, {
+                nodeWidth: 240, nodeHeight: 100,
+                idealEdgeLength: 220, nodeSeparation: 80,
+                quality: 'default',
+            });
+            const dt = (performance.now() - t0).toFixed(0);
+            console.log(`[UniverseCanvas] layout computed in ${dt}ms`);
+            this._showBanner(`fCoSE done: ${positions.size} positions in ${dt}ms`, '#3a7');
+            return positions;
+        } catch (err) {
+            this._showBanner('fCoSE error: ' + err.message, '#c33');
+            console.error('[UniverseCanvas] layout error:', err);
+            return null;
+        }
+    }
+
+    _applyPositionsAndRender(nodes, edges, positions) {
+        // Overwrite positions with computed ones (when available)
+        if (positions) {
+            for (const n of nodes) {
+                const p = positions.get(String(n.id));
+                if (p) {
+                    n.position = { x: p.x, y: p.y };
+                }
+            }
+            // Persist computed positions back via IPC so they survive reload
+            this._persistPositions(positions);
+        }
+
+        // Phase 11.U.H — render nodes first, edges second, then a final
+        // redrawEdges pass to lock positions in. Edges keep their data in
+        // this.edges even if endpoint nodes are temporarily missing.
+        // Debug: log input positions before render
+        if (nodes.length > 0) {
+            const sample = nodes.slice(0, 3).map(n => `(${n.position?.x},${n.position?.y})`).join(' ');
+            const allPos = nodes.map(n => ({x: n.position?.x ?? 0, y: n.position?.y ?? 0}));
+            const minX = Math.min(...allPos.map(p => p.x));
+            const maxX = Math.max(...allPos.map(p => p.x));
+            const minY = Math.min(...allPos.map(p => p.y));
+            const maxY = Math.max(...allPos.map(p => p.y));
+            console.log(`[UniverseCanvas] _applyPositionsAndRender: nodes=${nodes.length} bbox=(${minX},${minY})→(${maxX},${maxY}) spread=${maxX-minX}x${maxY-minY} samples=${sample}`);
+        }
+        nodes.forEach(node => this.renderNode(node));
+        // Phase 11.U.H DEBUG — log type of stored node-ids vs edge endpoints
+        if (nodes.length > 0 && edges && edges.length > 0) {
+            const firstNodeKey = Array.from(this.nodes.keys())[0];
+            const firstEdge = edges[0];
+            console.log(`[UniverseCanvas] DEBUG: nodes-map first key=${firstNodeKey} (typeof ${typeof firstNodeKey}); first-edge from=${firstEdge.from_node_id} (typeof ${typeof firstEdge.from_node_id}) to=${firstEdge.to_node_id} (typeof ${typeof firstEdge.to_node_id})`);
+        }
+        if (edges && Array.isArray(edges)) {
+            edges.forEach(edge => this.createEdge(
+                edge.from_node_id, edge.to_node_id,
+                { label: edge.edge_type || 'related' },
+            ));
+        }
+        // Recompute edge positions now that all node DOM-elements are in place
+        this.redrawEdges();
+
+        // Phase 11.U.H — Critical: fit the new layout into the visible
+        // viewport. Without this, the freshly-rendered nodes sit at
+        // (canvas-coord = 10050+), invisible because no pan/scale was set.
+        // centerOnNodes() handles both pan AND auto-fit scale.
+        if (positions || nodes.length > 0) {
+            // Use a microtask so layout reflow + offsetWidth measurements
+            // pick up the actual rendered widths
+            requestAnimationFrame(() => {
+                this.centerOnNodes();
+                // One more pass after centering so edges follow the new transform
+                this.redrawEdges();
+            });
+        }
+    }
+
+    async _persistPositions(positions) {
+        // Phase 11.U.H — IDs are DB-UUIDs directly (post-H.1). Use map-keys
+        // straight as PATCH targets. Throttle to 6 in-flight at once to
+        // avoid ERR_INSUFFICIENT_RESOURCES.
+        const SUPA = 'http://localhost:54321/rest/v1';
+        const tasks = [];
+        positions.forEach((pos, nodeId) => {
+            // nodeId is already a Supabase UUID string after H.1
+            if (!nodeId || typeof nodeId !== 'string' || nodeId.length < 4) return;
+            tasks.push({ dbId: nodeId, pos });
+        });
+        const BATCH = 6;
+        for (let i = 0; i < tasks.length; i += BATCH) {
+            const slice = tasks.slice(i, i + BATCH);
+            await Promise.allSettled(slice.map(t => {
+                return fetch(`${SUPA}/canvas_nodes?id=eq.${encodeURIComponent(t.dbId)}`, {
+                    method: 'PATCH',
+                    headers: { 'apikey': 'anon', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x: t.pos.x, y: t.pos.y }),
+                });
+            }));
+        }
+        console.log(`[UniverseCanvas] persisted ${tasks.length} positions to Supabase`);
     }
 
     clear() {
@@ -489,14 +750,17 @@ class UniverseCanvas {
         if (node) {
             node.element.classList.remove('dragging');
 
-            // Save new position to backend
-            const newPosition = {
-                x: parseInt(node.element.style.left),
-                y: parseInt(node.element.style.top)
-            };
+            // Phase 11.U.H — style.left/top INCLUDE canvasCenter offset.
+            // The stored data.position must be canvas-relative (without
+            // center) so renderNode can re-add canvasCenter on the next
+            // load without drifting outward.
+            const rawX = (parseInt(node.element.style.left) || 0) - this.canvasCenter;
+            const rawY = (parseInt(node.element.style.top) || 0) - this.canvasCenter;
+            const newPosition = { x: rawX, y: rawY };
             node.data.position = newPosition;
 
-            // Sync with Python backend
+            // Sync with Python backend (will eventually PATCH Supabase via
+            // _persistPositions OR via the update_canvas_node IPC path)
             if (window.vibemind) {
                 window.vibemind.updateCanvasNode(
                     this.bubbleId,
@@ -584,57 +848,100 @@ class UniverseCanvas {
     // EDGE RENDERING (SVG)
     // ========================================================================
 
-    createEdge(fromNodeId, toNodeId) {
-        const fromNode = this.nodes.get(fromNodeId);
-        const toNode = this.nodes.get(toNodeId);
-        if (!fromNode || !toNode) return;
+    // Phase 11.U.H — Edge data lives in this.edges regardless of node-render state.
+    // createEdge() always records the edge; redrawEdges() looks up DOM elements via
+    // [data-node-id="<uuid>"] selector each time. If a node isn't currently rendered,
+    // the edge is simply skipped this render pass — but stays in this.edges so a
+    // later load/relayout can re-draw it.
+    createEdge(fromNodeId, toNodeId, opts = {}) {
+        // De-dup
+        const exists = this.edges.some(e =>
+            (e.fromId === fromNodeId && e.toId === toNodeId) ||
+            (e.fromId === toNodeId && e.toId === fromNodeId)
+        );
+        if (exists) return;
 
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.classList.add('canvas-edge');
-        line.dataset.from = fromNodeId;
-        line.dataset.to = toNodeId;
-
-        this.updateEdgePosition(line, fromNode.element, toNode.element);
+        line.dataset.from = String(fromNodeId);
+        line.dataset.to = String(toNodeId);
+        if (opts.label) line.dataset.label = opts.label;
         this.svgOverlay.appendChild(line);
-        this.edges.push({ fromId: fromNodeId, toId: toNodeId, element: line });
+
+        const edge = {
+            fromId: fromNodeId,
+            toId: toNodeId,
+            label: opts.label || 'related',
+            element: line,
+        };
+        this.edges.push(edge);
+        this._positionEdge(edge);  // initial position (may be hidden if nodes missing)
     }
 
-    updateEdgePosition(line, fromEl, toEl) {
-        // FIX: Use canvas coordinates directly instead of getBoundingClientRect
-        // getBoundingClientRect returns screen coordinates which are affected by zoom/transform
-        // We need canvas coordinates (style.left/top) which are unaffected
-        
-        const fromX = parseInt(fromEl.style.left) || 0;
-        const fromY = parseInt(fromEl.style.top) || 0;
-        const toX = parseInt(toEl.style.left) || 0;
-        const toY = parseInt(toEl.style.top) || 0;
-        
-        // Get node dimensions for center point calculation
-        const fromWidth = fromEl.offsetWidth || this.nodeWidth;
-        const fromHeight = fromEl.offsetHeight || this.nodeHeight;
-        const toWidth = toEl.offsetWidth || this.nodeWidth;
-        const toHeight = toEl.offsetHeight || this.nodeHeight;
-        
-        // Calculate center points in canvas coordinates
-        const x1 = fromX + fromWidth / 2;
-        const y1 = fromY + fromHeight / 2;
-        const x2 = toX + toWidth / 2;
-        const y2 = toY + toHeight / 2;
+    _findNodeElement(nodeId) {
+        // Phase 11.U.H — first try the in-memory map (fast path), then
+        // fall back to DOM querySelector for nodes that may have been
+        // rendered but not yet inserted in the map (race-safe).
+        const node = this.nodes.get(nodeId);
+        if (node && node.element) return node.element;
+        // querySelectorAll-escape the id (UUIDs are safe but be defensive)
+        const safe = String(nodeId).replace(/"/g, '\\"');
+        return this.nodesContainer.querySelector(`[data-node-id="${safe}"]`);
+    }
 
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
+    _positionEdge(edge) {
+        const fromEl = this._findNodeElement(edge.fromId);
+        const toEl = this._findNodeElement(edge.toId);
+        if (!fromEl || !toEl) {
+            // Hide the line until both endpoints exist
+            // Phase 11.U.H — log mismatched ids so we can spot type bugs
+            if (!this.__edgeWarnLogged) {
+                this.__edgeWarnLogged = 0;
+            }
+            if (this.__edgeWarnLogged < 5) {
+                console.warn(`[UniverseCanvas] edge endpoint(s) not found: fromId=${edge.fromId} (typeof ${typeof edge.fromId}) fromEl=${!!fromEl} toId=${edge.toId} (typeof ${typeof edge.toId}) toEl=${!!toEl}. Map sample key=${Array.from(this.nodes.keys()).slice(0,1)[0]} (typeof ${typeof Array.from(this.nodes.keys())[0]})`);
+                this.__edgeWarnLogged++;
+            }
+            edge.element.setAttribute('x1', 0);
+            edge.element.setAttribute('y1', 0);
+            edge.element.setAttribute('x2', 0);
+            edge.element.setAttribute('y2', 0);
+            edge.element.style.visibility = 'hidden';
+            return;
+        }
+        edge.element.style.visibility = '';
+        const fromX = parseFloat(fromEl.style.left) || 0;
+        const fromY = parseFloat(fromEl.style.top) || 0;
+        const toX = parseFloat(toEl.style.left) || 0;
+        const toY = parseFloat(toEl.style.top) || 0;
+        const fromW = fromEl.offsetWidth || this.nodeWidth || 240;
+        const fromH = fromEl.offsetHeight || this.nodeHeight || 100;
+        const toW = toEl.offsetWidth || this.nodeWidth || 240;
+        const toH = toEl.offsetHeight || this.nodeHeight || 100;
+        edge.element.setAttribute('x1', fromX + fromW / 2);
+        edge.element.setAttribute('y1', fromY + fromH / 2);
+        edge.element.setAttribute('x2', toX + toW / 2);
+        edge.element.setAttribute('y2', toY + toH / 2);
+    }
+
+    // Back-compat shim — old callers used updateEdgePosition(line, fromEl, toEl)
+    updateEdgePosition(line, fromEl, toEl) {
+        const fromX = parseFloat(fromEl.style.left) || 0;
+        const fromY = parseFloat(fromEl.style.top) || 0;
+        const toX = parseFloat(toEl.style.left) || 0;
+        const toY = parseFloat(toEl.style.top) || 0;
+        const fromW = fromEl.offsetWidth || this.nodeWidth || 240;
+        const fromH = fromEl.offsetHeight || this.nodeHeight || 100;
+        const toW = toEl.offsetWidth || this.nodeWidth || 240;
+        const toH = toEl.offsetHeight || this.nodeHeight || 100;
+        line.setAttribute('x1', fromX + fromW / 2);
+        line.setAttribute('y1', fromY + fromH / 2);
+        line.setAttribute('x2', toX + toW / 2);
+        line.setAttribute('y2', toY + toH / 2);
     }
 
     redrawEdges() {
-        this.edges.forEach(edge => {
-            const fromNode = this.nodes.get(edge.fromId);
-            const toNode = this.nodes.get(edge.toId);
-            if (fromNode && toNode) {
-                this.updateEdgePosition(edge.element, fromNode.element, toNode.element);
-            }
-        });
+        this.edges.forEach(edge => this._positionEdge(edge));
     }
 
     // ========================================================================
@@ -704,112 +1011,91 @@ class UniverseCanvas {
      * Auto-layout nodes using a force-directed algorithm.
      * Connected nodes attract, all nodes repel, edges act as springs.
      */
-    autoLayout() {
+    /**
+     * Phase 11.U.G — Cytoscape (fCoSE) based auto-layout.
+     * Replaces the old hand-rolled force simulation. fCoSE is what
+     * Rowboat uses and produces clean radial-cluster layouts without
+     * overlap, using real DOM box dimensions.
+     */
+    async autoLayout() {
         const nodeIds = Array.from(this.nodes.keys());
         if (nodeIds.length < 2) return;
 
-        // Build adjacency set for quick lookup
-        const adjacency = new Map();
-        nodeIds.forEach(id => adjacency.set(id, new Set()));
-        this.edges.forEach(edge => {
-            if (adjacency.has(edge.fromId) && adjacency.has(edge.toId)) {
-                adjacency.get(edge.fromId).add(edge.toId);
-                adjacency.get(edge.toId).add(edge.fromId);
+        // Phase 11.U.H — sample up to 10 nodes for an average box size.
+        // CSS allows .canvas-node width to range 200-350 px depending on
+        // title length; a single sample can mislead the layout.
+        let boxW = 260, boxH = 110;
+        try {
+            const samples = nodeIds.slice(0, Math.min(10, nodeIds.length))
+                .map(id => this.nodes.get(id).element.getBoundingClientRect())
+                .filter(r => r.width > 0 && r.height > 0);
+            if (samples.length > 0) {
+                const maxW = Math.max(...samples.map(r => r.width));
+                const maxH = Math.max(...samples.map(r => r.height));
+                boxW = maxW;
+                boxH = maxH;
             }
-        });
+        } catch (_) { /* keep defaults */ }
+        // Generous breathing space — fCoSE doesn't know about CSS box-shadow / hover
+        boxW = Math.max(240, boxW + 40);
+        boxH = Math.max(110, boxH + 30);
 
-        // Initialize positions from current node positions (canvas-relative)
-        const positions = new Map();
-        nodeIds.forEach(id => {
-            const node = this.nodes.get(id);
-            const el = node.element;
-            positions.set(id, {
-                x: (parseInt(el.style.left) || this.canvasCenter) - this.canvasCenter,
-                y: (parseInt(el.style.top) || this.canvasCenter) - this.canvasCenter,
-                vx: 0,
-                vy: 0
-            });
-        });
+        // Convert edges to fCoSE format
+        const edgeList = this.edges.map(e => ({
+            from_node_id: e.fromId, to_node_id: e.toId,
+        }));
+        const nodeList = nodeIds.map(id => ({ id }));
 
-        // Layout parameters
-        const REPULSION = 80000;      // Repulsion force between all nodes
-        const ATTRACTION = 0.005;     // Spring constant for connected nodes
-        const IDEAL_LENGTH = 350;     // Ideal edge length
-        const DAMPING = 0.85;         // Velocity damping
-        const CENTER_PULL = 0.01;     // Pull towards center
-        const ITERATIONS = 200;       // Simulation steps
+        this._showBanner(`Auto Layout (fCoSE): ${nodeIds.length} nodes, ${edgeList.length} edges...`, '#37c');
 
-        for (let iter = 0; iter < ITERATIONS; iter++) {
-            const cooling = 1 - (iter / ITERATIONS) * 0.8; // Slow down over time
-
-            // Calculate forces for each node
-            nodeIds.forEach(id => {
-                const p = positions.get(id);
-                let fx = 0, fy = 0;
-
-                // Repulsion from all other nodes (Coulomb's law)
-                nodeIds.forEach(otherId => {
-                    if (otherId === id) return;
-                    const o = positions.get(otherId);
-                    const dx = p.x - o.x;
-                    const dy = p.y - o.y;
-                    const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-                    const force = REPULSION / (dist * dist);
-                    fx += (dx / dist) * force;
-                    fy += (dy / dist) * force;
+        // Run Cytoscape fCoSE if available, fall back to old simulation otherwise
+        let positions;
+        if (typeof window.computeCytoscapeLayout === 'function') {
+            try {
+                positions = await window.computeCytoscapeLayout(nodeList, edgeList, {
+                    nodeWidth: boxW, nodeHeight: boxH,
+                    idealEdgeLength: Math.max(280, boxW + 80),
+                    nodeSeparation: Math.max(80, boxW * 0.4),
+                    quality: 'proof', // 'proof' = best quality, slower
                 });
-
-                // Attraction along edges (Hooke's law)
-                const neighbors = adjacency.get(id);
-                if (neighbors) {
-                    neighbors.forEach(neighborId => {
-                        const o = positions.get(neighborId);
-                        const dx = o.x - p.x;
-                        const dy = o.y - p.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        const displacement = dist - IDEAL_LENGTH;
-                        const force = ATTRACTION * displacement;
-                        fx += (dx / Math.max(dist, 1)) * force;
-                        fy += (dy / Math.max(dist, 1)) * force;
-                    });
-                }
-
-                // Center gravity (prevent drift)
-                fx -= p.x * CENTER_PULL;
-                fy -= p.y * CENTER_PULL;
-
-                // Update velocity with damping and cooling
-                p.vx = (p.vx + fx) * DAMPING * cooling;
-                p.vy = (p.vy + fy) * DAMPING * cooling;
-            });
-
-            // Apply velocities
-            nodeIds.forEach(id => {
-                const p = positions.get(id);
-                p.x += p.vx;
-                p.y += p.vy;
-            });
+                this._showBanner(`fCoSE done: ${positions.size} positioned`, '#3a7');
+            } catch (err) {
+                this._showBanner('fCoSE error: ' + err.message, '#c33');
+                console.error('[UniverseCanvas] fCoSE error:', err);
+                return;
+            }
+        } else {
+            this._showBanner('cytoscape not loaded', '#c33');
+            console.warn('[UniverseCanvas] window.computeCytoscapeLayout missing');
+            return;
         }
 
         // Apply final positions with animation
         nodeIds.forEach(id => {
             const node = this.nodes.get(id);
-            const p = positions.get(id);
+            const p = positions.get(String(id));
+            if (!p) return;
             const el = node.element;
             el.style.transition = 'left 0.5s ease, top 0.5s ease';
-            el.style.left = (Math.round(p.x) + this.canvasCenter) + 'px';
-            el.style.top = (Math.round(p.y) + this.canvasCenter) + 'px';
-
-            // Remove transition after animation
+            // canvasCenter is added because renderNode does `+ this.canvasCenter`
+            el.style.left = (p.x + this.canvasCenter) + 'px';
+            el.style.top = (p.y + this.canvasCenter) + 'px';
+            // Also update data so future redraw/persist sees them
+            if (node.data) {
+                node.data.position = { x: p.x, y: p.y };
+            }
             setTimeout(() => { el.style.transition = ''; }, 600);
         });
 
-        // Redraw edges after layout
-        setTimeout(() => this.redrawEdges(), 50);
-        // Redraw again after animation completes
-        setTimeout(() => this.redrawEdges(), 550);
+        // Persist to Supabase so the layout survives reload
+        this._persistPositions(positions);
 
-        // Center the view on the laid-out nodes
+        // Phase 11.U.H — redraw edges throughout the 500ms transition so
+        // they animate along with the nodes. Final pass at 600ms locks in
+        // the resting positions.
+        for (const t of [0, 100, 200, 300, 400, 500, 600]) {
+            setTimeout(() => this.redrawEdges(), t);
+        }
         this.centerOnNodes();
     }
 
@@ -832,6 +1118,27 @@ class UniverseCanvas {
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
         const rect = this.container.getBoundingClientRect();
+        const bboxW = maxX - minX;
+        const bboxH = maxY - minY;
+
+        // Phase 11.U.H — auto-fit-to-viewport: compute scale so the entire
+        // bbox fits with 10% margin around it. Clamp to [minScale, maxScale].
+        // Without this, large-spread fCoSE outputs render tiny because the
+        // default scale is 1 and the bbox blows past the viewport.
+        if (bboxW > 0 && bboxH > 0) {
+            const margin = 0.85; // 15% padding
+            const scaleX = (rect.width * margin) / bboxW;
+            const scaleY = (rect.height * margin) / bboxH;
+            const newScale = Math.min(scaleX, scaleY);
+            this.scale = Math.min(
+                this.maxScale || 3,
+                Math.max(this.minScale || 0.05, newScale),
+            );
+            console.log(`[UniverseCanvas] auto-fit: bbox ${Math.round(bboxW)}x${Math.round(bboxH)} → scale ${this.scale.toFixed(3)}`);
+            if (this.zoomLevelDisplay) {
+                this.zoomLevelDisplay.textContent = `${Math.round(this.scale * 100)}%`;
+            }
+        }
 
         this.panX = rect.width / 2 - centerX * this.scale;
         this.panY = rect.height / 2 - centerY * this.scale;
@@ -1022,12 +1329,50 @@ class UniverseCanvas {
     }
 
     onNodeAdded(node) {
+        // In Mermaid mode, re-render the whole diagram (cheap for small graphs)
+        if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         // If we already have a temp node, replace it
         // Otherwise just render
         this.renderNode(node);
     }
 
+    _scheduleMermaidRefresh() {
+        // Debounce — rapid backend bursts (e.g. 10× node_added within 1s)
+        // shouldn't trigger 10 enterBubble round-trips.
+        if (this._mermaidRefreshTimer) return;
+        this._mermaidRefreshTimer = setTimeout(() => {
+            this._mermaidRefreshTimer = null;
+            this.refresh();
+        }, 300);
+    }
+
+    _startMermaidPoll() {
+        if (this._mermaidPollTimer) return;
+        // 5-second poll: re-fetches the bubble via enterBubble. The voice
+        // backend's enter_bubble reads canvas_nodes + canvas_edges fresh
+        // from Supabase, so we always see the latest state. Skipped if
+        // the user is mid-cluster-drag (state.isPanning on the SVG wrap
+        // OR the per-cluster drag is active).
+        this._mermaidPollTimer = setInterval(() => {
+            // Skip if user is actively dragging — don't yank the diagram
+            // out from under them
+            const dragging = !!document.querySelector('.mermaid-graph-wrap')?.matches('[data-dragging="true"]');
+            if (dragging) return;
+            this.refresh();
+        }, 5000);
+        console.log('[UniverseCanvas] mermaid auto-poll started (5s interval)');
+    }
+
+    _stopMermaidPoll() {
+        if (this._mermaidPollTimer) {
+            clearInterval(this._mermaidPollTimer);
+            this._mermaidPollTimer = null;
+            console.log('[UniverseCanvas] mermaid auto-poll stopped');
+        }
+    }
+
     onNodeUpdated(nodeId, updates) {
+        if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         // Use findNodeById for cross-system ID compatibility
         const node = this.findNodeById(nodeId);
         if (!node) {
@@ -1046,9 +1391,20 @@ class UniverseCanvas {
         Object.assign(node.data, updates);
 
         // Update DOM position
+        // Phase 11.U.H rev4 — renderNode() positions elements at
+        // (data.position.x + canvasCenter, ...). Updates coming via realtime
+        // carry RAW DB coords, so we must re-add canvasCenter here. Without
+        // this, positions like (1115, 950) end up at the top-left of the
+        // 20000×20000 canvas — looks like all items collapsed into a corner.
         if (updates.position) {
-            node.element.style.left = updates.position.x + 'px';
-            node.element.style.top = updates.position.y + 'px';
+            const x = (updates.position.x || 100) + this.canvasCenter;
+            const y = (updates.position.y || 100) + this.canvasCenter;
+            node.element.style.left = x + 'px';
+            node.element.style.top = y + 'px';
+            // Keep node.data.position in raw-DB shape (consistent with how
+            // renderNode reads data.position.x for the next render). Object.assign
+            // above already stamped updates.position into node.data — which is
+            // the right shape (raw, no center-offset).
             this.redrawEdges();
         }
 
@@ -1108,6 +1464,7 @@ class UniverseCanvas {
     }
 
     onNodeDeleted(nodeId) {
+        if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         const node = this.nodes.get(nodeId);
         if (node) {
             node.element.remove();
@@ -1247,13 +1604,14 @@ class UniverseCanvas {
      * BUG FIX: Visual feedback when linking ideas
      */
     onEdgeAdded(edge) {
+        if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         const fromNodeId = edge.from_node_id;
         const toNodeId = edge.to_node_id;
-        
+
         console.log('[UniverseCanvas] Edge added:', fromNodeId, '->', toNodeId);
-        
+
         // Check if edge already exists
-        const exists = this.edges.some(e => 
+        const exists = this.edges.some(e =>
             (e.fromId === fromNodeId && e.toId === toNodeId) ||
             (e.fromId === toNodeId && e.toId === fromNodeId)
         );
@@ -1273,6 +1631,23 @@ class UniverseCanvas {
                 setTimeout(() => toNode.element.classList.remove('linked'), 1000);
             }
         }
+    }
+
+    onEdgeRemoved(payload) {
+        if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
+        const edgeId = payload && (payload.edge_id || (payload.edge && payload.edge.id));
+        const fromId = payload && (payload.from_node_id || (payload.edge && payload.edge.from_node_id));
+        const toId = payload && (payload.to_node_id || (payload.edge && payload.edge.to_node_id));
+        const before = this.edges.length;
+        this.edges = this.edges.filter(e => {
+            if (edgeId && e.id === edgeId) { if (e.element) e.element.remove(); return false; }
+            if (fromId && toId && ((e.fromId === fromId && e.toId === toId) || (e.fromId === toId && e.toId === fromId))) {
+                if (e.element) e.element.remove();
+                return false;
+            }
+            return true;
+        });
+        console.log(`[UniverseCanvas] Edge removed (${before - this.edges.length} dropped)`);
     }
 
     /**

@@ -420,17 +420,16 @@ class CanvasManager:
                 # Filter nodes by linked_idea_id (the DB UUID of the bubble)
                 for db_node in db_nodes:
                     if db_node.linked_idea_id == db_bubble_id:
-                        # Map DB UUID to local int ID
+                        # Phase 11.U.H — DB-UUID durchgehend. Keep dict
+                        # populated for legacy callers (drag/drop helpers)
+                        # but always wire `id` = UUID to the renderer.
                         if db_node.id not in self.backend.db_id_map:
-                            local_id = self.backend.next_node_id
-                            self.backend.next_node_id += 1
-                            self.backend.db_id_map[db_node.id] = local_id
-                            self.backend.node_id_map[local_id] = db_node.id
-                        else:
-                            local_id = self.backend.db_id_map[db_node.id]
+                            self.backend.db_id_map[db_node.id] = db_node.id
+                            self.backend.node_id_map[db_node.id] = db_node.id
 
                         node = {
-                            "id": local_id,
+                            "id": db_node.id,        # DB UUID (canonical)
+                            "db_id": db_node.id,     # back-compat alias
                             "type": db_node.node_type or "note",
                             "position": {"x": db_node.x or 100, "y": db_node.y or 100},
                             "content": {
@@ -474,14 +473,10 @@ class CanvasManager:
                     if already_loaded:
                         continue
 
-                    # Generate a stable local ID from child idea UUID
+                    # Phase 11.U.H — DB-UUID durchgehend
                     if child.id not in self.backend.db_id_map:
-                        local_id = self.backend.next_node_id
-                        self.backend.next_node_id += 1
-                        self.backend.db_id_map[child.id] = local_id
-                        self.backend.node_id_map[local_id] = child.id
-                    else:
-                        local_id = self.backend.db_id_map[child.id]
+                        self.backend.db_id_map[child.id] = child.id
+                        self.backend.node_id_map[child.id] = child.id
 
                     # Arrange in a circle
                     angle = ci * (2 * math.pi / max(len(child_ideas), 1))
@@ -490,7 +485,8 @@ class CanvasManager:
                     cy = 300 + math.sin(angle) * radius
 
                     node = {
-                        "id": local_id,
+                        "id": child.id,        # DB UUID (canonical)
+                        "db_id": child.id,     # back-compat alias
                         "type": "idea",
                         "position": {"x": cx, "y": cy},
                         "content": {
@@ -510,20 +506,133 @@ class CanvasManager:
         self.backend.bubbles[bubble_id].content = bubble_nodes
 
         # Also load edges if available
+        # Phase 11.U.H — load edges directly from Supabase (canonical source).
+        # canvas_repo's local sqlite is often empty in this setup, but Supabase
+        # has the real canvas_edges rows. Filter to only those whose endpoints
+        # are in the current bubble's node-set.
         edges = []
-        if self.backend.canvas_repo:
+        try:
+            import os as _os_e, requests as _r_e
+            supa_url = _os_e.environ.get("SUPABASE_URL", "http://localhost:54321").rstrip("/")
+            supa_key = _os_e.environ.get("SUPABASE_ANON_KEY", "anon").strip() or "anon"
+            headers = {"apikey": supa_key}
+            if supa_key.count(".") == 2:
+                headers["Authorization"] = f"Bearer {supa_key}"
+            # Build set of UUIDs for this bubble's nodes
+            bubble_node_ids = {n["id"] for n in bubble_nodes if isinstance(n.get("id"), str)}
+            if bubble_node_ids:
+                resp = _r_e.get(
+                    f"{supa_url}/rest/v1/canvas_edges",
+                    headers=headers,
+                    params={"select": "id,from_node_id,to_node_id,edge_type", "limit": "2000"},
+                    timeout=8,
+                )
+                if resp.status_code == 200:
+                    all_edges = resp.json()
+                    for db_edge in all_edges:
+                        fr = db_edge.get("from_node_id")
+                        to = db_edge.get("to_node_id")
+                        if fr in bubble_node_ids and to in bubble_node_ids:
+                            edges.append({
+                                "from_node_id": fr,   # DB UUID
+                                "to_node_id": to,     # DB UUID
+                                "edge_type": db_edge.get("edge_type", "related"),
+                            })
+                    logger.info(f"Loaded {len(edges)} edges for bubble {db_bubble_id} from Supabase")
+                else:
+                    logger.warning(f"Supabase canvas_edges fetch HTTP {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"Failed to load edges from Supabase: {e}")
+        # Fallback to canvas_repo if Supabase failed and sqlite has data
+        if not edges and self.backend.canvas_repo:
             try:
                 db_edges = self.backend.canvas_repo.list_edges(limit=1000)
+                bubble_node_ids = {n["id"] for n in bubble_nodes}
                 for db_edge in db_edges:
-                    from_local = self.backend.db_id_map.get(db_edge.from_node_id)
-                    to_local = self.backend.db_id_map.get(db_edge.to_node_id)
-                    if from_local and to_local:
+                    if db_edge.from_node_id in bubble_node_ids and db_edge.to_node_id in bubble_node_ids:
                         edges.append({
-                            "from_node_id": from_local,
-                            "to_node_id": to_local
+                            "from_node_id": db_edge.from_node_id,
+                            "to_node_id": db_edge.to_node_id,
+                            "edge_type": getattr(db_edge, "edge_type", "related"),
                         })
             except Exception as e:
-                logger.warning(f"Failed to load edges from database: {e}")
+                logger.debug(f"Sqlite edges fallback also failed: {e}")
+
+        # ── Phase 11.U.G — Layout moved to Cytoscape in renderer ───
+        # Skip the Python auto-layout: the renderer's universe_canvas.js
+        # now runs Cytoscape+fCoSE in loadNodes(), which uses real DOM
+        # box dimensions and produces overlap-free layouts. The Python
+        # path remains as a fallback if PYTHON_AUTOLAYOUT_FALLBACK=1.
+        try:
+            import os as _os_cm
+            if _os_cm.environ.get("PYTHON_AUTOLAYOUT_FALLBACK") != "1":
+                raise ImportError("python auto-layout disabled (Cytoscape in renderer)")
+            from ipc.auto_layout import relayout_if_needed
+            # Build payload the layout fn expects: list of {id, x, y} +
+            # list of (from_id, to_id) tuples
+            nodes_for_layout = []
+            local_to_db = {v: k for k, v in self.backend.db_id_map.items()}
+            for n in bubble_nodes:
+                local_id = n["id"]
+                db_id = local_to_db.get(local_id, str(local_id))
+                pos = n.get("position") or {}
+                nodes_for_layout.append({
+                    "id": db_id,
+                    "local_id": local_id,
+                    "x": pos.get("x"),
+                    "y": pos.get("y"),
+                })
+            edge_pairs = []
+            for e in edges:
+                fr_local = e["from_node_id"]
+                to_local = e["to_node_id"]
+                fr_db = local_to_db.get(fr_local)
+                to_db = local_to_db.get(to_local)
+                if fr_db and to_db:
+                    edge_pairs.append((fr_db, to_db))
+            new_positions = relayout_if_needed(nodes_for_layout, edge_pairs)
+            if new_positions:
+                # Persist directly to Supabase REST (the canonical store
+                # for canvas_nodes; canvas_repo's sqlite mirror is often
+                # empty in this setup). Best-effort — if Supabase is down
+                # we still update the in-memory node list so the UI sees
+                # the layout this turn.
+                import os as _os
+                import requests as _requests
+                supa_url = _os.environ.get(
+                    "SUPABASE_URL", "http://localhost:54321"
+                ).rstrip("/")
+                supa_key = _os.environ.get("SUPABASE_ANON_KEY", "anon").strip() or "anon"
+                headers = {"apikey": supa_key, "Content-Type": "application/json"}
+                if supa_key and supa_key.count(".") == 2:
+                    headers["Authorization"] = f"Bearer {supa_key}"
+                patched = 0
+                for db_id, (nx, ny) in new_positions.items():
+                    try:
+                        r = _requests.patch(
+                            f"{supa_url}/rest/v1/canvas_nodes?id=eq.{db_id}",
+                            headers=headers,
+                            json={"x": nx, "y": ny},
+                            timeout=5,
+                        )
+                        if r.status_code in (200, 204):
+                            patched += 1
+                    except Exception as e:
+                        logger.debug(f"supabase patch {db_id}: {e}")
+                # Also reflect in the in-memory node list so the current
+                # entered_bubble message carries the new positions
+                for n in bubble_nodes:
+                    local_id = n["id"]
+                    db_id = local_to_db.get(local_id, str(local_id))
+                    if db_id in new_positions:
+                        nx, ny = new_positions[db_id]
+                        n["position"] = {"x": nx, "y": ny}
+                logger.info(
+                    f"[auto_layout] applied to {len(new_positions)} nodes "
+                    f"in bubble {bubble_id} ({patched} persisted to supabase)"
+                )
+        except Exception as e:
+            logger.warning(f"[auto_layout] skipped: {e}")
 
         self.send_message({
             "type": "entered_bubble",

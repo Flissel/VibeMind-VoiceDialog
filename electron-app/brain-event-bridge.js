@@ -91,35 +91,35 @@ function mapEventToIpc(ev) {
             return { type: 'bubble_exited', source: 'brain-bridge' };
         }
         case 'idea.create': {
-            return {
-                type: 'node_added',
-                source: 'brain-bridge',
-                node: {
-                    id: params.title || '?',
-                    title: params.title || '?',
-                    content: params.content || '',
-                    bubble_id: params.bubble_id || '',
-                    type: 'idea',
-                },
-            };
+            // Phase 11.U.E — DO NOT emit node_added here. The space_event_bus
+            // auto-publishes a `ui.refresh_bubbles` immediately after every
+            // mutating event, which triggers a full canvas reload from DB
+            // (correct titles + content). Emitting node_added too would race
+            // and leave a broken placeholder visible for ~5-50ms.
+            return null;
         }
         case 'idea.update': {
-            return {
-                type: 'node_updated',
-                source: 'brain-bridge',
-                node: {
-                    id: params.idea_id || '?',
-                    title: params.new_title || '',
-                    content: params.new_content || '',
-                },
-            };
+            // Same reasoning as idea.create — let the auto-refresh handle it.
+            return null;
         }
         case 'idea.delete': {
+            // Phase 11.U.E — auto-refresh handles it. Skip direct IPC.
+            return null;
+        }
+        case 'ui.refresh_bubbles': {
             return {
-                type: 'node_removed',
+                type: 'force_resync_bubbles',
                 source: 'brain-bridge',
-                node_id: params.idea_id || '?',
             };
+        }
+        case 'idea.connect':
+        case 'idea.disconnect':
+        case 'idea.auto_link': {
+            // Phase 11.U.E — let the auto-refresh re-load nodes+edges from DB.
+            // The renderer's loadNodes() rebuilds the full canvas, picking up
+            // the new edges with proper from/to_node_id mappings. Direct IPC
+            // would race and either flash a temporary state or stale visual.
+            return null;
         }
         default:
             return null;

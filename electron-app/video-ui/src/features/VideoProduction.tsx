@@ -1137,7 +1137,106 @@ function VideoPlayerModal({ video, onClose, onDelete }: { video: VideoFileInfo; 
 
 // ── Face Swap Dialog ──────────────────────────────────────────
 
-interface FaceswapPreset { id: string; name: string }
+interface FaceswapPreset {
+  id: string
+  name: string
+  image_url?: string        // present when sourced from /api/face-targets
+  tags?: string[]
+  consent_status?: string
+}
+
+// Try Supabase-backed /api/face-targets first; fall back to filesystem
+// presets if the new endpoint isn't yet live (older backend builds).
+async function fetchPresets(base: string): Promise<FaceswapPreset[]> {
+  try {
+    const r = await fetch(`${base}/api/face-targets`,
+      { signal: AbortSignal.timeout(4000), cache: 'no-cache' })
+    if (r.ok) {
+      const d = await r.json()
+      const list: FaceswapPreset[] = d.targets ?? []
+      if (list.length > 0) return list
+    }
+  } catch { /* fall through */ }
+  try {
+    const r = await fetch(`${base}/api/video/presets`,
+      { signal: AbortSignal.timeout(4000), cache: 'no-cache' })
+    if (r.ok) {
+      const d = await r.json()
+      return d.presets ?? []
+    }
+  } catch { /* nothing */ }
+  return []
+}
+
+// Small button: pick an image file, prompt for display name, POST to
+// /api/face-targets. Calls onUploaded(name) after the new face is in DB so
+// the caller can refresh the dropdown + auto-select the freshly-added face.
+function FaceUploadButton({ onUploaded }: { onUploaded: (name: string) => void }) {
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const pickFile = () => fileRef.current?.click()
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const suggested = file.name.replace(/\.(jpe?g|png|webp)$/i, '').replace(/[_-]+/g, ' ')
+    // eslint-disable-next-line no-alert
+    const name = window.prompt('Name für dieses Gesicht (z.B. "Alice"):', suggested)
+    if (!name) { e.target.value = ''; return }
+    setBusy(true); setErr(null)
+    try {
+      const fd = new FormData()
+      fd.append('display_name', name)
+      fd.append('image', file)
+      fd.append('tags', 'user-upload')
+      fd.append('consent_status', 'private')
+      const r = await fetch(`${VIDEO_API_BASE}/api/face-targets`, { method: 'POST', body: fd })
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '')
+        throw new Error(`HTTP ${r.status}: ${txt.slice(0, 200)}`)
+      }
+      const data = await r.json()
+      onUploaded(data.name || name)
+    } catch (ex: any) {
+      setErr(ex?.message ?? String(ex))
+    } finally {
+      setBusy(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        style={{ display: 'none' }}
+        onChange={onFile}
+      />
+      <button
+        onClick={pickFile}
+        disabled={busy}
+        title="Neues Gesicht hochladen (in Supabase persistiert)"
+        style={{
+          padding: '6px 12px', fontSize: 'var(--text-footnote)',
+          background: 'rgba(100,140,255,0.15)', color: 'var(--accent)',
+          border: '1px dashed var(--accent)', borderRadius: 'var(--radius-sm)',
+          cursor: busy ? 'wait' : 'pointer',
+        }}
+      >
+        {busy ? '⏳ Upload…' : '+ Face'}
+      </button>
+      {err && (
+        <span style={{ fontSize: 'var(--text-caption2)', color: '#ff8080' }}>
+          {err}
+        </span>
+      )}
+    </>
+  )
+}
 
 interface FaceswapJob {
   id: string
@@ -1164,12 +1263,10 @@ function FaceswapDialog({ video, onClose }: { video: VideoFileInfo; onClose: () 
   const [error, setError] = useState<string | null>(null)
   const pollRef = useRef<number | null>(null)
 
-  // Load presets once
+  // Load presets once (face-targets preferred, legacy fallback inside helper)
   useEffect(() => {
-    fetch(`${VIDEO_API_BASE}/api/video/presets`)
-      .then(r => r.json())
-      .then(data => setPresets(data.presets || []))
-      .catch(e => setError(`Cannot load presets: ${e.message}`))
+    fetchPresets(VIDEO_API_BASE).then(setPresets).catch(e =>
+      setError(`Cannot load presets: ${e?.message ?? e}`))
   }, [])
 
   // Poll job status while running
@@ -1367,6 +1464,8 @@ interface LiveRecState {
   output_path?: string
   size_mb?: number
   source?: string
+  swap_job_id?: string | null
+  swap_target?: string | null
 }
 
 function LiveCapture() {
@@ -1376,6 +1475,37 @@ function LiveCapture() {
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState('')
   const [tick, setTick] = useState(0)
+  // Optional face-swap during recording. UI shows the live-swapped stream
+  // as a preview; the recording on disk is always the raw eyeTerm feed, but
+  // when this is set the stop endpoint auto-spawns a faceswap batch job.
+  const [swapTarget, setSwapTarget] = useState<string>('')   // '' = no swap
+  const [presets, setPresets] = useState<FaceswapPreset[]>([])
+
+  // Load preset list for the dropdown. Retries on empty: if backend was
+  // booting during initial mount the first fetch returns nothing — re-run
+  // every 5s until we get a non-empty list (max 6 tries = 30s).
+  // Uses fetchPresets() which prefers /api/face-targets and falls back to
+  // /api/video/presets for older backend builds.
+  const reloadPresets = useCallback(async () => {
+    const list = await fetchPresets(VIDEO_API_BASE)
+    if (list.length > 0) setPresets(list)
+    return list.length
+  }, [])
+
+  useEffect(() => {
+    if (presets.length > 0) return
+    let cancelled = false
+    let tries = 0
+    const tryFetch = async () => {
+      if (cancelled || tries >= 6) return
+      tries++
+      const n = await reloadPresets()
+      if (cancelled) return
+      if (n === 0) setTimeout(tryFetch, 5000)
+    }
+    tryFetch()
+    return () => { cancelled = true }
+  }, [presets.length, reloadPresets])
 
   // Probe eyeTerm status — retries with backoff so transient slow responses
   // (eyeTerm is starting up, MJPEG handler busy, etc.) don't permanently mark
@@ -1421,7 +1551,10 @@ function LiveCapture() {
   // Stream via backend same-origin proxy — Chromium refuses cross-origin
   // <img> from a file:// renderer in some configs even with CORS=*. The
   // backend proxy on :8007 keeps this same-origin and always works.
-  const streamSrc = `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
+  // If a swap target is picked, switch to the live-swap proxy (~11 fps).
+  const streamSrc = swapTarget
+    ? `${VIDEO_API_BASE}/api/eyeterm/swap-stream?target=${encodeURIComponent(swapTarget)}&t=${tick}`
+    : `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
 
   const startRec = async () => {
     setBusy(true); setError(null)
@@ -1429,7 +1562,11 @@ function LiveCapture() {
       const r = await fetch(`${VIDEO_API_BASE}/api/video/live-record/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'eyeterm', name_hint: hint || null }),
+        body: JSON.stringify({
+          source: 'eyeterm',
+          name_hint: hint || null,
+          swap_target: swapTarget || null,
+        }),
       })
       if (!r.ok) {
         const txt = await r.text().catch(() => '')
@@ -1542,6 +1679,25 @@ function LiveCapture() {
                 width: 200,
               }}
             />
+            <select
+              value={swapTarget}
+              onChange={e => setSwapTarget(e.target.value)}
+              title="Face-Swap während Recording (Preview ~11 fps, finale mp4 in voller Qualität)"
+              style={{
+                padding: '6px 12px', fontSize: 'var(--text-footnote)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <option value="">Kein Face-Swap</option>
+              {presets.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+            <FaceUploadButton
+              onUploaded={async (name) => {
+                await reloadPresets()
+                setSwapTarget(name)
+              }}
+            />
             <button
               onClick={startRec}
               disabled={busy || streamOk === false}
@@ -1586,12 +1742,17 @@ function LiveCapture() {
           fontSize: 'var(--text-caption1)',
         }}>
           ✓ Aufnahme gespeichert: <code>{rec.output_path.split(/[/\\]/).pop()}</code> ({rec.size_mb} MB).
-          Erscheint in 30s in der Gallery — dort kannst du Face Swap anwenden.
+          {rec.swap_job_id ? (
+            <> Face-Swap (<b>{rec.swap_target}</b>) läuft im Hintergrund — finale mp4 erscheint in 30-90s in der Gallery.</>
+          ) : (
+            <> Erscheint in 30s in der Gallery.</>
+          )}
         </div>
       )}
 
       <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
         Audio wird vom Default-Mikrofon mit aufgenommen. Output landet in <code>~/.rowboat/Videos/</code>.
+        {swapTarget && <> · Live-Preview swap zu <b>{swapTarget}</b> (~11 fps, post-process volle Qualität).</>}
       </div>
     </div>
   )

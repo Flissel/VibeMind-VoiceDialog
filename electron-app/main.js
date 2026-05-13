@@ -327,6 +327,27 @@ function createWindow() {
     // Rowboat, SWE Design) don't cover it — BrowserView renders above docked DevTools
     mainWindow.webContents.openDevTools({ mode: 'detach' });
 
+    // Phase 11.U.G — tail all renderer console output to a file so we can
+    // debug without DevTools (which sometimes fails to open).
+    // File: %TEMP%\vibemind-renderer-console.log (always overwritten on start)
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const logPath = path.join(require('os').tmpdir(), 'vibemind-renderer-console.log');
+        fs.writeFileSync(logPath, `=== renderer console tail started ${new Date().toISOString()} ===\n`);
+        console.log('[main] tailing renderer console to', logPath);
+        mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+            const levelStr = ['VERBOSE', 'INFO', 'WARN', 'ERROR'][level] || `L${level}`;
+            const stamp = new Date().toISOString().split('T')[1].replace('Z', '');
+            const src = sourceId ? sourceId.split('/').pop() + ':' + line : '?';
+            try {
+                fs.appendFileSync(logPath, `${stamp} ${levelStr} [${src}] ${message}\n`);
+            } catch (_) { /* ignore */ }
+        });
+    } catch (e) {
+        console.warn('[main] console-tail setup failed:', e.message);
+    }
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });

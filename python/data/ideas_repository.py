@@ -90,6 +90,21 @@ class IdeasRepository:
         )
         return Idea.from_dict(dict(row)) if row else None
 
+    # Phase 11.U — exact-match lookup for system bubbles (Inbox, etc).
+    # The fuzzy LIKE in get_by_title was creating duplicates: under
+    # parallel load two callers could both search for "Inbox", both get
+    # None back, both create one. With exact-match + small probability
+    # of dup we can at least catch it.
+    def get_by_title_exact(self, title: str) -> Optional[Idea]:
+        """Get idea by exact title (case-insensitive). Used for system
+        bubbles like Inbox where partial-match would over-match."""
+        row = self.db.fetch_one(
+            "SELECT * FROM ideas WHERE LOWER(title) = LOWER(?) "
+            "AND parent_id IS NULL LIMIT 1",
+            (title,),
+        )
+        return Idea.from_dict(dict(row)) if row else None
+
     def get_by_title_fuzzy(self, title: str, parent_id: Optional[str] = None) -> Optional[Idea]:
         """
         Semantic fuzzy title search for voice input.

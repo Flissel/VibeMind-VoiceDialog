@@ -868,6 +868,47 @@ class ElectronBackend:
                 message.get("bubble_id"),
                 message.get("node_id")
             )
+
+        elif msg_type == "submit_issue":
+            # Phase 11.U.I — debug-agent toast "Post to VibeMind" button.
+            # Append to the vibemind-issue-detector inbox so the issue surfaces
+            # in the user's dashboard. Best-effort: never blocks the renderer.
+            try:
+                from pathlib import Path
+                from datetime import datetime
+                title = (message.get("title") or "Error from debug-agent toast")[:200]
+                body = message.get("body") or ""
+                severity = (message.get("severity") or "ALERT").upper()
+                source = message.get("source") or "debug-agent"
+                inbox = Path(
+                    r"C:/Users/User/Desktop/Vibemind_V1/vibemind-os/issue-detector/vibemind_inbox.md"
+                )
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                icon = {"INFO": "ℹ️", "WARN": "⚠️", "ALERT": "🚨"}.get(severity, "🚨")
+                entry = (
+                    f"\n## {icon} [{severity}] {ts} — {title}\n\n"
+                    f"**Source:** {source}\n\n"
+                    f"{body}\n\n---\n"
+                )
+                if inbox.exists():
+                    existing = inbox.read_text(encoding="utf-8")
+                else:
+                    inbox.parent.mkdir(parents=True, exist_ok=True)
+                    existing = "# VibeMind Issue Detector — Notification Inbox\n"
+                inbox.write_text(existing + entry, encoding="utf-8")
+                self.send_message({
+                    "type": "issue_submitted",
+                    "ok": True,
+                    "inbox": str(inbox),
+                })
+                debug_log(f"[submit_issue] appended to {inbox}")
+            except Exception as e:
+                debug_log(f"[submit_issue] failed: {e}")
+                self.send_message({
+                    "type": "issue_submitted",
+                    "ok": False,
+                    "error": str(e),
+                })
         
         elif msg_type == "start_project_preview":
             project_id = message.get("project_id")
