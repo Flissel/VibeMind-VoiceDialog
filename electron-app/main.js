@@ -3187,11 +3187,20 @@ app.whenReady().then(async () => {
     // Initialize ClawPort Dashboard Manager
     clawportManager = new ClawPortManager(mainWindow);
 
-    // Initialize Brain Dashboard Manager + start server immediately (headless)
+    // Initialize Brain Dashboard Manager.
+    // Phase A: when the Brain runs as a container (started by
+    // Vibemind.debug.ps1), SKIP_BRAIN_SPAWN=1 stops Electron from spawning
+    // its OWN competing venv Brain on :5000. The BrowserView still works —
+    // BrainManager.startHeadless()'s port-busy adoption path
+    // (brain-manager.js:108-115) attaches to the running container instead.
     brainManager = new BrainManager(mainWindow);
-    brainManager.startHeadless().catch(err =>
-      console.warn('[Main] Brain headless start failed:', err.message)
-    );
+    if (process.env.SKIP_BRAIN_SPAWN === '1' || process.env.SKIP_BRAIN_SPAWN === 'true') {
+      console.log('[Main] SKIP_BRAIN_SPAWN set — not spawning embedded Brain (using external/container Brain on :' + (process.env.BRAIN_PORT || '5000') + ')');
+    } else {
+      brainManager.startHeadless().catch(err =>
+        console.warn('[Main] Brain headless start failed:', err.message)
+      );
+    }
 
     // Initialize OpenFang Agent OS + start daemon immediately
     openfangManager = new OpenFangManager();
