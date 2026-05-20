@@ -11,17 +11,33 @@ const path = require('path');
 const _DM_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (Dashboard)
 function _dmLog(...a) { process.stdout.write(`${_DM_C}[DashboardManager] ${a.join(' ')}${_RST}\n`); }
 
+// 2026-05-21: the legacy file:// fallback targets a git submodule
+// (python/spaces/coding/Coding_engine) that is uninstantiated in most
+// checkouts — Chromium blocks with "Not allowed to load local resource".
+// Default to the running Swarm-Stack frontend on :5173 instead; the
+// file path is the ultimate fallback for offline-with-built-submodule.
+const STACK_FRONTEND_URL = 'http://localhost:5173';
+
 class DashboardManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
     this.dashboardView = null;
     this.isVisible = false;
 
-    // Dashboard source - use built files or dev server
-    this.dashboardPath = process.env.DASHBOARD_DEV_URL ||
-      path.join(__dirname, '..', 'python', 'spaces', 'coding', 'Coding_engine', 'web-app', 'front', 'dist', 'index.html');
+    // Dashboard source — precedence:
+    //   1. DASHBOARD_DEV_URL env (explicit override from launcher / .env)
+    //   2. Swarm-Stack coding-frontend on :5173 (the production path
+    //      since the stack migration: vibemind_coding-frontend in
+    //      infra/swarm/vibemind-stack.yml)
+    //   3. file:// fallback into the uninstanced submodule (legacy)
+    this.dashboardUrl = process.env.DASHBOARD_DEV_URL || STACK_FRONTEND_URL;
+    this.dashboardPath = path.join(__dirname, '..', 'python', 'spaces',
+      'coding', 'Coding_engine', 'web-app', 'front', 'dist', 'index.html');
 
-    this.isDev = !!process.env.DASHBOARD_DEV_URL;
+    // We're "dev" (= load by URL) whenever any URL is configured —
+    // which is now the default. file:// only happens if the URL can't
+    // be reached, see createView() below.
+    this.isDev = !!this.dashboardUrl;
 
     // Titlebar (32px) + Space Nav Bar (42px) to offset the view
     this.titlebarHeight = 74;
@@ -53,10 +69,19 @@ class DashboardManager {
       },
     });
 
-    // Load the dashboard
+    // Load the dashboard — URL first, file:// only if URL fails.
     if (this.isDev) {
-      _dmLog('Loading from dev server:', process.env.DASHBOARD_DEV_URL);
-      this.dashboardView.webContents.loadURL(process.env.DASHBOARD_DEV_URL);
+      _dmLog('Loading from URL:', this.dashboardUrl);
+      this.dashboardView.webContents.loadURL(this.dashboardUrl).catch((err) => {
+        _dmLog('URL load failed (' + err.message + '), trying file:// fallback:',
+               this.dashboardPath);
+        this.dashboardView.webContents.loadFile(this.dashboardPath).catch((err2) => {
+          _dmLog('file:// fallback also failed:', err2.message);
+          _dmLog('Hint: start the Swarm-Stack (scripts/vibemind-start.ps1) so '
+                 + this.dashboardUrl + ' becomes reachable, OR init the '
+                 + 'python/spaces/coding/Coding_engine submodule + build its web-app.');
+        });
+      });
     } else {
       _dmLog('Loading from file:', this.dashboardPath);
       this.dashboardView.webContents.loadFile(this.dashboardPath);
