@@ -20,6 +20,51 @@ const SWE_COLOR = '\x1b[96m';     // Bright Cyan
 const SWE_MGR_COLOR = '\x1b[96m'; // Bright Cyan
 const RST = '\x1b[0m';
 
+/**
+ * Resolve a path inside python/spaces/<subdir...>, working around the
+ * broken-symlink-on-Windows case. python/spaces is git-committed as a
+ * symlink to ../../spaces (= vibemind-os/spaces). On Linux/Mac and
+ * Win-with-symlink-rights this just works via path.join + fs. On
+ * Windows without symlink rights, git stores it as a plain 12-byte
+ * file with the literal text "../../spaces"; fs.existsSync on inner
+ * paths returns false. We try both candidates and return the first
+ * one that exists. Cross-platform safe.
+ *
+ * @param {string} projectRoot — typically `path.resolve(__dirname, '..')`
+ *                                (= voice/ root, so `voice/`).
+ * @param {...string} parts — path segments under spaces/, e.g. 'shuttles', 'swe_desgine'.
+ * @returns {string} — the resolved absolute path (first existing candidate),
+ *                     falling back to the symlink-style path so the caller
+ *                     still gets a deterministic value to log on failure.
+ */
+function resolveSpacesPath(projectRoot, ...parts) {
+  // Candidate 1: through python/spaces (works if symlink resolves)
+  const viaSymlink = path.join(projectRoot, 'python', 'spaces', ...parts);
+  if (fs.existsSync(viaSymlink)) return viaSymlink;
+
+  // Candidate 2: directly to vibemind-os/spaces (symlink target)
+  const viaDirect = path.join(projectRoot, '..', 'spaces', ...parts);
+  if (fs.existsSync(viaDirect)) return viaDirect;
+
+  // Candidate 3: read the "symlink" file content explicitly. Some
+  // setups stash the relative target inside that text file —
+  // safety net if naming ever diverges from `../../spaces`.
+  try {
+    const linkFile = path.join(projectRoot, 'python', 'spaces');
+    if (fs.existsSync(linkFile) && fs.statSync(linkFile).isFile()) {
+      const target = fs.readFileSync(linkFile, 'utf8').trim();
+      if (target) {
+        const candidate = path.join(path.dirname(linkFile), target, ...parts);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  } catch (_) { /* ignore — fall through */ }
+
+  // No candidate exists: return the symlink-style path so the caller
+  // logs a sensible error like "ENOENT: .../python/spaces/...".
+  return viaSymlink;
+}
+
 class SweDesignManager {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
@@ -37,9 +82,16 @@ class SweDesignManager {
     const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
     this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
 
-    // RE project root (where start_dashboard.py lives)
-    this.reProjectRoot = path.join(
-      projectRoot, 'python', 'spaces', 'shuttles', 'swe_desgine'
+    // RE project root (where start_dashboard.py lives).
+    //
+    // Cross-platform path-resolution: `python/spaces` is committed in git
+    // as a symlink to `../../spaces` (= vibemind-os/spaces). On Linux/Mac
+    // and Win-with-Developer-Mode the symlink resolves automatically. On
+    // Windows without symlink rights git materialises it as a 12-byte
+    // text file containing "../../spaces" — `fs.existsSync` on any inner
+    // path returns false ("Not a directory"). We probe both candidates.
+    this.reProjectRoot = resolveSpacesPath(
+      projectRoot, 'shuttles', 'swe_desgine'
     );
 
     this.port = 8086; // 8085 often held by zombie; use 8086 as default
