@@ -1,42 +1,15 @@
-[submodule "python/spaces/rowboat/rowboat"]
-	path = python/spaces/rowboat/rowboat
-	url = https://github.com/rowboatlabs/rowboat.git
-[submodule "python/spaces/coding/Coding_engine"]
-	path = python/spaces/coding/Coding_engine
-	url = https://github.com/Flissel/DaveFelix-Coding-Engine.git
-[submodule "python/spaces/shuttles/swe_desgine"]
-	path = python/spaces/shuttles/swe_desgine
-	url = https://github.com/Flissel/swe_desgine.git
 [submodule "external/zeroclaw"]
 	path = external/zeroclaw
 	url = https://github.com/zeroclaw-labs/zeroclaw.git
 [submodule "external/minibook"]
 	path = external/minibook
 	url = https://github.com/c4pt0r/minibook.git
-[submodule "electron-app/clawport-ui"]
-	path = electron-app/clawport-ui
-	url = https://github.com/JohnRiceML/clawport-ui.git
-[submodule "python/spaces/brain/the_brain"]
-	path = python/spaces/brain/the_brain
-	url = https://github.com/Flissel/the_brain.git
-[submodule "python/spaces/video/vibevideo"]
-	path = python/spaces/video/vibevideo
-	url = https://github.com/Flissel/vibevideo.git
-[submodule "python/spaces/video/vibevideo_deepfake"]
-	path = python/spaces/video/vibevideo_deepfake
-	url = https://github.com/Flissel/vibevideo-deepfake.git
 [submodule "external/Autogen_AgentFarm"]
 	path = external/Autogen_AgentFarm
-	url = https://github.com/Flissel/Autogen_AgentFarm.git
-[submodule "python/spaces/mirofish/mirofish"]
-	path = python/spaces/mirofish/mirofish
-	url = https://github.com/nikmcfly/MiroFish-Offline
-[submodule "python/spaces/autogen/farm"]
-	path = python/spaces/autogen/farm
 	url = https://github.com/Flissel/Autogen_AgentFarm.git
 [submodule "external/openclaw"]
 	path = external/openclaw
 	url = https://github.com/Flissel/openclaw.git
-[submodule "python/spaces/flowzen/flowzen"]
-	path = python/spaces/flowzen/flowzen
-	url = https://github.com/Flissel/flowzen.git
+[submodule "electron-app/clawport-ui"]
+	path = electron-app/clawport-ui
+	url = https://github.com/JohnRiceML/clawport-ui.git
