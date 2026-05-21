@@ -1480,6 +1480,11 @@ function LiveCapture() {
   // when this is set the stop endpoint auto-spawns a faceswap batch job.
   const [swapTarget, setSwapTarget] = useState<string>('')   // '' = no swap
   const [presets, setPresets] = useState<FaceswapPreset[]>([])
+  // Swap engine: 'inswapper' = InsightFace neural model (legacy, ~11 fps),
+  // 'region-math' = landmark region-composite (math, ~18 fps, per-region).
+  const [swapEngine, setSwapEngine] = useState<'inswapper' | 'region-math'>('inswapper')
+  // region-math only: which face regions get swapped.
+  const [regionProfile, setRegionProfile] = useState<string>('inner_face')
 
   // Load preset list for the dropdown. Retries on empty: if backend was
   // booting during initial mount the first fetch returns nothing — re-run
@@ -1551,10 +1556,31 @@ function LiveCapture() {
   // Stream via backend same-origin proxy — Chromium refuses cross-origin
   // <img> from a file:// renderer in some configs even with CORS=*. The
   // backend proxy on :8007 keeps this same-origin and always works.
-  // If a swap target is picked, switch to the live-swap proxy (~11 fps).
-  const streamSrc = swapTarget
-    ? `${VIDEO_API_BASE}/api/eyeterm/swap-stream?target=${encodeURIComponent(swapTarget)}&t=${tick}`
-    : `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
+  //
+  // Three modes:
+  //   no target           → raw eyeTerm MJPEG
+  //   target + inswapper  → InsightFace neural swap (~11 fps)
+  //   target + region-math → landmark region-composite (~18 fps, per-region)
+  let streamSrc: string
+  if (!swapTarget) {
+    streamSrc = `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
+  } else if (swapEngine === 'region-math') {
+    // face-math's /swap-stream resolves the target by face_target *id*
+    // (Supabase row id), whereas swapTarget holds the display name. Look
+    // the id up from the loaded preset list; fall back to the name if
+    // not found (older filesystem presets where id == name).
+    const matched = presets.find(p => p.name === swapTarget)
+    const targetId = matched?.id ?? swapTarget
+    streamSrc =
+      `${VIDEO_API_BASE}/api/face-math/swap-stream` +
+      `?target=${encodeURIComponent(targetId)}` +
+      `&profile=${encodeURIComponent(regionProfile)}` +
+      `&t=${tick}`
+  } else {
+    streamSrc =
+      `${VIDEO_API_BASE}/api/eyeterm/swap-stream` +
+      `?target=${encodeURIComponent(swapTarget)}&t=${tick}`
+  }
 
   const startRec = async () => {
     setBusy(true); setError(null)
@@ -1682,7 +1708,7 @@ function LiveCapture() {
             <select
               value={swapTarget}
               onChange={e => setSwapTarget(e.target.value)}
-              title="Face-Swap während Recording (Preview ~11 fps, finale mp4 in voller Qualität)"
+              title="Face-Swap während Recording (Preview ~11-18 fps, finale mp4 in voller Qualität)"
               style={{
                 padding: '6px 12px', fontSize: 'var(--text-footnote)',
                 background: 'var(--bg-primary)', color: 'var(--text-primary)',
@@ -1692,6 +1718,44 @@ function LiveCapture() {
               <option value="">Kein Face-Swap</option>
               {presets.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
+            {/* Swap-engine + region controls — only relevant once a
+                target face is picked. */}
+            {swapTarget && (
+              <>
+                <select
+                  value={swapEngine}
+                  onChange={e => setSwapEngine(e.target.value as 'inswapper' | 'region-math')}
+                  title="inswapper = neuronaler Voll-Gesichts-Swap. region-math = Landmark-Composite, pro Region wählbar, ~18 fps."
+                  style={{
+                    padding: '6px 12px', fontSize: 'var(--text-footnote)',
+                    background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                    border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <option value="inswapper">Engine: inswapper (neural)</option>
+                  <option value="region-math">Engine: region-math</option>
+                </select>
+                {swapEngine === 'region-math' && (
+                  <select
+                    value={regionProfile}
+                    onChange={e => setRegionProfile(e.target.value)}
+                    title="Welche Gesichtsregionen getauscht werden. inner_face = Augen+Brauen+Nase+Mund, Haare/Stirn/Wangen bleiben."
+                    style={{
+                      padding: '6px 12px', fontSize: 'var(--text-footnote)',
+                      background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                      border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    <option value="inner_face">inner_face (Augen+Brauen+Nase+Mund)</option>
+                    <option value="identity_anchor">identity_anchor (Augen+Brauen+Nase)</option>
+                    <option value="eyes_and_brows">eyes_and_brows</option>
+                    <option value="eyes_only">eyes_only</option>
+                    <option value="mouth_only">mouth_only</option>
+                    <option value="mouth_and_chin">mouth_and_chin</option>
+                  </select>
+                )}
+              </>
+            )}
             <FaceUploadButton
               onUploaded={async (name) => {
                 await reloadPresets()
@@ -1752,7 +1816,12 @@ function LiveCapture() {
 
       <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
         Audio wird vom Default-Mikrofon mit aufgenommen. Output landet in <code>~/.rowboat/Videos/</code>.
-        {swapTarget && <> · Live-Preview swap zu <b>{swapTarget}</b> (~11 fps, post-process volle Qualität).</>}
+        {swapTarget && swapEngine === 'region-math' && (
+          <> · Live-Preview <b>region-math</b> ({regionProfile}) zu <b>{swapTarget}</b> (~18 fps).</>
+        )}
+        {swapTarget && swapEngine === 'inswapper' && (
+          <> · Live-Preview <b>inswapper</b> swap zu <b>{swapTarget}</b> (~11 fps, post-process volle Qualität).</>
+        )}
       </div>
     </div>
   )
