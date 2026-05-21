@@ -1485,6 +1485,11 @@ function LiveCapture() {
   const [swapEngine, setSwapEngine] = useState<'inswapper' | 'region-math'>('inswapper')
   // region-math only: which face regions get swapped.
   const [regionProfile, setRegionProfile] = useState<string>('inner_face')
+  // Explicit ON/OFF toggle for the face-swap. When off, the live view
+  // shows the raw eyeTerm feed regardless of which target is selected.
+  const [swapOn, setSwapOn] = useState(false)
+  // The face-swap is "active" only when toggled on AND a target is picked.
+  const swapActive = swapOn && !!swapTarget
 
   // Load preset list for the dropdown. Retries on empty: if backend was
   // booting during initial mount the first fetch returns nothing — re-run
@@ -1562,7 +1567,7 @@ function LiveCapture() {
   //   target + inswapper  → InsightFace neural swap (~11 fps)
   //   target + region-math → landmark region-composite (~18 fps, per-region)
   let streamSrc: string
-  if (!swapTarget) {
+  if (!swapActive) {
     streamSrc = `${VIDEO_API_BASE}/api/eyeterm/stream?t=${tick}`
   } else if (swapEngine === 'region-math') {
     // face-math's /swap-stream resolves the target by face_target *id*
@@ -1591,7 +1596,7 @@ function LiveCapture() {
         body: JSON.stringify({
           source: 'eyeterm',
           name_hint: hint || null,
-          swap_target: swapTarget || null,
+          swap_target: swapActive ? swapTarget : null,
         }),
       })
       if (!r.ok) {
@@ -1715,12 +1720,32 @@ function LiveCapture() {
                 border: '1px solid var(--separator)', borderRadius: 'var(--radius-sm)',
               }}
             >
-              <option value="">Kein Face-Swap</option>
+              <option value="">Zielgesicht wählen…</option>
               {presets.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
-            {/* Swap-engine + region controls — only relevant once a
-                target face is picked. */}
-            {swapTarget && (
+            {/* Explicit ON/OFF toggle for the face-swap. Disabled until a
+                target is picked — toggling on with no target is a no-op. */}
+            <button
+              onClick={() => setSwapOn(v => !v)}
+              disabled={!swapTarget}
+              title={swapTarget
+                ? (swapOn ? 'Face-Swap ausschalten' : 'Face-Swap einschalten')
+                : 'Erst ein Zielgesicht wählen'}
+              style={{
+                padding: '6px 14px', fontSize: 'var(--text-footnote)',
+                fontWeight: 600, cursor: swapTarget ? 'pointer' : 'not-allowed',
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${swapActive ? '#22c55e' : 'var(--separator)'}`,
+                background: swapActive ? 'rgba(34,197,94,0.18)' : 'var(--bg-primary)',
+                color: swapActive ? '#22c55e' : 'var(--text-secondary)',
+                opacity: swapTarget ? 1 : 0.45,
+              }}
+            >
+              {swapActive ? '🟢 Swap AN' : '⚪ Swap AUS'}
+            </button>
+            {/* Swap-engine + region controls — only relevant once the
+                swap is actually toggled on. */}
+            {swapActive && (
               <>
                 <select
                   value={swapEngine}
@@ -1760,6 +1785,7 @@ function LiveCapture() {
               onUploaded={async (name) => {
                 await reloadPresets()
                 setSwapTarget(name)
+                setSwapOn(true)
               }}
             />
             <button
@@ -1816,10 +1842,10 @@ function LiveCapture() {
 
       <div style={{ fontSize: 'var(--text-caption2)', color: 'var(--text-tertiary)' }}>
         Audio wird vom Default-Mikrofon mit aufgenommen. Output landet in <code>~/.rowboat/Videos/</code>.
-        {swapTarget && swapEngine === 'region-math' && (
+        {swapActive && swapEngine === 'region-math' && (
           <> · Live-Preview <b>region-math</b> ({regionProfile}) zu <b>{swapTarget}</b> (~18 fps).</>
         )}
-        {swapTarget && swapEngine === 'inswapper' && (
+        {swapActive && swapEngine === 'inswapper' && (
           <> · Live-Preview <b>inswapper</b> swap zu <b>{swapTarget}</b> (~11 fps, post-process volle Qualität).</>
         )}
       </div>
