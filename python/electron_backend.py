@@ -884,9 +884,30 @@ class ElectronBackend:
                 body = message.get("body") or ""
                 severity = (message.get("severity") or "ALERT").upper()
                 source = message.get("source") or "debug-agent"
-                inbox = Path(
-                    r"C:/Users/User/Desktop/Vibemind_V1/vibemind-os/issue-detector/vibemind_inbox.md"
-                )
+                # Cross-platform inbox path via vibemind_shared. Voice's venv
+                # may not have the package installed (it has its own dependency
+                # set), so we fall back to a hand-rolled climb if needed.
+                try:
+                    # Make vibemind_shared importable when its package isn't
+                    # in this venv: shared/src is 4 levels up from this file
+                    # (voice/python/electron_backend.py).
+                    _shared_src = (
+                        Path(__file__).resolve().parent.parent.parent
+                        / "shared" / "src"
+                    )
+                    if _shared_src.is_dir() and str(_shared_src) not in sys.path:
+                        sys.path.insert(0, str(_shared_src))
+                    from vibemind_shared.paths import issue_inbox  # noqa: WPS433
+                    inbox = issue_inbox()
+                except Exception:
+                    # Fallback: climb to find vibemind-os/ and build manually
+                    here = Path(__file__).resolve()
+                    root = next(
+                        (p for p in here.parents
+                         if (p / "vibemind-os" / "shared").is_dir()),
+                        here.parents[3] if len(here.parents) > 3 else here.parent,
+                    )
+                    inbox = root / "vibemind-os" / "issue-detector" / "vibemind_inbox.md"
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 icon = {"INFO": "ℹ️", "WARN": "⚠️", "ALERT": "🚨"}.get(severity, "🚨")
                 entry = (
