@@ -73,3 +73,6 @@ APScheduler>=3.10.0
 # eyeTerm - Hands-free screen understanding controller
 vosk>=0.3.45
 comtypes>=1.4.0
+
+# SoM-Planner Phase D - durable Resume-Loop (interrupt/checkpoint) als LangGraph StateGraph
+langgraph>=1.0.0
