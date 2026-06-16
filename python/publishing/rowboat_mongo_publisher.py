@@ -465,6 +465,96 @@ class RowboatMongoPublisher:
         logger.info(f"[RowboatMongo] Marked '{source_name}' as deleted")
 
     # ------------------------------------------------------------------
+    # Reverse-cleanup: purge Rowboat sources with no matching live bubble
+    # ------------------------------------------------------------------
+
+    def list_vibemind_sources(self, include_deleted: bool = False) -> List[Dict[str, Any]]:
+        """List all 'VibeMind - *' sources in this project.
+
+        By default excludes already status='deleted' ones (active set). Used by
+        cleanup_orphaned_sources to diff against the canonical live bubbles.
+        """
+        query: Dict[str, Any] = {
+            "projectId": self._project_id,
+            "name": {"$regex": "^VibeMind - "},
+        }
+        if not include_deleted:
+            query["status"] = {"$ne": "deleted"}
+        return list(self._sources.find(query))
+
+    def cleanup_orphaned_sources(
+        self,
+        live_titles,
+        dry_run: bool = True,
+        max_delete: Optional[int] = 200,
+    ) -> Dict[str, Any]:
+        """Reverse-sync: HARD-DELETE every 'VibeMind - <title>' Rowboat source
+        whose <title> is NOT in the canonical live-bubble set.
+
+        Safety guards (because hard-delete is irreversible + may run on startup):
+          - empty live_titles  -> ABORT (refuse to wipe Rowboat on an empty/broken DB).
+          - more orphans than max_delete -> ABORT (guard against mass-deletion).
+          - dry_run=True (default) -> report only, delete nothing.
+
+        Qdrant: we mark-then-purge — set status='deleted' on source+docs first so
+        the rag-worker drops the embeddings from Qdrant, THEN hard-delete the Mongo
+        docs so they no longer appear in listings.
+
+        Returns a report dict.
+        """
+        if not self._validate_schema():
+            raise SchemaIncompatibleError("MongoDB schema check failed")
+
+        live = {f"VibeMind - {t}" for t in (live_titles or set())}
+        report: Dict[str, Any] = {
+            "success": True, "dry_run": dry_run, "checked": 0,
+            "orphaned": [], "deleted": 0, "aborted": None,
+        }
+
+        # GUARD 1: never wipe everything if the canonical DB looks empty/broken.
+        if not live:
+            report["success"] = False
+            report["aborted"] = "no live bubbles — refusing to delete any Rowboat source"
+            logger.warning("[RowboatMongo] cleanup aborted: 0 live bubbles")
+            return report
+
+        sources = self.list_vibemind_sources(include_deleted=False)
+        report["checked"] = len(sources)
+        orphans = [s for s in sources if s.get("name") not in live]
+        report["orphaned"] = [s.get("name") for s in orphans]
+
+        # GUARD 2: refuse an unexpectedly large deletion.
+        if max_delete is not None and len(orphans) > max_delete:
+            report["success"] = False
+            report["aborted"] = (
+                f"{len(orphans)} orphans exceed max_delete={max_delete} — aborting"
+            )
+            logger.warning("[RowboatMongo] cleanup aborted: %s orphans > max_delete %s",
+                           len(orphans), max_delete)
+            return report
+
+        if dry_run:
+            logger.info("[RowboatMongo] cleanup DRY-RUN: %s orphaned of %s checked",
+                        len(orphans), len(sources))
+            return report
+
+        for s in orphans:
+            sid = str(s["_id"])
+            name = s.get("name", sid)
+            try:
+                # mark-then-purge: let rag-worker drop Qdrant embeddings first…
+                self._mark_all_docs_deleted(sid)
+                self._mark_source_deleted(sid)
+                # …then hard-delete the Mongo docs so they vanish from listings.
+                self._docs.delete_many({"sourceId": sid})
+                self._sources.delete_one({"_id": self._ObjectId(sid)})
+                report["deleted"] += 1
+                logger.info("[RowboatMongo] cleanup hard-deleted orphan '%s'", name)
+            except Exception as e:  # noqa: BLE001 — one bad source must not abort the rest
+                logger.warning("[RowboatMongo] cleanup failed for '%s': %s", name, e)
+        return report
+
+    # ------------------------------------------------------------------
     # Shuttle / Project data (Arbeitspaket enrichment)
     # ------------------------------------------------------------------
 
@@ -905,6 +995,102 @@ class RowboatMongoPublisher:
         self._reset_source_to_pending(source_id)
         self._notify_source_updated(source_id, source_name)
         logger.info(f"[RowboatMongo] Published project '{project.name}'")
+
+    # ------------------------------------------------------------------
+    # SWE Design (RE pipeline) runs
+    # ------------------------------------------------------------------
+
+    def _build_swe_run_overview_text(self, run: Dict[str, Any]) -> str:
+        """Build markdown text for an RE pipeline run overview doc."""
+        lines = [f"# SWE Design: {run.get('project_name', 'Unnamed')}", ""]
+
+        domain = run.get("domain")
+        if domain and domain != "custom":
+            lines.append(f"Domain: {domain}")
+
+        status = run.get("status", "unknown")
+        completed = run.get("completed_stages", 0)
+        total = run.get("total_stages", 0)
+        lines.append(f"Status: {status} ({completed}/{total} stages)")
+
+        cost = run.get("total_cost_usd")
+        if cost:
+            lines.append(f"LLM Cost: ${float(cost):.4f}")
+        if run.get("total_llm_calls"):
+            lines.append(f"LLM Calls: {run['total_llm_calls']}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def publish_swe_design_pipeline(self, run_id: str):
+        """Publish an RE pipeline run to Rowboat MongoDB.
+
+        Creates a 'VibeMind - SWE:{name}' source with an overview doc plus
+        one doc per generated artifact, so the rag-worker indexes the full
+        requirements spec for semantic search.
+        """
+        if not self._validate_schema():
+            return
+
+        try:
+            from data.swe_design_repository import SweDesignRepository
+        except ImportError as e:
+            logger.warning(f"[RowboatMongo] SweDesignRepository unavailable: {e}")
+            return
+
+        repo = SweDesignRepository()
+        run = repo.get_run(run_id)
+        if not run:
+            logger.debug(f"[RowboatMongo] SWE run {run_id} not found")
+            return
+
+        project_name = run.get("project_name", "Unnamed")
+        source_name = f"VibeMind - SWE:{project_name}"
+        description = (
+            f"Requirements engineering pipeline "
+            f"({run.get('status', 'unknown')})"
+        )
+
+        existing = self._find_source_by_name(source_name)
+        if existing:
+            source_id = str(existing["_id"])
+        else:
+            source_id = self._create_source(source_name, description)
+
+        # Overview doc
+        self._upsert_doc(
+            source_id,
+            f"[SWE] {project_name} Overview",
+            self._build_swe_run_overview_text(run),
+        )
+
+        # One doc per artifact — prefer raw text, fall back to JSON dump.
+        artifacts = repo.list_artifacts(run_id)
+        docs_added = 1
+        for art in artifacts:
+            content = art.get("content_text")
+            if not content and art.get("content_json") is not None:
+                cj = art["content_json"]
+                if isinstance(cj, str):
+                    content = cj
+                else:
+                    content = json.dumps(cj, ensure_ascii=False, indent=2)
+            if not content:
+                continue
+            art_type = art.get("artifact_type", "artifact")
+            art_name = art.get("name", "artifact")
+            self._upsert_doc(
+                source_id,
+                f"[{art_type}] {art_name}",
+                content,
+            )
+            docs_added += 1
+
+        self._reset_source_to_pending(source_id)
+        self._notify_source_updated(source_id, source_name)
+        logger.info(
+            f"[RowboatMongo] Published SWE Design run '{project_name}' "
+            f"({docs_added} docs)"
+        )
 
     # ------------------------------------------------------------------
     # N8n Workflows

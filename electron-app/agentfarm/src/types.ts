@@ -40,7 +40,7 @@ export interface GenerationStatusResponse {
 
 // ── Sub-Tab ──
 
-export type AgentFarmTab = 'autogen' | 'teams' | 'n8n'
+export type AgentFarmTab = 'autogen' | 'teams' | 'n8n' | 'rowboat' | 'openfang'
 
 // ── Teams (completed pipeline runs) ──
 

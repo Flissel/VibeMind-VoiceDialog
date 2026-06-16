@@ -18,6 +18,11 @@ services:
         #   - hotel-concierge: lives in vibemind-os/openclaw, not in this build context;
         #     to be replaced by a future "mailcow-integration" extension.
         OPENCLAW_EXTENSIONS: "discord whatsapp ollama"
+        # Sandbox-browser (noVNC live view) requires the docker CLI inside the
+        # container to spawn the openclaw-sbx-* browser container via the
+        # mounted /var/run/docker.sock. Without this, sandbox mode fails with
+        # "docker command not found in PATH".
+        OPENCLAW_INSTALL_DOCKER_CLI: "1"
     container_name: vibemind-openclaw
     command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
     user: "root"

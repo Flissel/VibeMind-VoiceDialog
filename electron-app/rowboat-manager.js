@@ -53,9 +53,11 @@ class RowboatManager {
    * Resolve path to built renderer dist/index.html
    */
   _resolveRendererPath() {
-    // Development: built renderer in submodule
+    // Development: built renderer in submodule. electron-app -> voice ->
+    // vibemind-os -> spaces/rowboat/rowboat (NOT voice/python, which has no
+    // rowboat checkout — that broken path was the original "tab won't open").
     const devPath = path.join(
-      __dirname, '..', 'python', 'spaces', 'rowboat', 'rowboat',
+      __dirname, '..', '..', 'spaces', 'rowboat', 'rowboat',
       'apps', 'x', 'apps', 'renderer', 'dist', 'index.html'
     );
     // Production: extraResources
@@ -242,9 +244,11 @@ class RowboatManager {
   startBridge() {
     if (this.bridgeProcess) return Promise.resolve();
 
-    // CWD must be apps/x/apps/main/ where pnpm workspace symlinks resolve @x/core, @x/shared
+    // CWD must be apps/x/apps/main/ where pnpm workspace symlinks resolve
+    // @x/core, @x/shared. Same path correction as _resolveRendererPath:
+    // electron-app -> voice -> vibemind-os -> spaces/rowboat/rowboat.
     const coreDir = path.join(
-      __dirname, '..', 'python', 'spaces', 'rowboat', 'rowboat', 'apps', 'x', 'apps', 'main'
+      __dirname, '..', '..', 'spaces', 'rowboat', 'rowboat', 'apps', 'x', 'apps', 'main'
     );
     const bridgeScript = path.join(__dirname, 'rowboat-core-bridge.mjs');
 

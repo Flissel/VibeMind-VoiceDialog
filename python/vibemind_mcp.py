@@ -88,6 +88,17 @@ TOOLS = [
         }
     },
     {
+        "name": "vibemind_rowboat_cleanup",
+        "description": "Reverse-Sync: loescht aus Rowboats MongoDB alle 'VibeMind - *'-Sources, die KEINER Live-Bubble (Supabase) mehr entsprechen. Standard dry_run=true (zeigt nur was geloescht WUERDE). dry_run=false fuehrt Hard-Delete aus. Safety: bricht ab wenn 0 Live-Bubbles oder mehr Orphans als max_delete.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dry_run": {"type": "boolean", "description": "Nur berichten statt loeschen. Default true.", "default": True},
+                "max_delete": {"type": "integer", "description": "Abbruch wenn mehr Orphans als das. Default 200.", "default": 200}
+            }
+        }
+    },
+    {
         "name": "vibemind_ui",
         "description": "Liest den aktuellen VibeMind Electron UI-Zustand via CDP (Chrome DevTools Protocol). Zeigt: aktive Spaces, Chat-Messages, 3D-Szene Status, WebGL, Fehler. Nützlich um zu prüfen ob die UI richtig rendert.",
         "inputSchema": {
@@ -259,6 +270,91 @@ TOOLS = [
             }
         }
     },
+    # ── Launcher control (Docker Swarm stack + native services) ────────────
+    # Drives the same PS1 scripts as the Tauri launcher UI (scripts/vibemind-*.ps1)
+    # so any LLM agent can bring the stack up/down or live-toggle spaces.
+    {
+        "name": "vibemind_launcher_status",
+        "description": "Status aller Core-Services + Spaces des Vibemind-Stacks. Liefert JSON mit Container-Health (brain, rowboat, qdrant, supabase…), Native-Health (openfang, ollama, bridge, la-fungus, automation-ui) und der Aktiv/Inaktiv-Lage jedes Space (coding, n8n, mirofish, …).",
+        "inputSchema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "vibemind_launcher_start",
+        "description": "Startet den Vibemind-Stack mit der gegebenen Space-Auswahl (Core kommt immer mit). Funktioniert nur wenn der Stack noch nicht laeuft — fuer Live-Aenderungen `vibemind_launcher_apply` nehmen. Streamt KEIN Output zurueck (laeuft im Hintergrund), gibt sofort die submitted-Bestaetigung; Status via `vibemind_launcher_status` pollen.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "spaces": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["coding", "mirofish", "n8n", "media", "logging", "core-phase-d"]},
+                    "description": "Welche Spaces zusaetzlich zum Core hochfahren. Leeres Array = nur Core."
+                }
+            }
+        }
+    },
+    {
+        "name": "vibemind_launcher_stop",
+        "description": "Faehrt den kompletten Vibemind-Stack runter (docker stack rm + native services). Named Volumes bleiben (qdrant, brain_data, rowboat_mongo, neo4j, …). Setzt den persistenten Space-State NICHT zurueck.",
+        "inputSchema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "vibemind_launcher_apply",
+        "description": "Live-Re-Deploy mit der gegebenen Space-Auswahl. Funktioniert auch wenn der Stack schon laeuft — `docker stack deploy --prune` startet neue Services und entfernt abgewaehlte. Volumes bleiben.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "spaces": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["coding", "mirofish", "n8n", "media", "logging", "core-phase-d"]},
+                    "description": "Vollstaendige Liste der Spaces die NACH dem Apply aktiv sein sollen. Was hier NICHT drin ist, wird gestoppt."
+                }
+            },
+            "required": ["spaces"]
+        }
+    },
+    {
+        "name": "vibemind_launcher_presets",
+        "description": "Verwaltet gespeicherte Space-Presets (~/.vibemind/presets.json). Sub-Action via `op`: list (Default), save (braucht name + spaces), delete (braucht name).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": ["list", "save", "delete"], "default": "list"},
+                "name": {"type": "string", "description": "Preset-Name fuer save/delete"},
+                "spaces": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Space-Liste fuer save"
+                }
+            }
+        }
+    },
+    {
+        "name": "vibemind_launcher_logs",
+        "description": "Liefert den letzten vibemind-start.ps1 / vibemind-stop.ps1 Transcript-Log + optional `docker stack ps vibemind` Events. Faengt UI-Klicks (Tauri-Launcher) UND MCP-Triggers (`vibemind_launcher_start/stop`), weil das Logging im PS1-Skript selbst sitzt. Use-Case: debug warum START nichts tut, ohne den UI-Log abtippen zu muessen.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["start", "stop", "both"],
+                    "default": "start",
+                    "description": "Welcher Skript-Lauf: start (Default), stop, oder both."
+                },
+                "lines": {
+                    "type": "integer",
+                    "default": 200,
+                    "minimum": 10,
+                    "maximum": 5000,
+                    "description": "Maximale Zeilen vom Ende des Logs (Default 200)."
+                },
+                "include_stack_events": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Wenn true, haengt `docker stack ps vibemind --no-trunc` Output an (zeigt fehlgeschlagene Tasks + Container-Errors)."
+                }
+            }
+        }
+    },
 ]
 
 
@@ -290,6 +386,98 @@ def _get_space_agent(space: str):
     except Exception:
         pass
     return None
+
+
+# ── Launcher control helpers ──────────────────────────────────────────────
+# Mirror what scripts/vibemind-spaces.ps1 and scripts/vibemind-start.ps1 do.
+# Repo root resolved relative to THIS file: voice/python/.. = vibemind-os/..
+import subprocess
+_REPO_ROOT = Path(__file__).resolve().parents[3]  # vibemind_mcp.py -> python -> voice -> vibemind-os -> Vibemind_V1
+
+
+def _run_spaces_ps1(args: list[str], timeout: int = 60) -> tuple[int, str, str]:
+    """Call scripts/vibemind-spaces.ps1 with the given args. Returns (rc, stdout, stderr).
+    Uses CREATE_NO_WINDOW on Windows so the MCP-side flash matches the launcher.
+    """
+    script = _REPO_ROOT / "scripts" / "vibemind-spaces.ps1"
+    if not script.exists():
+        return 127, "", f"script not found: {script}"
+    cmd = [
+        "pwsh.exe", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", str(script),
+    ] + args
+    flags = 0
+    if sys.platform == "win32":
+        flags = 0x08000000  # CREATE_NO_WINDOW
+    try:
+        proc = subprocess.run(
+            cmd, cwd=str(_REPO_ROOT),
+            capture_output=True, text=True, timeout=timeout,
+            creationflags=flags,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timeout after {timeout}s"
+    except Exception as e:
+        return 1, "", str(e)
+
+
+def _run_start_ps1_bg(spaces_csv: str) -> tuple[bool, str]:
+    """Fire-and-forget the long-running vibemind-start.ps1. Returns (ok, message).
+    Stack-boot is ~2-3min; the MCP tool must not block on it.
+    """
+    script = _REPO_ROOT / "scripts" / "vibemind-start.ps1"
+    if not script.exists():
+        return False, f"script not found: {script}"
+    cmd = [
+        "pwsh.exe", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", str(script),
+        "-SkipVenv", "-SkipNode", "-SkipElectron",  # avoid double-spawn (Electron etc. drive themselves)
+    ]
+    if spaces_csv:
+        cmd += ["-Spaces", spaces_csv]
+    flags = 0
+    detach = {}
+    if sys.platform == "win32":
+        flags = 0x08000000 | 0x00000008  # CREATE_NO_WINDOW | DETACHED_PROCESS
+        detach = {"creationflags": flags}
+    try:
+        subprocess.Popen(
+            cmd, cwd=str(_REPO_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **detach,
+        )
+        return True, f"start submitted with spaces=[{spaces_csv}] — poll vibemind_launcher_status for progress"
+    except Exception as e:
+        return False, str(e)
+
+
+def _run_stop_ps1_bg() -> tuple[bool, str]:
+    """Fire-and-forget vibemind-stop.ps1."""
+    script = _REPO_ROOT / "scripts" / "vibemind-stop.ps1"
+    if not script.exists():
+        return False, f"script not found: {script}"
+    cmd = [
+        "pwsh.exe", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", str(script),
+    ]
+    flags = 0
+    detach = {}
+    if sys.platform == "win32":
+        flags = 0x08000000 | 0x00000008
+        detach = {"creationflags": flags}
+    try:
+        subprocess.Popen(
+            cmd, cwd=str(_REPO_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **detach,
+        )
+        return True, "stop submitted — poll vibemind_launcher_status for progress"
+    except Exception as e:
+        return False, str(e)
 
 
 async def handle_tool(name: str, args: dict) -> str:
@@ -355,6 +543,49 @@ async def handle_tool(name: str, args: dict) -> str:
             return "\n".join(lines)
         except Exception as e:
             return f"Fehler beim Laden der Bubbles: {e}"
+
+    elif name == "vibemind_rowboat_cleanup":
+        dry_run = bool(args.get("dry_run", True))
+        max_delete = int(args.get("max_delete", 200))
+        try:
+            from data import IdeasRepository
+            from publishing.rowboat_mongo_publisher import RowboatMongoPublisher
+            # Canonical live bubbles = top-level ideas (parent_id IS NULL).
+            repo = IdeasRepository()
+            bubbles = repo.list_top_level(limit=10000)
+            live_titles = {b.title for b in bubbles if getattr(b, "title", None)}
+            head = "🧹 Rowboat-Cleanup " + ("(DRY-RUN)" if dry_run else "(ECHT-LAUF)")
+            lines = [head, f"  live bubbles: {len(live_titles)}"]
+
+            # Ebene 1: RAG-MongoDB-Sources
+            mrep = RowboatMongoPublisher().cleanup_orphaned_sources(
+                live_titles, dry_run=dry_run, max_delete=max_delete
+            )
+            lines.append(
+                f"  [MongoDB] geprueft: {mrep.get('checked')} | orphaned: {len(mrep.get('orphaned') or [])} | geloescht: {mrep.get('deleted')}"
+                + (f"  ⚠️ {mrep['aborted']}" if mrep.get("aborted") else "")
+            )
+
+            # Ebene 2: Filesystem-Vault knowledge/Projects/'VibeMind - *'
+            from publishing.ideas_publisher import IdeasPublisher
+            frep = IdeasPublisher().cleanup_orphaned_project_dirs(
+                live_titles, dry_run=dry_run, max_delete=max_delete
+            )
+            lines.append(
+                f"  [Vault]   geprueft: {frep.get('checked')} | orphaned: {len(frep.get('orphaned') or [])} | geloescht: {frep.get('deleted')}"
+                + (f"  ⚠️ {frep['aborted']}" if frep.get("aborted") else "")
+            )
+
+            orph = sorted(set((mrep.get("orphaned") or []) + (frep.get("orphaned") or [])))
+            if orph:
+                lines.append(f"  orphaned ({len(orph)} distinct):")
+                for n in orph[:60]:
+                    lines.append(f"    - {n}")
+                if len(orph) > 60:
+                    lines.append(f"    … (+{len(orph)-60} weitere)")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Fehler beim Rowboat-Cleanup: {e}"
 
     elif name == "vibemind_ui":
         action = args.get("action", "read")
@@ -883,6 +1114,154 @@ async def handle_tool(name: str, args: dict) -> str:
         if len(all_results) == 1:
             return json.dumps(all_results[0], default=str, ensure_ascii=False)
         return json.dumps({"success": True, "spaces": all_results}, default=str, ensure_ascii=False)
+
+    # ── Launcher control ──────────────────────────────────────────────────
+    elif name == "vibemind_launcher_status":
+        rc_c, core_out, core_err = _run_spaces_ps1(["core-status"], timeout=30)
+        rc_s, spaces_out, spaces_err = _run_spaces_ps1(["list"], timeout=15)
+        result = {"success": rc_c == 0 and rc_s == 0}
+        if rc_c == 0:
+            try: result["core"] = json.loads(core_out.strip())
+            except Exception as e: result["core_parse_error"] = str(e); result["core_raw"] = core_out[:500]
+        else:
+            result["core_error"] = core_err or "core-status failed"
+        if rc_s == 0:
+            try: result["spaces"] = json.loads(spaces_out.strip())
+            except Exception as e: result["spaces_parse_error"] = str(e); result["spaces_raw"] = spaces_out[:500]
+        else:
+            result["spaces_error"] = spaces_err or "list failed"
+        return json.dumps(result, ensure_ascii=False)
+
+    elif name == "vibemind_launcher_start":
+        spaces = args.get("spaces") or []
+        csv = ",".join(s.strip() for s in spaces if s.strip())
+        ok, msg = _run_start_ps1_bg(csv)
+        return json.dumps({"success": ok, "message": msg, "spaces": spaces}, ensure_ascii=False)
+
+    elif name == "vibemind_launcher_stop":
+        ok, msg = _run_stop_ps1_bg()
+        return json.dumps({"success": ok, "message": msg}, ensure_ascii=False)
+
+    elif name == "vibemind_launcher_apply":
+        spaces = args.get("spaces")
+        if spaces is None:
+            return json.dumps({"success": False, "error": "apply requires `spaces` array (use [] for core-only)"})
+        csv = ",".join(s.strip() for s in spaces if s.strip())
+        rc, out, err = _run_spaces_ps1(["apply", csv], timeout=300)
+        return json.dumps({
+            "success": rc == 0,
+            "spaces": spaces,
+            "stdout_tail": out[-400:] if out else "",
+            "stderr_tail": err[-200:] if err else "",
+            "exit_code": rc,
+        }, ensure_ascii=False)
+
+    elif name == "vibemind_launcher_logs":
+        kind = args.get("kind", "start")
+        line_count = int(args.get("lines", 200))
+        include_events = bool(args.get("include_stack_events", False))
+        log_dir = _REPO_ROOT / "logs" / "launcher"
+
+        def _read_latest(prefix: str) -> dict:
+            if not log_dir.is_dir():
+                return {"found": False, "reason": f"{log_dir} does not exist yet — no run captured"}
+            candidates = sorted(
+                log_dir.glob(f"{prefix}-*.log"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if not candidates:
+                return {"found": False, "reason": f"no {prefix}-*.log in {log_dir}"}
+            latest = candidates[0]
+            try:
+                text = latest.read_text(encoding="utf-8", errors="replace")
+            except OSError as e:
+                return {"found": False, "reason": f"read failed: {e}", "path": str(latest)}
+            lines = text.splitlines()
+            tail = lines[-line_count:] if len(lines) > line_count else lines
+            return {
+                "found": True,
+                "path": str(latest),
+                "total_lines": len(lines),
+                "returned_lines": len(tail),
+                "log": "\n".join(tail),
+            }
+
+        result: dict = {"success": True}
+        if kind in ("start", "both"):
+            result["start"] = _read_latest("start")
+        if kind in ("stop", "both"):
+            result["stop"] = _read_latest("stop")
+
+        if include_events:
+            try:
+                # First: does the stack even exist? Avoids the misleading
+                # `exit 1 / nothing found in stack` confusion.
+                ls_proc = subprocess.run(
+                    ["docker", "stack", "ls", "--format", "{{.Name}}"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                stacks = [s.strip() for s in ls_proc.stdout.splitlines() if s.strip()]
+                deployed = "vibemind" in stacks
+
+                if not deployed:
+                    result["stack_events"] = {
+                        "stack_status": "not_deployed",
+                        "deployed_stacks": stacks,
+                        "hint": "vibemind stack is not running — start it via vibemind_launcher_start or the Tauri UI.",
+                    }
+                else:
+                    proc = subprocess.run(
+                        ["docker", "stack", "ps", "vibemind", "--no-trunc",
+                         "--format", "{{.Name}}\t{{.CurrentState}}\t{{.Error}}"],
+                        capture_output=True, text=True, timeout=15,
+                    )
+                    events = proc.stdout.strip()
+                    rows = events.splitlines() if events else []
+                    # Filter to rows with an error message (Error column non-empty).
+                    errors = [
+                        line for line in rows
+                        if line.count("\t") >= 2 and line.split("\t")[2].strip()
+                    ]
+                    result["stack_events"] = {
+                        "stack_status": "deployed",
+                        "exit_code": proc.returncode,
+                        "stderr_tail": (proc.stderr or "").strip().splitlines()[-5:],
+                        "task_count": len(rows),
+                        "error_rows": errors[:50],
+                        "raw_tail": rows[-30:],
+                    }
+            except Exception as e:
+                result["stack_events"] = {"error": str(e)}
+
+        return json.dumps(result, ensure_ascii=False, default=str)
+
+    elif name == "vibemind_launcher_presets":
+        op = args.get("op", "list")
+        if op == "list":
+            rc, out, err = _run_spaces_ps1(["presets-list"], timeout=10)
+            if rc != 0:
+                return json.dumps({"success": False, "error": err or "presets-list failed"})
+            try:
+                return json.dumps({"success": True, "presets": json.loads(out.strip())}, ensure_ascii=False)
+            except Exception as e:
+                return json.dumps({"success": False, "error": f"parse: {e}", "raw": out[:500]})
+        elif op == "save":
+            n = (args.get("name") or "").strip()
+            sps = args.get("spaces") or []
+            if not n:
+                return json.dumps({"success": False, "error": "save requires `name`"})
+            csv = ",".join(s.strip() for s in sps if s.strip())
+            rc, out, err = _run_spaces_ps1(["presets-save", n, csv], timeout=10)
+            return json.dumps({"success": rc == 0, "name": n, "spaces": sps, "stderr": err[:200] if err else ""}, ensure_ascii=False)
+        elif op == "delete":
+            n = (args.get("name") or "").strip()
+            if not n:
+                return json.dumps({"success": False, "error": "delete requires `name`"})
+            rc, out, err = _run_spaces_ps1(["presets-delete", n], timeout=10)
+            return json.dumps({"success": rc == 0, "name": n, "stderr": err[:200] if err else ""}, ensure_ascii=False)
+        else:
+            return json.dumps({"success": False, "error": f"unknown op: {op}"})
 
     return f"Unbekanntes Tool: {name}"
 

@@ -3,11 +3,15 @@ import type { AgentFarmTab } from './types'
 import { ProjectProgress } from './features/ProjectProgress'
 import { TeamRunner } from './features/TeamRunner'
 import { WorkflowBuilder } from './features/WorkflowBuilder'
+import { RowboatWorkflow } from './features/RowboatWorkflow'
+import { OpenFangWorkflow } from './features/OpenFangWorkflow'
 
 const SUB_TABS: { key: AgentFarmTab; label: string }[] = [
   { key: 'autogen', label: 'Pipeline' },
   { key: 'teams', label: 'Teams' },
   { key: 'n8n', label: 'n8n' },
+  { key: 'rowboat', label: 'Rowboat' },
+  { key: 'openfang', label: 'OpenFang' },
 ]
 
 export default function App() {
@@ -110,14 +114,19 @@ export default function App() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden" style={{ position: 'relative' }}>
-        <div
-          className="h-full overflow-y-auto"
-          style={{ padding: 'var(--space-4)' }}
-        >
-          {activeTab === 'autogen' && <ProjectProgress />}
-          {activeTab === 'teams' && <TeamRunner />}
-          {activeTab === 'n8n' && <WorkflowBuilder />}
-        </div>
+        {/* rowboat + openfang are full-bleed iframes (no padding/scroll wrapper) */}
+        {activeTab === 'rowboat' && <RowboatWorkflow />}
+        {activeTab === 'openfang' && <OpenFangWorkflow />}
+        {activeTab !== 'rowboat' && activeTab !== 'openfang' && (
+          <div
+            className="h-full overflow-y-auto"
+            style={{ padding: 'var(--space-4)' }}
+          >
+            {activeTab === 'autogen' && <ProjectProgress />}
+            {activeTab === 'teams' && <TeamRunner />}
+            {activeTab === 'n8n' && <WorkflowBuilder />}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 
 class CodingPublisher(BasePublisher):
 
-    space_name = "coding"
+    # Workspace slug aligns with the WORKSPACE_SPACES registry ('projects/')
+    # in base_publisher.py — coding-generation output lands alongside the
+    # other space mirrors under ~/.rowboat/vibemind/projects/.
+    space_name = "projects"
 
     def publish_project(
         self,
@@ -39,7 +42,7 @@ class CodingPublisher(BasePublisher):
 
         manifest = {
             "schema_version": "1.0",
-            "space": "coding",
+            "space": self.space_name,
             "type": "code_project",
             "published_at": datetime.now().isoformat(),
             "project": {
@@ -54,7 +57,7 @@ class CodingPublisher(BasePublisher):
             },
         }
 
-        self._write_manifest(f"coding/{slug}.json", manifest)
+        self._write_manifest(f"{self.space_name}/{slug}.json", manifest)
 
         # Build knowledge note
         key_facts = [

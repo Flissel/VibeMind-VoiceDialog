@@ -29,6 +29,29 @@ def _slugify(text: str) -> str:
     return text or "untitled"
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Workspace space registry
+#
+# ~/.rowboat/vibemind/ is the VibeMind collection + distribution point.
+# Every space publishes into its own subdirectory here so output stays
+# sorted by origin (and separate from Rowboat's own agents/ projects/ ...).
+#
+# Keys are the canonical space slugs used as `space_name` on publishers
+# and as the subdirectory name. Values are human-readable descriptions
+# written into each folder's README.
+# ─────────────────────────────────────────────────────────────────────
+WORKSPACE_SPACES: Dict[str, str] = {
+    "ideas":      "Ideas Universe — bubbles and ideas (synced via Graph Builder).",
+    "swe-design": "SWE Design — Requirements Engineer pipeline runs and specs.",
+    "projects":   "Coding — code-generation project metadata and quality reports.",
+    "videos":     "Video Studio — rendered video projects and pipeline output.",
+    "n8n":        "n8n — workflow definitions and automation metadata.",
+    "openfang":   "OpenFang — agent definitions and execution metadata.",
+    "blue-rose":  "Blue Rose / Flowzen — diary, check-ins and activity logs.",
+    "mirofish":   "MiroFish — simulation and prediction output.",
+}
+
+
 class BasePublisher(ABC):
     """Abstract base for space-to-Rowboat metadata publishers."""
 
@@ -137,3 +160,44 @@ class BasePublisher(ABC):
         if not space_dir.exists():
             return 0
         return len(list(space_dir.glob("*.json")))
+
+    def mirror_clean(self) -> None:
+        """Empty this space's workspace folder before a full re-sync.
+
+        Deletes every file in vibemind/{space_name}/ except README.md, so a
+        subsequent publish leaves the folder as an exact mirror of the
+        source (orphaned manifests for deleted objects are removed).
+        Knowledge notes are NOT touched here — they live under knowledge/.
+        """
+        space_dir = self.vibemind_dir / self.space_name
+        if not space_dir.exists():
+            return
+        for entry in space_dir.iterdir():
+            if entry.is_file() and entry.name != "README.md":
+                try:
+                    entry.unlink()
+                except OSError as e:
+                    logger.debug(f"[Publishing] mirror_clean skip {entry}: {e}")
+
+    @staticmethod
+    def ensure_space_dirs() -> Path:
+        """Create the per-space subdirectories under ~/.rowboat/vibemind/.
+
+        Idempotent: existing folders and READMEs are left untouched. This
+        makes the workspace the collection + distribution point — every
+        space has a guaranteed home folder. Returns the vibemind/ root.
+        """
+        vibemind_dir = Path.home() / ".rowboat" / "vibemind"
+        vibemind_dir.mkdir(parents=True, exist_ok=True)
+        for slug, description in WORKSPACE_SPACES.items():
+            space_dir = vibemind_dir / slug
+            space_dir.mkdir(parents=True, exist_ok=True)
+            readme = space_dir / "README.md"
+            if not readme.exists():
+                readme.write_text(
+                    f"# {slug}\n\n{description}\n\n"
+                    f"_This folder is part of the VibeMind → Rowboat workspace. "
+                    f"Files here are published by the `{slug}` space._\n",
+                    encoding="utf-8",
+                )
+        return vibemind_dir

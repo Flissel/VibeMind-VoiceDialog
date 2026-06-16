@@ -75,10 +75,13 @@ class AgentFarmManager {
       this.agentfarmView.webContents.loadFile(rendererPath);
     }
 
-    // Strip X-Frame-Options / CSP frame-ancestors from n8n responses
-    // so the embedded iframe can load n8n's UI
+    // Strip X-Frame-Options / CSP from embedded iframe targets so their UIs
+    // can load inside AgentFarm:
+    //  - n8n (:15678) sends restrictive CSP frame-ancestors
+    //  - OpenFang (:4200) sends X-Frame-Options: DENY (Rust server)
+    // Rowboat (:3100) needs no stripping (Next.js sends no such headers).
     this.agentfarmView.webContents.session.webRequest.onHeadersReceived(
-      { urls: ['http://localhost:15678/*'] },
+      { urls: ['http://localhost:15678/*', 'http://localhost:4200/*'] },
       (details, callback) => {
         const headers = { ...details.responseHeaders };
         // Remove headers that block iframe embedding (case-insensitive keys)

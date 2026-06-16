@@ -451,9 +451,16 @@ class ElectronBackend:
             try:
                 import time
                 time.sleep(2)
-                from publishing import get_ideas_publisher
+                from publishing import get_ideas_publisher, sync_all_spaces
                 publisher = get_ideas_publisher()
                 publisher.sync_all()
+
+                # Mirror per-space sources into ~/.rowboat/vibemind/*
+                # (openfang agents, n8n workflows, blue-rose diary).
+                try:
+                    sync_all_spaces()
+                except Exception as e:
+                    debug_log(f"sync_all_spaces at startup (non-critical): {e}")
 
                 # Wire up BrainSeeder (if enabled)
                 try:
@@ -490,9 +497,52 @@ class ElectronBackend:
                                     publisher.flush_agent_metrics()
                             except Exception:
                                 pass
+                        # Per-space workspace mirror: every 15min (30 ticks)
+                        if tick % 30 == 0:
+                            try:
+                                from publishing import sync_all_spaces
+                                sync_all_spaces()
+                            except Exception:
+                                pass
                 threading.Thread(
                     target=_periodic_flush, daemon=True, name="publisher-flush"
                 ).start()
+
+                # ── Bidirectional bubble↔Rowboat sync workers (env-gated) ──
+                # Worker A (DB->FS): drains ideas_sync_outbox, re-publishes the
+                # affected bubble's .md. Worker B (FS->DB): watches the vault,
+                # applies user edits back to public.ideas (GUC-fenced, canvas
+                # nodes read-only, LWW conflict = DB wins). Both no-op unless
+                # VIBEMIND_BUBBLE_SYNC_ENABLED=1 (default OFF — opt-in).
+                if os.environ.get("VIBEMIND_BUBBLE_SYNC_ENABLED", "0") in ("1", "true", "True"):
+                    try:
+                        from publishing.bubble_sync import _db as _bsdb
+                        _container = _bsdb.find_supabase_container()
+
+                        def _run_worker_a():
+                            try:
+                                from publishing.bubble_sync.worker_db_to_fs import listen_forever
+                                listen_forever(_container)
+                            except Exception as e:
+                                debug_log(f"bubble_sync Worker A stopped: {e}")
+
+                        def _run_worker_b():
+                            try:
+                                from publishing.bubble_sync.worker_fs_to_db import (
+                                    _run_watchdog, _run_polling, HAS_WATCHDOG)
+                                (_run_watchdog if HAS_WATCHDOG else _run_polling)(_container)
+                            except Exception as e:
+                                debug_log(f"bubble_sync Worker B stopped: {e}")
+
+                        threading.Thread(target=_run_worker_a, daemon=True,
+                                         name="bubble-sync-A").start()
+                        threading.Thread(target=_run_worker_b, daemon=True,
+                                         name="bubble-sync-B").start()
+                        debug_log("bubble_sync workers started (VIBEMIND_BUBBLE_SYNC_ENABLED=1)")
+                    except Exception as e:
+                        debug_log(f"bubble_sync worker wiring failed (non-critical): {e}")
+                else:
+                    debug_log("bubble_sync workers OFF (set VIBEMIND_BUBBLE_SYNC_ENABLED=1 to enable)")
 
             except Exception as e:
                 debug_log(f"Rowboat sync failed (non-critical): {e}")

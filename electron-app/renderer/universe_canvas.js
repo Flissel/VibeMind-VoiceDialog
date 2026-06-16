@@ -1654,10 +1654,52 @@ class UniverseCanvas {
      * Refresh canvas - request nodes from backend again.
      * Called when voice tools modify the canvas.
      */
-    refresh() {
-        if (this.bubbleId && window.vibemind) {
-            // Re-request the current bubble (triggers entered_bubble with fresh data)
-            window.vibemind.enterBubble(this.bubbleId);
+    async refresh() {
+        // Phase 11.U.J — In-place reload, NO navigation.
+        //
+        // The old body did `window.vibemind.enterBubble(this.bubbleId)`,
+        // a verkappter re-enter: Python answered `entered_bubble` and the
+        // handlers switched the view → the user got yanked into the bubble
+        // from wherever they were. That was THE auto-navigation bug.
+        //
+        // Instead: pull this bubble's canvas_nodes + canvas_edges straight
+        // from Supabase and feed loadNodes() in-place. Same shape the
+        // Supabase-Realtime path uses (position:{x,y}, content:{title,text},
+        // content_json/format_schema), so the renderer is happy and the
+        // user stays exactly where they are. (Day-to-day deltas already
+        // arrive via Realtime; this is the explicit-refresh fallback for
+        // voice tools / manual triggers.)
+        if (!this.bubbleId) return;
+        const SUPA = 'http://localhost:54321/rest/v1';
+        const HDR = { 'apikey': 'anon' };
+        try {
+            const [nRes, eRes] = await Promise.all([
+                fetch(`${SUPA}/canvas_nodes?linked_idea_id=eq.${encodeURIComponent(this.bubbleId)}&select=*`, { headers: HDR }),
+                fetch(`${SUPA}/canvas_edges?select=*`, { headers: HDR }),
+            ]);
+            if (!nRes.ok) {
+                console.warn('[UniverseCanvas] refresh: canvas_nodes fetch', nRes.status);
+                return;
+            }
+            const rows = await nRes.json();
+            const allEdges = eRes.ok ? await eRes.json() : [];
+            const nodeIds = new Set(rows.map(r => r.id));
+            const nodes = rows.map(r => ({
+                id: r.id,
+                type: r.node_type || 'note',
+                position: { x: r.x ?? 100, y: r.y ?? 100 },
+                content: { title: r.title || '', text: r.content || '' },
+                content_json: r.content_json || null,
+                format_schema: r.format_schema || null,
+                format_type: (r.content_json && r.content_json.type) || null,
+            }));
+            const edges = allEdges
+                .filter(e => nodeIds.has(e.from_node_id) && nodeIds.has(e.to_node_id))
+                .map(e => ({ id: e.id, from_node_id: e.from_node_id, to_node_id: e.to_node_id, type: e.edge_type }));
+            console.log(`[UniverseCanvas] refresh in-place: ${nodes.length} nodes, ${edges.length} edges (no re-enter)`);
+            this.loadNodes(nodes, edges);
+        } catch (err) {
+            console.warn('[UniverseCanvas] refresh failed (non-fatal):', err);
         }
     }
 

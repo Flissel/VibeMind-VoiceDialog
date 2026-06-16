@@ -982,6 +982,60 @@
                     }
                     break;
 
+                // Phase 11.U.M — spaces-ideas evaluate_bubble_evolution path.
+                // This is the eval path that actually WORKS (no KG-recall
+                // hallucination). It broadcasts `bubble_evolution_scored`
+                // with {score, details:{completeness,structure,actionability,
+                // depth,summary,recommendations}}. The mirofish path
+                // hallucinates, so we feed THIS into the eval side-panel by
+                // adapting its shape to what showEvalPanel expects.
+                case 'bubble_evolution_scored':
+                    if (message && message.details) {
+                        const d = message.details;
+                        const sc = Math.round(Number(message.score) || 0);
+                        // Resolve bubble title from the 3D scene by id
+                        let bName = 'Bubble';
+                        try {
+                            const objs = window.multiverseApp?.spaces?.ideas?.objects || [];
+                            const m = objs.find(b =>
+                                String(b.userData?.db_id) === String(message.bubble_id) ||
+                                String(b.userData?.id) === String(message.bubble_id));
+                            if (m) bName = m.userData.title;
+                        } catch (e) { /* ignore */ }
+
+                        // Adapt evolution-eval → showEvalPanel's expected shape.
+                        // recommendations become the actionable TODO list.
+                        const adapted = {
+                            action: 'evaluate_readiness',
+                            bubble_id: message.bubble_id,
+                            bubble_name: bName,
+                            total_score: sc,
+                            prediction: sc >= 66 ? 'GO' : sc >= 40 ? 'NEEDS_WORK' : 'NOT_READY',
+                            // 4-dim breakdown rendered as per-agent bars (×2.5 → /25 scale)
+                            per_agent: {
+                                vibemind_coding:    { score: Math.round((d.actionability||0) * 2.5), assessment: 'Actionability — kann in konkrete Tasks/Deliverables übersetzt werden' },
+                                vibemind_swe_design:{ score: Math.round((d.structure||0)     * 2.5), assessment: 'Structure — logisch organisiert, gut vernetzt' },
+                                vibemind_research:  { score: Math.round((d.depth||0)         * 2.5), assessment: 'Depth — detaillierte, gründlich explorierte Beschreibungen' },
+                                vibemind_ideas:     { score: Math.round((d.completeness||0)  * 2.5), assessment: 'Completeness — klare Ziele, Requirements, Scope' },
+                                vibemind_rowboat:   { score: 0, assessment: d.summary || '' },
+                            },
+                            // The actionable TODOs the user must do next:
+                            missing_items: Array.isArray(d.recommendations) ? d.recommendations : [],
+                            eval_history: [],
+                            _summary: d.summary || '',
+                        };
+                        if (typeof window.showEvalPanel === 'function') {
+                            window.showEvalPanel(adapted);
+                        }
+                        // Update 3D fill
+                        if (window.multiverseApp?.updateBubbleScore) {
+                            try { window.multiverseApp.updateBubbleScore(message.bubble_id, sc); } catch (e) {}
+                        }
+                        const ic = sc >= 66 ? '🟢' : sc >= 33 ? '🟡' : '🔴';
+                        showTranscript('Eval', `${ic} ${bName}: ${sc}/100 — ${(d.recommendations||[]).length} TODOs`);
+                    }
+                    break;
+
                 case 'bubbles_listed':
                     // Update bubbles with index numbers for voice reference
                     if (window.multiverseApp && message.bubbles) {
@@ -1095,6 +1149,39 @@
                     if (window.isEnteringBubble) {
                         console.log('[Python] entered_bubble - storing content for enterSpace() to load:', message.content?.length, 'nodes');
                         // Store content - enterSpace() callback will load it when spaceCanvas is ready
+                        if (message.content) {
+                            window.pendingBubbleContent = {
+                                content: message.content,
+                                edges: message.edges || []
+                            };
+                        }
+                        break;
+                    }
+
+                    // Resolve view elements locally. `spaceView` /
+                    // `canvasContainer` are declared as function-scoped vars
+                    // inside bubble-navigation.js's IIFE and are NOT visible
+                    // in this inline IPC handler — referencing them bare threw
+                    // "spaceView is not defined", aborting bubble load. Look
+                    // them up from the DOM here instead.
+                    const spaceView = document.getElementById('space-view');
+                    const canvasContainer = document.getElementById('canvas-container');
+                    if (!spaceView || !canvasContainer) {
+                        console.error('[Python] entered_bubble: space-view/canvas-container DOM missing');
+                        break;
+                    }
+
+                    // Phase 11.U.J — Top-level guard (same as the canvas-
+                    // handlers.js copy of this handler). A view-switch into
+                    // the bubble is only legitimate for USER-initiated
+                    // navigation (enterSpace sets isEnteringBubble, handled
+                    // by the early break above). Reaching here with
+                    // space-view HIDDEN and isEnteringBubble FALSE = an
+                    // AUTOMATIC re-enter (stray refresh/enterBubble after a
+                    // Brain mutation) — the auto-navigation we are removing.
+                    // Stash content for a later genuine enter; do NOT switch.
+                    if (spaceView.classList.contains('hidden') && !window.isEnteringBubble) {
+                        console.log('[Python] entered_bubble at TOP-LEVEL without user intent — NOT navigating (auto re-enter suppressed)');
                         if (message.content) {
                             window.pendingBubbleContent = {
                                 content: message.content,
@@ -1306,23 +1393,49 @@
                     // Phase 11.U — Brain published ui.refresh_bubbles, re-fetch from source-of-truth
                     console.log('[Brain] force_resync_bubbles received');
                     // Phase 11.U.E — debounce: many mutations in <500ms collapse
-                    // to one resync. Otherwise overlapping `enter_bubble` round-trips
-                    // race the DOM and stack stale placeholder nodes.
+                    // to one resync.
                     if (window.__resyncTimer) clearTimeout(window.__resyncTimer);
                     window.__resyncTimer = setTimeout(() => {
                         window.__resyncTimer = null;
                         try {
+                            // Always re-pull the top-level bubble list — cheap,
+                            // and the only thing needed when at top-level.
                             if (window.vibemind && typeof window.vibemind.requestBubbles === 'function') {
                                 window.vibemind.requestBubbles();
                             }
-                            const bid = window.__currentBubbleId;
-                            if (bid != null && window.vibemind?.sendToPython) {
-                                console.log('[Brain] debounced resync re-entering bubble', bid);
-                                window.vibemind.sendToPython({
-                                    type: 'enter_bubble',
-                                    bubble_id: bid,
-                                });
+                            // Phase 11.U.J — force_resync does NOTHING beyond
+                            // the top-level bubble-list pull above. It must
+                            // NOT touch the open canvas:
+                            //
+                            //  * The earlier `spaceCanvas.refresh()` here was
+                            //    NOT in-place — refresh() internally calls
+                            //    window.vibemind.enterBubble(bubbleId)
+                            //    (universe_canvas.js:1657), a verkappter
+                            //    re-enter. Python answers `entered_bubble`,
+                            //    canvas-handlers.js unconditionally switches
+                            //    to space-view → the user gets yanked into
+                            //    the bubble from top-level. THIS was the
+                            //    auto-navigation the user kept seeing.
+                            //
+                            //  * Node/edge deltas already arrive IN-PLACE via
+                            //    Supabase-Realtime (supabase-realtime.js →
+                            //    node_added/updated/removed, edge_added/
+                            //    removed). force_resync is a coarse fallback
+                            //    for the BUBBLE LIST only; the canvas heals
+                            //    itself reactively. No re-enter, no view
+                            //    switch, no loop — the user stays exactly
+                            //    where they are.
+                            const spaceView = document.getElementById('space-view');
+                            const insideBubble = spaceView
+                                && !spaceView.classList.contains('hidden');
+                            if (!insideBubble && window.__currentBubbleId != null) {
+                                // Stale id while at top-level → clear it so
+                                // nothing downstream mistakes us for "inside".
+                                console.log('[Brain] resync at top-level, clearing stale __currentBubbleId', window.__currentBubbleId);
+                                window.__currentBubbleId = null;
                             }
+                            // (inside a bubble → Realtime keeps the canvas
+                            //  current; deliberately no canvas action here.)
                         } catch (e) { console.warn('[Brain] resync failed:', e); }
                     }, 350);
                     break;
@@ -2401,19 +2514,102 @@
                 title: title,
             };
 
-            // Try cache keys in order
+            // Try cache keys in order — used ONLY as an instant optimistic
+            // badge while the authoritative DB value is fetched.
             const keys = [opts.dbId, title, primaryId, opts.localId].filter(Boolean);
             let cached = null;
             for (const k of keys) {
                 cached = _getCachedEval(k);
                 if (cached) break;
             }
-            if (cached) {
-                _updateToggleBadge(cached.total_score);
-            } else {
-                _updateToggleBadge(null);
-            }
+            // Optimistic: show the cached score immediately if we have one,
+            // so the badge isn't blank for the ~100ms REST round-trip.
+            _updateToggleBadge(cached ? cached.total_score : null);
+
+            // Phase 11.U.H — ALWAYS re-fetch from Supabase. The DB is the
+            // source of truth; localStorage cache goes stale the moment a
+            // re-eval runs (bug: cached 46 was shown forever even after the
+            // DB rose to 80, because the old code only hit the DB when
+            // there was NO cache). _fetchEvalFromDB overwrites the cache +
+            // badge + panel with the fresh value.
+            window._fetchEvalFromDB(opts.dbId || primaryId, title);
             // Don't auto-open here — wait for user click or new eval
+        };
+
+        // Pull persisted ai_eval from Supabase REST and feed it to the
+        // panel via the same adapter shape showEvalPanel expects.
+        window._fetchEvalFromDB = async function(bubbleDbId, title) {
+            if (!bubbleDbId && !title) return;
+            try {
+                const base = (window.__SUPABASE_URL || 'http://127.0.0.1:54321');
+                const key = window.__SUPABASE_ANON_KEY || '';
+                const hdrs = key ? { apikey: key, Authorization: 'Bearer ' + key } : {};
+                // Phase 11.U.H — DB-UUIDs here are 8+ hex chars (e.g.
+                // ff16dc78). On an auto-enter (force_resync race) the 3D
+                // object isn't loaded yet so enterSpace passes the LOCAL
+                // int id, not the UUID — `id=eq.3` matches nothing and the
+                // eval silently never appears ("da fehlt eval"). Detect a
+                // non-UUID id and resolve by title instead.
+                const looksUuid = /^[0-9a-f]{6,}$/i.test(String(bubbleDbId || ''));
+                let url;
+                if (bubbleDbId && looksUuid) {
+                    url = `${base}/rest/v1/ideas?id=eq.${encodeURIComponent(bubbleDbId)}&select=title,score,metadata`;
+                } else if (title) {
+                    url = `${base}/rest/v1/ideas?title=eq.${encodeURIComponent(title)}&parent_id=is.null&select=id,title,score,metadata&limit=1`;
+                } else {
+                    return;  // no UUID and no title — can't resolve
+                }
+                const r = await fetch(url, { headers: hdrs });
+                if (!r.ok) return;
+                const rows = await r.json();
+                const row = Array.isArray(rows) ? rows[0] : rows;
+                const ae = row && row.metadata && row.metadata.ai_eval;
+                if (!ae) return;
+                const sc = Math.round(Number(row.score) || 0);
+                // Use the row's real UUID (when resolved by title, the
+                // passed bubbleDbId was a local int — row.id is the truth).
+                const realId = (row && row.id) || bubbleDbId;
+                const adapted = {
+                    action: 'evaluate_readiness',
+                    bubble_id: realId,
+                    bubble_name: row.title || title || 'Bubble',
+                    total_score: sc,
+                    prediction: sc >= 66 ? 'GO' : sc >= 40 ? 'NEEDS_WORK' : 'NOT_READY',
+                    per_agent: {
+                        vibemind_coding:    { score: Math.round((ae.actionability||0)*2.5), assessment: 'Actionability' },
+                        vibemind_swe_design:{ score: Math.round((ae.structure||0)*2.5),     assessment: 'Structure' },
+                        vibemind_research:  { score: Math.round((ae.depth||0)*2.5),         assessment: 'Depth' },
+                        vibemind_ideas:     { score: Math.round((ae.completeness||0)*2.5),  assessment: 'Completeness' },
+                        vibemind_rowboat:   { score: 0, assessment: ae.summary || '' },
+                    },
+                    missing_items: Array.isArray(ae.recommendations) ? ae.recommendations : [],
+                    eval_history: [],
+                    _summary: ae.summary || '',
+                    _fromDB: true,
+                };
+                // Cache it so toggle/badge work, update badge; don't force-open
+                try {
+                    if (typeof _saveCachedEval === 'function') {
+                        _saveCachedEval(realId, adapted);
+                        if (bubbleDbId && bubbleDbId !== realId) _saveCachedEval(bubbleDbId, adapted);
+                        if (title) _saveCachedEval(title, adapted);
+                    }
+                } catch (e) { /* ignore */ }
+                _updateToggleBadge(sc);
+                // Phase 11.U.H — if the panel is already OPEN, re-render its
+                // body with the fresh DB eval. Without this, a user with the
+                // panel open kept seeing the stale 46 even after the DB rose
+                // to 80 (badge updated, body didn't).
+                try {
+                    const panel = document.getElementById('eval-panel');
+                    if (panel && panel.classList.contains('open')
+                        && typeof window.showEvalPanel === 'function') {
+                        window.showEvalPanel(adapted);
+                    }
+                } catch (e) { /* non-fatal */ }
+            } catch (e) {
+                console.warn('[eval-panel] DB fallback fetch failed:', e);
+            }
         };
 
         window.onEvalBubbleExit = function() {

@@ -61,10 +61,15 @@ const VideoManager = require('./video-manager');
 const EyeTermManager = require('./eyeterm-manager');
 
 // Enable remote debugging port for CDP (Chrome DevTools Protocol)
-// This allows external tools to connect and manipulate the renderer
+// This allows external tools to connect and manipulate the renderer.
+// remote-allow-origins is REQUIRED since Chromium 111: without it the
+// WebSocket handshake responds 403 "Rejected an incoming WebSocket
+// connection from the http://127.0.0.1:9223 origin". Localhost-only port
+// so the wildcard is acceptable; this is the same value chromedriver uses.
 // Safety check: only set if app is available (not running as Node)
 if (app && app.commandLine) {
     app.commandLine.appendSwitch('remote-debugging-port', '9223');
+    app.commandLine.appendSwitch('remote-allow-origins', '*');
 }
 
 // Note: GPU flags are now passed via command line when starting electron:
@@ -130,15 +135,44 @@ async function autoConfigureRowboatModels() {
             currentConfig = JSON.parse(raw);
         } catch { /* file doesn't exist yet — will create */ }
 
-        // Determine desired config (Priority: ANTHROPIC > OPENROUTER > OPENAI)
+        // Default priority: ANTHROPIC > OPENROUTER > OPENAI.
+        // Override via ROWBOAT_PROVIDER (openai|anthropic|openrouter) to pin a
+        // specific provider regardless of which keys are present.
         let desiredConfig = null;
         let source = '';
 
         // Check for global model override (takes precedence over provider-specific defaults)
         const rowboatModelOverride = process.env.LLM_MODEL_ROWBOAT || process.env.ROWBOAT_MODEL;
+        const providerOverride = (process.env.ROWBOAT_PROVIDER || '').trim().toLowerCase();
+
+        // Rowboat-specific OpenAI config — falls back to the shared key/defaults
+        // so Rowboat can use its own key/model without affecting the rest.
+        const rowboatOpenAIKey = process.env.ROWBOAT_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+        const rowboatOpenAIModel = rowboatModelOverride || process.env.ROWBOAT_OPENAI_MODEL || 'gpt-4.1';
+
+        // 0. Explicit provider pin (ROWBOAT_PROVIDER). Wins over the priority chain.
+        if (providerOverride === 'openai' && rowboatOpenAIKey) {
+            desiredConfig = {
+                provider: { flavor: 'openai', apiKey: rowboatOpenAIKey },
+                model: rowboatOpenAIModel,
+            };
+            source = 'OpenAI (pinned via ROWBOAT_PROVIDER)';
+        } else if (providerOverride === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+            desiredConfig = {
+                provider: { flavor: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY },
+                model: rowboatModelOverride || 'claude-sonnet-4-20250514',
+            };
+            source = 'Anthropic (pinned via ROWBOAT_PROVIDER)';
+        } else if (providerOverride === 'openrouter' && process.env.OPENROUTER_API_KEY) {
+            desiredConfig = {
+                provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
+                model: rowboatModelOverride || 'anthropic/claude-sonnet-4',
+            };
+            source = 'OpenRouter (pinned via ROWBOAT_PROVIDER)';
+        }
 
         // 1. Explicit Anthropic API key from .env
-        {
+        if (!desiredConfig) {
             const anthropicKey = process.env.ANTHROPIC_API_KEY;
             if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
                 desiredConfig = {
@@ -158,11 +192,11 @@ async function autoConfigureRowboatModels() {
             source = 'OpenRouter';
         }
 
-        // 3. OpenAI (fallback)
-        if (!desiredConfig && process.env.OPENAI_API_KEY) {
+        // 3. OpenAI (fallback) — uses the rowboat-specific key/model if set
+        if (!desiredConfig && rowboatOpenAIKey) {
             desiredConfig = {
-                provider: { flavor: 'openai', apiKey: process.env.OPENAI_API_KEY },
-                model: rowboatModelOverride || 'gpt-4.1',
+                provider: { flavor: 'openai', apiKey: rowboatOpenAIKey },
+                model: rowboatOpenAIModel,
             };
             source = 'OpenAI';
         }
@@ -2037,6 +2071,16 @@ function setupIpcHandlers() {
     ipcMain.handle('slack:getConfig',    _stubConfig);
     ipcMain.handle('voice:getConfig',    () => ({ deepgram: null, elevenlabs: null }));
     ipcMain.handle('agent-schedule:getState', () => ({ schedules: [] }));
+    // agent-schedule:updateAgent — App.tsx calls this; without a handler the
+    // schedule UI throws "No handler registered". Forward to the bridge when
+    // ready; degrade gracefully otherwise (the knowledge-graph itself is
+    // bridge-independent and unaffected).
+    ipcMain.handle('agent-schedule:updateAgent', async (_e, args) => {
+        if (!rowboatManager?.bridgeReady) {
+            return { ok: false, error: 'Rowboat bridge not ready' };
+        }
+        return rowboatManager.sendRpc('agent-schedule:updateAgent', args);
+    });
 
     // ========================================
     // CLAUDE CODE TOKEN (for Settings UI badge)
@@ -3151,8 +3195,10 @@ app.whenReady().then(async () => {
     // Start media server container (video/audio playback for Rowboat)
     try {
         const { execSync } = require('child_process');
-        const mediaCompose = _path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
-        if (_fs.existsSync(mediaCompose)) {
+        const path = require('path');
+        const fs = require('fs');
+        const mediaCompose = path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
+        if (fs.existsSync(mediaCompose)) {
             execSync(`docker compose -f "${mediaCompose}" up -d media`, {
                 timeout: 15000, stdio: 'ignore',
             });
