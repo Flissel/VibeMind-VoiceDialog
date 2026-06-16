@@ -111,3 +111,4 @@ python/vibemind.db.before-wipe-*.db
 # Graphify code-graph output (local dev tool, ~MB) — rebuilt via `graphify update .`, never commit.
 graphify-out/
 .graphifyignore
+python/spaces.bak-*
