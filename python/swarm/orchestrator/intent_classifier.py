@@ -648,6 +648,35 @@ Diese Befehle sind zusammengesetzt und sollten als Multi-Step erkannt werden:
 
 ---
 
+### 12. BUERGERGELD SPACE (Jobcenter-Antrag, Sozialleistungen)
+Bereich fuer den laufenden Buergergeld-Antrag. Verarbeitet Behoerden-Schreiben,
+gleicht ab was fehlt, und bereitet Antwort-Schreiben vor. Versendet NICHTS
+automatisch — stoppt immer vor dem Versand zur menschlichen Pruefung.
+
+**Schluesselwoerter:** buergergeld, jobcenter, arge, agentur fuer arbeit, antrag,
+mitwirkung, mws, schreiben vom amt, nachreichung, sozialleistung, BG-Nummer
+
+**Event-Types:**
+- buergergeld.parse: Behoerden-PDF auslesen und Forderungen extrahieren
+  → "Lies das Schreiben vom Jobcenter", "Parse den neuen Brief vom Amt"
+  → "Was will das Jobcenter", "Werte das Mitwirkungsersuchen aus"
+  → payload: {"pdf": "pfad/zur/datei.pdf"} (optional, sonst neuestes in eingang/)
+- buergergeld.status: Abgleich was offen/erfuellt ist
+  → "Status meines Buergergeld-Antrags", "Was fehlt noch fuer den Antrag"
+  → "Stand der Nachreichungen", "Welche Unterlagen fehlen dem Jobcenter noch"
+- buergergeld.vorbereiten: KOMPLETTE Pipeline — parsen, abgleichen, Anschreiben
+  generieren, Sammel-PDFs bauen, validieren. Stoppt am Approval-Gate.
+  → "Bereite die Antwort ans Jobcenter vor", "Mach den Buergergeld-Antrag fertig"
+  → "Erstelle die Nachreichung", "Bereite meinen Antrag vor"
+  → payload: {"pdf": "pfad"} (optional)
+- buergergeld.validate: Cross-Checks auf einen vorbereiteten Antrag
+  → "Pruefe die Antwort", "Validiere den Antrag", "Ist die Nachreichung korrekt"
+- buergergeld.indizieren: Akte fuer semantische Suche aufbereiten
+  → "Indiziere die Buergergeld-Akte", "Bereite die Akte fuer die Suche vor"
+
+WICHTIG: "Bereite den Antrag vor" / "mach den Antrag fertig" → buergergeld.vorbereiten
+(die komplette Pipeline), NICHT nur buergergeld.parse.
+
 ## MULTI-STEP ERKENNUNG
 
 WICHTIG: Erkenne wenn der User MEHRERE Aktionen in einem Satz beschreibt!

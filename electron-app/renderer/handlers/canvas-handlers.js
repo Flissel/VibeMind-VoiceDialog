@@ -32,6 +32,26 @@
         var spaceView = document.getElementById('space-view');
         var canvasContainer = document.getElementById('canvas-container');
 
+        // Phase 11.U.J — Top-level guard. A view-switch into the bubble is
+        // ONLY legitimate for a USER-initiated navigation. enterSpace()
+        // (bubble-navigation.js, the Enter button / double-click / voice)
+        // sets window.isEnteringBubble=true and the early-return at the top
+        // of this handler already covers that path (it stores pending
+        // content and returns). So if we reach here with space-view HIDDEN
+        // and isEnteringBubble FALSE, this `entered_bubble` is an
+        // AUTOMATIC re-enter (e.g. a stray refresh()/enterBubble() round
+        // trip after a Brain mutation) — exactly the auto-navigation the
+        // user wants gone. Do NOT switch views; the bubble's data will be
+        // picked up in-place via Supabase-Realtime or on the next genuine
+        // enter. Stash content so a later real enter is instant.
+        if (spaceView.classList.contains('hidden') && !window.isEnteringBubble) {
+            console.log('[Python] entered_bubble at TOP-LEVEL without user intent — NOT navigating (auto re-enter suppressed)');
+            if (msg.content) {
+                window.pendingBubbleContent = { content: msg.content, edges: msg.edges || [] };
+            }
+            return;
+        }
+
         // First switch views if not already in space view
         if (spaceView.classList.contains('hidden')) {
             console.log('[Python] entered_bubble - switching to space view');

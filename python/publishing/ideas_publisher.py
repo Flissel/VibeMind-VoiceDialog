@@ -94,10 +94,15 @@ class IdeasPublisher(BasePublisher):
             if not title or title in seen_titles:
                 continue
             seen_titles.add(title)
-            # Render structured content if available
-            rendered_content = ""
             cj = getattr(node, "content_json", None)
-            if isinstance(cj, dict) and cj:
+            has_cj = isinstance(cj, dict) and bool(cj)
+            reformat_pending = bool(getattr(node, "reformat_pending", False))
+            # ANTI-FLICKER (canvas bidi-sync): while a content edit awaits its
+            # content_json regeneration (reformat_pending), render the FRESH plain
+            # `content` and SKIP the lossy content_json flatten — so a forced
+            # re-render shows the user's edited text, not the stale structure.
+            rendered_content = ""
+            if has_cj and not reformat_pending:
                 try:
                     from spaces.mirofish.tools.mirofish_tools import _flatten_content_json
                     fmt_type = cj.get("type") or node.node_type
@@ -113,6 +118,10 @@ class IdeasPublisher(BasePublisher):
                 "content": rendered_content,
                 "tags": [],
                 "node_type": node.node_type or "note",
+                # canvas-sync frontmatter drivers (consumed by render_canvas_note)
+                "is_canvas": True,
+                "has_content_json": has_cj,
+                "reformat_pending": reformat_pending,
             })
 
         # Get edges between this bubble's canvas nodes
@@ -233,34 +242,45 @@ class IdeasPublisher(BasePublisher):
             key_facts=key_facts,
             source_space="Ideas",
         )
-        (bubble_dir / "_overview.md").write_text(overview_md + eval_appendix, encoding="utf-8")
+        from .bubble_sync.render_md import render_overview
+        _ov_path = bubble_dir / "_overview.md"
+        _ov_existing = _ov_path.read_text(encoding="utf-8") if _ov_path.exists() else None
+        _ov_path.write_text(
+            render_overview(
+                bubble_id=bubble.id,
+                overview_body=(overview_md + eval_appendix),
+                existing=_ov_existing,
+            ),
+            encoding="utf-8",
+        )
 
         # Track which files we write so we can prune stale ones
         written_files = {"_overview.md"}
 
-        # Individual idea files
+        # Individual idea files — now with stable frontmatter (idea_id/bubble_id)
+        # + a user-editable fence, via bubble_sync.render_md. The DB-rendered
+        # body is unchanged; this makes the files identifiable + round-trippable
+        # for the bidirectional sync (see publishing/bubble_sync/).
+        from .bubble_sync.render_md import render_idea_note, render_canvas_note
         for n in notes:
             idea_title = n["title"] or "Untitled"
             filename = f"{_safe_filename(idea_title)}.md"
             written_files.add(filename)
 
-            lines = [f"# {idea_title}", ""]
-            if n["content"]:
-                lines.append(n["content"])
-                lines.append("")
-            if n["tags"]:
-                lines.append(f"**Tags:** {', '.join(n['tags'])}")
-                lines.append("")
-            if n.get("node_type") and n["node_type"] != "note":
-                lines.append(f"**Type:** {n['node_type']}")
-                lines.append("")
-            lines.append(f"**Bubble:** [[Projects/{folder_name}/_overview]]")
-            lines.append("")
-            lines.append("---")
-            lines.append(f"*Auto-published by VibeMind on {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
-            lines.append("")
-
-            (bubble_dir / filename).write_text("\n".join(lines), encoding="utf-8")
+            idea_path = bubble_dir / filename
+            existing = idea_path.read_text(encoding="utf-8") if idea_path.exists() else None
+            # Canvas nodes get the canvas frontmatter (canvas_node_id + writeback
+            # drivers) so Worker B can sync edits back to public.canvas_nodes;
+            # child ideas keep the idea frontmatter.
+            if n.get("is_canvas"):
+                md = render_canvas_note(
+                    n, bubble_id=bubble.id, folder_name=folder_name, existing=existing,
+                )
+            else:
+                md = render_idea_note(
+                    n, bubble_id=bubble.id, folder_name=folder_name, existing=existing,
+                )
+            idea_path.write_text(md, encoding="utf-8")
 
         # Prune ideas that were deleted (files in folder but not in current notes)
         # Skip _-prefixed files (wizard outputs like _requirements.md)
@@ -316,6 +336,90 @@ class IdeasPublisher(BasePublisher):
 
         self._update_index(self._count_manifests())
         logger.debug(f"[IdeasPublisher] Removed bubble '{title}'")
+
+    def cleanup_orphaned_project_dirs(
+        self,
+        live_titles,
+        dry_run: bool = True,
+        max_delete: Optional[int] = 200,
+        skip_substrings=("VibeMind - TODO ",),
+    ) -> Dict[str, Any]:
+        """Filesystem reverse-sync: delete knowledge/Projects/'VibeMind - {title}'/
+        folders whose {title} is NOT a live bubble. ONLY touches 'VibeMind - *'
+        dirs — Agents/Diary/People/Bewerbung/Topics/Videos/etc. are never scanned.
+
+        ``skip_substrings``: folder names containing any of these are PRESERVED
+        even if orphaned. Default protects 'VibeMind - TODO ' dirs — those are the
+        split-out E-Ticketing requirement bubbles (API spec, GDPR, Tariflogik…),
+        which belong to the real project and must not be wiped as test junk.
+
+        Mirrors cleanup_orphaned_sources (MongoDB) on the .md vault side. Same
+        safety guards: empty live_titles -> abort; > max_delete -> abort;
+        dry_run default report-only. Deletion reuses shutil.rmtree (same as
+        remove_bubble).
+        """
+        projects_dir = self.knowledge_dir / "Projects"
+        report: Dict[str, Any] = {
+            "success": True, "dry_run": dry_run, "checked": 0,
+            "orphaned": [], "deleted": 0, "aborted": None,
+        }
+
+        # GUARD 1: refuse to wipe on an empty/broken bubble set.
+        live = set(live_titles or set())
+        if not live:
+            report["success"] = False
+            report["aborted"] = "no live bubbles — refusing to delete project dirs"
+            logger.warning("[IdeasPublisher] cleanup aborted: 0 live bubbles")
+            return report
+
+        if not projects_dir.is_dir():
+            report["aborted"] = f"Projects dir not found: {projects_dir}"
+            return report
+
+        live_folders = {f"VibeMind - {_safe_filename(t)}" for t in live}
+        # Only consider 'VibeMind - *' dirs (bubble-published); skip everything else.
+        candidates = [
+            p for p in projects_dir.iterdir()
+            if p.is_dir() and p.name.startswith("VibeMind - ")
+        ]
+        report["checked"] = len(candidates)
+        skips = tuple(skip_substrings or ())
+        orphans = [
+            p for p in candidates
+            if p.name not in live_folders
+            and not any(s in p.name for s in skips)
+        ]
+        report["orphaned"] = [p.name for p in orphans]
+        report["protected"] = len([
+            p for p in candidates
+            if p.name not in live_folders and any(s in p.name for s in skips)
+        ])
+
+        # GUARD 2: refuse an unexpectedly large deletion.
+        if max_delete is not None and len(orphans) > max_delete:
+            report["success"] = False
+            report["aborted"] = (
+                f"{len(orphans)} orphan dirs exceed max_delete={max_delete} — aborting"
+            )
+            logger.warning("[IdeasPublisher] cleanup aborted: %s orphans > max_delete %s",
+                           len(orphans), max_delete)
+            return report
+
+        if dry_run:
+            logger.info("[IdeasPublisher] FS cleanup DRY-RUN: %s orphaned of %s checked",
+                        len(orphans), len(candidates))
+            return report
+
+        for p in orphans:
+            try:
+                shutil.rmtree(p)
+                report["deleted"] += 1
+                logger.info("[IdeasPublisher] cleanup deleted orphan dir '%s'", p.name)
+            except Exception as e:  # noqa: BLE001 — one bad dir must not abort the rest
+                logger.warning("[IdeasPublisher] cleanup failed for '%s': %s", p.name, e)
+        if not dry_run:
+            self._update_index(self._count_manifests())
+        return report
 
     def publish_wizard_results(
         self,

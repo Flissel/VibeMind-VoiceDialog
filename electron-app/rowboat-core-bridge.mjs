@@ -19,7 +19,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Core dist lives at: spaces/rowboat/rowboat/apps/x/packages/core/dist/
-const CORE_BASE = join(__dirname, '..', 'python', 'spaces', 'rowboat', 'rowboat',
+// electron-app -> voice -> vibemind-os -> spaces/rowboat/rowboat (NOT
+// voice/python, which has no rowboat checkout — same path bug that broke
+// rowboat-manager._resolveRendererPath / startBridge.coreDir).
+const CORE_BASE = join(__dirname, '..', '..', 'spaces', 'rowboat', 'rowboat',
   'apps', 'x', 'packages', 'core', 'dist');
 
 function coreModule(subpath) {

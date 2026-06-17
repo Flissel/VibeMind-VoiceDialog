@@ -451,9 +451,16 @@ class ElectronBackend:
             try:
                 import time
                 time.sleep(2)
-                from publishing import get_ideas_publisher
+                from publishing import get_ideas_publisher, sync_all_spaces
                 publisher = get_ideas_publisher()
                 publisher.sync_all()
+
+                # Mirror per-space sources into ~/.rowboat/vibemind/*
+                # (openfang agents, n8n workflows, blue-rose diary).
+                try:
+                    sync_all_spaces()
+                except Exception as e:
+                    debug_log(f"sync_all_spaces at startup (non-critical): {e}")
 
                 # Wire up BrainSeeder (if enabled)
                 try:
@@ -490,9 +497,71 @@ class ElectronBackend:
                                     publisher.flush_agent_metrics()
                             except Exception:
                                 pass
+                        # Per-space workspace mirror: every 15min (30 ticks)
+                        if tick % 30 == 0:
+                            try:
+                                from publishing import sync_all_spaces
+                                sync_all_spaces()
+                            except Exception:
+                                pass
                 threading.Thread(
                     target=_periodic_flush, daemon=True, name="publisher-flush"
                 ).start()
+
+                # ── Bidirectional bubble↔Rowboat sync workers (env-gated) ──
+                # Worker A (DB->FS): drains ideas_sync_outbox, re-publishes the
+                # affected bubble's .md. Worker B (FS->DB): watches the vault,
+                # applies user edits back to public.ideas (GUC-fenced, canvas
+                # nodes read-only, LWW conflict = DB wins). Both no-op unless
+                # VIBEMIND_BUBBLE_SYNC_ENABLED=1 (default OFF — opt-in).
+                if os.environ.get("VIBEMIND_BUBBLE_SYNC_ENABLED", "0") in ("1", "true", "True"):
+                    try:
+                        from publishing.bubble_sync import _db as _bsdb
+                        _container = _bsdb.find_supabase_container()
+
+                        def _run_worker_a():
+                            try:
+                                from publishing.bubble_sync.worker_db_to_fs import listen_forever
+                                listen_forever(_container)
+                            except Exception as e:
+                                debug_log(f"bubble_sync Worker A stopped: {e}")
+
+                        def _run_worker_b():
+                            try:
+                                from publishing.bubble_sync.worker_fs_to_db import (
+                                    _run_watchdog, _run_polling, HAS_WATCHDOG)
+                                (_run_watchdog if HAS_WATCHDOG else _run_polling)(_container)
+                            except Exception as e:
+                                debug_log(f"bubble_sync Worker B stopped: {e}")
+
+                        threading.Thread(target=_run_worker_a, daemon=True,
+                                         name="bubble-sync-A").start()
+                        threading.Thread(target=_run_worker_b, daemon=True,
+                                         name="bubble-sync-B").start()
+                        debug_log("bubble_sync workers started (VIBEMIND_BUBBLE_SYNC_ENABLED=1)")
+
+                        # Canvas reformat drainer: when a STRUCTURED canvas node's
+                        # prose was FS-edited, Worker B writes `content` + enqueues
+                        # a job; this daemon regenerates content_json via the LLM
+                        # formatter (GUC-fenced, out of the watchdog hot path).
+                        # Separate kill-switch so the LLM cost is opt-in independent
+                        # of the (free) content writeback.
+                        if os.environ.get("VIBEMIND_CANVAS_REFORMAT_ENABLED", "0") in ("1", "true", "True"):
+                            def _run_reformat():
+                                try:
+                                    from publishing.bubble_sync.worker_canvas_reformat import drain_forever
+                                    drain_forever(_container)
+                                except Exception as e:
+                                    debug_log(f"canvas reformat drainer stopped: {e}")
+                            threading.Thread(target=_run_reformat, daemon=True,
+                                             name="canvas-reformat").start()
+                            debug_log("canvas reformat drainer started (VIBEMIND_CANVAS_REFORMAT_ENABLED=1)")
+                        else:
+                            debug_log("canvas reformat drainer OFF (set VIBEMIND_CANVAS_REFORMAT_ENABLED=1 to enable)")
+                    except Exception as e:
+                        debug_log(f"bubble_sync worker wiring failed (non-critical): {e}")
+                else:
+                    debug_log("bubble_sync workers OFF (set VIBEMIND_BUBBLE_SYNC_ENABLED=1 to enable)")
 
             except Exception as e:
                 debug_log(f"Rowboat sync failed (non-critical): {e}")
@@ -884,9 +953,30 @@ class ElectronBackend:
                 body = message.get("body") or ""
                 severity = (message.get("severity") or "ALERT").upper()
                 source = message.get("source") or "debug-agent"
-                inbox = Path(
-                    r"C:/Users/User/Desktop/Vibemind_V1/vibemind-os/issue-detector/vibemind_inbox.md"
-                )
+                # Cross-platform inbox path via vibemind_shared. Voice's venv
+                # may not have the package installed (it has its own dependency
+                # set), so we fall back to a hand-rolled climb if needed.
+                try:
+                    # Make vibemind_shared importable when its package isn't
+                    # in this venv: shared/src is 4 levels up from this file
+                    # (voice/python/electron_backend.py).
+                    _shared_src = (
+                        Path(__file__).resolve().parent.parent.parent
+                        / "shared" / "src"
+                    )
+                    if _shared_src.is_dir() and str(_shared_src) not in sys.path:
+                        sys.path.insert(0, str(_shared_src))
+                    from vibemind_shared.paths import issue_inbox  # noqa: WPS433
+                    inbox = issue_inbox()
+                except Exception:
+                    # Fallback: climb to find vibemind-os/ and build manually
+                    here = Path(__file__).resolve()
+                    root = next(
+                        (p for p in here.parents
+                         if (p / "vibemind-os" / "shared").is_dir()),
+                        here.parents[3] if len(here.parents) > 3 else here.parent,
+                    )
+                    inbox = root / "vibemind-os" / "issue-detector" / "vibemind_inbox.md"
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 icon = {"INFO": "ℹ️", "WARN": "⚠️", "ALERT": "🚨"}.get(severity, "🚨")
                 entry = (

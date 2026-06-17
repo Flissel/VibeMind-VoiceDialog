@@ -565,6 +565,25 @@ class IntentOrchestrator:
             except Exception as e:
                 logger.warning(f"BrainOpenFangBridge init failed: {e}")
 
+        # PHASE -2: Brain Multihop Bridge (capability-routed via MCPExecutor)
+        # Routes intents through Brain's /api/multihop/execute → CapabilityRouter
+        # → MCPExecutor / OpenFangExecutor (whichever the matched cap's
+        # execution_target picks). For our use case: "erstelle openfang agent X"
+        # → cap openfang_agent_create → mcp:openfang-agents:openfang_agent_spawn_from_template
+        # → openfang-agents stdio MCP server → :4200/api/agents POST.
+        # On no-cap-match / brain-down / timeout: return None → Phase -1 takes over.
+        # Default off; enable with VOICE_BRAIN_MULTIHOP=true.
+        self._multihop_bridge = None
+        if os.getenv("VOICE_BRAIN_MULTIHOP", "false").lower() == "true":
+            try:
+                from swarm.routing.brain_multihop_bridge import BrainMultihopBridge
+                self._multihop_bridge = BrainMultihopBridge(
+                    brain_url=os.getenv("BRAIN_URL", "http://localhost:5000"),
+                )
+                logger.info("BrainMultihopBridge enabled (Phase -2 capability-routed)")
+            except Exception as e:
+                logger.warning(f"BrainMultihopBridge init failed: {e}")
+
         # Direct tool executors for synchronous fallback AND multi-step execution
         # Multi-step always uses direct execution, so we always load tools
         from swarm.orchestrator.tool_registry import ToolRegistry
@@ -858,6 +877,29 @@ class IntentOrchestrator:
                     return domain_result
                 # If domain routing failed, continue to normal analysis
                 logger.warning(f"[DomainRouter] Domain routing failed, falling back to analysis")
+
+            # =================================================================
+            # PHASE -2: BRAIN MULTIHOP (capability-routed via MCPExecutor)
+            # =================================================================
+            # Free-text intent → Brain's /api/multihop/execute → CapabilityRouter
+            # (regex / shortcut / LLM planner) → executor (mcp:* via MCPExecutor,
+            # openfang:* via OpenFangExecutor, etc.). Only the "ok=true with
+            # speakable text" branch is treated as success; any other outcome
+            # (ok:false, exception, no final_text, brain-down) falls through to
+            # Phase -1, preserving the existing default behavior bit-for-bit
+            # when VOICE_BRAIN_MULTIHOP=false (default).
+            if self._multihop_bridge is not None:
+                try:
+                    mh_result = await self._multihop_bridge.execute(intent_text=intent_text)
+                    if mh_result and not mh_result.error:
+                        asyncio.create_task(self._store_memory_for_intent(
+                            intent_text, mh_result, context
+                        ))
+                        return mh_result
+                except Exception as e:
+                    logger.debug(
+                        f"[MultihopBridge] unexpected error, falling through: {e}"
+                    )
 
             # =================================================================
             # PHASE -1: BRAIN + OPENFANG (context-aware routing + execution)

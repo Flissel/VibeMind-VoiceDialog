@@ -437,19 +437,32 @@ class MultiverseApp {
         // AND from supabase-realtime listener. Without dedup we'd render
         // each bubble multiple times.
         const incomingId = node.id;
-        if (incomingId !== undefined && incomingId !== null) {
-            const existing = this.spaces.ideas.objects.find(b =>
-                b.userData && (
-                    b.userData.id === incomingId ||
-                    b.userData.db_id === incomingId ||
-                    String(b.userData.id) === String(incomingId) ||
-                    String(b.userData.db_id) === String(incomingId)
-                )
-            );
-            if (existing) {
-                console.log('[Multiverse] addBubbleTo3D: skipping duplicate id=' + incomingId);
-                return existing;
+        const incomingTitle = (node.title || '').trim().toLowerCase();
+        // Phase 11.U.L — dedup by id/db_id AND title. The id-only check
+        // missed cross-path duplicates (syncBubbles vs node_added assign
+        // different local int-ids for the same DB-UUID, and an early
+        // node_added can land before db_id is set). Title is unique per
+        // top-level bubble so it's the reliable cross-path key.
+        const existing = this.spaces.ideas.objects.find(b => {
+            if (!b.userData || b.userData.type !== 'bubble') return false;
+            const u = b.userData;
+            if (incomingId !== undefined && incomingId !== null && (
+                u.id === incomingId ||
+                u.db_id === incomingId ||
+                String(u.id) === String(incomingId) ||
+                String(u.db_id) === String(incomingId)
+            )) return true;
+            if (incomingTitle && String(u.title || '').trim().toLowerCase() === incomingTitle) {
+                return true;
             }
+            return false;
+        });
+        if (existing) {
+            console.log('[Multiverse] addBubbleTo3D: skipping duplicate "' +
+                        node.title + '" (id=' + incomingId + ')');
+            // Refresh score-fill on the existing one in case score changed
+            try { this._applyScoreFill(existing, node.score, existing.geometry?.parameters?.radius || 0.7); } catch (e) {}
+            return existing;
         }
 
         const radius = node.radius || 0.7;
@@ -474,14 +487,25 @@ class MultiverseApp {
         bubble.userData = {
             type: 'bubble',
             id: node.id,
+            db_id: node.id,                       // node.id IS the DB-UUID here
             title: node.title || 'Untitled',
             description: node.description || '',
+            data: node,
         };
 
         group.add(bubble);
         this.spaces.ideas.objects.push(bubble);
 
-        console.log(`[Multiverse] Added DB bubble: "${node.title}" at (${node.x}, ${node.y}, ${node.z})`);
+        // Phase 11.U.L — node_added is the REAL bubble-load path (from
+        // _load_bubbles_from_db). syncBubbles/addBubble were dead ends.
+        // Apply the score-fill here so it actually shows.
+        try {
+            this._applyScoreFill(bubble, node.score, radius);
+        } catch (e) {
+            console.warn('[Multiverse] addBubbleTo3D score-fill failed:', e);
+        }
+
+        console.log(`[Multiverse] Added DB bubble: "${node.title}" score=${node.score} at (${node.x}, ${node.y}, ${node.z})`);
     }
     
     // ========================================================================
@@ -2370,13 +2394,16 @@ class MultiverseApp {
 
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
+        // Reset per-navigation arrival guard so _arriveAtSpace runs for this nav.
+        this._arrivedSpace = null;
 
-        // Failsafe: reset isNavigating after 3s if animation callback never fires
+        // Failsafe: if the animation callback never fires (slow frame / throttled
+        // rAF), still run the full arrival path so the space's BrowserView is
+        // shown — otherwise the camera "arrives" but the space never appears.
         setTimeout(() => {
             if (this.isNavigating) {
                 console.warn('[Multiverse] Navigation failsafe triggered for:', targetSpace);
-                this.isNavigating = false;
-                this.currentSpace = targetSpace;
+                this._arriveAtSpace(targetSpace, this.spaces[targetSpace]);
             }
         }, 3000);
 
@@ -2503,98 +2530,112 @@ class MultiverseApp {
         targetPos.z += 10;
         targetPos.y += 2;
 
-        // Animate camera
+        // Animate camera — arrival logic runs in _arriveAtSpace so the 3s
+        // failsafe above can run the exact same "show BrowserView" path if the
+        // animation callback never fires (slow frame / throttled rAF).
         this.animateCameraTo(targetPos, space.position, () => {
-            this.currentSpace = targetSpace;
-            this.currentAgent = space.agent ? space.agent.slug : targetSpace;
-            this.isNavigating = false;
-            console.log('[Multiverse] Arrived at:', targetSpace);
-
-            // Show dashboard when entering projects space
-            if (targetSpace === 'projects') {
-                if (window.vibemind && window.vibemind.showDashboard) {
-                    window.vibemind.showDashboard();
-                    console.log('[Multiverse] Showing Coding Engine Dashboard');
-                }
-            }
-
-            // Show Rowboat BrowserView when entering roarboot space
-            if (targetSpace === 'roarboot') {
-                if (window.vibemind && window.vibemind.showRowboat) {
-                    window.vibemind.showRowboat();
-                    console.log('[Multiverse] Showing Rowboat BrowserView');
-                }
-            }
-
-            // Show SWE Design BrowserView when entering swedesign space
-            if (targetSpace === 'swedesign') {
-                if (window.vibemind && window.vibemind.showSweDesign) {
-                    window.vibemind.showSweDesign();
-                    console.log('[Multiverse] Showing SWE Design BrowserView');
-                }
-            }
-
-            // Show ClawPort Dashboard BrowserView when entering clawport space
-            if (targetSpace === 'clawport') {
-                if (window.vibemind && window.vibemind.showClawPort) {
-                    window.vibemind.showClawPort();
-                    console.log('[Multiverse] Showing ClawPort Dashboard');
-                }
-            }
-
-            // Show Brain Dashboard BrowserView when entering thebrain space
-            if (targetSpace === 'thebrain') {
-                if (window.vibemind && window.vibemind.showBrain) {
-                    window.vibemind.showBrain();
-                    console.log('[Multiverse] Showing Brain Dashboard');
-                }
-            }
-
-            // Show Agent Farm BrowserView when entering agentfarm space
-            if (targetSpace === 'agentfarm') {
-                if (window.vibemind && window.vibemind.showAgentFarm) {
-                    window.vibemind.showAgentFarm();
-                    console.log('[Multiverse] Showing Agent Farm');
-                }
-            }
-
-            // Show Video Studio BrowserView when entering video space
-            if (targetSpace === 'video') {
-                if (window.vibemind && window.vibemind.showVideo) {
-                    window.vibemind.showVideo();
-                    console.log('[Multiverse] Showing Video Studio');
-                }
-            }
-
-            // Show MiroFish BrowserView when entering mirofish space
-            if (targetSpace === 'mirofish') {
-                if (window.vibemind && window.vibemind.showMiroFish) {
-                    window.vibemind.showMiroFish();
-                    console.log('[Multiverse] Showing MiroFish');
-                }
-            }
-
-            // Show Flowzen Diary BrowserView when entering flowzen space
-            if (targetSpace === 'flowzen') {
-                if (window.vibemind && window.vibemind.showFlowzen) {
-                    window.vibemind.showFlowzen();
-                    console.log('[Multiverse] Showing Flowzen Diary');
-                }
-            }
-
-            // Hide old DOM flowzen panel (superseded by BrowserView)
-            const fzPanel = document.getElementById('flowzen-panel');
-            if (fzPanel) {
-                fzPanel.classList.add('hidden');
-            }
-
-            // Notify IPC
-            if (window.vibemind) {
-                window.vibemind.navigateToSpace(targetSpace);
-            }
+            this._arriveAtSpace(targetSpace, space);
         });
     }
-    
+
+    // Single source of truth for "we arrived at targetSpace": set state and
+    // show that space's BrowserView. Idempotent — guarded so the camera
+    // callback and the navigation failsafe can't both run it for one nav.
+    _arriveAtSpace(targetSpace, space) {
+        if (this._arrivedSpace === targetSpace) {
+            return;
+        }
+        this._arrivedSpace = targetSpace;
+
+        this.currentSpace = targetSpace;
+        this.currentAgent = space && space.agent ? space.agent.slug : targetSpace;
+        this.isNavigating = false;
+        console.log('[Multiverse] Arrived at:', targetSpace);
+
+        // Show dashboard when entering projects space
+        if (targetSpace === 'projects') {
+            if (window.vibemind && window.vibemind.showDashboard) {
+                window.vibemind.showDashboard();
+                console.log('[Multiverse] Showing Coding Engine Dashboard');
+            }
+        }
+
+        // Show Rowboat BrowserView when entering roarboot space
+        if (targetSpace === 'roarboot') {
+            if (window.vibemind && window.vibemind.showRowboat) {
+                window.vibemind.showRowboat();
+                console.log('[Multiverse] Showing Rowboat BrowserView');
+            }
+        }
+
+        // Show SWE Design BrowserView when entering swedesign space
+        if (targetSpace === 'swedesign') {
+            if (window.vibemind && window.vibemind.showSweDesign) {
+                window.vibemind.showSweDesign();
+                console.log('[Multiverse] Showing SWE Design BrowserView');
+            }
+        }
+
+        // Show ClawPort Dashboard BrowserView when entering clawport space
+        if (targetSpace === 'clawport') {
+            if (window.vibemind && window.vibemind.showClawPort) {
+                window.vibemind.showClawPort();
+                console.log('[Multiverse] Showing ClawPort Dashboard');
+            }
+        }
+
+        // Show Brain Dashboard BrowserView when entering thebrain space
+        if (targetSpace === 'thebrain') {
+            if (window.vibemind && window.vibemind.showBrain) {
+                window.vibemind.showBrain();
+                console.log('[Multiverse] Showing Brain Dashboard');
+            }
+        }
+
+        // Show Agent Farm BrowserView when entering agentfarm space
+        if (targetSpace === 'agentfarm') {
+            if (window.vibemind && window.vibemind.showAgentFarm) {
+                window.vibemind.showAgentFarm();
+                console.log('[Multiverse] Showing Agent Farm');
+            }
+        }
+
+        // Show Video Studio BrowserView when entering video space
+        if (targetSpace === 'video') {
+            if (window.vibemind && window.vibemind.showVideo) {
+                window.vibemind.showVideo();
+                console.log('[Multiverse] Showing Video Studio');
+            }
+        }
+
+        // Show MiroFish BrowserView when entering mirofish space
+        if (targetSpace === 'mirofish') {
+            if (window.vibemind && window.vibemind.showMiroFish) {
+                window.vibemind.showMiroFish();
+                console.log('[Multiverse] Showing MiroFish');
+            }
+        }
+
+        // Show Flowzen Diary BrowserView when entering flowzen space
+        if (targetSpace === 'flowzen') {
+            if (window.vibemind && window.vibemind.showFlowzen) {
+                window.vibemind.showFlowzen();
+                console.log('[Multiverse] Showing Flowzen Diary');
+            }
+        }
+
+        // Hide old DOM flowzen panel (superseded by BrowserView)
+        const fzPanel = document.getElementById('flowzen-panel');
+        if (fzPanel) {
+            fzPanel.classList.add('hidden');
+        }
+
+        // Notify IPC
+        if (window.vibemind) {
+            window.vibemind.navigateToSpace(targetSpace);
+        }
+    }
+
     animateCameraTo(targetPosition, lookAtPosition, onComplete) {
         const startPosition = this.camera.position.clone();
         const startLookAt = this.controls.target.clone();
@@ -4156,30 +4197,65 @@ class MultiverseApp {
             return;
         }
         
-        // Remove all existing bubbles (but keep the marker ring)
-        const toRemove = [];
+        // Phase 11.U.L — IDEMPOTENT SYNC (was: destructive remove-all + rebuild).
+        // The old code deleted every bubble then recreated them. But `node_added`
+        // → addBubbleTo3D ALSO creates the same bubbles from a second IPC path
+        // (_load_bubbles_from_db). The two racing paths produced visible
+        // duplicates (same db_id, different local int-id). Fix: reconcile
+        // against what's already in the scene by db_id/title — keep matches,
+        // only add genuinely-new bubbles, prune ones no longer in the DB set.
+        const wantKeys = new Set();
+        bubbles.forEach(d => {
+            const k = String(d.db_id || d.id || (d.title || '')).toLowerCase().trim();
+            if (k) wantKeys.add(k);
+            const t = (d.title || '').toLowerCase().trim();
+            if (t) wantKeys.add(t);
+        });
+        const existingByKey = new Map();
+        const stale = [];
         ideasGroup.children.forEach(child => {
-            if (child.userData && child.userData.type === 'bubble') {
-                toRemove.push(child);
+            if (!child.userData || child.userData.type !== 'bubble') return;
+            const u = child.userData;
+            const dbk = String(u.db_id || u.id || '').toLowerCase().trim();
+            const tk = String(u.title || '').toLowerCase().trim();
+            if (wantKeys.has(dbk) || wantKeys.has(tk)) {
+                if (dbk) existingByKey.set(dbk, child);
+                if (tk) existingByKey.set(tk, child);
+            } else {
+                stale.push(child);   // bubble no longer in DB → remove
             }
         });
-        toRemove.forEach(obj => {
+        stale.forEach(obj => {
             ideasGroup.remove(obj);
-            if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) obj.material.dispose();
+            obj.traverse(c => {
+                if (c.geometry) c.geometry.dispose();
+                if (c.material && c.material.dispose) c.material.dispose();
+            });
         });
-        
-        // Clear objects array (keep non-bubbles)
         this.spaces.ideas.objects = this.spaces.ideas.objects.filter(
-            obj => !obj.userData || obj.userData.type !== 'bubble'
+            obj => !obj.userData || obj.userData.type !== 'bubble' || !stale.includes(obj)
         );
         
         // Color palette for bubbles
         const colors = [0x66aaff, 0xff66aa, 0x66ffaa, 0xffcc66, 0xcc66ff,
                         0xff9966, 0x66ffcc, 0x9966ff, 0xff6666, 0x66ff66];
         
-        // Create new bubbles from data
+        // Create new bubbles from data — skip ones already in the scene
         bubbles.forEach((data, index) => {
+            // Reconcile: if a bubble with this db_id/title already exists
+            // (created by addBubbleTo3D's node_added path), reuse it and
+            // just refresh its score-fill — do NOT create a duplicate.
+            const dbk = String(data.db_id || data.id || '').toLowerCase().trim();
+            const tk = (data.title || '').toLowerCase().trim();
+            const already = existingByKey.get(dbk) || existingByKey.get(tk);
+            if (already) {
+                try {
+                    this._applyScoreFill(already, data.score,
+                        already.geometry?.parameters?.radius || 0.7);
+                } catch (e) { /* non-fatal */ }
+                return;   // skip duplicate creation
+            }
+
             const radius = data.radius || 0.6 + Math.random() * 0.3;
             
             // Use provided color or pick from palette
@@ -4512,8 +4588,6 @@ class MultiverseApp {
      */
     _applyScoreFill(bubble, score, radius) {
         if (!bubble) return;
-        const s = Math.max(0, Math.min(100, Number(score) || 0));
-        const r = radius || 0.7;
 
         // Remove old fill if present (idempotent update)
         const old = bubble.userData._fillMesh;
@@ -4525,66 +4599,93 @@ class MultiverseApp {
             });
             bubble.userData._fillMesh = null;
         }
-        if (s <= 0) return;
+
+        // STRICT: only render fill if score is a real positive number.
+        // score===undefined (field missing from payload) or 0 → empty glass.
+        const sNum = Number(score);
+        if (!isFinite(sNum) || sNum <= 0) {
+            bubble.userData.score = 0;
+            return;
+        }
+        const s = Math.min(100, sNum);
+        const r = radius || 0.7;
 
         // Color by score band
         let fillColor = 0xff5566;   // red
         if (s >= 66)      fillColor = 0x55dd77;   // green
         else if (s >= 33) fillColor = 0xddbb44;   // amber
 
-        // Three.js SphereGeometry uses `thetaStart/thetaLength` to slice the
-        // sphere along Y. thetaStart=0 is north pole; theta=PI is south pole.
-        // We want the BOTTOM portion: from the waterline angle down to PI.
-        //   fluidLevelY = -r + (s/100) * 2r
-        //   waterline angle θ_w satisfies cos(θ_w) = fluidLevelY / r
-        //   so the visible cap occupies thetaStart = θ_w, thetaLength = PI - θ_w
-        const fillRadius = r * 0.96;
-        const cosTheta = (-r + (s / 100) * 2 * r) / r;       // = -1 + 2s/100 = (2s-100)/100
-        const thetaWaterline = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
-        const thetaLength = Math.PI - thetaWaterline;
-
-        // Cap geometry (bottom slice only)
-        const capGeo = new THREE.SphereGeometry(
-            fillRadius,
-            32, 20,
-            0, Math.PI * 2,                 // full revolution around Y
-            thetaWaterline, thetaLength      // only the bottom slice
-        );
-        const capMat = new THREE.MeshPhysicalMaterial({
-            color: fillColor,
-            metalness: 0.05,
-            roughness: 0.35,
-            transmission: 0.15,
-            transparent: true,
-            opacity: 0.82,
-            emissive: fillColor,
-            emissiveIntensity: 0.1,
-            side: THREE.DoubleSide,          // see underside through glass
-        });
-        const cap = new THREE.Mesh(capGeo, capMat);
-        cap.renderOrder = 1;
-
-        // Surface disc (the meniscus at the waterline)
-        const surfaceR = fillRadius * Math.sin(thetaWaterline);
-        if (surfaceR > 0.02) {
-            const discGeo = new THREE.CircleGeometry(surfaceR, 48);
-            const discMat = new THREE.MeshBasicMaterial({
-                color: fillColor,
-                transparent: true,
-                opacity: 0.55,
-                side: THREE.DoubleSide,
-            });
-            const disc = new THREE.Mesh(discGeo, discMat);
-            disc.rotation.x = -Math.PI / 2;
-            disc.position.y = fillRadius * Math.cos(thetaWaterline);
-            disc.renderOrder = 2;
-            cap.add(disc);
+        // --- Liquid as a flat-topped cap, built from a LatheGeometry ---
+        // We sweep a profile curve (the sphere's silhouette from south pole
+        // up to the waterline) around Y. This gives a real fluid volume:
+        // rounded bottom following the bubble, flat surface at the level.
+        //
+        //   waterlineY  = -r + (s/100)*2r        (local Y of the surface)
+        //   At any height y the sphere radius is rho(y) = sqrt(r² − y²)
+        //
+        // Profile points from south pole (y=-r, rho=0) up to waterline.
+        const fillR = r * 0.94;                       // sit just inside shell
+        const waterlineY = -fillR + (s / 100) * (2 * fillR);
+        const steps = 24;
+        const profile = [];
+        for (let i = 0; i <= steps; i++) {
+            const y = -fillR + (i / steps) * (waterlineY + fillR);
+            const rho = Math.sqrt(Math.max(0, fillR * fillR - y * y));
+            profile.push(new THREE.Vector2(rho, y));
         }
+        // Close the top surface: go back to the axis at the waterline so the
+        // lathe caps the fluid with a flat disc.
+        profile.push(new THREE.Vector2(0, waterlineY));
 
-        cap.userData = { type: 'score_fill', score: s };
-        bubble.add(cap);
-        bubble.userData._fillMesh = cap;
+        const fillGeo = new THREE.LatheGeometry(profile, 48);
+        // CRITICAL: the bubble shell uses MeshPhysicalMaterial transmission:0.9
+        // (glass). Three.js renders transmissive materials in a separate pass
+        // and heavily attenuates / refracts geometry *behind* them — a
+        // transmissive or lit fill becomes nearly invisible inside the shell.
+        // Fix: use MeshBasicMaterial (unlit, ignores transmission entirely),
+        // full opacity, and a high renderOrder so it punches through the glass.
+        const fillMat = new THREE.MeshBasicMaterial({
+            color: fillColor,
+            transparent: true,
+            opacity: 0.92,
+            side: THREE.DoubleSide,
+            depthWrite: true,
+            toneMapped: false,        // keep the color vivid, not washed out
+        });
+        const fill = new THREE.Mesh(fillGeo, fillMat);
+        fill.renderOrder = 3;        // after the glass shell (which is ~0)
+        fill.userData = { type: 'score_fill', score: s };
+
+        // Add an emissive glow shell just outside the fluid so it reads
+        // through the glass even at low fill levels.
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: fillColor,
+            transparent: true,
+            opacity: 0.35,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+        });
+        const glow = new THREE.Mesh(fillGeo.clone(), glowMat);
+        glow.scale.setScalar(1.06);
+        glow.renderOrder = 2;
+        fill.add(glow);
+
+        bubble.add(fill);
+        bubble.userData._fillMesh = fill;
         bubble.userData.score = s;
+
+        // Tone the shell's transmission down a notch when it holds fluid so
+        // the liquid is clearly readable (full glass clarity hid it entirely).
+        if (bubble.material && bubble.material.transmission !== undefined) {
+            if (bubble.userData._origTransmission === undefined) {
+                bubble.userData._origTransmission = bubble.material.transmission;
+            }
+            bubble.material.transmission = 0.55;
+            bubble.material.opacity = 0.45;
+            bubble.material.needsUpdate = true;
+        }
     }
 
     /**

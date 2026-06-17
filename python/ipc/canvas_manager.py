@@ -73,15 +73,66 @@ class CanvasManager:
     # ========================================================================
 
     def _load_bubbles_from_db(self):
-        """Load bubbles from IdeasRepository into in-memory state."""
+        """Load bubbles from IdeasRepository into in-memory state.
+
+        On Electron startup PostgREST's schema cache is frequently still
+        cold (returns 503 PGRST002 "Could not query the database for the
+        schema cache. Retrying."). The previous single-shot version
+        silently dropped the load and left the 3D canvas empty until a
+        manual `requestBubbles()` IPC. We now retry with exponential
+        backoff (1s, 2s, 4s, 8s, 16s -- caps at ~30s total) before
+        giving up. Outside the startup window normal calls hit the first
+        try and skip the loop entirely.
+        """
         from electron_backend import Bubble
+        import time
 
         if not self.backend.ideas_repo:
             return
 
+        # Retry schedule: 6 attempts at 0/1/2/4/8/16 seconds. Covers the
+        # 30-60s PostgREST schema-cache warm-up without blocking too long.
+        retry_delays = [0, 1, 2, 4, 8, 16]
+        ideas = None
+        last_err = None
+        for attempt, delay in enumerate(retry_delays):
+            if delay:
+                time.sleep(delay)
+            try:
+                ideas = self.backend.ideas_repo.list_top_level(
+                    limit=50, order_by="created_at DESC"
+                )
+                if attempt > 0:
+                    logger.info(
+                        f"Loaded bubbles on retry {attempt} "
+                        f"(after {sum(retry_delays[:attempt+1])}s)"
+                    )
+                break
+            except Exception as e:
+                last_err = e
+                err_str = str(e)
+                # PGRST002 = schema cache warm-up. Other errors are
+                # not worth retrying (network down, auth missing, ...).
+                if "PGRST002" not in err_str and "schema cache" not in err_str:
+                    logger.warning(
+                        f"Failed to load bubbles from database "
+                        f"(non-retryable): {e}"
+                    )
+                    return
+                # Last attempt: emit a warning and bail out
+                if attempt == len(retry_delays) - 1:
+                    logger.warning(
+                        f"Failed to load bubbles after "
+                        f"{len(retry_delays)} attempts: {e}"
+                    )
+                    return
+
+        if ideas is None:
+            # All attempts exhausted; the loop already logged a warning.
+            return
+
         try:
             import math
-            ideas = self.backend.ideas_repo.list_top_level(limit=50, order_by="created_at DESC")
 
             # Color palette for bubbles
             colors = [0x66aaff, 0xff66aa, 0x66ffaa, 0xffcc66, 0xcc66ff,
@@ -164,6 +215,9 @@ class CanvasManager:
                             "radius": 0.6 + (idea.score / 200),
                             "node_type": "bubble",
                             "description": (idea.description or "")[:200],
+                            # Phase 11.U.L — score drives 3D fluid-fill viz
+                            "score": float(idea.score or 0.0),
+                            "status": idea.status or "",
                         }
                     })
                 except Exception as e:
