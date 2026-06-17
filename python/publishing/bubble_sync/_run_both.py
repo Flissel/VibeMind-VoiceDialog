@@ -95,14 +95,34 @@ def main() -> int:
     tb = threading.Thread(target=_run_b, name="worker-b", daemon=True)
     ta.start()
     tb.start()
-    print("[run_both] both workers started; Ctrl+C to stop", flush=True)
+
+    # Optional 3rd worker: the canvas reformat drainer (LLM — opt-in via its own
+    # flag so the cost is independent of the free content writeback).
+    wcr = None
+    tc = None
+    if os.environ.get("VIBEMIND_CANVAS_REFORMAT_ENABLED", "0") in ("1", "true", "True"):
+        from publishing.bubble_sync import worker_canvas_reformat as wcr
+
+        def _run_c():
+            try:
+                wcr.drain_forever(container)
+            except Exception as e:
+                print(f"[run_both] reformat drainer crashed: {e}", flush=True)
+
+        tc = threading.Thread(target=_run_c, name="reformat", daemon=True)
+        tc.start()
+        print("[run_both] 3 workers started (incl. reformat drainer); Ctrl+C to stop", flush=True)
+    else:
+        print("[run_both] 2 workers started (reformat drainer OFF); Ctrl+C to stop", flush=True)
 
     try:
-        while ta.is_alive() or tb.is_alive():
+        while ta.is_alive() or tb.is_alive() or (tc and tc.is_alive()):
             time.sleep(1)
     except KeyboardInterrupt:
         wa._shutdown = True
         wb._shutdown = True
+        if wcr:
+            wcr._shutdown = True
         print("[run_both] shutdown requested", flush=True)
     return 0
 

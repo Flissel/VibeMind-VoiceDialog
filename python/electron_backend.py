@@ -539,6 +539,25 @@ class ElectronBackend:
                         threading.Thread(target=_run_worker_b, daemon=True,
                                          name="bubble-sync-B").start()
                         debug_log("bubble_sync workers started (VIBEMIND_BUBBLE_SYNC_ENABLED=1)")
+
+                        # Canvas reformat drainer: when a STRUCTURED canvas node's
+                        # prose was FS-edited, Worker B writes `content` + enqueues
+                        # a job; this daemon regenerates content_json via the LLM
+                        # formatter (GUC-fenced, out of the watchdog hot path).
+                        # Separate kill-switch so the LLM cost is opt-in independent
+                        # of the (free) content writeback.
+                        if os.environ.get("VIBEMIND_CANVAS_REFORMAT_ENABLED", "0") in ("1", "true", "True"):
+                            def _run_reformat():
+                                try:
+                                    from publishing.bubble_sync.worker_canvas_reformat import drain_forever
+                                    drain_forever(_container)
+                                except Exception as e:
+                                    debug_log(f"canvas reformat drainer stopped: {e}")
+                            threading.Thread(target=_run_reformat, daemon=True,
+                                             name="canvas-reformat").start()
+                            debug_log("canvas reformat drainer started (VIBEMIND_CANVAS_REFORMAT_ENABLED=1)")
+                        else:
+                            debug_log("canvas reformat drainer OFF (set VIBEMIND_CANVAS_REFORMAT_ENABLED=1 to enable)")
                     except Exception as e:
                         debug_log(f"bubble_sync worker wiring failed (non-critical): {e}")
                 else:
