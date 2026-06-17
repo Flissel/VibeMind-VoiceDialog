@@ -60,16 +60,29 @@ const VideoManager = require('./video-manager');
 // eyeTerm Camera Preview Integration
 const EyeTermManager = require('./eyeterm-manager');
 
-// Enable remote debugging port for CDP (Chrome DevTools Protocol)
-// This allows external tools to connect and manipulate the renderer.
-// remote-allow-origins is REQUIRED since Chromium 111: without it the
-// WebSocket handshake responds 403 "Rejected an incoming WebSocket
-// connection from the http://127.0.0.1:9223 origin". Localhost-only port
-// so the wildcard is acceptable; this is the same value chromedriver uses.
-// Safety check: only set if app is available (not running as Node)
-if (app && app.commandLine) {
-    app.commandLine.appendSwitch('remote-debugging-port', '9223');
-    app.commandLine.appendSwitch('remote-allow-origins', '*');
+// Enable remote debugging port for CDP (Chrome DevTools Protocol).
+// This lets local tools (vibemind-notify, rowboat-ui MCP, cdp_eval) drive the
+// renderer over ws://127.0.0.1:9223.
+//
+// SECURITY: remote-allow-origins must NOT be '*'. With a wildcard, ANY web page
+// the user opens can WebSocket to localhost:9223 and fully control the app (CDP
+// = RCE). Chromium 111+ requires the switch when a client sends an Origin header,
+// so we allow exactly the loopback CDP origins our own clients use:
+//   - mcp_server_rowboat_ui.py uses websocket.create_connection(ws_url) WITHOUT
+//     suppress_origin -> sends Origin http://127.0.0.1:9223 (derived from ws_url).
+//   - cdp_eval.py uses suppress_origin=True -> sends no Origin (no allowlist hit).
+//   - devtools://devtools for the DevTools frontend.
+// A browser-based attacker always sends its own (http(s)://...) origin -> blocked.
+//
+// Gated behind VIBEMIND_ENABLE_CDP=1 so a production user is not exposed to an
+// open debugging port by default. Set it where the CDP consumers run.
+if (app && app.commandLine && process.env.VIBEMIND_ENABLE_CDP === '1') {
+    const CDP_PORT = process.env.VIBEMIND_CDP_PORT || '9223';
+    app.commandLine.appendSwitch('remote-debugging-port', CDP_PORT);
+    app.commandLine.appendSwitch(
+        'remote-allow-origins',
+        `http://127.0.0.1:${CDP_PORT},http://localhost:${CDP_PORT},devtools://devtools`
+    );
 }
 
 // Note: GPU flags are now passed via command line when starting electron:
