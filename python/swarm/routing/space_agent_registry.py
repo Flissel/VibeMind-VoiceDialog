@@ -50,6 +50,10 @@ class SpaceAgentRegistry:
         self._legacy = legacy_map or {}
         self._defaults = self._data.get("defaults", {}) if self._data else {}
         self._spaces = self._data.get("spaces", {}) if self._data else {}
+        try:
+            self._version = int(self._data.get("version", 0) or 0)
+        except (TypeError, ValueError):
+            self._version = 0
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "SpaceAgentRegistry":
@@ -63,7 +67,10 @@ class SpaceAgentRegistry:
         if version != 1:
             logger.warning(f"[Registry] Unknown version {version}, expected 1")
         n_spaces = len(data.get("spaces", {}))
-        logger.info(f"[Registry] Loaded {n_spaces} spaces from {p}")
+        logger.info(
+            f"[Registry] Loaded {n_spaces} spaces from {p} "
+            f"(registry_version={version})"
+        )
         return cls(data=data)
 
     @classmethod
@@ -80,6 +87,19 @@ class SpaceAgentRegistry:
     @property
     def mode(self) -> str:
         return os.getenv("VIBEMIND_ROUTING_REGISTRY", "shadow").lower()
+
+    @property
+    def version(self) -> int:
+        """Registry content version from the YAML `version:` stamp (0 = empty
+        or unversioned). REG-1 (Phase 0): learned-routing trajectories are
+        stamped with this so distilled (state, agent_id) pairs from an older
+        registry generation can be quarantined."""
+        return self._version
+
+    @property
+    def registry_version(self) -> int:
+        """Alias of `version` — the name trajectory rows use (CASCADE §2.3)."""
+        return self._version
 
     def lookup(self, space: str, event_type: str) -> RoutingRecipe | None:
         """Return a RoutingRecipe for (space, event_type), or None if unknown."""
