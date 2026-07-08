@@ -31,3 +31,35 @@ class TestRegistryVersionStamp:
 
     def test_version_read_from_injected_data(self):
         assert SpaceAgentRegistry(data={"version": 7}).version == 7
+
+
+# REG-2 (Phase 0) — canonical_spaces() as the ONE space-name authority.
+# RED today: SpaceAgentRegistry has no canonical_spaces/space_exists ->
+# AttributeError. GREEN: the 13 YAML keys, canonical names only
+# (roarboot NOT rowboat, agentfarm NOT autogen).
+CANONICAL_SPACES = {
+    "agentfarm", "bubbles", "coding", "desktop", "flowzen", "ideas",
+    "minibook", "mirofish", "n8n", "research", "roarboot", "schedule",
+    "video",
+}
+
+
+class TestCanonicalSpaces:
+    def test_canonical_spaces_matches_yaml_keys(self):
+        reg = SpaceAgentRegistry.load(YAML_PATH)
+        spaces = reg.canonical_spaces()
+        assert spaces == CANONICAL_SPACES
+        # the two drift-prone names: canonical form in, alias out
+        assert "roarboot" in spaces and "rowboat" not in spaces
+        assert "agentfarm" in spaces and "autogen" not in spaces
+
+    def test_space_exists(self):
+        reg = SpaceAgentRegistry.load(YAML_PATH)
+        assert reg.space_exists("ideas")
+        assert reg.space_exists("roarboot")
+        assert not reg.space_exists("rowboat")
+        assert not reg.space_exists("autogen")
+        assert not reg.space_exists("")
+
+    def test_canonical_spaces_empty_registry(self):
+        assert SpaceAgentRegistry(data={}).canonical_spaces() == set()

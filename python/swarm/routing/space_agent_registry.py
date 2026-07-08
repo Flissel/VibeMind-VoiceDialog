@@ -149,6 +149,16 @@ class SpaceAgentRegistry:
     def legacy_agent(self, space: str) -> str:
         return self._legacy.get(space, "vibemind")
 
+    def canonical_spaces(self) -> set[str]:
+        """REG-2 (Phase 0): the ONE authority for space names = the YAML
+        `spaces:` keys. Every other map (bindings, legacy dict, logger
+        colors) must validate against this set — canonical forms only
+        (`roarboot` not `rowboat`, `agentfarm` not `autogen`)."""
+        return set(self._spaces.keys())
+
+    def space_exists(self, space: str) -> bool:
+        return space in self._spaces
+
     def all_spaces(self) -> dict[str, dict[str, Any]]:
         return dict(self._spaces)
 

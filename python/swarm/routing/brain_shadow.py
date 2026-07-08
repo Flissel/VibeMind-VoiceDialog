@@ -39,18 +39,34 @@ class BrainShadowObserver:
         self._brain_available = True
         self._active = False
         self._last_check_time = 0.0
+        # REWARD-2 (Phase 0): observations skipped because the outcome was
+        # UNVERIFIED (success=None from the outcome gate) — counted locally,
+        # never POSTed.
+        self._skipped_unverified = 0
 
     async def observe(self, user_text: str, event_type: str,
-                      actual_space: str, success: bool = True) -> None:
+                      actual_space: str,
+                      success: Optional[bool] = True) -> None:
         """Called after every HybridRouter decision. Non-blocking.
 
         Args:
             user_text: Original user input
             event_type: Classified event type (e.g. "idea.create")
             actual_space: Space that HybridRouter routed to
-            success: Whether agent execution succeeded
+            success: gate-derived outcome. REWARD-2 (Phase 0): `None` means
+                UNVERIFIED — no POST at all (neither route-ask nor train);
+                only a local skip counter increments. An unverified hop must
+                never train the SpaceRoutingHead.
         """
         if not self._brain_available or not user_text or not actual_space:
+            return
+        if success is None:
+            self._skipped_unverified += 1
+            if self._skipped_unverified % 25 == 0:
+                logger.debug(
+                    f"Shadow: {self._skipped_unverified} unverified "
+                    f"observations skipped (no ground truth)"
+                )
             return
 
         try:

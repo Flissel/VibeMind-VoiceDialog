@@ -45,6 +45,10 @@ class BrainEventShadowObserver:
         self._brain_disabled_at: float = 0.0  # timestamp when disabled
         self._brain_backoff_s: float = 10.0   # re-enable after N seconds
         self._active = False
+        # REWARD-2 (Phase 0): rewards skipped because the outcome was
+        # UNVERIFIED (success=None from the outcome gate) — observability
+        # counter, never trained.
+        self._skipped_unverified = 0
 
     # ------------------------------------------------------------------
     # Shadow path — called after every LLM classification
@@ -180,9 +184,21 @@ class BrainEventShadowObserver:
         except Exception:
             return None
 
-    async def reward(self, routing_id: str, success: bool) -> None:
-        """Send a reward signal for a previous classification (fire-and-forget)."""
+    async def reward(self, routing_id: str, success: Optional[bool]) -> None:
+        """Send a reward signal for a previous classification (fire-and-forget).
+
+        REWARD-2 (Phase 0): `success=None` means UNVERIFIED (no independent
+        ground truth from the outcome gate) — train NOTHING. Neither a
+        fabricated positive nor a fabricated negative is sent."""
         if not routing_id:
+            return
+        if success is None:
+            self._skipped_unverified += 1
+            if self._skipped_unverified % 25 == 0:
+                logger.debug(
+                    f"EventShadow: {self._skipped_unverified} unverified "
+                    f"rewards skipped (no ground truth)"
+                )
             return
         try:
             timeout = aiohttp.ClientTimeout(total=1.0)
