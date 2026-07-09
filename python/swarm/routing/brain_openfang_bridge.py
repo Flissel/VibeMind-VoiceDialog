@@ -34,9 +34,8 @@ from swarm.routing.space_agent_registry import RoutingRecipe, SpaceAgentRegistry
 
 logger = logging.getLogger(__name__)
 
-# Legacy fallback map — used when registry YAML absent or VIBEMIND_ROUTING_REGISTRY=off.
-# New routing is driven by config/space_agent_registry.yml.
-LEGACY_SPACE_AGENT_MAP: Dict[str, str] = {
+# Emergency-only literal — used ONLY when the registry YAML is absent/empty.
+_LEGACY_STATIC_FALLBACK: Dict[str, str] = {
     "ideas": "vibemind",
     "bubbles": "vibemind",
     "coding": "brain-coder",
@@ -51,6 +50,30 @@ LEGACY_SPACE_AGENT_MAP: Dict[str, str] = {
     "mirofish": "vibemind",
     "minibook": "vibemind",
 }
+
+
+def _derive_space_agent_map() -> Dict[str, str]:
+    """ABSORB-7 (Phase 0): space -> OpenFang-agent derived from the versioned
+    registry (config/space_agent_registry.yml) so this map can never drift
+    from the SoT again (the REG-3 agentfarm drift was exactly that). A YAML
+    agent that is not yet deployed is safe: _ensure_agent spawns missing
+    agents on demand. Falls back to the static literal only when the YAML
+    is absent/empty."""
+    try:
+        from .space_agent_registry import SpaceAgentRegistry
+        spaces = SpaceAgentRegistry.load().all_spaces()
+        if spaces:
+            return {
+                space: (meta.get("agent") or _LEGACY_STATIC_FALLBACK.get(space, "vibemind"))
+                for space, meta in spaces.items()
+            }
+    except Exception as e:  # noqa: BLE001 — bridge must boot registry-less
+        logger.debug(f"[BrainBridge] registry-derived map unavailable: {e}")
+    return dict(_LEGACY_STATIC_FALLBACK)
+
+
+# Name kept for backwards-compat — content is now registry-derived.
+LEGACY_SPACE_AGENT_MAP: Dict[str, str] = _derive_space_agent_map()
 
 # Kept as alias for backwards-compat with any external import.
 SPACE_AGENT_MAP = LEGACY_SPACE_AGENT_MAP
@@ -74,6 +97,41 @@ class BrainOpenFangBridge:
         self._min_confidence = min_confidence
         self._assembler = ContextAssembler()
         self._agent_cache: Dict[str, str] = {}  # agent_name → agent_id
+        # ASSERT-10 (Phase 0): boot-time consistency — every space the
+        # binding layer can emit must be a canonical registry key, else
+        # dispatch dies silently later. Warn-only unless
+        # VIBEMIND_REGISTRY_STRICT=1; RegistryConsistencyError propagates
+        # in strict mode, everything else is best-effort.
+        try:
+            from .bindings_registry import (
+                build_keyword_bindings,
+                build_prefix_bindings,
+            )
+            from .space_agent_registry import (
+                RegistryConsistencyError,
+                SpaceAgentRegistry,
+            )
+            _reg = SpaceAgentRegistry.load()
+            _binding_spaces = {
+                b.space for b in build_prefix_bindings().values() if b.agent
+            }
+            _binding_spaces |= {
+                b.space for b in build_keyword_bindings().values()
+            }
+            _reg.assert_consistent(_binding_spaces)
+            logger.info(
+                f"[BrainBridge] boot consistency ok "
+                f"(registry_version={_reg.version}, "
+                f"{len(_binding_spaces)} binding spaces)"
+            )
+        except Exception as e:  # noqa: BLE001
+            try:
+                from .space_agent_registry import RegistryConsistencyError as _RCE
+                if isinstance(e, _RCE):
+                    raise
+            except ImportError:
+                pass
+            logger.debug(f"[BrainBridge] boot consistency check skipped: {e}")
         self._available = True
         self._registry = SpaceAgentRegistry.load_or_legacy(legacy=self._space_map)
         self._registry_mode = os.getenv("VIBEMIND_ROUTING_REGISTRY", "shadow").lower()

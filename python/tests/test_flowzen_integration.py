@@ -81,12 +81,22 @@ def test_circadian_matrix_recommends_deep_work_for_energized_morning():
 
 
 def test_space_router_maps_rose_to_flowzen():
-    """SpaceRouter deterministic map includes rose. → flowzen."""
-    try:
-        from spaces.minibook.enrichment.space_router import EVENT_TYPE_TO_SPACE
-        assert EVENT_TYPE_TO_SPACE.get("rose.") == "flowzen"
-    except ImportError:
-        pass  # Minibook may not be importable without full env
+    """rose. prefix routes to flowzen — from the versioned registry.
+
+    ABSORB-9 (Phase 0): the old assert imported the non-existent
+    spaces.minibook.enrichment.space_router and SILENTLY passed on
+    ImportError — it tested nothing. Registry-only now, no minibook
+    import resurrection."""
+    from swarm.routing.space_agent_registry import SpaceAgentRegistry
+    reg = SpaceAgentRegistry.load()
+    meta = reg.space_meta("flowzen")
+    assert meta is not None, "flowzen space missing from registry"
+    assert "rose." in (meta.get("prefixes") or []), (
+        "rose. prefix not registered for flowzen"
+    )
+
+    from swarm.routing.bindings_registry import build_prefix_bindings
+    assert build_prefix_bindings()["rose."].space == "flowzen"
 
 
 def test_plugin_manifest_exists():

@@ -30,13 +30,63 @@ KEYWORD_BINDINGS: Dict[str, SpaceBinding] = {
 _COMPILED_KEYWORDS: Dict[re.Pattern, SpaceBinding] = {}
 
 
+def _load_registry():
+    """Load the versioned SpaceAgentRegistry, or None when unavailable."""
+    try:
+        from .space_agent_registry import SpaceAgentRegistry
+        reg = SpaceAgentRegistry.load()
+        return reg if reg.all_spaces() else None
+    except Exception as e:  # noqa: BLE001 — bindings must work registry-less
+        logger.debug(f"registry unavailable for bindings: {e}")
+        return None
+
+
+def build_registry_prefix_bindings(registry=None) -> Dict[str, SpaceBinding]:
+    """ABSORB-5 (Phase 0): prefix -> SpaceBinding derived from the YAML
+    `prefixes:` lists — the registry is the SoT for prefix->space. The
+    binding agent is the registry's OpenFang agent (nothing dispatches on
+    RouteResult.agent — verified consumer sweep; space is the routed key)."""
+    reg = registry if registry is not None else _load_registry()
+    if reg is None:
+        return {}
+    out: Dict[str, SpaceBinding] = {}
+    for space, meta in reg.all_spaces().items():
+        for prefix in (meta.get("prefixes") or []):
+            out[prefix] = SpaceBinding(
+                space=space,
+                agent=meta.get("agent", ""),
+                stream=f"events:tasks:{space}",
+                pattern=f"prefix:{prefix}*",
+            )
+    return out
+
+
+def build_keyword_bindings(registry=None) -> Dict[str, SpaceBinding]:
+    """ABSORB-6 (Phase 0): keyword-regex -> SpaceBinding from the YAML
+    `keywords:` lists; falls back to the static KEYWORD_BINDINGS dict only
+    when the registry carries no keywords (YAML absent/empty)."""
+    reg = registry if registry is not None else _load_registry()
+    if reg is not None:
+        out: Dict[str, SpaceBinding] = {}
+        for space, meta in reg.all_spaces().items():
+            for pattern in (meta.get("keywords") or []):
+                out[pattern] = SpaceBinding(
+                    space=space,
+                    agent=meta.get("agent", ""),
+                    pattern=f"keyword:{space}",
+                )
+        if out:
+            return out
+    return dict(KEYWORD_BINDINGS)
+
+
 def _compile_keywords():
-    """Compile keyword patterns once."""
+    """Compile keyword patterns once (registry-first, ABSORB-6)."""
     global _COMPILED_KEYWORDS
     if not _COMPILED_KEYWORDS:
         _COMPILED_KEYWORDS = {
             re.compile(pattern, re.IGNORECASE): binding
-            for pattern, binding in KEYWORD_BINDINGS.items()
+            for pattern, binding in build_keyword_bindings().items()
         }
 
 
@@ -91,17 +141,24 @@ def build_prefix_bindings() -> Dict[str, SpaceBinding]:
             logger.debug(f"Could not load agent {agent_key}: {e}")
             continue
 
-    # Static fallback is authoritative for prefix->space mapping.
-    # Dynamic extraction can produce wrong mappings when agents share event prefixes
-    # (e.g. CodingAgent has "idea.to_project" but Ideas owns the "idea." prefix).
-    # Static takes priority; dynamic only adds genuinely new prefixes.
+    # ABSORB-5 (Phase 0): the REGISTRY is authoritative for prefix->space.
+    # Static fallback contributes infra pseudo-bindings (conversation./
+    # evaluation.) and serves as emergency source when the YAML is absent.
+    # Dynamic extraction only adds genuinely new prefixes (it can produce
+    # wrong mappings when agents share event prefixes — e.g. CodingAgent
+    # has "idea.to_project" but Ideas owns the "idea." prefix).
     static = _get_static_fallback()
-    merged = dict(static)
+    registry_bindings = build_registry_prefix_bindings()
+    merged = {**static, **registry_bindings}
     for prefix, binding in bindings.items():
         if prefix not in merged:
             merged[prefix] = binding
 
-    logger.info(f"Built {len(merged)} prefix bindings ({len(merged) - len(static)} dynamic additions)")
+    logger.info(
+        f"Built {len(merged)} prefix bindings "
+        f"({len(registry_bindings)} from registry, "
+        f"{len(merged) - len(static)} dynamic additions)"
+    )
     return merged
 
 

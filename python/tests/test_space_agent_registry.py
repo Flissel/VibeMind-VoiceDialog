@@ -65,6 +65,45 @@ class TestCanonicalSpaces:
         assert SpaceAgentRegistry(data={}).canonical_spaces() == set()
 
 
+class TestBootConsistencyAssertion:
+    """ASSERT-10 (Phase 0) — boot gate against silent dispatch death.
+    RED was: no assert_consistent; a binding emitting 'autogen'/'rowboat'
+    produced no error until space_to_agent returned None at dispatch."""
+
+    def _reg(self):
+        return SpaceAgentRegistry(data={
+            "version": 1,
+            "spaces": {"ideas": {"agent": "a"}, "coding": {"agent": "b"}},
+        })
+
+    def test_aligned_sets_pass(self):
+        assert self._reg().assert_consistent({"ideas", "coding"}) == []
+
+    def test_offenders_warn_by_default(self):
+        offenders = self._reg().assert_consistent({"ideas", "autogen", "rowboat"})
+        assert offenders == ["autogen", "rowboat"]
+
+    def test_strict_mode_raises(self):
+        from swarm.routing.space_agent_registry import RegistryConsistencyError
+        import pytest as _pytest
+        with _pytest.raises(RegistryConsistencyError):
+            self._reg().assert_consistent({"rowboat"}, strict=True)
+
+    def test_empty_registry_is_noop(self):
+        assert SpaceAgentRegistry(data={}).assert_consistent({"whatever"}) == []
+
+    def test_live_bindings_are_consistent(self):
+        # the real E2E gate: current binding layer vs current YAML
+        from swarm.routing.bindings_registry import (
+            build_keyword_bindings,
+            build_prefix_bindings,
+        )
+        reg = SpaceAgentRegistry.load(YAML_PATH)
+        spaces = {b.space for b in build_prefix_bindings().values() if b.agent}
+        spaces |= {b.space for b in build_keyword_bindings().values()}
+        assert reg.assert_consistent(spaces, strict=True) == []
+
+
 class TestAgentfarmCanonicalization:
     """REG-3 (Phase 0) — YAML and LEGACY_SPACE_AGENT_MAP must agree on the
     agentfarm agent. RED proved the live drift: YAML said

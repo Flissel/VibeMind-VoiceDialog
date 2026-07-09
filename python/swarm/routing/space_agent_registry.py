@@ -19,6 +19,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+class RegistryConsistencyError(RuntimeError):
+    """ASSERT-10: binding layer emits space names the registry doesn't know."""
+
+
 @dataclass
 class RoutingRecipe:
     """Structured routing decision for an intent."""
@@ -148,6 +152,42 @@ class SpaceAgentRegistry:
 
     def legacy_agent(self, space: str) -> str:
         return self._legacy.get(space, "vibemind")
+
+    def assert_consistent(
+        self,
+        binding_spaces: set[str],
+        *,
+        strict: bool | None = None,
+    ) -> list[str]:
+        """ASSERT-10 (Phase 0): boot-time consistency gate — every space the
+        binding layer can emit must be a canonical registry key, otherwise
+        dispatch dies silently (`space_to_agent -> None`, the FIX-3 bug
+        class). Returns the offender list.
+
+        strict=None reads env VIBEMIND_REGISTRY_STRICT (default off =
+        warn-only for the first rollout; set to 1 to fail-fast at boot).
+        Empty registry => no-op (registry-less boot stays possible).
+
+        Note: the plan also wants Brain's SPACE_NAMES compared; Brain is a
+        separate service not importable from the voice venv — callers that
+        HAVE the brain space set can pass it as part of binding_spaces."""
+        canonical = self.canonical_spaces()
+        if not canonical:
+            return []
+        offenders = sorted(s for s in binding_spaces if s not in canonical)
+        if offenders:
+            msg = (
+                f"non-canonical binding spaces {offenders} "
+                f"(registry_version={self.version}, canonical={sorted(canonical)})"
+            )
+            if strict is None:
+                strict = os.getenv(
+                    "VIBEMIND_REGISTRY_STRICT", "0"
+                ).lower() in ("1", "true")
+            if strict:
+                raise RegistryConsistencyError(msg)
+            logger.warning(f"[Registry] ASSERT-10: {msg}")
+        return offenders
 
     def canonical_spaces(self) -> set[str]:
         """REG-2 (Phase 0): the ONE authority for space names = the YAML

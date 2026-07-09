@@ -375,10 +375,13 @@ class VoiceManager:
                     # Rachel Interface — passive dashboard
                     rachel = RachelInterface()
 
-                    # Register all known agents in Rachel
-                    from spaces.minibook.tools.collaboration_tools import SPACE_AGENT_REGISTRY
-                    for space_key, agent_info in SPACE_AGENT_REGISTRY.items():
-                        rachel.register_agent(agent_info["name"], space_key)
+                    # Register all known agents in Rachel.
+                    # ABSORB-9 (Phase 0): spaces.minibook.tools.collaboration_tools
+                    # does not exist in this tree (dead ref, ModuleNotFoundError) —
+                    # register from the versioned registry instead (registry-only).
+                    from swarm.routing.space_agent_registry import SpaceAgentRegistry
+                    for space_key, meta in SpaceAgentRegistry.load().all_spaces().items():
+                        rachel.register_agent(meta.get("agent", ""), space_key)
 
                     # Enrichment Pipeline — classifier reused from orchestrator
                     pipeline = create_enrichment_pipeline(
