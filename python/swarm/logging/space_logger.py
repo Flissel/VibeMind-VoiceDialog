@@ -37,7 +37,7 @@ class SpaceColors:
     IDEAS = "\033[92m"         # Bright Green
     CODING = "\033[93m"        # Bright Yellow
     DESKTOP = "\033[95m"       # Bright Magenta
-    ROWBOAT = "\033[94m"       # Blue
+    ROARBOOT = "\033[94m"      # Blue (ABSORB-8: canonical name, was ROWBOAT)
     RESEARCH = "\033[91m"      # Red
     MINIBOOK = "\033[97m"      # White Bold
     SCHEDULE = "\033[36m"      # Cyan
@@ -46,6 +46,9 @@ class SpaceColors:
     BRAIN = "\033[32m"         # Dark Green
     AGENTFARM = "\033[38;5;208m"  # Orange (distinct from all other spaces)
     N8N = "\033[38;5;99m"      # Purple
+    FLOWZEN = "\033[38;5;213m"   # Pink
+    MIROFISH = "\033[38;5;45m"   # Turquoise
+    VIDEO = "\033[38;5;141m"     # Violet
     DEFAULT = "\033[2m"        # Dim
     RESET = "\033[0m"
 
@@ -68,7 +71,9 @@ MODULE_TO_SPACE: Dict[str, str] = {
     "spaces.coding": "coding",
     "spaces.desktop": "desktop",
     "eyeterm": "desktop",
-    "spaces.rowboat": "rowboat",
+    # ABSORB-8: module path stays (real dir on disk), emitted space name is
+    # the CANONICAL `roarboot` (registry key) — `rowboat` was un-dispatchable
+    "spaces.rowboat": "roarboot",
     "spaces.research": "research",
     "spaces.minibook": "minibook",
     "spaces.schedule": "schedule",
@@ -84,8 +89,8 @@ MODULE_TO_SPACE: Dict[str, str] = {
     # n8n Society agents
     "n8n.society": "n8n",
     "society": "n8n",
-    # Publishing → rowboat
-    "publishing": "rowboat",
+    # Publishing → roarboot (canonical)
+    "publishing": "roarboot",
     # IPC handlers → associated spaces
     "ipc.canvas_manager": "ideas",
     "ipc.eyeterm_handlers": "desktop",
@@ -104,7 +109,7 @@ SPACE_TO_COLOR: Dict[str, str] = {
     "ideas": SpaceColors.IDEAS,
     "coding": SpaceColors.CODING,
     "desktop": SpaceColors.DESKTOP,
-    "rowboat": SpaceColors.ROWBOAT,
+    "roarboot": SpaceColors.ROARBOOT,
     "research": SpaceColors.RESEARCH,
     "minibook": SpaceColors.MINIBOOK,
     "schedule": SpaceColors.SCHEDULE,
@@ -113,6 +118,9 @@ SPACE_TO_COLOR: Dict[str, str] = {
     "brain": SpaceColors.BRAIN,
     "agentfarm": SpaceColors.AGENTFARM,
     "n8n": SpaceColors.N8N,
+    "flowzen": SpaceColors.FLOWZEN,
+    "mirofish": SpaceColors.MIROFISH,
+    "video": SpaceColors.VIDEO,
 }
 
 SPACE_TO_TAG: Dict[str, str] = {
@@ -120,7 +128,7 @@ SPACE_TO_TAG: Dict[str, str] = {
     "ideas": "[IDEAS]",
     "coding": "[CODING]",
     "desktop": "[DESKTOP]",
-    "rowboat": "[ROWBOAT]",
+    "roarboot": "[ROARBOOT]",
     "research": "[RESEARCH]",
     "minibook": "[MINIBOOK]",
     "schedule": "[SCHEDULE]",
@@ -129,6 +137,9 @@ SPACE_TO_TAG: Dict[str, str] = {
     "brain": "[BRAIN]",
     "agentfarm": "[AGENTFARM]",
     "n8n": "[N8N]",
+    "flowzen": "[FLOWZEN]",
+    "mirofish": "[MIROFISH]",
+    "video": "[VIDEO]",
 }
 
 # Pad all tags to same width for aligned output

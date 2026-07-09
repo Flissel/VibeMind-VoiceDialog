@@ -19,8 +19,10 @@ KEYWORD_BINDINGS: Dict[str, SpaceBinding] = {
     r"termin|erinnerung|wecker|timer|schedule|reminder": SpaceBinding(
         space="schedule", agent="ScheduleBackendAgent", pattern="keyword:schedule"
     ),
+    # FIX-3 (Phase 0): canonical space name `agentfarm` (was `autogen` — no
+    # such key in the registry/LEGACY map, dispatch resolved to None)
     r"agent.?farm|pipeline|forge|swarm.?team|agent.?team": SpaceBinding(
-        space="autogen", agent="AgentFarmBackendAgent", pattern="keyword:agentfarm"
+        space="agentfarm", agent="AgentFarmBackendAgent", pattern="keyword:agentfarm"
     ),
 }
 
@@ -53,13 +55,13 @@ def build_prefix_bindings() -> Dict[str, SpaceBinding]:
         "ideas": ("ideas", "IdeasAgent", "events:tasks:ideas"),
         "desktop": ("desktop", "DesktopAgent", "events:tasks:desktop"),
         "coding": ("coding", "CodingAgent", "events:tasks:coding"),
-        "roarboot": ("rowboat", "RoarbootBackendAgent", "events:tasks:roarboot"),
+        "roarboot": ("roarboot", "RoarbootBackendAgent", "events:tasks:roarboot"),
         "n8n": ("n8n", "N8nBackendAgent", "events:tasks:n8n"),
         "schedule": ("schedule", "ScheduleBackendAgent", "events:tasks:schedule"),
         "minibook": ("minibook", "MinibookBackendAgent", "events:tasks:minibook"),
         "zeroclaw_research": ("research", "ZeroClawResearchAgent", "events:tasks:zeroclaw"),
         "video": ("video", "VideoBackendAgent", "events:tasks:video"),
-        "agentfarm": ("autogen", "AgentFarmBackendAgent", "events:tasks:agentfarm"),
+        "agentfarm": ("agentfarm", "AgentFarmBackendAgent", "events:tasks:agentfarm"),
     }
 
     for agent_key, (space, agent_name, stream) in agent_registry.items():
@@ -113,13 +115,13 @@ def _get_static_fallback() -> Dict[str, SpaceBinding]:
         "web.": SpaceBinding(space="desktop", agent="DesktopAgent", stream="events:tasks:desktop", pattern="prefix:web.*"),
         "messaging.": SpaceBinding(space="desktop", agent="DesktopAgent", stream="events:tasks:desktop", pattern="prefix:messaging.*"),
         "openclaw.": SpaceBinding(space="desktop", agent="DesktopAgent", stream="events:tasks:desktop", pattern="prefix:openclaw.*"),
-        "roarboot.": SpaceBinding(space="rowboat", agent="RoarbootBackendAgent", stream="events:tasks:roarboot", pattern="prefix:roarboot.*"),
+        "roarboot.": SpaceBinding(space="roarboot", agent="RoarbootBackendAgent", stream="events:tasks:roarboot", pattern="prefix:roarboot.*"),
         "research.": SpaceBinding(space="research", agent="ZeroClawResearchAgent", stream="events:tasks:zeroclaw", pattern="prefix:research.*"),
         "minibook.": SpaceBinding(space="minibook", agent="MinibookBackendAgent", stream="events:tasks:minibook", pattern="prefix:minibook.*"),
         "schedule.": SpaceBinding(space="schedule", agent="ScheduleBackendAgent", stream="events:tasks:schedule", pattern="prefix:schedule.*"),
         "n8n.": SpaceBinding(space="n8n", agent="N8nBackendAgent", stream="events:tasks:n8n", pattern="prefix:n8n.*"),
         "video.": SpaceBinding(space="video", agent="VideoBackendAgent", stream="events:tasks:video", pattern="prefix:video.*"),
-        "agentfarm.": SpaceBinding(space="autogen", agent="AgentFarmBackendAgent", stream="events:tasks:agentfarm", pattern="prefix:agentfarm.*"),
+        "agentfarm.": SpaceBinding(space="agentfarm", agent="AgentFarmBackendAgent", stream="events:tasks:agentfarm", pattern="prefix:agentfarm.*"),
         "mirofish.": SpaceBinding(space="mirofish", agent="MiroFishBackendAgent", stream="events:tasks:mirofish", pattern="prefix:mirofish.*"),
         "rose.": SpaceBinding(space="flowzen", agent="FlowzenBackendAgent", stream="events:tasks:flowzen", pattern="prefix:rose.*"),
         "conversation.": SpaceBinding(space="conversation", agent=None, stream=None, pattern="prefix:conversation.*"),
