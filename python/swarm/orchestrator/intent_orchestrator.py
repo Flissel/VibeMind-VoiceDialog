@@ -760,6 +760,29 @@ class IntentOrchestrator:
         self._minibook_hub = hub
         logger.info("MinibookHub connected to IntentOrchestrator")
 
+    def _fire_event_label_if_verified(
+        self,
+        sig: Optional[bool],
+        user_text: str,
+        event_type: str,
+        user_id: Optional[str] = None,
+    ) -> None:
+        """ORCH-4 (Phase 0): deferred LLM event-label post, gated on the
+        outcome gate. The LLM's classification used to be POSTed to
+        /api/cortex/classify/train UNCONDITIONALLY at classify time — even
+        when the downstream execution failed. Now the label fires only for a
+        gate-PROVEN hop (`sig is True`); False (failed path) and None
+        (unverified) train NOTHING and are counted locally."""
+        if sig is not True:
+            self._skipped_event_labels = getattr(self, "_skipped_event_labels", 0) + 1
+            return
+        if self._brain_event_shadow and event_type:
+            asyncio.create_task(self._brain_event_shadow.observe(
+                user_text=user_text,
+                actual_event_type=event_type,
+                user_id=user_id,
+            ))
+
     # NOTE: _load_direct_tools() and _load_evaluation_tools() have been extracted
     # to swarm.orchestrator.tool_registry.ToolRegistry. See __init__ for usage.
 
@@ -944,19 +967,17 @@ class IntentOrchestrator:
                             logger.debug(f"[BrainBridge] EventRoutingHead pre-cls failed: {be_err}")
 
                     # Fallback to LLM if Event-Brain didn't hit
+                    _pending_pre_label = None
                     if not _pre_event:
                         try:
                             from swarm.orchestrator.intent_classifier import IntentClassifier
                             _pre_cls = IntentClassifier()
                             _pre_result = await _pre_cls.classify(intent_text)
                             _pre_event = _pre_result.get("event_type", "") if _pre_result else ""
-                            # Shadow-train the Event-Brain from the LLM answer
-                            if self._brain_event_shadow and _pre_event:
-                                asyncio.create_task(self._brain_event_shadow.observe(
-                                    user_text=intent_text,
-                                    actual_event_type=_pre_event,
-                                    user_id=_user_id_pre,
-                                ))
+                            # ORCH-4: label post DEFERRED behind the outcome
+                            # gate — fired only if the executed hop proves True
+                            if _pre_event:
+                                _pending_pre_label = (intent_text, _pre_event, _user_id_pre)
                         except Exception:
                             pass
 
@@ -966,11 +987,16 @@ class IntentOrchestrator:
                         pre_classification=_pre_event,
                     )
                     if bridge_result and not bridge_result.error:
-                        # Reward the Event-Brain if its classification drove this path
+                        # ORCH-4: the bridge result is FREE TEXT — no
+                        # ground-truth verdict exists, so this is UNVERIFIED.
+                        from swarm.routing import outcome_gate as _og
+                        _sig = _og.contract_pass_from_verdict(None, True)  # -> None
                         if _pre_event_brain_routing_id and self._brain_event_shadow:
                             asyncio.create_task(self._brain_event_shadow.reward(
-                                routing_id=_pre_event_brain_routing_id, success=True,
+                                routing_id=_pre_event_brain_routing_id, success=_sig,
                             ))
+                        if _pending_pre_label is not None:
+                            self._fire_event_label_if_verified(_sig, *_pending_pre_label)
                         asyncio.create_task(self._store_memory_for_intent(
                             intent_text, bridge_result, context
                         ))
@@ -1000,6 +1026,8 @@ class IntentOrchestrator:
                     _classification: Optional[Dict[str, Any]] = None
                     _pre_event_type = ""
                     _brain_routing_id = ""
+                    # ORCH-4: deferred LLM event label (fired only gate-True)
+                    _pending_event_label = None
 
                     # 0. Multi-step gate — Brain only handles single-step intents.
                     # If the user combined multiple actions with a connector
@@ -1175,12 +1203,15 @@ class IntentOrchestrator:
                                                     f"({brain_cls.get('confidence', 0):.0%}) → "
                                                     f"OpenFang '{_of_agent_name}'"
                                                 )
-                                                # Reward brain for correct classification
+                                                # ORCH-4: OpenFang replied with
+                                                # FREE TEXT — no ground truth,
+                                                # UNVERIFIED (None = no-op),
+                                                # never a fabricated positive.
                                                 if self._brain_event_shadow and _brain_routing_id:
                                                     asyncio.create_task(
                                                         self._brain_event_shadow.reward(
                                                             routing_id=_brain_routing_id,
-                                                            success=True,
+                                                            success=None,
                                                         )
                                                     )
                                                 _of_result = OrchestrationResult(
@@ -1238,14 +1269,15 @@ class IntentOrchestrator:
                                 _classifier = IntentClassifier()
                                 _classification = await _classifier.classify(intent_text)
                                 _pre_event_type = _classification.get("event_type", "") if _classification else ""
-                            # Brain learns from the LLM ground truth (shadow training),
-                            # personalized to the current user when available.
+                            # ORCH-4: the LLM label is NOT ground truth — it
+                            # used to train /classify unconditionally, even
+                            # when execution then failed. Deferred behind the
+                            # outcome gate; fired in the execute branch only
+                            # if the hop proves True.
                             if self._brain_event_shadow and _pre_event_type:
-                                asyncio.create_task(self._brain_event_shadow.observe(
-                                    user_text=intent_text,
-                                    actual_event_type=_pre_event_type,
-                                    user_id=_user_id_for_brain,
-                                ))
+                                _pending_event_label = (
+                                    intent_text, _pre_event_type, _user_id_for_brain,
+                                )
                         except Exception:
                             pass
 
@@ -1290,6 +1322,7 @@ class IntentOrchestrator:
                                 # gets "VibeMind nicht verfuegbar" because the
                                 # agent has no DB access.
                                 response: Optional[str] = None
+                                _via_openfang = False  # ORCH-4: which path produced `response`
                                 if (self._use_openfang_direct
                                         and self._brain_bridge is not None
                                         and tool_name not in _BRAIN_PARAMETERLESS_EVENTS):
@@ -1312,6 +1345,7 @@ class IntentOrchestrator:
                                                     ),
                                                     timeout=5.0,
                                                 )
+                                                _via_openfang = response is not None
                                                 logger.info(
                                                     f"[HybridRouter] Executed '{tool_name}' "
                                                     f"via OpenFang agent '{_agent_name}'"
@@ -1335,20 +1369,42 @@ class IntentOrchestrator:
                                         response = result.get("message", str(result))
                                     else:
                                         response = str(result)
+                                # ORCH-4: derive the learning signal from real
+                                # evidence instead of hardcoded success=True.
+                                # Local tool result None/empty-dict/error-key
+                                # -> ok=False -> gate False (honest negative);
+                                # non-empty result WITHOUT a truth-verdict ->
+                                # UNVERIFIED (None, trains nothing). Only a
+                                # future threaded verified=True yields True.
+                                from swarm.routing import outcome_gate as _og
+                                if _via_openfang:
+                                    # OpenFang free text: ran ok, no verdict
+                                    _tool_ok = True
+                                else:
+                                    _tool_ok = not (
+                                        result is None
+                                        or (isinstance(result, dict)
+                                            and (not result or result.get("error")))
+                                    )
+                                _sig = _og.contract_pass_from_verdict(None, _tool_ok)
                                 # Shadow: Brain observes this routing decision (space routing)
                                 if self._brain_shadow:
                                     asyncio.create_task(self._brain_shadow.observe(
                                         user_text=intent_text,
                                         event_type=route_result.event_type,
                                         actual_space=route_result.space,
-                                        success=True,
+                                        success=_sig,
                                     ))
-                                # Reward: Brain event-classifier learns from tool success
+                                # Reward: event-classifier learns only from real outcomes
                                 if self._brain_event_shadow and _brain_routing_id:
                                     asyncio.create_task(self._brain_event_shadow.reward(
                                         routing_id=_brain_routing_id,
-                                        success=True,
+                                        success=_sig,
                                     ))
+                                # ORCH-4: deferred LLM event label, gate-True only
+                                if _pending_event_label is not None:
+                                    self._fire_event_label_if_verified(
+                                        _sig, *_pending_event_label)
                                 hybrid_result = OrchestrationResult(
                                     job_id="",
                                     event_type=route_result.event_type,

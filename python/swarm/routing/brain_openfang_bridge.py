@@ -184,8 +184,11 @@ class BrainOpenFangBridge:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.info(f"[BrainBridge] {agent_name} responded in {latency_ms:.0f}ms")
 
-            # 6. Reward Brain (fire-and-forget)
-            asyncio.create_task(self._reward_brain(routing_id, success=True))
+            # 6. Reward Brain (fire-and-forget). OF-3 (Phase 0): the response
+            # is FREE TEXT — no ground-truth verdict exists here, so this is
+            # UNVERIFIED (None = no-op), NOT success. "Didn't crash" must
+            # never train the SpaceRoutingHead (outcome_gate semantics).
+            asyncio.create_task(self._reward_brain(routing_id, success=None))
 
             return OrchestrationResult(
                 job_id=routing_id or f"brain-{space}",
@@ -260,9 +263,15 @@ class BrainOpenFangBridge:
             logger.debug(f"[BrainBridge] Brain route failed: {e}")
             return None
 
-    async def _reward_brain(self, routing_id: str, success: bool) -> None:
-        """POST /api/cortex/route/reward (fire-and-forget)."""
+    async def _reward_brain(self, routing_id: str, success: Optional[bool]) -> None:
+        """POST /api/cortex/route/reward (fire-and-forget).
+
+        OF-3 (Phase 0): `success=None` means UNVERIFIED (no independent
+        ground truth) — no POST at all, mirroring REWARD-2 in both shadow
+        loops. Only real True/False outcomes train."""
         if not routing_id:
+            return
+        if success is None:
             return
         try:
             timeout = aiohttp.ClientTimeout(total=1.0)
@@ -377,7 +386,8 @@ class BrainOpenFangBridge:
         try:
             response_text = await self._send_to_openfang(agent_id, message)
             logger.info(f"[BrainBridge] Background: {space} completed")
-            await self._reward_brain(routing_id, success=True)
+            # OF-3: free-text response, no verdict -> UNVERIFIED (no-op)
+            await self._reward_brain(routing_id, success=None)
 
             # Notify voice pipeline of background completion
             try:

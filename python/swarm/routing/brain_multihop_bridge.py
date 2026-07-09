@@ -95,6 +95,22 @@ class BrainMultihopBridge:
 
         final_text = (data.get("final_text") or "").strip()
         executed = data.get("executed") or {}
+
+        # MH-5 (Phase 0): feed the REAL per-hop truth-verdict back as a
+        # reward, keyed on the top-level plan_id (MH-5a response contract).
+        # outcome_gate ANDs {ok, validator_verdict} across hops: True/False
+        # reward, None (unverified / empty executed) rewards NOTHING — never
+        # a fabricated positive. Fires even when voice has no final_text:
+        # the hop ground truth exists independently of the synthesizer.
+        try:
+            from swarm.routing import outcome_gate as _og
+            _plan_id = data.get("plan_id") or ""
+            _sig = _og.contract_pass_from_executed(executed)
+            if _plan_id and _sig is not None:
+                asyncio.create_task(self._reward_multihop(_plan_id, _sig))
+        except Exception as e:  # noqa: BLE001 — reward must never break voice
+            logger.debug(f"[MultihopBridge] reward gating skipped: {e}")
+
         if not final_text and executed:
             final_text = self._summarize_executed(executed)
         if not final_text:
@@ -191,6 +207,31 @@ class BrainMultihopBridge:
         if not parts:
             return ""
         return f"executed {len(parts)} hop(s): " + ", ".join(parts)
+
+    async def _reward_multihop(self, plan_id: str, success: bool) -> None:
+        """POST /api/multihop/plan/{plan_id}/reward (fire-and-forget).
+
+        MH-5 (Phase 0): plan_id is the verified reward correlate — the
+        endpoint takes body {delta, reason} and forwards to
+        PlanExecutor.record_plan_reward. Only gate-True/False outcomes
+        reach this method (None is filtered at the call site)."""
+        if not plan_id:
+            return
+        try:
+            timeout = aiohttp.ClientTimeout(total=1.0)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                await session.post(
+                    f"{self._brain_url}/api/multihop/plan/{plan_id}/reward",
+                    json={
+                        "delta": 1.0 if success else -1.0,
+                        "reason": (
+                            "voice-bridge outcome_gate: "
+                            + ("verified" if success else "refuted")
+                        ),
+                    },
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[MultihopBridge] reward failed (non-critical): {e}")
 
     def _re_enable(self) -> None:
         """Re-enable bridge after backoff window expires."""
