@@ -63,3 +63,26 @@ class TestCanonicalSpaces:
 
     def test_canonical_spaces_empty_registry(self):
         assert SpaceAgentRegistry(data={}).canonical_spaces() == set()
+
+
+class TestAgentfarmCanonicalization:
+    """REG-3 (Phase 0) — YAML and LEGACY_SPACE_AGENT_MAP must agree on the
+    agentfarm agent. RED proved the live drift: YAML said
+    `brain-orchestrator`, the bridge dispatched `vibemind`.
+
+    Decision (2026-07-02, against the LIVE OpenFang agent list, 71 agents):
+    `brain-orchestrator` is NOT deployed; `vibemind` IS
+    (openrouter/llama-3.3-70b) -> YAML canonicalized to `vibemind`.
+    From here the registry is the single truth — NO test hardcodes the
+    agentfarm agent name; both sides are compared against each other.
+    """
+
+    def test_agentfarm_agent_consistent(self):
+        from swarm.routing.brain_openfang_bridge import LEGACY_SPACE_AGENT_MAP
+        reg = SpaceAgentRegistry.load(YAML_PATH)
+        yaml_agent = reg.lookup("agentfarm", "agentfarm.run").agent
+        bridge_agent = LEGACY_SPACE_AGENT_MAP["agentfarm"]
+        assert yaml_agent == bridge_agent, (
+            f"agentfarm drift: YAML says {yaml_agent!r}, bridge dispatches "
+            f"{bridge_agent!r} — registry must be the single truth (REG-3)"
+        )
