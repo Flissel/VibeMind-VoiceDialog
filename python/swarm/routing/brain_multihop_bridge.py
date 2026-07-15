@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -54,8 +55,23 @@ class BrainMultihopBridge:
         # the final_synthesizer LLM, plus the MCPExecutor stdio roundtrip.
         # 6s covers a typical OpenFang spawn (~5s) + overhead. Above that
         # we'd rather fall through than block voice.
+        #
+        # Env-tunable (VOICE_BRAIN_MULTIHOP_TIMEOUT_S): this is the WORST-CASE
+        # latency a voice turn pays when multihop MISSES (no cap / no plan) —
+        # it waits this long, then falls through to the old fast path. Lower
+        # it (e.g. 2.5) to cap that tail at the cost of cutting off slow
+        # legitimate multihop runs (an OpenFang spawn can need ~5s). Read at
+        # instantiation, AFTER electron_backend has loaded the .env files.
+        _env_timeout = os.getenv("VOICE_BRAIN_MULTIHOP_TIMEOUT_S")
+        try:
+            self._request_timeout = float(_env_timeout) if _env_timeout else request_timeout_s
+        except ValueError:
+            logger.warning(
+                f"[MultihopBridge] bad VOICE_BRAIN_MULTIHOP_TIMEOUT_S={_env_timeout!r}, "
+                f"using {request_timeout_s}s"
+            )
+            self._request_timeout = request_timeout_s
         self._brain_url = brain_url.rstrip("/")
-        self._request_timeout = request_timeout_s
         self._backoff = backoff_seconds
         self._available = True
 
