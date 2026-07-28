@@ -10,7 +10,7 @@ Usage (stdio):
     python vibemind_db_mcp.py
 
 Environment:
-    SUPABASE_URL     (default: http://localhost:54321)
+    SUPABASE_URL     (default: http://192.168.178.65:54321)
     SUPABASE_ANON_KEY (default: local dev key)
 """
 import json
@@ -20,7 +20,7 @@ import urllib.request
 import urllib.error
 from typing import Any
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://localhost:54321")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://192.168.178.65:54321")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
 )

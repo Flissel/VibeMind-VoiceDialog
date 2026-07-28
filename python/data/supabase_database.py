@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://localhost:54321").rstrip("/")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://192.168.178.65:54321").rstrip("/")
 SUPABASE_KEY = os.environ.get(
     "SUPABASE_ANON_KEY",
     "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH",

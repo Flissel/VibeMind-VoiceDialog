@@ -569,7 +569,7 @@ class CanvasManager:
         edges = []
         try:
             import os as _os_e, requests as _r_e
-            supa_url = _os_e.environ.get("SUPABASE_URL", "http://localhost:54321").rstrip("/")
+            supa_url = _os_e.environ.get("SUPABASE_URL", "http://192.168.178.65:54321").rstrip("/")
             supa_key = _os_e.environ.get("SUPABASE_ANON_KEY", "anon").strip() or "anon"
             headers = {"apikey": supa_key}
             if supa_key.count(".") == 2:
@@ -656,7 +656,7 @@ class CanvasManager:
                 import os as _os
                 import requests as _requests
                 supa_url = _os.environ.get(
-                    "SUPABASE_URL", "http://localhost:54321"
+                    "SUPABASE_URL", "http://192.168.178.65:54321"
                 ).rstrip("/")
                 supa_key = _os.environ.get("SUPABASE_ANON_KEY", "anon").strip() or "anon"
                 headers = {"apikey": supa_key, "Content-Type": "application/json"}

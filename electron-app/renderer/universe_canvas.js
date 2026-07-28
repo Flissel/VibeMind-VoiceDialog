@@ -468,7 +468,7 @@ class UniverseCanvas {
         // Phase 11.U.H — IDs are DB-UUIDs directly (post-H.1). Use map-keys
         // straight as PATCH targets. Throttle to 6 in-flight at once to
         // avoid ERR_INSUFFICIENT_RESOURCES.
-        const SUPA = 'http://localhost:54321/rest/v1';
+        const SUPA = 'http://192.168.178.65:54321/rest/v1';
         const tasks = [];
         positions.forEach((pos, nodeId) => {
             // nodeId is already a Supabase UUID string after H.1
@@ -1670,7 +1670,7 @@ class UniverseCanvas {
         // arrive via Realtime; this is the explicit-refresh fallback for
         // voice tools / manual triggers.)
         if (!this.bubbleId) return;
-        const SUPA = 'http://localhost:54321/rest/v1';
+        const SUPA = 'http://192.168.178.65:54321/rest/v1';
         const HDR = { 'apikey': 'anon' };
         try {
             const [nRes, eRes] = await Promise.all([
