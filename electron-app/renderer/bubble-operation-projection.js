@@ -3,12 +3,12 @@
  * It deliberately does not infer orchestration, provider, or execution success.
  */
 (function(root, factory) {
-    var api = factory(root.document);
+    var api = factory(root, root.document);
     if (typeof module === 'object' && module.exports) {
         module.exports = api;
     }
     root.bubbleOperationProjection = api;
-})(typeof window !== 'undefined' ? window : globalThis, function(documentRef) {
+})(typeof window !== 'undefined' ? window : globalThis, function(root, documentRef) {
     'use strict';
 
     var EVENT_TYPE = 'bubbles.operation_projection';
@@ -26,6 +26,20 @@
         'blocked_dependency',
     ]);
     var COMPLETED_LIFECYCLES = new Set(['completed', 'succeeded']);
+    var TERMINAL_LIFECYCLES = new Set(['cancelled', 'failed', 'completed', 'succeeded']);
+    var LIFECYCLE_RANKS = {
+        planned: 0,
+        awaiting_clarification: 0,
+        awaiting_approval: 1,
+        approval_required: 1,
+        queued: 2,
+        blocked_dependency: 2,
+        running: 3,
+        cancelled: 4,
+        failed: 4,
+        completed: 4,
+        succeeded: 4,
+    };
     var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     function isDatabaseUuid(value) {
@@ -120,11 +134,24 @@
         return projection;
     }
 
+    function isLifecycleRegression(current, candidate) {
+        if (!current || !current.verified || current.operation_id !== candidate.operation_id) return false;
+        if (TERMINAL_LIFECYCLES.has(current.lifecycle)) return candidate.lifecycle !== current.lifecycle;
+        return LIFECYCLE_RANKS[candidate.lifecycle] < LIFECYCLE_RANKS[current.lifecycle];
+    }
+
     function createStore() {
         var byBubbleId = Object.create(null);
         function reduce(message) {
             var result = project(message);
-            if (result.bubble_id && message && message.type === EVENT_TYPE) byBubbleId[result.bubble_id] = result;
+            if (result.bubble_id && message && message.type === EVENT_TYPE) {
+                var current = byBubbleId[result.bubble_id];
+                if (current && current.verified && !result.verified) return result;
+                if (isLifecycleRegression(current, result)) {
+                    return unverified(message.params, 'stale_lifecycle_regression');
+                }
+                byBubbleId[result.bubble_id] = result;
+            }
             return result;
         }
         function rehydrate(bubbleId) {
