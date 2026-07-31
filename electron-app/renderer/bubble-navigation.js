@@ -35,7 +35,7 @@
             if (bubbleId !== null && bubbleId !== undefined) {
                 console.log('[Enter Button] Entering bubble:', bubbleId);
                 window.vibemind.enterBubble(bubbleId);
-                enterSpace(bubbleId);
+                enterSpace(bubbleId, true);
             } else {
                 console.warn('[Enter Button] No bubble in tooltip or selected!');
             }
@@ -46,7 +46,7 @@
         backBtn.onclick = function() { exitSpace(); };
     }
 
-    function enterSpace(bubbleId) {
+    function enterSpace(bubbleId, userInitiated) {
         try {
             // Set flag to prevent entered_bubble handler from duplicating work
             window.isEnteringBubble = true;
@@ -68,6 +68,13 @@
             }
 
             var bubble = window.multiverseApp ? window.multiverseApp.getBubbleById(bubbleId) : null;
+            var dbId = (bubble && bubble.userData && bubble.userData.db_id) || null;
+            // Rehydrate/request only for a deliberate UI entry, keyed strictly by DB UUID.
+            if (userInitiated && window.bubbleOperationProjection &&
+                window.bubbleOperationProjection.isDatabaseUuid(dbId)) {
+                window.bubbleOperationProjection.rehydrate(dbId);
+                window.bubbleOperationProjection.request(dbId);
+            }
             var bubbleTitle = (bubble && bubble.userData && (bubble.userData.title || bubble.userData.data && bubble.userData.data.title))
                 || (bubble && bubble.title)
                 || 'Space';
@@ -86,7 +93,6 @@
             // is keyed by UUID (because that's what mirofish_result emits).
             if (typeof window.onEvalBubbleEnter === 'function') {
                 try {
-                    var dbId = (bubble && bubble.userData && bubble.userData.db_id) || null;
                     window.onEvalBubbleEnter(dbId || bubbleId, { localId: bubbleId, dbId: dbId });
                 } catch (e) { /* non-fatal */ }
             }

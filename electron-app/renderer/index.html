@@ -57,6 +57,7 @@
     <script defer src="shuttle-wizard.js"></script>
     <script defer src="space-navigator.js"></script>
     <!-- Extracted modules (Tier 4 — heavy coupling) -->
+    <script defer src="bubble-operation-projection.js"></script>
     <script defer src="bubble-navigation.js"></script>
 </head>
 <body>
@@ -138,6 +139,7 @@
                 <button id="back-btn">← Back</button>
                 <span id="space-title">Space</span>
             </div>
+            <div id="bubble-operation-projection" data-verified="false">Bubbles operation: unverified</div>
             <div id="space-canvas"></div>
             
             <!-- Summaries Toggle Button -->
@@ -769,6 +771,12 @@
             }
 
             switch (message.type) {
+                case 'bubbles.operation_projection':
+                    if (window.bubbleOperationProjection) {
+                        window.bubbleOperationProjection.reduce(message);
+                    }
+                    break;
+
                 case 'bubbles_sync':
                     // Update bubbles from Python
                     if (window.multiverseApp && message.bubbles) {
