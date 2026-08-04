@@ -11,10 +11,11 @@ Flow:
 5. Brain /api/cortex/route/reward receives success/failure feedback
 6. OrchestrationResult returned to voice pipeline
 
-Graceful degradation:
-- Brain down → return None → HybridRouter handles
-- OpenFang down → return None → SyncExecutor handles
-- Timeout > 1.5s → quick ack + background execution
+Fail-closed behavior:
+- Brain down → caller-visible ``brain_unavailable`` error
+- OpenFang down → caller-visible ``openfang_unavailable`` error
+- Timeout > 1.5s → caller-visible ``openfang_timeout`` error
+- Missing canonical agent → no spawn; caller-visible error
 """
 
 from __future__ import annotations
@@ -56,9 +57,9 @@ def _derive_space_agent_map() -> Dict[str, str]:
     """ABSORB-7 (Phase 0): space -> OpenFang-agent derived from the versioned
     registry (config/space_agent_registry.yml) so this map can never drift
     from the SoT again (the REG-3 agentfarm drift was exactly that). A YAML
-    agent that is not yet deployed is safe: _ensure_agent spawns missing
-    agents on demand. Falls back to the static literal only when the YAML
-    is absent/empty."""
+    agent that is not yet registered is handled fail-closed by the bridge.
+    The static literal remains available only for backwards-compatible
+    introspection when the YAML is absent/empty."""
     try:
         from .space_agent_registry import SpaceAgentRegistry
         spaces = SpaceAgentRegistry.load().all_spaces()
@@ -97,6 +98,7 @@ class BrainOpenFangBridge:
         self._min_confidence = min_confidence
         self._assembler = ContextAssembler()
         self._agent_cache: Dict[str, str] = {}  # agent_name → agent_id
+        self._last_agent_lookup_error: Optional[str] = None
         # ASSERT-10 (Phase 0): boot-time consistency — every space the
         # binding layer can emit must be a canonical registry key, else
         # dispatch dies silently later. Warn-only unless
@@ -145,14 +147,14 @@ class BrainOpenFangBridge:
         intent_text: str,
         context: Any = None,
         pre_classification: str = "",
-    ) -> Optional[OrchestrationResult]:
+    ) -> OrchestrationResult:
         """Full pipeline: context → Brain route → OpenFang execute → reward.
 
-        Returns OrchestrationResult on success, None to fall through to
-        HybridRouter/SyncExecutor.
+        Every outcome is an OrchestrationResult. Cognitive voice intents never
+        return ``None`` because that would authorize a downstream fallback.
         """
         if not self._available:
-            return None
+            return self._failure_result("brain_unavailable", pre_classification)
 
         start = time.perf_counter()
 
@@ -170,61 +172,53 @@ class BrainOpenFangBridge:
 
         brain_result = await self._route_via_brain(enriched_text, pre_classification, context_dict)
         if not brain_result:
-            return None
+            return self._failure_result("brain_unavailable", pre_classification)
         if brain_result["confidence"] < self._min_confidence:
             logger.debug(
-                f"[BrainBridge] Low confidence {brain_result['confidence']:.0%}, "
-                f"falling through"
+                f"[BrainBridge] Low confidence {brain_result['confidence']:.0%}, failing closed"
             )
-            return None
+            return self._failure_result("brain_low_confidence", pre_classification)
 
         space = brain_result["space"]
         routing_id = brain_result.get("routing_id", "")
 
-        # 3. Map space → OpenFang agent (via registry; legacy dict when OFF)
-        recipe = None
-        if self._registry_mode != "off":
-            recipe = self._registry.lookup(space, pre_classification)
-            if recipe is None:
-                recipe = self._registry.fallback(space)
+        # 3. Resolve a canonical registry recipe. Legacy/fallback agents are
+        # deliberately not execution candidates for cognitive voice intents.
+        recipe = self._registry.lookup(space, pre_classification)
+        if recipe is None or not recipe.agent:
+            logger.warning(f"[BrainBridge] No canonical agent for space '{space}'")
+            return self._failure_result(
+                "canonical_agent_unresolved",
+                pre_classification,
+                routing_id=routing_id,
+                space=space,
+            )
 
-            # Shadow mode: log divergence but still execute via registry
-            if self._registry_mode == "shadow":
-                legacy_agent = self._space_map.get(space, "")
-                if recipe.agent != legacy_agent:
-                    logger.info(
-                        f"[BrainBridge.shadow] divergence space={space} "
-                        f"legacy={legacy_agent} registry={recipe.agent}"
-                    )
-
-        agent_name = recipe.agent if recipe else self._space_map.get(space)
-        if not agent_name:
-            logger.warning(f"[BrainBridge] No agent mapped for space '{space}'")
-            return None
+        agent_name = recipe.agent
 
         agent_id = await self._ensure_agent(agent_name)
         if not agent_id:
-            return None
+            return self._failure_result(
+                self._last_agent_lookup_error or "canonical_agent_unavailable",
+                pre_classification,
+                routing_id=routing_id,
+                space=space,
+            )
 
         # 4. Build structured JSON envelope (schema: vibemind.intent.v1)
-        if recipe and not recipe.is_fallback:
-            context_fields = recipe.context_fields or None
-            context_json = ContextAssembler.to_json_context(workspace_ctx, context_fields)
-            envelope = {
-                "schema": "vibemind.intent.v1",
-                "event_type": pre_classification,
-                "space": space,
-                "preferred_tool": recipe.tool_hint,
-                "required_params": recipe.required_params,
-                "mcp_scope": recipe.mcp_scope,
-                "context": context_json,
-                "user_text": intent_text,
-            }
-            message = json.dumps(envelope, ensure_ascii=False)
-        else:
-            # Fallback path — legacy markdown block for unknown/generic agents
-            context_block = ContextAssembler.to_openfang_block(workspace_ctx)
-            message = f"{context_block}\n\n{intent_text}"
+        context_fields = recipe.context_fields or None
+        context_json = ContextAssembler.to_json_context(workspace_ctx, context_fields)
+        envelope = {
+            "schema": "vibemind.intent.v1",
+            "event_type": pre_classification,
+            "space": space,
+            "preferred_tool": recipe.tool_hint,
+            "required_params": recipe.required_params,
+            "mcp_scope": recipe.mcp_scope,
+            "context": context_json,
+            "user_text": intent_text,
+        }
+        message = json.dumps(envelope, ensure_ascii=False)
 
         tool_hint = recipe.tool_hint if recipe else ""
         logger.info(
@@ -259,24 +253,42 @@ class BrainOpenFangBridge:
         except asyncio.TimeoutError:
             logger.info(
                 f"[BrainBridge] {agent_name} timeout after {self._voice_timeout}s, "
-                f"continuing in background"
+                f"failing closed"
             )
-            # Background execution
-            asyncio.create_task(
-                self._background_execute(agent_id, message, routing_id, space, pre_classification)
-            )
-            return OrchestrationResult(
-                job_id=routing_id or f"brain-{space}",
-                event_type=pre_classification or f"brain.{space}",
-                stream=space,
-                response_hint="Ich arbeite daran...",
-                is_conversational=False,
+            return self._failure_result(
+                "openfang_timeout",
+                pre_classification,
+                routing_id=routing_id,
+                space=space,
             )
 
         except Exception as e:
             logger.warning(f"[BrainBridge] OpenFang execution failed: {e}")
             asyncio.create_task(self._reward_brain(routing_id, success=False))
-            return None
+            return self._failure_result(
+                "openfang_unavailable",
+                pre_classification,
+                routing_id=routing_id,
+                space=space,
+            )
+
+    @staticmethod
+    def _failure_result(
+        error: str,
+        event_type: str,
+        *,
+        routing_id: str = "",
+        space: str = "brain",
+    ) -> OrchestrationResult:
+        """Return a non-successful result that cannot trigger a fallback."""
+        return OrchestrationResult(
+            job_id=routing_id or "brain-openfang-failed",
+            event_type=event_type or "brain.route",
+            stream=space,
+            response_hint="Die kognitive Ausfuehrung ist derzeit nicht verfuegbar.",
+            is_conversational=False,
+            error=error,
+        )
 
     # ------------------------------------------------------------------
     # Brain communication
@@ -367,7 +379,12 @@ class BrainOpenFangBridge:
         return self._space_map.get(space)
 
     async def _ensure_agent(self, agent_name: str) -> Optional[str]:
-        """Ensure an OpenFang agent is running. Returns agent_id or None."""
+        """Find an already registered canonical OpenFang agent.
+
+        Agent lifecycle is outside the Voice authority boundary. Missing agents
+        are therefore a failure, never a request to create one.
+        """
+        self._last_agent_lookup_error = None
         # Check cache first
         if agent_name in self._agent_cache:
             return self._agent_cache[agent_name]
@@ -378,6 +395,7 @@ class BrainOpenFangBridge:
                 # List agents to find by name
                 async with session.get(f"{self._openfang_url}/api/agents") as resp:
                     if resp.status != 200:
+                        self._last_agent_lookup_error = "openfang_unavailable"
                         return None
                     agents = await resp.json()
 
@@ -388,22 +406,12 @@ class BrainOpenFangBridge:
                         self._agent_cache[agent_name] = agent_id
                         return agent_id
 
-                # Agent doesn't exist — spawn it
-                async with session.post(
-                    f"{self._openfang_url}/api/agents",
-                    json={"name": agent_name},
-                ) as resp:
-                    if resp.status in (200, 201):
-                        data = await resp.json()
-                        agent_id = data.get("id", "")
-                        self._agent_cache[agent_name] = agent_id
-                        logger.info(f"[BrainBridge] Spawned OpenFang agent: {agent_name} ({agent_id})")
-                        return agent_id
-                    else:
-                        logger.warning(f"[BrainBridge] Failed to spawn {agent_name}: {resp.status}")
-                        return None
+                self._last_agent_lookup_error = "canonical_agent_unavailable"
+                logger.warning(f"[BrainBridge] Canonical agent is not registered: {agent_name}")
+                return None
 
         except Exception as e:
+            self._last_agent_lookup_error = "openfang_unavailable"
             logger.debug(f"[BrainBridge] Agent ensure failed for {agent_name}: {e}")
             return None
 
@@ -440,7 +448,7 @@ class BrainOpenFangBridge:
         space: str,
         event_type: str,
     ) -> None:
-        """Continue OpenFang execution in background after voice timeout."""
+        """Compatibility helper; ``execute`` never schedules background work."""
         try:
             response_text = await self._send_to_openfang(agent_id, message)
             logger.info(f"[BrainBridge] Background: {space} completed")

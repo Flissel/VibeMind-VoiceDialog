@@ -911,7 +911,7 @@ class IntentOrchestrator:
             # (ok:false, exception, no final_text, brain-down) falls through to
             # Phase -1, preserving the existing default behavior bit-for-bit
             # when VOICE_BRAIN_MULTIHOP=false (default).
-            if self._multihop_bridge is not None:
+            if self._multihop_bridge is not None and self._brain_bridge is None:
                 try:
                     mh_result = await self._multihop_bridge.execute(intent_text=intent_text)
                     if mh_result and not mh_result.error:
@@ -986,6 +986,12 @@ class IntentOrchestrator:
                         context=context,
                         pre_classification=_pre_event,
                     )
+                    if bridge_result and bridge_result.error:
+                        logger.warning(
+                            f"[BrainBridge] Fail-closed cognitive routing: "
+                            f"{bridge_result.error}"
+                        )
+                        return bridge_result
                     if bridge_result and not bridge_result.error:
                         # ORCH-4: the bridge result is FREE TEXT — no
                         # ground-truth verdict exists, so this is UNVERIFIED.
@@ -1001,13 +1007,28 @@ class IntentOrchestrator:
                             intent_text, bridge_result, context
                         ))
                         return bridge_result
-                    # None or error → fall through to HybridRouter
+                    # A bridge result above returns on both success and error.
+                    # Keep a defensive failure for an invalid bridge contract.
                     if _pre_event_brain_routing_id and self._brain_event_shadow:
                         asyncio.create_task(self._brain_event_shadow.reward(
                             routing_id=_pre_event_brain_routing_id, success=False,
                         ))
+                    return OrchestrationResult(
+                        job_id="brain-openfang-failed",
+                        event_type=_pre_event or "brain.route",
+                        stream="brain",
+                        response_hint="Die kognitive Ausfuehrung ist derzeit nicht verfuegbar.",
+                        error="brain_bridge_invalid_result",
+                    )
                 except Exception as bridge_err:
-                    logger.warning(f"[BrainBridge] Phase -1 failed, falling through: {bridge_err}")
+                    logger.warning(f"[BrainBridge] Phase -1 failed closed: {bridge_err}")
+                    return OrchestrationResult(
+                        job_id="brain-openfang-failed",
+                        event_type="brain.route",
+                        stream="brain",
+                        response_hint="Die kognitive Ausfuehrung ist derzeit nicht verfuegbar.",
+                        error="brain_bridge_exception",
+                    )
 
             # =================================================================
             # PHASE 0: HYBRID ROUTER (deterministic fast-path)
