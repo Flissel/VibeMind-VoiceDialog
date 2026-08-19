@@ -176,6 +176,15 @@ TOOLS = [
          "name": {"type": "string"}, "description": {"type": "string", "default": ""}},
          "required": ["name"]}},
 
+    # === Composite (full semantics per user decision 2026-08-07: composed
+    # operations with rollback run through MCP, not split with the Brain) ===
+    {"name": "db_bubble_promote",
+     "description": "Promote a bubble/idea to a queryable project: resolve by id or name, create the project, link the bubble (status=promoted + promoted_to_project_id). Rolls the project back if linking fails. Returns ok=false on not-found (never a success-shaped error).",
+     "inputSchema": {"type": "object", "properties": {
+         "bubble_id": {"type": "string", "description": "idea id (preferred)"},
+         "bubble_name": {"type": "string", "description": "idea title (ilike match) if no id"}},
+         "required": []}},
+
     # === Generic Write (any table) ===
     {"name": "db_insert", "description": "Insert a row into any table. Provide table name and key-value pairs.",
      "inputSchema": {"type": "object", "properties": {
@@ -355,6 +364,45 @@ def handle_tool(name: str, args: dict) -> str:
             body = {k: v for k, v in args.items() if v is not None}
             data = _api("POST", "video_projects", body=[body])
             return json.dumps({"created": data}, default=str, ensure_ascii=False)
+
+        # === Composite: bubble promote (resolve -> create -> link -> rollback) ===
+        elif name == "db_bubble_promote":
+            import uuid as _uuid
+            # 1. resolve (not-found is ok=false, never a success string)
+            if args.get("bubble_id"):
+                rows = _api("GET", "ideas", params=f"id=eq.{args['bubble_id']}")
+            elif args.get("bubble_name"):
+                rows = _api("GET", "ideas", params=f"title=ilike.%25{args['bubble_name']}%25&limit=2")
+            else:
+                return json.dumps({"ok": False, "error": "provide bubble_id or bubble_name"})
+            if not (isinstance(rows, list) and rows):
+                return json.dumps({"ok": False, "error": "bubble not found"})
+            if len(rows) > 1 and not args.get("bubble_id"):
+                return json.dumps({"ok": False, "error": "bubble_name is ambiguous",
+                                   "candidates": [{"id": r["id"], "title": r["title"]} for r in rows]})
+            row = rows[0]
+            # 2. create project (the externally queryable execution result)
+            project = {"id": _uuid.uuid4().hex[:8], "name": row["title"],
+                       "description": row.get("description") or "", "status": "active",
+                       "from_idea_id": row["id"],
+                       "metadata": {"source_space": "bubbles", "source_bubble_id": row["id"],
+                                    "source_score": row.get("score", 0)}}
+            created = _api("POST", "projects", body=[project])
+            if not created:
+                return json.dumps({"ok": False, "error": "project creation failed"})
+            pid = (created[0] if isinstance(created, list) else project)["id"]
+            # 3. link bubble; 4. roll back the project if linking fails so callers
+            # never receive a fabricated successful promotion
+            linked = _api("PATCH", "ideas",
+                          body={"status": "promoted", "promoted_to_project_id": pid},
+                          params=f"id=eq.{row['id']}")
+            if not linked:
+                _api("DELETE", "projects", params=f"id=eq.{pid}")
+                return json.dumps({"ok": False, "error": "bubble link failed - project rolled back"})
+            return json.dumps({"ok": True, "result_id": pid, "project_id": pid,
+                               "bubble_id": row["id"], "title": row["title"],
+                               "text": f"Bubble '{row['title']}' promoted to project (id={pid})."},
+                              default=str, ensure_ascii=False)
 
         # === Generic Write ===
         elif name == "db_insert":
