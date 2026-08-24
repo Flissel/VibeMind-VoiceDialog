@@ -15,7 +15,9 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "test:unit": "node --test *.test.js",
+    "laura:build": "pnpm --dir ../../spaces/video/laura/apps/desktop build:embed"
   },
   "author": "VibeMind",
   "license": "MIT",
