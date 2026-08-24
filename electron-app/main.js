@@ -8,11 +8,19 @@
 // Sentry error tracking (lazy-init after app.whenReady)
 const sentry = require('./sentry');
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net } = require('electron');
 const { spawn } = require('child_process');
 
 const path = require('path');
 const fs = require('fs');
+const { createLauraEmbedHost } = require('./laura-embed-host');
+
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: 'laura-media',
+        privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+    },
+]);
 
 // Load .env files with priority: Vibemind_V1/.env (master) > vibemind-os/voice/.env (overrides)
 // First-win strategy: master keys are not overridden by voice-specific config
@@ -122,6 +130,7 @@ let flowzenManager = null;
 
 // Video Space manager
 let videoManager = null;
+let lauraEmbedHost = null;
 
 // eyeTerm camera preview manager
 let eyetermManager = null;
@@ -3291,6 +3300,18 @@ app.whenReady().then(async () => {
     // Initialize Flowzen Diary (Blue Rose Journal) Manager
     flowzenManager = new FlowzenManager(mainWindow, sendToPython);
 
+    lauraEmbedHost = createLauraEmbedHost({
+        app,
+        dialog,
+        env: process.env,
+        ipcMain,
+        logger: console,
+        net,
+        protocol,
+        shell,
+    });
+    lauraEmbedHost.install();
+
     // Initialize Video Space Manager
     videoManager = new VideoManager(mainWindow);
 
@@ -3493,6 +3514,8 @@ app.on('will-quit', () => {
     if (clawportManager) clawportManager.destroy();
     if (brainManager) brainManager.destroy();
     if (openfangManager) openfangManager.destroy();
+    if (videoManager) videoManager.destroy();
+    if (lauraEmbedHost) lauraEmbedHost.dispose();
     destroyRealtimeSubscriptions(realtimeChannels);
 
     globalShortcut.unregisterAll();
