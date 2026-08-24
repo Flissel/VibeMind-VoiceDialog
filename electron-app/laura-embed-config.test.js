@@ -90,30 +90,64 @@ test('service info defaults to localhost and the configured or default port', ()
   );
 });
 
-test('workspace guard accepts the root and descendants', () => {
-  const root = path.resolve('fixtures', 'workspace');
+test('workspace guard accepts Windows drive roots and descendants case-insensitively', () => {
+  const realpathSync = (value) => value;
 
-  assert.equal(isInsideWorkspace(root, root), true);
-  assert.equal(isInsideWorkspace(root, path.join(root, 'exports', 'clip.mp4')), true);
+  assert.equal(
+    isInsideWorkspace(
+      'C:\\Laura\\Workspace',
+      'c:\\laura\\workspace\\Exports\\clip.mp4',
+      'win32',
+      realpathSync,
+    ),
+    true,
+  );
+  assert.equal(
+    isInsideWorkspace('C:\\Laura\\Workspace', 'c:\\LAURA\\WORKSPACE', 'win32', realpathSync),
+    true,
+  );
 });
 
-test('workspace guard rejects empty, relative, and prefix-sibling candidates', () => {
-  const root = path.resolve('fixtures', 'workspace');
+test('workspace guard uses POSIX path semantics independently of the host', () => {
+  const realpathSync = (value) => value;
 
-  assert.equal(isInsideWorkspace(root, ''), false);
-  assert.equal(isInsideWorkspace(root, path.join('exports', 'clip.mp4')), false);
-  assert.equal(isInsideWorkspace(root, `${root}-evil${path.sep}clip.mp4`), false);
+  assert.equal(
+    isInsideWorkspace('/srv/laura/workspace', '/srv/laura/workspace/clip.mp4', 'linux', realpathSync),
+    true,
+  );
 });
 
-test('workspace guard rejects a relative root even for an absolute candidate', () => {
-  const candidate = path.resolve('fixtures', 'workspace', 'clip.mp4');
+test('workspace guard rejects relative Windows paths and prefix siblings', () => {
+  const root = 'C:\\Laura\\Workspace';
+  const realpathSync = (value) => value;
 
-  assert.equal(isInsideWorkspace('fixtures/workspace', candidate), false);
+  assert.equal(isInsideWorkspace(root, '', 'win32', realpathSync), false);
+  assert.equal(isInsideWorkspace(root, 'exports\\clip.mp4', 'win32', realpathSync), false);
+  assert.equal(
+    isInsideWorkspace('Laura\\Workspace', 'C:\\Laura\\Workspace\\clip.mp4', 'win32', realpathSync),
+    false,
+  );
+  assert.equal(
+    isInsideWorkspace(root, 'C:\\Laura\\Workspace-evil\\clip.mp4', 'win32', realpathSync),
+    false,
+  );
 });
 
-test('workspace guard compares Windows paths case-insensitively', () => {
-  const root = path.resolve('fixtures', 'Workspace');
-  const candidate = path.join(root.toUpperCase(), 'Exports', 'clip.mp4');
+test('workspace guard rejects a junction or symlink escape after resolving real paths', () => {
+  const root = 'C:\\Laura\\Workspace';
+  const candidate = 'C:\\Laura\\Workspace\\linked\\clip.mp4';
+  const realpathSync = (value) => {
+    if (value === root) return 'C:\\Real\\Workspace';
+    if (value === candidate) return 'D:\\Outside\\clip.mp4';
+    throw new Error('unexpected path');
+  };
 
-  assert.equal(isInsideWorkspace(root.toLowerCase(), candidate, 'win32'), true);
+  assert.equal(isInsideWorkspace(root, candidate, 'win32', realpathSync), false);
+});
+
+test('workspace guard fails closed when default realpath resolution fails', () => {
+  const root = path.resolve('fixtures', 'missing-workspace-for-realpath-test');
+  const candidate = path.join(root, 'clip.mp4');
+
+  assert.equal(isInsideWorkspace(root, candidate), false);
 });

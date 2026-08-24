@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const path = require('node:path');
 
 function resolveLauraRendererPath({ dirname, resourcesPath, existsSync }) {
@@ -30,18 +31,36 @@ function readLauraServiceInfo(env) {
   };
 }
 
-function canonical(value, platform) {
-  const resolved = path.resolve(value);
-  return platform === 'win32' ? resolved.toLowerCase() : resolved;
+function canonicalRealPath(value, pathApi, platform, realpathSync) {
+  const resolved = realpathSync(value);
+  if (typeof resolved !== 'string') throw new TypeError('realpath resolver must return a string');
+  const normalized = pathApi.normalize(resolved);
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-function isInsideWorkspace(root, candidate, platform = process.platform) {
-  if (!root || !candidate || !path.isAbsolute(root) || !path.isAbsolute(candidate)) return false;
+function isInsideWorkspace(
+  root,
+  candidate,
+  platform = process.platform,
+  realpathSync = fs.realpathSync.native,
+) {
+  if (typeof root !== 'string' || typeof candidate !== 'string' || !root || !candidate) {
+    return false;
+  }
 
-  const canonicalRoot = canonical(root, platform);
-  const canonicalCandidate = canonical(candidate, platform);
-  const prefix = canonicalRoot.endsWith(path.sep) ? canonicalRoot : canonicalRoot + path.sep;
-  return canonicalCandidate === canonicalRoot || canonicalCandidate.startsWith(prefix);
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  if (!pathApi.isAbsolute(root) || !pathApi.isAbsolute(candidate)) return false;
+
+  try {
+    const canonicalRoot = canonicalRealPath(root, pathApi, platform, realpathSync);
+    const canonicalCandidate = canonicalRealPath(candidate, pathApi, platform, realpathSync);
+    const prefix = canonicalRoot.endsWith(pathApi.sep)
+      ? canonicalRoot
+      : canonicalRoot + pathApi.sep;
+    return canonicalCandidate === canonicalRoot || canonicalCandidate.startsWith(prefix);
+  } catch {
+    return false;
+  }
 }
 
 module.exports = { isInsideWorkspace, readLauraServiceInfo, resolveLauraRendererPath };
