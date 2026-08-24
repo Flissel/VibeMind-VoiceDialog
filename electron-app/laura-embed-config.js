@@ -17,7 +17,7 @@ function resolveLauraRendererPath({ dirname, resourcesPath, existsSync }) {
 
   if (resourcesPath && existsSync(packaged)) return packaged;
   if (existsSync(development)) return development;
-  throw new Error(`Laura renderer missing; run npm run laura:build (checked ${development})`);
+  throw new Error(`Laura renderer missing; run pnpm laura:build (checked ${development})`);
 }
 
 function readLauraServiceInfo(env) {
@@ -36,7 +36,7 @@ function canonical(value, platform) {
 }
 
 function isInsideWorkspace(root, candidate, platform = process.platform) {
-  if (!root || !candidate || !path.isAbsolute(candidate)) return false;
+  if (!root || !candidate || !path.isAbsolute(root) || !path.isAbsolute(candidate)) return false;
 
   const canonicalRoot = canonical(root, platform);
   const canonicalCandidate = canonical(candidate, platform);

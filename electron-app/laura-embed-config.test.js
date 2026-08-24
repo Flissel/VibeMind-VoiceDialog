@@ -56,11 +56,13 @@ test('renderer resolution falls back to the Laura development build', () => {
 });
 
 test('renderer resolution gives a clear build instruction when both builds are absent', () => {
-  const { dirname, resourcesPath } = rendererPaths();
+  const { development, dirname, resourcesPath } = rendererPaths();
 
   assert.throws(
     () => resolveLauraRendererPath({ dirname, resourcesPath, existsSync: () => false }),
-    /Laura renderer missing; run (?:npm run|pnpm) laura:build/,
+    {
+      message: `Laura renderer missing; run pnpm laura:build (checked ${development})`,
+    },
   );
 });
 
@@ -101,6 +103,12 @@ test('workspace guard rejects empty, relative, and prefix-sibling candidates', (
   assert.equal(isInsideWorkspace(root, ''), false);
   assert.equal(isInsideWorkspace(root, path.join('exports', 'clip.mp4')), false);
   assert.equal(isInsideWorkspace(root, `${root}-evil${path.sep}clip.mp4`), false);
+});
+
+test('workspace guard rejects a relative root even for an absolute candidate', () => {
+  const candidate = path.resolve('fixtures', 'workspace', 'clip.mp4');
+
+  assert.equal(isInsideWorkspace('fixtures/workspace', candidate), false);
 });
 
 test('workspace guard compares Windows paths case-insensitively', () => {
