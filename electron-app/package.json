@@ -12,9 +12,9 @@
     "video:build": "npm run laura:build",
     "build:rowboat": "bash scripts/build-rowboat.sh",
     "build": "npm run dashboard:build && npm run agentfarm:build && npm run video:build && electron-builder",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
+    "build:win": "npm run video:build && electron-builder --win",
+    "build:mac": "npm run video:build && electron-builder --mac",
+    "build:linux": "npm run video:build && electron-builder --linux",
     "test:e2e": "npx playwright test",
     "test:unit": "node --test laura-embed-config.test.js laura-preload.test.js laura-embed-host.test.js video-manager.test.js laura-packaging.test.js",
     "laura:build": "pnpm --dir ../../spaces/video/laura/apps/desktop build:embed"

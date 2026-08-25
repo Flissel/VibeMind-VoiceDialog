@@ -20,3 +20,18 @@ test('package build creates and bundles the Laura renderer exactly once', () => 
     filter: ['**/*'],
   }]);
 });
+
+test('platform package entry points build Laura immediately before electron-builder', () => {
+  assert.deepEqual(
+    {
+      win: packageConfig.scripts['build:win'],
+      mac: packageConfig.scripts['build:mac'],
+      linux: packageConfig.scripts['build:linux'],
+    },
+    {
+      win: 'npm run video:build && electron-builder --win',
+      mac: 'npm run video:build && electron-builder --mac',
+      linux: 'npm run video:build && electron-builder --linux',
+    },
+  );
+});
