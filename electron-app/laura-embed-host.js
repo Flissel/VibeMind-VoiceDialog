@@ -35,6 +35,12 @@ function contentTypeFor(filePath) {
   if (extension === '.mp3') return 'audio/mpeg';
   if (extension === '.m4a' || extension === '.aac') return 'audio/aac';
   if (extension === '.flac') return 'audio/flac';
+  if (extension === '.aif' || extension === '.aiff') return 'audio/aiff';
+  if (extension === '.webm') return 'video/webm';
+  if (extension === '.mov') return 'video/quicktime';
+  if (extension === '.mkv') return 'video/x-matroska';
+  if (extension === '.avi') return 'video/x-msvideo';
+  if (extension === '.mpg' || extension === '.mpeg') return 'video/mpeg';
   return 'video/mp4';
 }
 

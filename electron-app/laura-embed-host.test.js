@@ -245,6 +245,53 @@ test('media protocol sends auth, rejects unsafe API paths, and streams full and 
   assert.equal(requests.length, 2, 'only a successful safe path is cached');
 });
 
+test('media protocol preserves content types for supported media containers', async (t) => {
+  const { workspace } = await createWorkspace(t);
+  const cases = [
+    ['wav', 'audio/wav'],
+    ['mp3', 'audio/mpeg'],
+    ['m4a', 'audio/aac'],
+    ['aac', 'audio/aac'],
+    ['flac', 'audio/flac'],
+    ['aif', 'audio/aiff'],
+    ['aiff', 'audio/aiff'],
+    ['webm', 'video/webm'],
+    ['mov', 'video/quicktime'],
+    ['mkv', 'video/x-matroska'],
+    ['avi', 'video/x-msvideo'],
+    ['mpg', 'video/mpeg'],
+    ['mpeg', 'video/mpeg'],
+    ['mp4', 'video/mp4'],
+    ['m4v', 'video/mp4'],
+    ['unknown', 'video/mp4'],
+  ];
+  const mediaPaths = new Map();
+  await Promise.all(cases.map(async ([extension]) => {
+    const mediaPath = path.join(workspace, `sample.${extension}`);
+    mediaPaths.set(extension, mediaPath);
+    await fs.writeFile(mediaPath, extension);
+  }));
+  const fakes = installFakes(
+    { LAURA_TOKEN: 'top-secret', LAURA_URL: 'http://laura.test', LAURA_WORKSPACE: workspace },
+    {
+      net: {
+        fetch: async (url) => {
+          const assetId = new URL(url).pathname.split('/').pop();
+          return Response.json({ files: [{ kind: 'source', path: mediaPaths.get(assetId) }] });
+        },
+      },
+    },
+  );
+  const handler = fakes.protocols.get('laura-media');
+
+  for (const [extension, expectedContentType] of cases) {
+    const response = await handler(new Request(`laura-media://media/${extension}/source`));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), expectedContentType, extension);
+    await response.arrayBuffer();
+  }
+});
+
 test('export lane rechecks pending exports and streams only ready workspace files', async (t) => {
   const { workspace } = await createWorkspace(t);
   const exportPath = path.join(workspace, 'render.mp4');
