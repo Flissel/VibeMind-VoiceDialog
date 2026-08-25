@@ -145,6 +145,23 @@ describe('VideoManager Laura embed', () => {
     }
   });
 
+  test('same-document fragment navigation resets to the exact renderer without a reload loop', () => {
+    const { instances, manager } = createHarness();
+    manager.show();
+    const rendererUrl = pathToFileURL(RENDERER_PATH).href;
+    const handler = instances[0].handlers.get('did-navigate-in-page');
+
+    assert.equal(typeof handler, 'function');
+    handler({}, rendererUrl);
+    assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH]);
+
+    handler({}, `${rendererUrl}#fragment`);
+    assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH, RENDERER_PATH]);
+
+    handler({}, rendererUrl);
+    assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH, RENDERER_PATH]);
+  });
+
   test('failed loads log only a safe code without description or URL', () => {
     const { instances, logs, manager } = createHarness();
     manager.show();

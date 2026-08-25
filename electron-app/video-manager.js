@@ -85,6 +85,9 @@ class VideoManager {
     this.videoView.webContents.on('will-navigate', (event, url) => {
       if (url !== rendererUrl) event.preventDefault();
     });
+    this.videoView.webContents.on('did-navigate-in-page', (_event, url) => {
+      if (url !== rendererUrl) this.videoView.webContents.loadFile(this.rendererPath);
+    });
 
     this.videoView.webContents.on('did-finish-load', () => {
       this.logger('Laura renderer loaded');
