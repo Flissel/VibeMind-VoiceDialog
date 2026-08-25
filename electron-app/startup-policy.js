@@ -1,3 +1,8 @@
+const { stripVTControlCharacters } = require('node:util');
+
+const DOCKER_BOOTSTRAP_MARKER =
+  '[Main] NORMAL_STARTUP Docker bootstrap entered: stale-container cleanup and media Docker';
+
 function createStartupPolicy(environment) {
   const isFastStartup = environment.FAST_STARTUP === 'true';
 
@@ -11,4 +16,31 @@ function createStartupPolicy(environment) {
   });
 }
 
-module.exports = { createStartupPolicy };
+function stripAnsi(value) {
+  return stripVTControlCharacters(String(value));
+}
+
+function findForbiddenStartupMarkers(output, markers) {
+  const normalized = stripAnsi(output);
+  return markers.filter((marker) => normalized.includes(marker));
+}
+
+function createStartupAudit() {
+  let dockerBootstrapStarted = false;
+  return Object.freeze({
+    markDockerBootstrapStarted() {
+      dockerBootstrapStarted = true;
+    },
+    publicMarkers() {
+      return dockerBootstrapStarted ? [DOCKER_BOOTSTRAP_MARKER] : [];
+    },
+  });
+}
+
+module.exports = {
+  DOCKER_BOOTSTRAP_MARKER,
+  createStartupAudit,
+  createStartupPolicy,
+  findForbiddenStartupMarkers,
+  stripAnsi,
+};

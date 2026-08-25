@@ -1,5 +1,13 @@
 import { test, expect } from './fixtures';
 
+const {
+    DOCKER_BOOTSTRAP_MARKER,
+    findForbiddenStartupMarkers,
+} = require('../startup-policy') as {
+    DOCKER_BOOTSTRAP_MARKER: string;
+    findForbiddenStartupMarkers: (output: string, markers: string[]) => string[];
+};
+
 test.describe('Space Navigation', () => {
     test('video space embeds the Laura renderer', async ({ electronApp, mainPage, mainProcessLogs }) => {
         const lauraEnvironment = await electronApp.evaluate(() => ({
@@ -110,7 +118,8 @@ test.describe('Space Navigation', () => {
         await expect.poll(mainProcessLogs).toContain('[Main] Laura host and VideoManager initialized');
         const startupLogs = mainProcessLogs();
         expect(startupLogs).toContain('[Main] FAST_STARTUP active — external startup side effects disabled');
-        for (const forbiddenMarker of [
+        const forbiddenMarkers = [
+            DOCKER_BOOTSTRAP_MARKER,
             'Starting Python backend',
             'Python process started with PID',
             '[BrainManager] Starting brain server',
@@ -121,9 +130,8 @@ test.describe('Space Navigation', () => {
             'Starting MiroFish Docker containers',
             '[RowboatManager] Bridge',
             '[RowboatManager] Restarting bridge',
-        ]) {
-            expect(startupLogs).not.toContain(forbiddenMarker);
-        }
+        ];
+        expect(findForbiddenStartupMarkers(startupLogs, forbiddenMarkers)).toEqual([]);
     });
 
     test('navigateToSpace API is callable', async ({ mainPage }) => {

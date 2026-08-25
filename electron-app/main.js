@@ -34,8 +34,9 @@ const _rootEnv = path.join(__dirname, '..', '..', '..', '.env');  // Vibemind_V1
 const _voiceEnv = path.join(__dirname, '..', '.env');              // vibemind-os/voice/.env
 require('dotenv').config({ path: _rootEnv });                      // master first
 require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
-const { createStartupPolicy } = require('./startup-policy');
+const { createStartupAudit, createStartupPolicy } = require('./startup-policy');
 const startupPolicy = createStartupPolicy(process.env);
+const startupAudit = createStartupAudit();
 
 // Coding Engine Dashboard Integration
 const DockerManager = require('./docker-manager');
@@ -3212,6 +3213,7 @@ app.whenReady().then(async () => {
     });
 
     await startupPolicy.runExternalStartup('Docker bootstrap', async () => {
+        startupAudit.markDockerBootstrapStarted();
         // Initialize Coding Engine managers
         dockerManager = new DockerManager();
         portAllocator = new PortAllocator();
@@ -3339,6 +3341,9 @@ app.whenReady().then(async () => {
     console.log('[Main] Laura host and VideoManager initialized');
     if (startupPolicy.isFastStartup) {
         console.log('[Main] FAST_STARTUP active — external startup side effects disabled');
+    }
+    for (const marker of startupAudit.publicMarkers()) {
+        console.log(marker);
     }
 
     await startupPolicy.runExternalStartup('post-window external services', async () => {
