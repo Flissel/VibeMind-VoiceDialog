@@ -1,9 +1,11 @@
-const { createReadStream } = require('node:fs');
-const { readdir, stat, writeFile } = require('node:fs/promises');
+const fs = require('node:fs');
+const { open, readdir, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
-const { isInsideWorkspace, readLauraServiceInfo } = require('./laura-embed-config');
+const { readLauraServiceInfo, resolveInsideWorkspace } = require('./laura-embed-config');
+
+const CACHE_TTL_MS = 5000;
 
 const IPC_CHANNELS = [
   'laura:service-info',
@@ -33,7 +35,8 @@ function contentTypeFor(filePath) {
   const extension = path.extname(filePath).toLowerCase();
   if (extension === '.wav') return 'audio/wav';
   if (extension === '.mp3') return 'audio/mpeg';
-  if (extension === '.m4a' || extension === '.aac') return 'audio/aac';
+  if (extension === '.m4a') return 'audio/mp4';
+  if (extension === '.aac') return 'audio/aac';
   if (extension === '.flac') return 'audio/flac';
   if (extension === '.aif' || extension === '.aiff') return 'audio/aiff';
   if (extension === '.webm') return 'video/webm';
@@ -41,18 +44,71 @@ function contentTypeFor(filePath) {
   if (extension === '.mkv') return 'video/x-matroska';
   if (extension === '.avi') return 'video/x-msvideo';
   if (extension === '.mpg' || extension === '.mpeg') return 'video/mpeg';
-  return 'video/mp4';
+  if (extension === '.mxf') return 'application/mxf';
+  if (extension === '.mp4' || extension === '.m4v') return 'video/mp4';
+  return 'application/octet-stream';
 }
 
-function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell }) {
+function createLauraEmbedHost({
+  app,
+  dialog,
+  env,
+  ipcMain,
+  isAllowedSender,
+  net,
+  now = Date.now,
+  openFile = open,
+  protocol,
+  readdir: readDirectory = readdir,
+  realpathSync = fs.realpathSync.native,
+  shell,
+}) {
   const serviceInfo = readLauraServiceInfo(env);
   const workspaceRoot = env.LAURA_WORKSPACE || path.join(app.getPath('userData'), 'laura-workspace');
   const mediaPathCache = new Map();
   const exportPathCache = new Map();
+  const authorizedDirectories = new Set();
   let installed = false;
 
   function safeWorkspacePath(candidate) {
-    return isInsideWorkspace(workspaceRoot, candidate) ? path.resolve(candidate) : null;
+    return resolveInsideWorkspace(workspaceRoot, candidate, process.platform, realpathSync);
+  }
+
+  function canonicalExistingPath(candidate) {
+    if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return null;
+    try {
+      return path.normalize(realpathSync(candidate));
+    } catch {
+      return null;
+    }
+  }
+
+  function canonicalDirectoryKey(candidate) {
+    return process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+  }
+
+  function readCachedPath(cache, key) {
+    const cached = cache.get(key);
+    if (!cached) return null;
+    if (now() >= cached.expiresAt) {
+      cache.delete(key);
+      return null;
+    }
+    const safePath = safeWorkspacePath(cached.path);
+    if (!safePath) cache.delete(key);
+    return safePath;
+  }
+
+  function cachePath(cache, key, filePath) {
+    cache.set(key, { path: filePath, expiresAt: now() + CACHE_TTL_MS });
+  }
+
+  function evictCachedPath(filePath) {
+    for (const cache of [mediaPathCache, exportPathCache]) {
+      for (const [key, entry] of cache) {
+        if (entry.path === filePath) cache.delete(key);
+      }
+    }
   }
 
   async function fetchJson(url) {
@@ -70,8 +126,8 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
 
   async function resolveMediaPath(assetId, kind) {
     const key = `${assetId}/${kind}`;
-    const cached = mediaPathCache.get(key);
-    if (cached) return safeWorkspacePath(cached);
+    const cached = readCachedPath(mediaPathCache, key);
+    if (cached) return cached;
 
     const asset = await fetchJson(
       `${serviceInfo?.baseUrl || ''}/assets/${encodeURIComponent(assetId)}`,
@@ -80,13 +136,13 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
     const file = asset.files.find((candidate) => candidate && candidate.kind === kind);
     const safePath = file && typeof file.path === 'string' ? safeWorkspacePath(file.path) : null;
     if (!safePath) return null;
-    mediaPathCache.set(key, safePath);
+    cachePath(mediaPathCache, key, safePath);
     return safePath;
   }
 
   async function resolveExportPath(exportId) {
-    const cached = exportPathCache.get(exportId);
-    if (cached) return safeWorkspacePath(cached);
+    const cached = readCachedPath(exportPathCache, exportId);
+    if (cached) return cached;
 
     const exported = await fetchJson(
       `${serviceInfo?.baseUrl || ''}/exports/${encodeURIComponent(exportId)}`,
@@ -94,7 +150,7 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
     if (!exported || exported.status !== 'ready' || typeof exported.path !== 'string') return null;
     const safePath = safeWorkspacePath(exported.path);
     if (!safePath) return null;
-    exportPathCache.set(exportId, safePath);
+    cachePath(exportPathCache, exportId, safePath);
     return safePath;
   }
 
@@ -129,10 +185,20 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
       : await resolveMediaPath(parts[0], parts[1]);
     if (!filePath) return new Response('media not found', { status: 404 });
 
+    let fileHandle;
+    try {
+      fileHandle = await openFile(filePath, 'r');
+    } catch {
+      evictCachedPath(filePath);
+      return new Response('media missing on disk', { status: 404 });
+    }
+
     let total;
     try {
-      total = (await stat(filePath)).size;
+      total = (await fileHandle.stat()).size;
     } catch {
+      await fileHandle.close().catch(() => {});
+      evictCachedPath(filePath);
       return new Response('media missing on disk', { status: 404 });
     }
 
@@ -141,30 +207,52 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
       'Content-Type': contentTypeFor(filePath),
     };
     const rangeHeader = request.headers.get('Range');
+    let start = 0;
+    let end = total - 1;
+    let status = 200;
     if (rangeHeader !== null) {
-      const match = /^bytes=(\d+)-(\d*)$/.exec(rangeHeader);
-      if (!match) return rangeNotSatisfiable(total, baseHeaders);
-      const start = Number(match[1]);
-      const requestedEnd = match[2] === '' ? total - 1 : Number(match[2]);
-      const end = Math.min(requestedEnd, total - 1);
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd)
-          || start >= total || start > end) {
+      const match = /^bytes=(?:(\d+)-(\d*)|-(\d+))$/.exec(rangeHeader);
+      if (!match) {
+        await fileHandle.close().catch(() => {});
         return rangeNotSatisfiable(total, baseHeaders);
       }
-      return new Response(Readable.toWeb(createReadStream(filePath, { start, end })), {
-        status: 206,
-        headers: {
-          ...baseHeaders,
-          'Content-Length': String(end - start + 1),
-          'Content-Range': `bytes ${start}-${end}/${total}`,
-        },
-      });
+      if (match[3] !== undefined) {
+        const suffixLength = Number(match[3]);
+        if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0 || total === 0) {
+          await fileHandle.close().catch(() => {});
+          return rangeNotSatisfiable(total, baseHeaders);
+        }
+        start = Math.max(total - suffixLength, 0);
+      } else {
+        start = Number(match[1]);
+        const requestedEnd = match[2] === '' ? total - 1 : Number(match[2]);
+        end = Math.min(requestedEnd, total - 1);
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd)
+            || start >= total || start > end) {
+          await fileHandle.close().catch(() => {});
+          return rangeNotSatisfiable(total, baseHeaders);
+        }
+      }
+      status = 206;
     }
 
-    return new Response(Readable.toWeb(createReadStream(filePath)), {
-      status: 200,
-      headers: { ...baseHeaders, 'Content-Length': String(total) },
-    });
+    try {
+      const stream = fileHandle.createReadStream({ start, end, autoClose: true });
+      return new Response(Readable.toWeb(stream), {
+        status,
+        headers: status === 206
+          ? {
+            ...baseHeaders,
+            'Content-Length': String(end - start + 1),
+            'Content-Range': `bytes ${start}-${end}/${total}`,
+          }
+          : { ...baseHeaders, 'Content-Length': String(total) },
+      });
+    } catch {
+      await fileHandle.close().catch(() => {});
+      evictCachedPath(filePath);
+      return new Response('media missing on disk', { status: 404 });
+    }
   }
 
   const handlers = new Map([
@@ -188,13 +276,24 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
     }],
     ['laura:pick-folder', async () => {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-      return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+      if (result.canceled || result.filePaths.length === 0) return null;
+      const selected = canonicalExistingPath(result.filePaths[0]);
+      if (!selected) return null;
+      authorizedDirectories.add(canonicalDirectoryKey(selected));
+      return selected;
     }],
     ['laura:list-media-in-folder', async (_event, folder) => {
-      const entries = await readdir(folder, { withFileTypes: true });
+      const canonicalFolder = canonicalExistingPath(folder);
+      const allowedByWorkspace = canonicalFolder && safeWorkspacePath(canonicalFolder);
+      const allowedByGrant = canonicalFolder
+        && authorizedDirectories.has(canonicalDirectoryKey(canonicalFolder));
+      if (!canonicalFolder || (!allowedByWorkspace && !allowedByGrant)) {
+        throw new Error('folder is not authorized');
+      }
+      const entries = await readDirectory(canonicalFolder, { withFileTypes: true });
       return entries
         .filter((entry) => entry.isFile() && MEDIA_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-        .map((entry) => path.join(folder, entry.name));
+        .map((entry) => path.join(canonicalFolder, entry.name));
     }],
     ['laura:open-path', async (_event, candidate) => {
       const safePath = safeWorkspacePath(candidate);
@@ -213,7 +312,14 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
   return {
     install() {
       if (installed) return;
-      for (const [channel, handler] of handlers) ipcMain.handle(channel, handler);
+      for (const [channel, handler] of handlers) {
+        ipcMain.handle(channel, async (event, ...args) => {
+          if (typeof isAllowedSender !== 'function' || !isAllowedSender(event?.sender)) {
+            throw new Error('unauthorized Laura IPC sender');
+          }
+          return handler(event, ...args);
+        });
+      }
       protocol.handle('laura-media', handleMedia);
       installed = true;
     },
@@ -223,6 +329,7 @@ function createLauraEmbedHost({ app, dialog, env, ipcMain, net, protocol, shell 
       protocol.unhandle('laura-media');
       mediaPathCache.clear();
       exportPathCache.clear();
+      authorizedDirectories.clear();
       installed = false;
     },
   };

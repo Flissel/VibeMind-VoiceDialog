@@ -1,12 +1,30 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const {
+  LAURA_SESSION_PARTITION,
   isInsideWorkspace,
   readLauraServiceInfo,
+  resolveInsideWorkspace,
   resolveLauraRendererPath,
 } = require('./laura-embed-config');
+
+test('Laura uses a dedicated persistent Electron session partition', () => {
+  assert.equal(LAURA_SESSION_PARTITION, 'persist:laura');
+});
+
+test('main installs Laura host on its isolated session protocol with a sender boundary', () => {
+  const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+
+  assert.match(mainSource, /\bsession\b/);
+  assert.match(mainSource, /session\.fromPartition\(LAURA_SESSION_PARTITION\)\.protocol/);
+  assert.match(
+    mainSource,
+    /isAllowedSender:\s*\(sender\)\s*=>\s*Boolean\(videoManager\?\.videoView\?\.webContents\)\s*&&\s*sender\s*===\s*videoManager\.videoView\.webContents/,
+  );
+});
 
 function rendererPaths() {
   const dirname = path.resolve('fixtures', 'voice', 'electron-app');
@@ -143,6 +161,23 @@ test('workspace guard rejects a junction or symlink escape after resolving real 
   };
 
   assert.equal(isInsideWorkspace(root, candidate, 'win32', realpathSync), false);
+  assert.equal(resolveInsideWorkspace(root, candidate, 'win32', realpathSync), null);
+});
+
+test('workspace resolution returns the canonical real target inside the workspace', () => {
+  const root = '/srv/laura/workspace-link';
+  const candidate = '/srv/laura/workspace-link/clip.mp4';
+  const realpathSync = (value) => {
+    if (value === root) return '/real/laura/workspace';
+    if (value === candidate) return '/real/laura/workspace/clip.mp4';
+    throw new Error('unexpected path');
+  };
+
+  assert.equal(
+    resolveInsideWorkspace(root, candidate, 'linux', realpathSync),
+    '/real/laura/workspace/clip.mp4',
+  );
+  assert.equal(isInsideWorkspace(root, candidate, 'linux', realpathSync), true);
 });
 
 test('workspace guard fails closed when default realpath resolution fails', () => {

@@ -18,6 +18,8 @@ const IPC_CHANNELS = [
 ];
 
 function createFakes(env = {}, overrides = {}) {
+  const trustedSender = { id: 'trusted-laura-renderer' };
+  const event = { sender: trustedSender };
   const handlers = new Map();
   const removed = [];
   const protocols = new Map();
@@ -34,6 +36,7 @@ function createFakes(env = {}, overrides = {}) {
         ...overrides.dialog,
       },
       env,
+      isAllowedSender: overrides.isAllowedSender || ((sender) => sender === trustedSender),
       ipcMain: {
         handle(channel, handler) {
           handlers.set(channel, handler);
@@ -45,6 +48,9 @@ function createFakes(env = {}, overrides = {}) {
       },
       logger: { warn() {}, ...overrides.logger },
       net: { fetch: async () => new Response('', { status: 404 }), ...overrides.net },
+      now: overrides.now || (() => Date.now()),
+      openFile: overrides.openFile,
+      readdir: overrides.readdir,
       protocol: {
         handle(scheme, handler) {
           protocols.set(scheme, handler);
@@ -66,11 +72,13 @@ function createFakes(env = {}, overrides = {}) {
       },
     },
     handlers,
+    event,
     opened,
     protocols,
     removed,
     revealed,
     unhandled,
+    trustedSender,
   };
 }
 
@@ -96,7 +104,7 @@ test('install registers the exact Laura surface and dispose removes it', async (
 
   assert.deepEqual([...fakes.handlers.keys()], IPC_CHANNELS);
   assert.deepEqual([...fakes.protocols.keys()], ['laura-media']);
-  assert.equal(await fakes.handlers.get('laura:service-info')(), null);
+  assert.equal(await fakes.handlers.get('laura:service-info')(fakes.event), null);
 
   host.dispose();
 
@@ -104,6 +112,24 @@ test('install registers the exact Laura surface and dispose removes it', async (
   assert.deepEqual(fakes.unhandled, ['laura-media']);
   assert.equal(fakes.handlers.size, 0);
   assert.equal(fakes.protocols.size, 0);
+});
+
+test('IPC rejects untrusted senders before service data or privileged handlers are reached', async () => {
+  let dialogs = 0;
+  const fakes = installFakes(
+    { LAURA_TOKEN: 'top-secret' },
+    { dialog: { showOpenDialog: async () => { dialogs += 1; return { canceled: true, filePaths: [] }; } } },
+  );
+  const untrusted = { sender: { id: 'other-renderer' } };
+
+  for (const channel of IPC_CHANNELS) {
+    await assert.rejects(async () => fakes.handlers.get(channel)(untrusted), /unauthorized/i, channel);
+  }
+  assert.equal(dialogs, 0);
+  assert.deepEqual(
+    await fakes.handlers.get('laura:service-info')(fakes.event),
+    { baseUrl: 'http://127.0.0.1:8765', token: 'top-secret' },
+  );
 });
 
 test('dialog handlers preserve Laura cancel and success semantics', async (t) => {
@@ -129,16 +155,16 @@ test('dialog handlers preserve Laura cancel and success semantics', async (t) =>
     },
   );
 
-  assert.equal(await fakes.handlers.get('laura:pick-file')(), null);
-  assert.equal(await fakes.handlers.get('laura:pick-file')(), path.join(workspace, 'one.mp4'));
-  assert.equal(await fakes.handlers.get('laura:save-file')(null, 'notes.txt', 'first'), null);
-  assert.equal(await fakes.handlers.get('laura:save-file')(null, 'notes.txt', 'saved'), savedPath);
+  assert.equal(await fakes.handlers.get('laura:pick-file')(fakes.event), null);
+  assert.equal(await fakes.handlers.get('laura:pick-file')(fakes.event), path.join(workspace, 'one.mp4'));
+  assert.equal(await fakes.handlers.get('laura:save-file')(fakes.event, 'notes.txt', 'first'), null);
+  assert.equal(await fakes.handlers.get('laura:save-file')(fakes.event, 'notes.txt', 'saved'), savedPath);
   assert.equal(await fs.readFile(savedPath, 'utf8'), 'saved');
-  assert.deepEqual(await fakes.handlers.get('laura:pick-files')(), [
+  assert.deepEqual(await fakes.handlers.get('laura:pick-files')(fakes.event), [
     path.join(workspace, 'one.mp4'),
     path.join(workspace, 'two.wav'),
   ]);
-  assert.equal(await fakes.handlers.get('laura:pick-folder')(), workspace);
+  assert.equal(await fakes.handlers.get('laura:pick-folder')(fakes.event), workspace);
 });
 
 test('list-media-in-folder returns only supported files', async (t) => {
@@ -151,12 +177,39 @@ test('list-media-in-folder returns only supported files', async (t) => {
   ]);
   const fakes = installFakes({ LAURA_WORKSPACE: workspace });
 
-  const result = await fakes.handlers.get('laura:list-media-in-folder')(null, workspace);
+  const result = await fakes.handlers.get('laura:list-media-in-folder')(fakes.event, workspace);
 
   assert.deepEqual(result.sort(), [
     path.join(workspace, 'clip.MP4'),
     path.join(workspace, 'sound.flac'),
   ].sort());
+});
+
+test('folder listing rejects arbitrary outside paths but grants a canonically picked folder', async (t) => {
+  const { root, workspace } = await createWorkspace(t);
+  const outside = path.join(root, 'outside');
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'clip.mp4'), 'media');
+  let reads = 0;
+  const fakes = installFakes(
+    { LAURA_WORKSPACE: workspace },
+    {
+      dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [outside] }) },
+      readdir: async (...args) => { reads += 1; return fs.readdir(...args); },
+    },
+  );
+
+  await assert.rejects(
+    fakes.handlers.get('laura:list-media-in-folder')(fakes.event, outside),
+    /not authorized/i,
+  );
+  assert.equal(reads, 0);
+  assert.equal(await fakes.handlers.get('laura:pick-folder')(fakes.event), await fs.realpath(outside));
+  assert.deepEqual(
+    await fakes.handlers.get('laura:list-media-in-folder')(fakes.event, outside),
+    [path.join(await fs.realpath(outside), 'clip.mp4')],
+  );
+  assert.equal(reads, 1);
 });
 
 test('open and reveal reject outside paths and allow real paths inside the workspace', async (t) => {
@@ -166,10 +219,10 @@ test('open and reveal reject outside paths and allow real paths inside the works
   await Promise.all([fs.writeFile(inside, ''), fs.writeFile(outside, '')]);
   const fakes = installFakes({ LAURA_WORKSPACE: workspace });
 
-  assert.match(await fakes.handlers.get('laura:open-path')(null, outside), /^rejected:/);
-  assert.match(await fakes.handlers.get('laura:reveal-path')(null, outside), /^rejected:/);
-  assert.equal(await fakes.handlers.get('laura:open-path')(null, inside), '');
-  assert.equal(await fakes.handlers.get('laura:reveal-path')(null, inside), '');
+  assert.match(await fakes.handlers.get('laura:open-path')(fakes.event, outside), /^rejected:/);
+  assert.match(await fakes.handlers.get('laura:reveal-path')(fakes.event, outside), /^rejected:/);
+  assert.equal(await fakes.handlers.get('laura:open-path')(fakes.event, inside), '');
+  assert.equal(await fakes.handlers.get('laura:reveal-path')(fakes.event, inside), '');
   assert.deepEqual(fakes.opened, [inside]);
   assert.deepEqual(fakes.revealed, [inside]);
 });
@@ -237,11 +290,28 @@ test('media protocol sends auth, rejects unsafe API paths, and streams full and 
   assert.equal(partial.headers.get('content-length'), '4');
   assert.equal(await partial.text(), '2345');
 
+  const suffix = await handler(new Request('laura-media://media/asset-1/proxy', {
+    headers: { Range: 'bytes=-4' },
+  }));
+  assert.equal(suffix.status, 206);
+  assert.equal(suffix.headers.get('content-range'), 'bytes 6-9/10');
+  assert.equal(await suffix.text(), '6789');
+
+  const oversizedSuffix = await handler(new Request('laura-media://media/asset-1/proxy', {
+    headers: { Range: 'bytes=-20' },
+  }));
+  assert.equal(oversizedSuffix.status, 206);
+  assert.equal(oversizedSuffix.headers.get('content-range'), 'bytes 0-9/10');
+  assert.equal(await oversizedSuffix.text(), '0123456789');
+
   const invalid = await handler(new Request('laura-media://media/asset-1/proxy', {
     headers: { Range: 'bytes=20-' },
   }));
   assert.equal(invalid.status, 416);
   assert.equal(invalid.headers.get('content-range'), 'bytes */10');
+  assert.equal((await handler(new Request('laura-media://media/asset-1/proxy', {
+    headers: { Range: 'bytes=0-1,4-5' },
+  }))).status, 416);
   assert.equal(requests.length, 2, 'only a successful safe path is cached');
 });
 
@@ -250,7 +320,7 @@ test('media protocol preserves content types for supported media containers', as
   const cases = [
     ['wav', 'audio/wav'],
     ['mp3', 'audio/mpeg'],
-    ['m4a', 'audio/aac'],
+    ['m4a', 'audio/mp4'],
     ['aac', 'audio/aac'],
     ['flac', 'audio/flac'],
     ['aif', 'audio/aiff'],
@@ -263,7 +333,8 @@ test('media protocol preserves content types for supported media containers', as
     ['mpeg', 'video/mpeg'],
     ['mp4', 'video/mp4'],
     ['m4v', 'video/mp4'],
-    ['unknown', 'video/mp4'],
+    ['mxf', 'application/mxf'],
+    ['unknown', 'application/octet-stream'],
   ];
   const mediaPaths = new Map();
   await Promise.all(cases.map(async ([extension]) => {
@@ -290,6 +361,82 @@ test('media protocol preserves content types for supported media containers', as
     assert.equal(response.headers.get('content-type'), expectedContentType, extension);
     await response.arrayBuffer();
   }
+});
+
+test('media cache expires and refetches after five seconds', async (t) => {
+  const { workspace } = await createWorkspace(t);
+  const mediaPath = path.join(workspace, 'clip.mp4');
+  await fs.writeFile(mediaPath, 'clip');
+  let clock = 1000;
+  let fetches = 0;
+  const fakes = installFakes(
+    { LAURA_TOKEN: 'token', LAURA_URL: 'http://laura.test', LAURA_WORKSPACE: workspace },
+    {
+      now: () => clock,
+      net: { fetch: async () => { fetches += 1; return Response.json({ files: [{ kind: 'source', path: mediaPath }] }); } },
+    },
+  );
+  const handler = fakes.protocols.get('laura-media');
+
+  await (await handler(new Request('laura-media://media/asset/source'))).arrayBuffer();
+  clock = 5999;
+  await (await handler(new Request('laura-media://media/asset/source'))).arrayBuffer();
+  assert.equal(fetches, 1);
+  clock = 6000;
+  await (await handler(new Request('laura-media://media/asset/source'))).arrayBuffer();
+  assert.equal(fetches, 2);
+});
+
+test('a missing cached file is evicted so a later backend path can recover', async (t) => {
+  const { workspace } = await createWorkspace(t);
+  const firstPath = path.join(workspace, 'first.mp4');
+  const recoveredPath = path.join(workspace, 'recovered.mp4');
+  await Promise.all([fs.writeFile(firstPath, 'first'), fs.writeFile(recoveredPath, 'recovered')]);
+  let backendPath = firstPath;
+  let fetches = 0;
+  const fakes = installFakes(
+    { LAURA_TOKEN: 'token', LAURA_URL: 'http://laura.test', LAURA_WORKSPACE: workspace },
+    { net: { fetch: async () => { fetches += 1; return Response.json({ files: [{ kind: 'source', path: backendPath }] }); } } },
+  );
+  const handler = fakes.protocols.get('laura-media');
+
+  assert.equal(await (await handler(new Request('laura-media://media/asset/source'))).text(), 'first');
+  await fs.rm(firstPath);
+  assert.equal((await handler(new Request('laura-media://media/asset/source'))).status, 404);
+  backendPath = recoveredPath;
+  assert.equal(await (await handler(new Request('laura-media://media/asset/source'))).text(), 'recovered');
+  assert.equal(fetches, 3);
+});
+
+test('media streaming uses the opened file handle and closes it for invalid ranges', async (t) => {
+  const { workspace } = await createWorkspace(t);
+  const mediaPath = path.join(workspace, 'clip.mp4');
+  await fs.writeFile(mediaPath, '0123');
+  const openedPaths = [];
+  let closes = 0;
+  const realHandle = await fs.open(mediaPath, 'r');
+  const fakes = installFakes(
+    { LAURA_TOKEN: 'token', LAURA_URL: 'http://laura.test', LAURA_WORKSPACE: workspace },
+    {
+      net: { fetch: async () => Response.json({ files: [{ kind: 'source', path: mediaPath }] }) },
+      openFile: async (candidate) => {
+        openedPaths.push(candidate);
+        return {
+          stat: () => realHandle.stat(),
+          createReadStream: (options) => realHandle.createReadStream(options),
+          close: async () => { closes += 1; await realHandle.close(); },
+        };
+      },
+    },
+  );
+
+  const response = await fakes.protocols.get('laura-media')(new Request(
+    'laura-media://media/asset/source',
+    { headers: { Range: 'bytes=20-' } },
+  ));
+  assert.equal(response.status, 416);
+  assert.deepEqual(openedPaths, [await fs.realpath(mediaPath)]);
+  assert.equal(closes, 1);
 });
 
 test('export lane rechecks pending exports and streams only ready workspace files', async (t) => {

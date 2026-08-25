@@ -8,12 +8,13 @@
 // Sentry error tracking (lazy-init after app.whenReady)
 const sentry = require('./sentry');
 
-const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net, session } = require('electron');
 const { spawn } = require('child_process');
 
 const path = require('path');
 const fs = require('fs');
 const { createLauraEmbedHost } = require('./laura-embed-host');
+const { LAURA_SESSION_PARTITION } = require('./laura-embed-config');
 
 protocol.registerSchemesAsPrivileged([
     {
@@ -3305,9 +3306,11 @@ app.whenReady().then(async () => {
         dialog,
         env: process.env,
         ipcMain,
+        isAllowedSender: (sender) => Boolean(videoManager?.videoView?.webContents)
+            && sender === videoManager.videoView.webContents,
         logger: console,
         net,
-        protocol,
+        protocol: session.fromPartition(LAURA_SESSION_PARTITION).protocol,
         shell,
     });
     lauraEmbedHost.install();

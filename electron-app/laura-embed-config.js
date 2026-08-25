@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const LAURA_SESSION_PARTITION = 'persist:laura';
+
 function resolveLauraRendererPath({ dirname, resourcesPath, existsSync }) {
   const packaged = path.join(resourcesPath || '', 'laura-renderer', 'index.html');
   const development = path.resolve(
@@ -34,33 +36,48 @@ function readLauraServiceInfo(env) {
 function canonicalRealPath(value, pathApi, platform, realpathSync) {
   const resolved = realpathSync(value);
   if (typeof resolved !== 'string') throw new TypeError('realpath resolver must return a string');
-  const normalized = pathApi.normalize(resolved);
-  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+  return pathApi.normalize(resolved);
 }
 
-function isInsideWorkspace(
+function resolveInsideWorkspace(
   root,
   candidate,
   platform = process.platform,
   realpathSync = fs.realpathSync.native,
 ) {
   if (typeof root !== 'string' || typeof candidate !== 'string' || !root || !candidate) {
-    return false;
+    return null;
   }
 
   const pathApi = platform === 'win32' ? path.win32 : path.posix;
-  if (!pathApi.isAbsolute(root) || !pathApi.isAbsolute(candidate)) return false;
+  if (!pathApi.isAbsolute(root) || !pathApi.isAbsolute(candidate)) return null;
 
   try {
-    const canonicalRoot = canonicalRealPath(root, pathApi, platform, realpathSync);
+    const canonicalRootPath = canonicalRealPath(root, pathApi, platform, realpathSync);
     const canonicalCandidate = canonicalRealPath(candidate, pathApi, platform, realpathSync);
+    const canonicalRoot = platform === 'win32' ? canonicalRootPath.toLowerCase() : canonicalRootPath;
+    const candidateForComparison = platform === 'win32'
+      ? canonicalCandidate.toLowerCase()
+      : canonicalCandidate;
     const prefix = canonicalRoot.endsWith(pathApi.sep)
       ? canonicalRoot
       : canonicalRoot + pathApi.sep;
-    return canonicalCandidate === canonicalRoot || canonicalCandidate.startsWith(prefix);
+    return candidateForComparison === canonicalRoot || candidateForComparison.startsWith(prefix)
+      ? canonicalCandidate
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-module.exports = { isInsideWorkspace, readLauraServiceInfo, resolveLauraRendererPath };
+function isInsideWorkspace(root, candidate, platform, realpathSync) {
+  return Boolean(resolveInsideWorkspace(root, candidate, platform, realpathSync));
+}
+
+module.exports = {
+  LAURA_SESSION_PARTITION,
+  isInsideWorkspace,
+  readLauraServiceInfo,
+  resolveInsideWorkspace,
+  resolveLauraRendererPath,
+};
