@@ -172,7 +172,7 @@ class VideoManager {
       if (this.mainWindow?.getBrowserView?.() === view) {
         this.mainWindow.setBrowserView(null);
       }
-      view.webContents.close();
+      view.webContents.destroy();
       this.videoView = null;
     }
     this.isVisible = false;

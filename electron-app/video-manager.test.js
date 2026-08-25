@@ -35,6 +35,7 @@ function createHarness({ loadFileImpl, openExternalImpl } = {}) {
       this.handlers = new Map();
       this.loadFiles = [];
       this.closeCalls = 0;
+      this.destroyCalls = 0;
       this.webContents = {
         loadFile: (file) => {
           this.loadFiles.push(file);
@@ -43,6 +44,7 @@ function createHarness({ loadFileImpl, openExternalImpl } = {}) {
         setWindowOpenHandler: (handler) => { this.windowOpenHandler = handler; },
         on: (event, handler) => this.handlers.set(event, handler),
         close: () => { this.closeCalls += 1; },
+        destroy: () => { this.destroyCalls += 1; },
         openDevTools: () => {},
       };
       instances.push(this);
@@ -133,14 +135,15 @@ describe('VideoManager Laura embed', () => {
     assert.equal(instances[0].bounds.length, 4);
   });
 
-  test('destroy closes the view, clears it, and resets visibility', () => {
+  test('destroy synchronously destroys the view, clears it, and resets visibility', () => {
     const { attachedViews, instances, manager } = createHarness();
     manager.show();
 
     manager.destroy();
 
     assert.deepEqual(attachedViews, [instances[0], null]);
-    assert.equal(instances[0].closeCalls, 1);
+    assert.equal(instances[0].destroyCalls, 1);
+    assert.equal(instances[0].closeCalls, 0);
     assert.equal(manager.videoView, null);
     assert.equal(manager.getIsVisible(), false);
   });
@@ -153,7 +156,8 @@ describe('VideoManager Laura embed', () => {
     manager.destroy();
 
     assert.deepEqual(attachedViews, [instances[0]]);
-    assert.equal(instances[0].closeCalls, 1);
+    assert.equal(instances[0].destroyCalls, 1);
+    assert.equal(instances[0].closeCalls, 0);
     assert.equal(manager.videoView, null);
   });
 
