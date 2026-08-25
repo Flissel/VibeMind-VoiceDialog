@@ -7,16 +7,33 @@
  * Pattern: identical to agentfarm-manager.js
  */
 
-const { BrowserView } = require('electron');
-const path = require('path');
-const fs = require('fs');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const {
+  LAURA_SESSION_PARTITION,
+  resolveLauraRendererPath,
+} = require('./laura-embed-config');
 
 const _VD_C = '\x1b[36m', _RST = '\x1b[0m'; // Cyan (Video)
 function _vdLog(...a) { process.stdout.write(`${_VD_C}[VideoManager] ${a.join(' ')}${_RST}\n`); }
 
 class VideoManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    let electron;
+    if (!dependencies.BrowserView || !dependencies.shell) {
+      electron = require('electron');
+    }
+
     this.mainWindow = mainWindow;
+    this.BrowserView = dependencies.BrowserView || electron.BrowserView;
+    this.shell = dependencies.shell || electron.shell;
+    this.logger = dependencies.logger || _vdLog;
+    this.rendererPath = dependencies.rendererPath || resolveLauraRendererPath({
+      dirname: __dirname,
+      resourcesPath: process.resourcesPath || '',
+      existsSync: fs.existsSync,
+    });
     this.videoView = null;
     this.isVisible = false;
 
@@ -34,36 +51,24 @@ class VideoManager {
   }
 
   /**
-   * Resolve path to built video-ui dist/index.html
-   */
-  _resolveRendererPath() {
-    const devPath = path.join(__dirname, 'video-ui', 'dist', 'index.html');
-    const prodPath = path.join(process.resourcesPath || '', 'video-ui', 'index.html');
-
-    if (fs.existsSync(prodPath)) return prodPath;
-    if (fs.existsSync(devPath)) return devPath;
-    return devPath;
-  }
-
-  /**
    * Create the BrowserView for Video Production
    */
   createView() {
     if (this.videoView) return this.videoView;
 
-    this.videoView = new BrowserView({
+    this.videoView = new this.BrowserView({
       webPreferences: {
-        preload: path.join(__dirname, 'video-preload.js'),
+        preload: path.join(__dirname, 'laura-preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false,
-        webSecurity: false,  // Allow file:// URLs for local video playback
+        sandbox: true,
+        webSecurity: true,
+        partition: LAURA_SESSION_PARTITION,
       },
     });
 
-    const rendererPath = this._resolveRendererPath();
-    _vdLog('Loading from file:', rendererPath);
-    this.videoView.webContents.loadFile(rendererPath);
+    this.logger('Loading Laura renderer');
+    this.videoView.webContents.loadFile(this.rendererPath);
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
@@ -72,16 +77,21 @@ class VideoManager {
 
     // Handle external link navigation
     this.videoView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
-    this.videoView.webContents.on('did-finish-load', () => {
-      _vdLog('Video UI loaded');
+    const rendererUrl = pathToFileURL(this.rendererPath).href;
+    this.videoView.webContents.on('will-navigate', (event, url) => {
+      if (url !== rendererUrl) event.preventDefault();
     });
 
-    this.videoView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      console.error('[VideoManager] Load failed:', errorCode, errorDescription);
+    this.videoView.webContents.on('did-finish-load', () => {
+      this.logger('Laura renderer loaded');
+    });
+
+    this.videoView.webContents.on('did-fail-load', (_event, errorCode) => {
+      this.logger('Laura renderer load failed:', errorCode);
     });
 
     return this.videoView;
@@ -94,14 +104,14 @@ class VideoManager {
     this.mainWindow.setBrowserView(this.videoView);
     this.updateBounds();
     this.isVisible = true;
-    _vdLog('Video shown');
+    this.logger('Video shown');
   }
 
   hide() {
     if (!this.mainWindow || !this.videoView) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    _vdLog('Video hidden');
+    this.logger('Video hidden');
   }
 
   toggle() {
