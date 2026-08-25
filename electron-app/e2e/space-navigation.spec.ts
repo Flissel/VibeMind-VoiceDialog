@@ -117,7 +117,9 @@ test.describe('Space Navigation', () => {
 
         await expect.poll(mainProcessLogs).toContain('[Main] Laura host and VideoManager initialized');
         const startupLogs = mainProcessLogs();
-        expect(startupLogs).toContain('[Main] FAST_STARTUP active — external startup side effects disabled');
+        expect(startupLogs).toContain(
+            '[Main] VIBEMIND_E2E_ISOLATED_STARTUP active — external startup side effects disabled',
+        );
         const forbiddenMarkers = [
             DOCKER_BOOTSTRAP_MARKER,
             'Starting Python backend',

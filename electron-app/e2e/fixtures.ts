@@ -25,6 +25,7 @@ export const test = base.extend<VibeMindFixtures>({
                 NODE_ENV: 'test',
                 FORCE_SYNC_MODE: 'true',
                 FAST_STARTUP: 'true',
+                VIBEMIND_E2E_ISOLATED_STARTUP: 'true',
                 USE_TASK_MEMORY: 'false',
                 USE_CONVERSATION_MEMORY: 'false',
                 USE_USER_PROFILES: 'false',

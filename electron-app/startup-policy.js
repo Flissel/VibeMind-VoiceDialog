@@ -4,12 +4,12 @@ const DOCKER_BOOTSTRAP_MARKER =
   '[Main] NORMAL_STARTUP Docker bootstrap entered: stale-container cleanup and media Docker';
 
 function createStartupPolicy(environment) {
-  const isFastStartup = environment.FAST_STARTUP === 'true';
+  const isIsolatedStartup = environment.VIBEMIND_E2E_ISOLATED_STARTUP === 'true';
 
   return Object.freeze({
-    isFastStartup,
+    isIsolatedStartup,
     async runExternalStartup(_name, start) {
-      if (isFastStartup) return false;
+      if (isIsolatedStartup) return false;
       await start();
       return true;
     },

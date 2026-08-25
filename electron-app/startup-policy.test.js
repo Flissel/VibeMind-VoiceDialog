@@ -21,8 +21,8 @@ const EXTERNAL_STARTS = [
   'Python backend',
 ];
 
-test('FAST_STARTUP skips every external startup callback', async () => {
-  const policy = createStartupPolicy({ FAST_STARTUP: 'true' });
+test('VIBEMIND_E2E_ISOLATED_STARTUP skips every external startup callback', async () => {
+  const policy = createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'true' });
   const calls = [];
 
   for (const name of EXTERNAL_STARTS) {
@@ -33,12 +33,12 @@ test('FAST_STARTUP skips every external startup callback', async () => {
     assert.equal(ran, false);
   }
 
-  assert.equal(policy.isFastStartup, true);
+  assert.equal(policy.isIsolatedStartup, true);
   assert.deepEqual(calls, []);
 });
 
-test('normal startup preserves external callback order and awaits completion', async () => {
-  const policy = createStartupPolicy({});
+test('FAST_STARTUP alone preserves normal Electron startup callbacks', async () => {
+  const policy = createStartupPolicy({ FAST_STARTUP: 'true' });
   const calls = [];
 
   for (const name of EXTERNAL_STARTS) {
@@ -49,14 +49,14 @@ test('normal startup preserves external callback order and awaits completion', a
     assert.equal(ran, true);
   }
 
-  assert.equal(policy.isFastStartup, false);
+  assert.equal(policy.isIsolatedStartup, false);
   assert.deepEqual(calls, EXTERNAL_STARTS);
 });
 
-test('FAST_STARTUP requires the explicit true value', () => {
-  assert.equal(createStartupPolicy({ FAST_STARTUP: 'false' }).isFastStartup, false);
-  assert.equal(createStartupPolicy({ FAST_STARTUP: '1' }).isFastStartup, false);
-  assert.equal(createStartupPolicy({ FAST_STARTUP: 'TRUE' }).isFastStartup, false);
+test('isolated startup requires the explicit true value', () => {
+  assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'false' }).isIsolatedStartup, false);
+  assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: '1' }).isIsolatedStartup, false);
+  assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'TRUE' }).isIsolatedStartup, false);
 });
 
 test('forbidden startup markers are matched after ANSI normalization', () => {
@@ -71,7 +71,7 @@ test('forbidden startup markers are matched after ANSI normalization', () => {
 
 test('Docker bootstrap audit marker records only an entered normal-mode callback', async () => {
   const fastAudit = createStartupAudit();
-  await createStartupPolicy({ FAST_STARTUP: 'true' }).runExternalStartup(
+  await createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'true' }).runExternalStartup(
     'Docker bootstrap',
     async () => fastAudit.markDockerBootstrapStarted(),
   );

@@ -3339,8 +3339,8 @@ app.whenReady().then(async () => {
     // Initialize Video Space Manager
     videoManager = new VideoManager(mainWindow);
     console.log('[Main] Laura host and VideoManager initialized');
-    if (startupPolicy.isFastStartup) {
-        console.log('[Main] FAST_STARTUP active — external startup side effects disabled');
+    if (startupPolicy.isIsolatedStartup) {
+        console.log('[Main] VIBEMIND_E2E_ISOLATED_STARTUP active — external startup side effects disabled');
     }
     for (const marker of startupAudit.publicMarkers()) {
         console.log(marker);
@@ -3463,7 +3463,7 @@ app.whenReady().then(async () => {
     // createTray();  // Uncomment when icon is available
     registerShortcuts();
 
-    if (!startupPolicy.isFastStartup) {
+    if (!startupPolicy.isIsolatedStartup) {
         console.log('[Main] Coding Engine Dashboard + Rowboat integration initialized');
     }
 
