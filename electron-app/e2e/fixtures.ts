@@ -1,6 +1,14 @@
 import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import path from 'path';
 
+const {
+    ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
+    stripAnsi,
+} = require('../startup-policy') as {
+    ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER: string;
+    stripAnsi: (output: string) => string;
+};
+
 type VibeMindFixtures = {
     electronApp: ElectronApplication;
     mainPage: Page;
@@ -53,6 +61,9 @@ export const test = base.extend<VibeMindFixtures>({
         await app.firstWindow();
         await use(app);
         await app.close();
+        if (!stripAnsi(output).includes(ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER)) {
+            throw new Error('isolated pre-quit video cleanup marker was not emitted');
+        }
         mainProcessLogReaders.delete(app);
     },
 

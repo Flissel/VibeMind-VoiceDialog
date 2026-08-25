@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   DOCKER_BOOTSTRAP_MARKER,
+  ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
   createStartupAudit,
   createStartupPolicy,
   findForbiddenStartupMarkers,
@@ -57,6 +58,37 @@ test('isolated startup requires the explicit true value', () => {
   assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'false' }).isIsolatedStartup, false);
   assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: '1' }).isIsolatedStartup, false);
   assert.equal(createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'TRUE' }).isIsolatedStartup, false);
+});
+
+test('isolated startup destroys the video BrowserView once before Electron closes windows', () => {
+  const policy = createStartupPolicy({ VIBEMIND_E2E_ISOLATED_STARTUP: 'true' });
+  const order = [];
+
+  const firstRun = policy.runIsolatedPreQuitCleanup(() => order.push('video BrowserView destroyed'));
+  order.push('Electron closes windows');
+  const secondRun = policy.runIsolatedPreQuitCleanup(() => order.push('duplicate destroy'));
+
+  assert.equal(firstRun, true);
+  assert.equal(secondRun, false);
+  assert.deepEqual(order, ['video BrowserView destroyed', 'Electron closes windows']);
+});
+
+test('normal startup never runs isolated pre-quit video cleanup', () => {
+  const policy = createStartupPolicy({ FAST_STARTUP: 'true' });
+  const calls = [];
+
+  const ran = policy.runIsolatedPreQuitCleanup(() => calls.push('video BrowserView destroyed'));
+
+  assert.equal(ran, false);
+  assert.deepEqual(calls, []);
+});
+
+test('isolated pre-quit video cleanup marker is public and secret-free', () => {
+  assert.match(
+    ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
+    /ISOLATED_STARTUP.*pre-quit video BrowserView destroyed/,
+  );
+  assert.doesNotMatch(ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER, /[A-Z]:\\|token|secret/i);
 });
 
 test('forbidden startup markers are matched after ANSI normalization', () => {

@@ -34,7 +34,11 @@ const _rootEnv = path.join(__dirname, '..', '..', '..', '.env');  // Vibemind_V1
 const _voiceEnv = path.join(__dirname, '..', '.env');              // vibemind-os/voice/.env
 require('dotenv').config({ path: _rootEnv });                      // master first
 require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
-const { createStartupAudit, createStartupPolicy } = require('./startup-policy');
+const {
+    ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
+    createStartupAudit,
+    createStartupPolicy,
+} = require('./startup-policy');
 const startupPolicy = createStartupPolicy(process.env);
 const startupAudit = createStartupAudit();
 
@@ -3495,6 +3499,13 @@ app.on('window-all-closed', () => {
 
 let dockerCleanupDone = false;
 app.on('before-quit', (event) => {
+    const cleanedVideoBeforeQuit = startupPolicy.runIsolatedPreQuitCleanup(() => {
+        if (videoManager) videoManager.destroy();
+    });
+    if (cleanedVideoBeforeQuit) {
+        console.log(ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER);
+    }
+
     if (dockerManager && !dockerCleanupDone) {
         event.preventDefault();
         // Docker cleanup with 5s timeout to prevent hanging
