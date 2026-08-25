@@ -7,7 +7,21 @@ const VideoManager = require('./video-manager');
 
 const RENDERER_PATH = 'C:\\Laura Renderer\\index.html';
 
-function createHarness() {
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function flushPromises() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createHarness({ loadFileImpl, openExternalImpl } = {}) {
   const instances = [];
   const openedUrls = [];
   const logs = [];
@@ -22,7 +36,10 @@ function createHarness() {
       this.loadFiles = [];
       this.closeCalls = 0;
       this.webContents = {
-        loadFile: (file) => this.loadFiles.push(file),
+        loadFile: (file) => {
+          this.loadFiles.push(file);
+          return loadFileImpl ? loadFileImpl(file, this.loadFiles.length) : Promise.resolve();
+        },
         setWindowOpenHandler: (handler) => { this.windowOpenHandler = handler; },
         on: (event, handler) => this.handlers.set(event, handler),
         close: () => { this.closeCalls += 1; },
@@ -36,18 +53,25 @@ function createHarness() {
     }
   }
 
+  let currentBrowserView = null;
   const mainWindow = {
     on: (event, handler) => windowHandlers.set(event, handler),
-    setBrowserView: (view) => attachedViews.push(view),
+    setBrowserView: (view) => {
+      currentBrowserView = view;
+      attachedViews.push(view);
+    },
+    getBrowserView: () => currentBrowserView,
     getContentBounds: () => ({ width: 1280, height: 900 }),
   };
   const shell = {
     openExternal: (url) => {
       openedUrls.push(url);
-      return Promise.resolve();
+      return openExternalImpl ? openExternalImpl(url) : Promise.resolve();
     },
   };
-  const logger = (...parts) => logs.push(parts);
+  const logger = (...parts) => logs.push(['info', ...parts]);
+  logger.info = (...parts) => logs.push(['info', ...parts]);
+  logger.warn = (...parts) => logs.push(['warn', ...parts]);
   const manager = new VideoManager(mainWindow, {
     BrowserView: FakeBrowserView,
     shell,
@@ -55,7 +79,15 @@ function createHarness() {
     logger,
   });
 
-  return { attachedViews, instances, logs, manager, openedUrls, windowHandlers };
+  return {
+    attachedViews,
+    instances,
+    logs,
+    manager,
+    openedUrls,
+    setCurrentView: (view) => { currentBrowserView = view; },
+    windowHandlers,
+  };
 }
 
 describe('VideoManager Laura embed', () => {
@@ -102,24 +134,58 @@ describe('VideoManager Laura embed', () => {
   });
 
   test('destroy closes the view, clears it, and resets visibility', () => {
-    const { instances, manager } = createHarness();
+    const { attachedViews, instances, manager } = createHarness();
     manager.show();
 
     manager.destroy();
 
+    assert.deepEqual(attachedViews, [instances[0], null]);
     assert.equal(instances[0].closeCalls, 1);
     assert.equal(manager.videoView, null);
     assert.equal(manager.getIsVisible(), false);
   });
 
-  test('new windows open externally and are denied inside the embed', () => {
+  test('destroy never detaches a BrowserView owned by another manager', () => {
+    const { attachedViews, instances, manager, setCurrentView } = createHarness();
+    manager.show();
+    setCurrentView({ owner: 'other-manager' });
+
+    manager.destroy();
+
+    assert.deepEqual(attachedViews, [instances[0]]);
+    assert.equal(instances[0].closeCalls, 1);
+    assert.equal(manager.videoView, null);
+  });
+
+  test('new windows open only HTTP(S) URLs externally and are always denied inside', () => {
     const { instances, manager, openedUrls } = createHarness();
     manager.show();
 
-    const result = instances[0].windowOpenHandler({ url: 'https://example.com/help' });
+    const results = [
+      'https://example.com/help',
+      'http://example.com/help',
+      'file:///private/customer.html',
+      'javascript:alert(1)',
+      'custom:command',
+      'not a URL',
+    ].map((url) => instances[0].windowOpenHandler({ url }));
 
-    assert.deepEqual(openedUrls, ['https://example.com/help']);
-    assert.deepEqual(result, { action: 'deny' });
+    assert.deepEqual(openedUrls, ['https://example.com/help', 'http://example.com/help']);
+    assert.deepEqual(results, Array(results.length).fill({ action: 'deny' }));
+  });
+
+  test('external open rejection is handled without logging URL or error details', async () => {
+    const { instances, logs, manager } = createHarness({
+      openExternalImpl: () => Promise.reject(new Error('token=super-secret')),
+    });
+    manager.show();
+
+    instances[0].windowOpenHandler({ url: 'https://private.example/customer' });
+    await flushPromises();
+
+    const serialized = JSON.stringify(logs);
+    assert.match(serialized, /external link failed/);
+    assert.doesNotMatch(serialized, /super-secret|private\.example|customer/);
   });
 
   test('navigation allows only the exact renderer file URL', () => {
@@ -145,21 +211,62 @@ describe('VideoManager Laura embed', () => {
     }
   });
 
-  test('same-document fragment navigation resets to the exact renderer without a reload loop', () => {
-    const { instances, manager } = createHarness();
+  test('same-document main-frame restoration is single-flight and ignores subframes', async () => {
+    const restore = deferred();
+    const { instances, manager } = createHarness({
+      loadFileImpl: (_file, callNumber) => callNumber === 2 ? restore.promise : Promise.resolve(),
+    });
     manager.show();
     const rendererUrl = pathToFileURL(RENDERER_PATH).href;
     const handler = instances[0].handlers.get('did-navigate-in-page');
 
     assert.equal(typeof handler, 'function');
-    handler({}, rendererUrl);
+    handler({}, `${rendererUrl}#subframe`, false);
     assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH]);
 
-    handler({}, `${rendererUrl}#fragment`);
+    handler({}, `${rendererUrl}#fragment`, true);
+    handler({}, `${rendererUrl}#second`, true);
     assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH, RENDERER_PATH]);
 
-    handler({}, rendererUrl);
+    restore.resolve();
+    await flushPromises();
+    handler({}, rendererUrl, true);
     assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH, RENDERER_PATH]);
+  });
+
+  test('failed same-document restoration is logged safely and can retry', async () => {
+    const failedRestore = deferred();
+    const { instances, logs, manager } = createHarness({
+      loadFileImpl: (_file, callNumber) => callNumber === 2
+        ? failedRestore.promise
+        : Promise.resolve(),
+    });
+    manager.show();
+    const rendererUrl = pathToFileURL(RENDERER_PATH).href;
+    const handler = instances[0].handlers.get('did-navigate-in-page');
+
+    handler({}, `${rendererUrl}#fragment`, true);
+    failedRestore.reject(new Error('file:///private/customer-token'));
+    await flushPromises();
+    handler({}, `${rendererUrl}#retry`, true);
+
+    assert.deepEqual(instances[0].loadFiles, [RENDERER_PATH, RENDERER_PATH, RENDERER_PATH]);
+    const serialized = JSON.stringify(logs);
+    assert.match(serialized, /renderer restore failed/);
+    assert.doesNotMatch(serialized, /private|customer-token/);
+  });
+
+  test('initial renderer load rejection is handled without sensitive logging', async () => {
+    const { logs, manager } = createHarness({
+      loadFileImpl: () => Promise.reject(new Error('file:///private/customer-token')),
+    });
+
+    manager.show();
+    await flushPromises();
+
+    const serialized = JSON.stringify(logs);
+    assert.match(serialized, /initial renderer load failed/);
+    assert.doesNotMatch(serialized, /private|customer-token/);
   });
 
   test('failed loads log only a safe code without description or URL', () => {

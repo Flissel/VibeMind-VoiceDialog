@@ -15,9 +15,6 @@ const {
   resolveLauraRendererPath,
 } = require('./laura-embed-config');
 
-const _VD_C = '\x1b[36m', _RST = '\x1b[0m'; // Cyan (Video)
-function _vdLog(...a) { process.stdout.write(`${_VD_C}[VideoManager] ${a.join(' ')}${_RST}\n`); }
-
 class VideoManager {
   constructor(mainWindow, dependencies = {}) {
     let electron;
@@ -28,7 +25,7 @@ class VideoManager {
     this.mainWindow = mainWindow;
     this.BrowserView = dependencies.BrowserView || electron.BrowserView;
     this.shell = dependencies.shell || electron.shell;
-    this.logger = dependencies.logger || _vdLog;
+    this.logger = dependencies.logger || console;
     this.rendererPath = dependencies.rendererPath || resolveLauraRendererPath({
       dirname: __dirname,
       resourcesPath: process.resourcesPath || '',
@@ -67,8 +64,8 @@ class VideoManager {
       },
     });
 
-    this.logger('Loading Laura renderer');
-    this.videoView.webContents.loadFile(this.rendererPath);
+    this.logger.info('[VideoManager] Loading Laura renderer');
+    this._loadRenderer('[VideoManager] initial renderer load failed');
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
@@ -77,7 +74,21 @@ class VideoManager {
 
     // Handle external link navigation
     this.videoView.webContents.setWindowOpenHandler(({ url }) => {
-      this.shell.openExternal(url);
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return { action: 'deny' };
+      }
+      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+        try {
+          Promise.resolve(this.shell.openExternal(url)).catch(() => {
+            this.logger.warn('[VideoManager] external link failed');
+          });
+        } catch {
+          this.logger.warn('[VideoManager] external link failed');
+        }
+      }
       return { action: 'deny' };
     });
 
@@ -85,16 +96,20 @@ class VideoManager {
     this.videoView.webContents.on('will-navigate', (event, url) => {
       if (url !== rendererUrl) event.preventDefault();
     });
-    this.videoView.webContents.on('did-navigate-in-page', (_event, url) => {
-      if (url !== rendererUrl) this.videoView.webContents.loadFile(this.rendererPath);
+    this.videoView.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+      if (!isMainFrame || url === rendererUrl || this.isRestoringRenderer) return;
+      this.isRestoringRenderer = true;
+      this._loadRenderer('[VideoManager] renderer restore failed').finally(() => {
+        this.isRestoringRenderer = false;
+      });
     });
 
     this.videoView.webContents.on('did-finish-load', () => {
-      this.logger('Laura renderer loaded');
+      this.logger.info('[VideoManager] Laura renderer loaded');
     });
 
     this.videoView.webContents.on('did-fail-load', (_event, errorCode) => {
-      this.logger('Laura renderer load failed:', errorCode);
+      this.logger.warn('[VideoManager] Laura renderer load failed:', errorCode);
     });
 
     return this.videoView;
@@ -107,14 +122,14 @@ class VideoManager {
     this.mainWindow.setBrowserView(this.videoView);
     this.updateBounds();
     this.isVisible = true;
-    this.logger('Video shown');
+    this.logger.info('[VideoManager] Video shown');
   }
 
   hide() {
     if (!this.mainWindow || !this.videoView) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
-    this.logger('Video hidden');
+    this.logger.info('[VideoManager] Video hidden');
   }
 
   toggle() {
@@ -140,9 +155,24 @@ class VideoManager {
     return this.isVisible;
   }
 
+  _loadRenderer(failureMessage) {
+    try {
+      return Promise.resolve(this.videoView.webContents.loadFile(this.rendererPath)).catch(() => {
+        this.logger.warn(failureMessage);
+      });
+    } catch {
+      this.logger.warn(failureMessage);
+      return Promise.resolve();
+    }
+  }
+
   destroy() {
     if (this.videoView) {
-      this.videoView.webContents.close();
+      const view = this.videoView;
+      if (this.mainWindow?.getBrowserView?.() === view) {
+        this.mainWindow.setBrowserView(null);
+      }
+      view.webContents.close();
       this.videoView = null;
     }
     this.isVisible = false;
