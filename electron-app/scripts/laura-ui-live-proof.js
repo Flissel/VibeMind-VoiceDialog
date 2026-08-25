@@ -45,6 +45,8 @@ function buildElectronEnvironment(baseEnvironment, token, authenticated, workspa
     MINIBOOK_ENABLED: 'false',
     USE_ZEROCLAW: 'false',
     N8N_ENABLED: 'false',
+    MIROFISH_ENABLED: 'false',
+    SKIP_BRAIN_SPAWN: 'true',
     EYETERM_ENABLED: 'false',
   };
   delete environment.ELECTRON_RUN_AS_NODE;

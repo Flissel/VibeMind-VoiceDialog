@@ -4,7 +4,10 @@ import path from 'path';
 type VibeMindFixtures = {
     electronApp: ElectronApplication;
     mainPage: Page;
+    mainProcessLogs: () => string;
 };
+
+const mainProcessLogReaders = new WeakMap<ElectronApplication, () => string>();
 
 export const test = base.extend<VibeMindFixtures>({
     electronApp: async ({}, use) => {
@@ -30,15 +33,32 @@ export const test = base.extend<VibeMindFixtures>({
                 MINIBOOK_ENABLED: 'false',
                 USE_ZEROCLAW: 'false',
                 N8N_ENABLED: 'false',
+                MIROFISH_ENABLED: 'false',
+                SKIP_BRAIN_SPAWN: 'true',
                 EYETERM_ENABLED: 'false',
             },
             timeout: 60_000,
         });
 
+        let output = '';
+        const append = (chunk: Buffer | string): void => {
+            output = `${output}${String(chunk)}`.slice(-64_000);
+        };
+        app.process().stdout?.on('data', append);
+        app.process().stderr?.on('data', append);
+        mainProcessLogReaders.set(app, () => output);
+
         // Wait for the first window to appear
         await app.firstWindow();
         await use(app);
         await app.close();
+        mainProcessLogReaders.delete(app);
+    },
+
+    mainProcessLogs: async ({ electronApp }, use) => {
+        const read = mainProcessLogReaders.get(electronApp);
+        if (!read) throw new Error('main process log reader was not installed');
+        await use(read);
     },
 
     mainPage: async ({ electronApp }, use) => {

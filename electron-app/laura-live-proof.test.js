@@ -39,5 +39,8 @@ test('live proof builds explicit positive and fail-closed Electron environments'
   assert.equal(positive.LAURA_URL, 'http://127.0.0.1:8765');
   assert.equal(negative.LAURA_URL, 'http://127.0.0.1:8765');
   assert.equal(positive.FAST_STARTUP, 'true');
+  assert.equal(positive.MIROFISH_ENABLED, 'false');
+  assert.equal(positive.N8N_ENABLED, 'false');
+  assert.equal(positive.SKIP_BRAIN_SPAWN, 'true');
   assert.equal(positive.ELECTRON_RUN_AS_NODE, undefined);
 });

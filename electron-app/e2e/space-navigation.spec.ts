@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 test.describe('Space Navigation', () => {
-    test('video space embeds the Laura renderer', async ({ electronApp, mainPage }) => {
+    test('video space embeds the Laura renderer', async ({ electronApp, mainPage, mainProcessLogs }) => {
         const lauraEnvironment = await electronApp.evaluate(() => ({
             tokenFailClosed: process.env.LAURA_TOKEN === '',
             deadLoopbackUrl: process.env.LAURA_URL === 'http://127.0.0.1:0',
@@ -106,6 +106,24 @@ test.describe('Space Navigation', () => {
             serviceInfoUnavailable: true,
             hasLegacyVideoApi: false,
         });
+
+        await expect.poll(mainProcessLogs).toContain('[Main] Laura host and VideoManager initialized');
+        const startupLogs = mainProcessLogs();
+        expect(startupLogs).toContain('[Main] FAST_STARTUP active — external startup side effects disabled');
+        for (const forbiddenMarker of [
+            'Starting Python backend',
+            'Python process started with PID',
+            '[BrainManager] Starting brain server',
+            '[OpenFang] Starting daemon',
+            '[Supabase-RT]',
+            '[Brain-Bridge] Connecting',
+            'Starting n8n Docker container',
+            'Starting MiroFish Docker containers',
+            '[RowboatManager] Bridge',
+            '[RowboatManager] Restarting bridge',
+        ]) {
+            expect(startupLogs).not.toContain(forbiddenMarker);
+        }
     });
 
     test('navigateToSpace API is callable', async ({ mainPage }) => {

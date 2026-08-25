@@ -34,6 +34,8 @@ const _rootEnv = path.join(__dirname, '..', '..', '..', '.env');  // Vibemind_V1
 const _voiceEnv = path.join(__dirname, '..', '.env');              // vibemind-os/voice/.env
 require('dotenv').config({ path: _rootEnv });                      // master first
 require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
+const { createStartupPolicy } = require('./startup-policy');
+const startupPolicy = createStartupPolicy(process.env);
 
 // Coding Engine Dashboard Integration
 const DockerManager = require('./docker-manager');
@@ -3179,7 +3181,7 @@ function registerShortcuts() {
 
 app.whenReady().then(async () => {
     // Initialize Sentry error tracking (requires app to be ready)
-    sentry.initSentry();
+    await startupPolicy.runExternalStartup('Sentry', async () => sentry.initSentry());
 
     // Register vibemind-video:// protocol handler for video playback
     protocol.handle('vibemind-video', (request) => {
@@ -3209,38 +3211,41 @@ app.whenReady().then(async () => {
         return net.fetch(`file:///${normalized.replace(/\\/g, '/')}`);
     });
 
-    // Initialize Coding Engine managers
-    dockerManager = new DockerManager();
-    portAllocator = new PortAllocator();
+    await startupPolicy.runExternalStartup('Docker bootstrap', async () => {
+        // Initialize Coding Engine managers
+        dockerManager = new DockerManager();
+        portAllocator = new PortAllocator();
 
-    // Clean up stale containers from previous sessions and release their ports
-    try {
-        await portAllocator.cleanupStaleContainers();
-    } catch (e) {
-        console.warn('[Main] Container cleanup failed (Docker may not be running):', e.message);
-    }
-
-    // Start media server container (video/audio playback for Rowboat)
-    try {
-        const { execSync } = require('child_process');
-        const path = require('path');
-        const fs = require('fs');
-        const mediaCompose = path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
-        if (fs.existsSync(mediaCompose)) {
-            execSync(`docker compose -f "${mediaCompose}" up -d media`, {
-                timeout: 15000, stdio: 'ignore',
-            });
-            console.log('[Main] Media server container started (port 9877)');
+        // Clean up stale containers from previous sessions and release their ports
+        try {
+            await portAllocator.cleanupStaleContainers();
+        } catch (e) {
+            console.warn('[Main] Container cleanup failed (Docker may not be running):', e.message);
         }
-    } catch (e) {
-        console.warn('[Main] Media server container failed (videos may not play):', e.message);
-    }
+
+        // Start media server container (video/audio playback for Rowboat)
+        try {
+            const { execSync } = require('child_process');
+            const path = require('path');
+            const fs = require('fs');
+            const mediaCompose = path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
+            if (fs.existsSync(mediaCompose)) {
+                execSync(`docker compose -f "${mediaCompose}" up -d media`, {
+                    timeout: 15000, stdio: 'ignore',
+                });
+                console.log('[Main] Media server container started (port 9877)');
+            }
+        } catch (e) {
+            console.warn('[Main] Media server container failed (videos may not play):', e.message);
+        }
+    });
 
     setupIpcHandlers();
     createWindow();
 
-    // Initialize Dashboard Manager after window is created
-    dashboardManager = new DashboardManager(mainWindow);
+    await startupPolicy.runExternalStartup('auxiliary managers and services', async () => {
+        // Initialize Dashboard Manager after window is created
+        dashboardManager = new DashboardManager(mainWindow);
 
     // Forward engine log lines and structured progress to the dashboard renderer
     if (dockerManager && dashboardManager) {
@@ -3303,8 +3308,9 @@ app.whenReady().then(async () => {
     // Initialize MiroFish Manager
     mirofishManager = new MiroFishManager(mainWindow);
 
-    // Initialize Flowzen Diary (Blue Rose Journal) Manager
-    flowzenManager = new FlowzenManager(mainWindow, sendToPython);
+        // Initialize Flowzen Diary (Blue Rose Journal) Manager
+        flowzenManager = new FlowzenManager(mainWindow, sendToPython);
+    });
 
     const lauraRendererUrl = pathToFileURL(resolveLauraRendererPath({
         dirname: __dirname,
@@ -3330,9 +3336,14 @@ app.whenReady().then(async () => {
 
     // Initialize Video Space Manager
     videoManager = new VideoManager(mainWindow);
+    console.log('[Main] Laura host and VideoManager initialized');
+    if (startupPolicy.isFastStartup) {
+        console.log('[Main] FAST_STARTUP active — external startup side effects disabled');
+    }
 
-    // Initialize eyeTerm Camera Preview Manager
-    eyetermManager = new EyeTermManager(mainWindow);
+    await startupPolicy.runExternalStartup('post-window external services', async () => {
+        // Initialize eyeTerm Camera Preview Manager
+        eyetermManager = new EyeTermManager(mainWindow);
 
     // ========================================
     // N8N DOCKER AUTO-START
@@ -3442,11 +3453,14 @@ app.whenReady().then(async () => {
         console.error('[Rowboat] Chat will not work — knowledge/graph view still functional');
     }
 
-    startPythonBackend();
+        startPythonBackend();
+    });
     // createTray();  // Uncomment when icon is available
     registerShortcuts();
 
-    console.log('[Main] Coding Engine Dashboard + Rowboat integration initialized');
+    if (!startupPolicy.isFastStartup) {
+        console.log('[Main] Coding Engine Dashboard + Rowboat integration initialized');
+    }
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
