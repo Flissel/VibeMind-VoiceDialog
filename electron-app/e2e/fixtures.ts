@@ -17,6 +17,8 @@ export const test = base.extend<VibeMindFixtures>({
             args: [path.join(__dirname, '..')],
             env: {
                 ...env,
+                LAURA_TOKEN: '',
+                LAURA_URL: 'http://127.0.0.1:0',
                 NODE_ENV: 'test',
                 FORCE_SYNC_MODE: 'true',
                 FAST_STARTUP: 'true',

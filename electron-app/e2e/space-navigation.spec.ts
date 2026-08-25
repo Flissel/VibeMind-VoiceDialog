@@ -2,6 +2,16 @@ import { test, expect } from './fixtures';
 
 test.describe('Space Navigation', () => {
     test('video space embeds the Laura renderer', async ({ electronApp, mainPage }) => {
+        const lauraEnvironment = await electronApp.evaluate(() => ({
+            tokenFailClosed: process.env.LAURA_TOKEN === '',
+            deadLoopbackUrl: process.env.LAURA_URL === 'http://127.0.0.1:0',
+        }));
+
+        expect(lauraEnvironment).toEqual({
+            tokenFailClosed: true,
+            deadLoopbackUrl: true,
+        });
+
         await mainPage.evaluate(() => {
             const vibemind = (window as Window & {
                 vibemind?: { showVideo?: () => void };
@@ -21,12 +31,14 @@ test.describe('Space Navigation', () => {
                 title: string | null;
                 titleVisible: boolean;
                 hasLauraGetServiceInfo: boolean;
+                serviceInfoUnavailable: boolean;
                 hasLegacyVideoApi: boolean;
             } = {
                 attached: false,
                 title: null,
                 titleVisible: false,
                 hasLauraGetServiceInfo: false,
+                serviceInfoUnavailable: false,
                 hasLegacyVideoApi: false,
             };
 
@@ -38,10 +50,14 @@ test.describe('Space Navigation', () => {
                 if (view && !view.webContents.isDestroyed()) {
                     try {
                         lastState = await view.webContents.executeJavaScript(`
-                            (() => {
+                            (async () => {
                                 const heading = Array.from(document.querySelectorAll('h1'))
                                     .find((element) => element.textContent?.trim() === 'Laura') ?? null;
                                 const style = heading ? getComputedStyle(heading) : null;
+                                const hasLauraGetServiceInfo =
+                                    typeof window.laura?.getServiceInfo === 'function';
+                                const serviceInfoUnavailable = hasLauraGetServiceInfo
+                                    && await window.laura.getServiceInfo() === null;
                                 const titleVisible = Boolean(
                                     heading
                                     && style
@@ -55,8 +71,8 @@ test.describe('Space Navigation', () => {
                                     attached: true,
                                     title: heading?.textContent?.trim() ?? null,
                                     titleVisible,
-                                    hasLauraGetServiceInfo:
-                                        typeof window.laura?.getServiceInfo === 'function',
+                                    hasLauraGetServiceInfo,
+                                    serviceInfoUnavailable,
                                     hasLegacyVideoApi:
                                         typeof window.vibemindVideo !== 'undefined',
                                 };
@@ -66,6 +82,7 @@ test.describe('Space Navigation', () => {
                         if (
                             lastState.titleVisible
                             && lastState.hasLauraGetServiceInfo
+                            && lastState.serviceInfoUnavailable
                             && !lastState.hasLegacyVideoApi
                         ) {
                             return lastState;
@@ -86,6 +103,7 @@ test.describe('Space Navigation', () => {
             title: 'Laura',
             titleVisible: true,
             hasLauraGetServiceInfo: true,
+            serviceInfoUnavailable: true,
             hasLegacyVideoApi: false,
         });
     });
