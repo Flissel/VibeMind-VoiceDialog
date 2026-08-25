@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const {
   LAURA_SESSION_PARTITION,
+  isAllowedLauraIpcEvent,
   isInsideWorkspace,
   readLauraServiceInfo,
   resolveInsideWorkspace,
@@ -22,8 +23,30 @@ test('main installs Laura host on its isolated session protocol with a sender bo
   assert.match(mainSource, /session\.fromPartition\(LAURA_SESSION_PARTITION\)\.protocol/);
   assert.match(
     mainSource,
-    /isAllowedSender:\s*\(sender\)\s*=>\s*Boolean\(videoManager\?\.videoView\?\.webContents\)\s*&&\s*sender\s*===\s*videoManager\.videoView\.webContents/,
+    /isAllowedSender:\s*\(event\)\s*=>\s*isAllowedLauraIpcEvent\(/,
   );
+  assert.match(mainSource, /pathToFileURL\(resolveLauraRendererPath\(/);
+});
+
+test('Laura IPC accepts only its exact local main frame', () => {
+  const rendererUrl = 'file:///C:/Laura/index.html';
+  const mainFrame = { url: rendererUrl };
+  const webContents = { mainFrame };
+
+  assert.equal(isAllowedLauraIpcEvent({ sender: webContents, senderFrame: mainFrame }, webContents, rendererUrl), true);
+  assert.equal(
+    isAllowedLauraIpcEvent(
+      { sender: webContents, senderFrame: { url: rendererUrl } },
+      webContents,
+      rendererUrl,
+    ),
+    false,
+    'subframes are rejected even when they belong to the same webContents',
+  );
+  mainFrame.url = 'https://remote.example/laura';
+  assert.equal(isAllowedLauraIpcEvent({ sender: webContents, senderFrame: mainFrame }, webContents, rendererUrl), false);
+  mainFrame.url = `${rendererUrl}?unexpected=1`;
+  assert.equal(isAllowedLauraIpcEvent({ sender: webContents, senderFrame: mainFrame }, webContents, rendererUrl), false);
 });
 
 function rendererPaths() {

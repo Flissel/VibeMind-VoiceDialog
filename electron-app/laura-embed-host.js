@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { open, readdir, writeFile } = require('node:fs/promises');
+const { open, readdir, stat, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
@@ -49,6 +49,21 @@ function contentTypeFor(filePath) {
   return 'application/octet-stream';
 }
 
+function hasStableFileId(stats) {
+  return stats && stats.dev !== undefined && stats.ino !== undefined
+    && stats.ino !== 0 && stats.ino !== 0n;
+}
+
+function fileIdentityMatches(handleStats, pathStats) {
+  if (hasStableFileId(handleStats) && hasStableFileId(pathStats)) {
+    return handleStats.dev === pathStats.dev && handleStats.ino === pathStats.ino;
+  }
+  const fallbackFields = ['size', 'mode', 'mtimeMs', 'ctimeMs', 'birthtimeMs'];
+  return fallbackFields.every((field) => Number.isFinite(handleStats?.[field])
+    && Number.isFinite(pathStats?.[field])
+    && handleStats[field] === pathStats[field]);
+}
+
 function createLauraEmbedHost({
   app,
   dialog,
@@ -62,6 +77,7 @@ function createLauraEmbedHost({
   readdir: readDirectory = readdir,
   realpathSync = fs.realpathSync.native,
   shell,
+  statPath = stat,
 }) {
   const serviceInfo = readLauraServiceInfo(env);
   const workspaceRoot = env.LAURA_WORKSPACE || path.join(app.getPath('userData'), 'laura-workspace');
@@ -85,6 +101,10 @@ function createLauraEmbedHost({
 
   function canonicalDirectoryKey(candidate) {
     return process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+  }
+
+  function sameCanonicalPath(left, right) {
+    return canonicalDirectoryKey(left) === canonicalDirectoryKey(right);
   }
 
   function readCachedPath(cache, key) {
@@ -193,20 +213,40 @@ function createLauraEmbedHost({
       return new Response('media missing on disk', { status: 404 });
     }
 
-    let total;
+    let fileStats;
     try {
-      total = (await fileHandle.stat()).size;
+      const postOpenPath = safeWorkspacePath(filePath);
+      if (!postOpenPath || !sameCanonicalPath(filePath, postOpenPath)) {
+        throw new Error('media path changed after open');
+      }
+      const [handleStats, pathStats] = await Promise.all([
+        fileHandle.stat(),
+        statPath(postOpenPath),
+      ]);
+      if (!fileIdentityMatches(handleStats, pathStats)) {
+        throw new Error('opened media identity mismatch');
+      }
+      fileStats = handleStats;
     } catch {
       await fileHandle.close().catch(() => {});
       evictCachedPath(filePath);
       return new Response('media missing on disk', { status: 404 });
     }
+    const total = fileStats.size;
 
     const baseHeaders = {
       'Accept-Ranges': 'bytes',
       'Content-Type': contentTypeFor(filePath),
     };
     const rangeHeader = request.headers.get('Range');
+    if (total === 0) {
+      await fileHandle.close().catch(() => {});
+      if (rangeHeader !== null) return rangeNotSatisfiable(total, baseHeaders);
+      return new Response(null, {
+        status: 200,
+        headers: { ...baseHeaders, 'Content-Length': '0' },
+      });
+    }
     let start = 0;
     let end = total - 1;
     let status = 200;
@@ -314,7 +354,7 @@ function createLauraEmbedHost({
       if (installed) return;
       for (const [channel, handler] of handlers) {
         ipcMain.handle(channel, async (event, ...args) => {
-          if (typeof isAllowedSender !== 'function' || !isAllowedSender(event?.sender)) {
+          if (typeof isAllowedSender !== 'function' || !isAllowedSender(event)) {
             throw new Error('unauthorized Laura IPC sender');
           }
           return handler(event, ...args);

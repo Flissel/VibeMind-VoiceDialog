@@ -3,6 +3,20 @@ const path = require('node:path');
 
 const LAURA_SESSION_PARTITION = 'persist:laura';
 
+function isAllowedLauraIpcEvent(event, webContents, rendererUrl) {
+  if (!event || !webContents || typeof rendererUrl !== 'string') return false;
+  let expectedUrl;
+  try {
+    expectedUrl = new URL(rendererUrl);
+  } catch {
+    return false;
+  }
+  if (expectedUrl.protocol !== 'file:' || expectedUrl.search || expectedUrl.hash) return false;
+  return event.sender === webContents
+    && event.senderFrame === webContents.mainFrame
+    && event.senderFrame?.url === expectedUrl.href;
+}
+
 function resolveLauraRendererPath({ dirname, resourcesPath, existsSync }) {
   const packaged = path.join(resourcesPath || '', 'laura-renderer', 'index.html');
   const development = path.resolve(
@@ -76,6 +90,7 @@ function isInsideWorkspace(root, candidate, platform, realpathSync) {
 
 module.exports = {
   LAURA_SESSION_PARTITION,
+  isAllowedLauraIpcEvent,
   isInsideWorkspace,
   readLauraServiceInfo,
   resolveInsideWorkspace,

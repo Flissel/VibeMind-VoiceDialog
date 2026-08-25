@@ -10,11 +10,16 @@ const sentry = require('./sentry');
 
 const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, globalShortcut, shell, protocol, net, session } = require('electron');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('node:url');
 
 const path = require('path');
 const fs = require('fs');
 const { createLauraEmbedHost } = require('./laura-embed-host');
-const { LAURA_SESSION_PARTITION } = require('./laura-embed-config');
+const {
+    LAURA_SESSION_PARTITION,
+    isAllowedLauraIpcEvent,
+    resolveLauraRendererPath,
+} = require('./laura-embed-config');
 
 protocol.registerSchemesAsPrivileged([
     {
@@ -3301,13 +3306,21 @@ app.whenReady().then(async () => {
     // Initialize Flowzen Diary (Blue Rose Journal) Manager
     flowzenManager = new FlowzenManager(mainWindow, sendToPython);
 
+    const lauraRendererUrl = pathToFileURL(resolveLauraRendererPath({
+        dirname: __dirname,
+        resourcesPath: process.resourcesPath,
+        existsSync: fs.existsSync,
+    })).href;
     lauraEmbedHost = createLauraEmbedHost({
         app,
         dialog,
         env: process.env,
         ipcMain,
-        isAllowedSender: (sender) => Boolean(videoManager?.videoView?.webContents)
-            && sender === videoManager.videoView.webContents,
+        isAllowedSender: (event) => isAllowedLauraIpcEvent(
+            event,
+            videoManager?.videoView?.webContents,
+            lauraRendererUrl,
+        ),
         logger: console,
         net,
         protocol: session.fromPartition(LAURA_SESSION_PARTITION).protocol,
