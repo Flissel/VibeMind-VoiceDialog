@@ -21,7 +21,10 @@ function safeHref(raw) {
     }
 }
 
-const INLINE_RE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/;
+// Der URL-Teil eines Links darf ein einzelnes Paar runder Klammern in sich
+// tragen (z.B. eine Wikipedia-URL ".../Foo_(bar)") - sonst schneidet das
+// erste ")" die URL mitten im Pfad ab.
+const INLINE_RE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\))/;
 
 function parseInline(text) {
     const spans = [];
@@ -53,6 +56,16 @@ function parseInline(text) {
 
 function splitRow(line) {
     return line.replace(/^\||\|$/g, '').split('|').map(c => parseInline(c.trim()));
+}
+
+// Eine Zeile ist nur dann eine Tabellentrennzeile, wenn JEDE Zelle rein aus
+// Trennzeichen besteht (Bindestriche, optionale Ausrichtungs-Doppelpunkte,
+// Leerraum) - nicht schon, wenn nur die ERSTE Zelle so aussieht. Eine
+// Datenzeile, deren erste Spalte "--" fuer "nicht zutreffend" traegt, waere
+// sonst mitsamt ihren echten Daten in spaeteren Spalten verworfen worden.
+function isSeparatorRow(line) {
+    const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+    return cells.length > 0 && cells.every(c => /^\s*:?-+:?\s*$/.test(c));
 }
 
 function parseMarkdown(text) {
@@ -90,7 +103,7 @@ function parseMarkdown(text) {
         if (line.includes('|') && /^\s*\|/.test(line)) {
             const rows = [];
             while (i < lines.length && /^\s*\|/.test(lines[i])) {
-                if (!/^\s*\|[\s:-]+\|/.test(lines[i])) rows.push(splitRow(lines[i].trim()));
+                if (!isSeparatorRow(lines[i])) rows.push(splitRow(lines[i].trim()));
                 i++;
             }
             blocks.push({ kind: 'table', rows });
