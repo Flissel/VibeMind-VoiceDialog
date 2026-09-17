@@ -313,6 +313,19 @@ def _handle_canvas_event(path: Path, text: str, observed_hash: str,
         _save_hash_store(hash_store)
         return
 
+    # RESEARCH NODES ARE WRITE-ONCE, READ-ONLY FROM FS: a research node is
+    # filed by a deep-research run and never touched again — vault->database
+    # is meaningless for it by construction. Guard here, BEFORE the LWW check
+    # and BEFORE update_canvas_in_db, so a research node's body (which
+    # legitimately contains many `---` lines — _body_description stops
+    # collecting at the first one) can never be written back truncated.
+    if fields.get("node_type") == "research":
+        print(f"[worker_b] node_type=research READ-ONLY, ignoring edit: {path.name}",
+              flush=True)
+        hash_store[str(path)] = observed_hash
+        _save_hash_store(hash_store)
+        return
+
     # CONFLICT (LWW): DB wins if the canvas row changed after this file was rendered.
     db_updated = _canvas_db_updated_at(fields["canvas_node_id"], container)
     file_synced = fields.get("last_synced_at")
