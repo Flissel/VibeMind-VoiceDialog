@@ -101,7 +101,10 @@ def _republish_bubbles(by_bubble: dict[str, list], container: str, hash_store: d
                        label: str) -> list:
     """Re-publish each unique bubble once (covers ALL its ideas AND canvas nodes —
     publish_bubble renders both into the one folder). Returns the flat list of
-    outbox row-ids that were covered (caller marks them applied in their table).
+    outbox row-ids whose bubble ACTUALLY published successfully — the caller
+    must mark ONLY these applied in their table. A bubble whose repo.get() or
+    publish_bubble() raised is skipped (its ids are NOT added), so the caller
+    leaves its outbox rows unapplied for the next drain to retry.
     Shared by the ideas- and canvas-outbox drains so a bubble touched by both in
     one cycle is published only once (de-dup happens in the merged by_bubble map)."""
     from data import IdeasRepository
@@ -146,36 +149,58 @@ def drain_outbox(container: str, hash_store: dict) -> int:
 
     # Merge BOTH outboxes onto the bubble key (de-dup), tracking which table each
     # row-id came from so we mark them applied in the right table afterwards.
+    # by_bubble keeps the REAL row-ids per bubble (not a placeholder) so a
+    # failed publish can be traced back to exactly the rows it covers — see the
+    # applied/failed split below (fixed 2026-09-17, see CHANGELOG note).
     by_bubble: dict[str, list] = {}
     idea_ids: list[str] = []
     canvas_ids: list[str] = []
     for r in idea_rows:
-        by_bubble.setdefault(r["bubble_id"], [])
+        by_bubble.setdefault(r["bubble_id"], []).append(r["id"])
         idea_ids.append(r["id"])
     for r in canvas_rows:
-        by_bubble.setdefault(r["bubble_id"], [])
+        by_bubble.setdefault(r["bubble_id"], []).append(r["id"])
         canvas_ids.append(r["id"])
-    # value lists are only used for the count; the publish covers the whole bubble
-    for b in by_bubble:
-        by_bubble[b] = ["_"]
 
-    _republish_bubbles(by_bubble, container, hash_store, label="ideas+canvas")
+    # applied_ids is the flat list of outbox row-ids whose bubble ACTUALLY
+    # published (see _republish_bubbles: a raised exception skips the
+    # `applied_ids.extend(ids)` for that bubble). Only THOSE rows may be
+    # marked applied — a row whose bubble failed must stay `applied_at IS
+    # NULL` so the next drain retries it.
+    #
+    # Bug fixed 2026-09-17: this return value used to be discarded entirely,
+    # and drain_outbox marked every row in idea_ids/canvas_ids applied
+    # unconditionally — including rows whose publish_bubble() call had just
+    # raised. That silently marked 53 rows "synced" (3 canvas + 50 ideas,
+    # 2026-09-16T23:19:19Z) while zero files were written, because every
+    # publish attempt in that run failed with a network timeout. See
+    # docs/operations/2026-09-16-bubble-sync-dauerbetrieb.md for the incident
+    # and the reversal of those 53 rows.
+    applied_ids = _republish_bubbles(by_bubble, container, hash_store, label="ideas+canvas")
     if hash_store:
         _save_hash_store(hash_store)
 
-    if idea_ids:
-        id_array = ",".join(f"'{i}'::uuid" for i in idea_ids)
+    applied_set = set(applied_ids)
+    applied_idea_ids = [i for i in idea_ids if i in applied_set]
+    applied_canvas_ids = [i for i in canvas_ids if i in applied_set]
+    skipped = (len(idea_ids) - len(applied_idea_ids)) + (len(canvas_ids) - len(applied_canvas_ids))
+    if skipped:
+        print(f"[worker_a] {skipped} outbox row(s) NOT marked applied "
+              f"(publish failed) — will retry next drain", flush=True)
+
+    if applied_idea_ids:
+        id_array = ",".join(f"'{i}'::uuid" for i in applied_idea_ids)
         _db.execute_via_docker(
             f"SELECT public.mark_ideas_outbox_applied(ARRAY[{id_array}])",
             container=container,
         )
-    if canvas_ids:
-        id_array = ",".join(f"'{i}'::uuid" for i in canvas_ids)
+    if applied_canvas_ids:
+        id_array = ",".join(f"'{i}'::uuid" for i in applied_canvas_ids)
         _db.execute_via_docker(
             f"SELECT public.mark_canvas_outbox_applied(ARRAY[{id_array}])",
             container=container,
         )
-    return len(idea_ids) + len(canvas_ids)
+    return len(applied_idea_ids) + len(applied_canvas_ids)
 
 
 def listen_forever(container: str) -> None:
@@ -214,7 +239,7 @@ def _main() -> int:
     if args.once:
         hs = _load_hash_store()
         n = drain_outbox(container, hs)
-        print(f"[worker_a] drained {n} events", flush=True)
+        print(f"[worker_a] applied {n} events", flush=True)
         return 0
     listen_forever(container)
     return 0
