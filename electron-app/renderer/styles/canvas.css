@@ -491,3 +491,42 @@
     min-width: 40px;
     text-align: center;
 }
+
+/* Research-Karten: zusammengeklappt eine Vorschau, aufgeklappt ein
+   eigener Scrollbereich - ein 436-Zeilen-Report darf die Flaeche nicht
+   sprengen. */
+.canvas-node[data-node-type="research"] { width: 320px; }
+
+.canvas-node[data-node-type="research"] .research-meta {
+    font-size: 11px; opacity: 0.7; margin-bottom: 6px;
+}
+
+.canvas-node[data-node-type="research"] .research-body {
+    overflow-y: auto; max-height: 480px; font-size: 12px; line-height: 1.45;
+}
+
+.canvas-node[data-node-type="research"] .research-body.collapsed {
+    max-height: 90px; overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+}
+
+.canvas-node[data-node-type="research"] .research-body h1,
+.canvas-node[data-node-type="research"] .research-body h2,
+.canvas-node[data-node-type="research"] .research-body h3,
+.canvas-node[data-node-type="research"] .research-body h4 {
+    font-size: 13px; margin: 8px 0 4px;
+}
+
+.canvas-node[data-node-type="research"] .research-body table {
+    border-collapse: collapse; width: 100%; font-size: 11px;
+}
+.canvas-node[data-node-type="research"] .research-body th,
+.canvas-node[data-node-type="research"] .research-body td {
+    border: 1px solid rgba(255,255,255,0.15); padding: 2px 4px; text-align: left;
+}
+.canvas-node[data-node-type="research"] .research-body pre {
+    overflow-x: auto; font-size: 11px;
+}
+.canvas-node[data-node-type="research"] .research-toggle {
+    margin-top: 6px; font-size: 11px; cursor: pointer;
+}

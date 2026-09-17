@@ -560,7 +560,13 @@ class UniverseCanvas {
         // Content area (type-specific)
         const content = document.createElement('div');
         content.className = 'node-content';
-        content.innerHTML = this.getNodeContent(data);
+        if (data.type === 'research') {
+            // Reporttext stammt aus fremden Webseiten: DOM bauen, nie
+            // innerHTML. Siehe lib/research-markdown.js.
+            this.renderResearchNode(content, data, document);
+        } else {
+            content.innerHTML = this.getNodeContent(data);
+        }
         el.appendChild(content);
 
         // Event handlers
@@ -650,6 +656,7 @@ class UniverseCanvas {
             case 'feature': return '⚙️';
             case 'feature_doc': return '📋';
             case 'feature_index': return '📑';
+            case 'research': return '🔬';
             default: return '📄';
         }
     }
@@ -694,6 +701,33 @@ class UniverseCanvas {
             default:
                 return `<div class="node-text">${data.content?.text || ''}</div>`;
         }
+    }
+
+    renderResearchNode(contentEl, data, doc) {
+        const text = data.content?.text || '';
+        const citations = data.metadata?.citation_count;
+
+        const meta = doc.createElement('div');
+        meta.className = 'research-meta';
+        meta.textContent = (citations === undefined)
+            ? 'Research-Report'
+            : `Research-Report · ${citations} Quellen`;
+        contentEl.appendChild(meta);
+
+        const body = doc.createElement('div');
+        body.className = 'research-body collapsed';
+        buildInto(body, parseMarkdown(text), doc);
+        contentEl.appendChild(body);
+
+        const toggle = doc.createElement('button');
+        toggle.className = 'research-toggle';
+        toggle.textContent = 'Aufklappen';
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const zu = body.classList.toggle('collapsed');
+            toggle.textContent = zu ? 'Aufklappen' : 'Zuklappen';
+        });
+        contentEl.appendChild(toggle);
     }
 
     escapeHtml(text) {
@@ -1692,6 +1726,7 @@ class UniverseCanvas {
                 content_json: r.content_json || null,
                 format_schema: r.format_schema || null,
                 format_type: (r.content_json && r.content_json.type) || null,
+                metadata: r.metadata || null,
             }));
             const edges = allEdges
                 .filter(e => nodeIds.has(e.from_node_id) && nodeIds.has(e.to_node_id))

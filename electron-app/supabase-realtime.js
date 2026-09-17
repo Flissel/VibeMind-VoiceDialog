@@ -47,6 +47,7 @@ const SUBSCRIPTIONS = [
       id: row.id, type: row.node_type || 'note',
       position: { x: row.x || 100, y: row.y || 100 },
       content: { title: row.title || '', text: row.content || '' },
+      metadata: row.metadata || null,
     } }) },
   { table: 'canvas_nodes', event: 'UPDATE', messageType: 'node_updated',
     // Renderer expects msg.updates (not msg.node) — see handlers/canvas-handlers.js:90
@@ -61,6 +62,7 @@ const SUBSCRIPTIONS = [
         content_json: row.content_json || null,
         format_schema: row.format_schema || null,
         format_type: (row.content_json && row.content_json.type) || null,
+        metadata: row.metadata || null,
       },
     }) },
   // Phase 11.U.I rev8 — DELETE subscription was missing; UI never refreshed
