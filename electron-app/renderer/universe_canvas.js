@@ -21,9 +21,23 @@ function _supabaseRestConfig() {
         console.warn('[UniverseCanvas] vibemind.supabase.anonKey missing from preload bridge — Supabase REST calls will fail');
     }
     const key = cfg.anonKey || '';
+    // NUR apikey, bewusst KEIN `Authorization: Bearer`. Der anon-Schluessel ist
+    // ein API-Schluessel fuer das Gateway, kein Nutzer-Token.
+    //
+    // Gemessen 2026-09-22 gegen beide Instanzen: mit beiden Headern antwortet
+    // die VM mit 401 und `PGRST301 None of the keys was able to decode the JWT`.
+    // Deren PostgREST prueft gegen ein asymmetrisches EC-JWKS (GoTrue 2.188
+    // signiert dort so, 3 Nutzer / 27 aktive Sitzungen), unser anon-Schluessel
+    // ist aber HS256 — als Bearer vorgelegt ist er nicht verifizierbar. Mit
+    // `apikey` allein laesst Kong die Anfrage durch und PostgREST arbeitet als
+    // Rolle `anon`; genau das braucht der Canvas.
+    //
+    // Die lokale Instanz akzeptiert beide Varianten (sie prueft symmetrisch mit
+    // demselben Geheimnis), `apikey` allein funktioniert also ueberall. Das
+    // Bearer-Feld wieder einzusetzen bricht die App gegen die VM.
     return {
         base: `${cfg.url || ''}/rest/v1`,
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        headers: { apikey: key },
     };
 }
 
