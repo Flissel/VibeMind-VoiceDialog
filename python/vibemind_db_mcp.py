@@ -33,7 +33,14 @@ def _api(method: str, path: str, body: Any = None, params: str = "") -> dict:
         url += f"?{params}"
     headers = {
         "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
+    # KEIN Authorization-Bearer. SUPABASE_KEY ist hier der ANON-Schluessel,
+    # also ein API-Schluessel fuers Gateway und kein Nutzer-Token - er bringt
+    # als Bearer keine zusaetzlichen Rechte, kostet aber die Anfrage:
+    # die PostgREST der VM prueft gegen ein asymmetrisches EC-JWKS (GoTrue
+    # 2.188, 3 Nutzer / 27 aktive Sitzungen), unser HS256-Schluessel ist dort
+    # als Bearer nicht verifizierbar. Gemessen 2026-09-22: mit beiden Headern
+    # HTTP 401 PGRST301 "None of the keys was able to decode the JWT", mit
+    # apikey allein HTTP 200. Lokal funktionieren beide Varianten.
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }

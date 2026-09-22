@@ -16,7 +16,15 @@ SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY",
 def query_supabase(table, filters=""):
     url = f"{SUPABASE_URL}/rest/v1/{table}?select=*&{filters}"
     req = urllib.request.Request(url, headers={
-        "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"
+    # KEIN Authorization-Bearer. SUPABASE_KEY ist hier der ANON-Schluessel,
+    # also ein API-Schluessel fuers Gateway und kein Nutzer-Token - er bringt
+    # als Bearer keine zusaetzlichen Rechte, kostet aber die Anfrage:
+    # die PostgREST der VM prueft gegen ein asymmetrisches EC-JWKS (GoTrue
+    # 2.188, 3 Nutzer / 27 aktive Sitzungen), unser HS256-Schluessel ist dort
+    # als Bearer nicht verifizierbar. Gemessen 2026-09-22: mit beiden Headern
+    # HTTP 401 PGRST301 "None of the keys was able to decode the JWT", mit
+    # apikey allein HTTP 200. Lokal funktionieren beide Varianten.
+        "apikey": SUPABASE_KEY
     })
     resp = urllib.request.urlopen(req, timeout=5)
     return json.loads(resp.read().decode())
