@@ -2542,9 +2542,12 @@
         window._fetchEvalFromDB = async function(bubbleDbId, title) {
             if (!bubbleDbId && !title) return;
             try {
-                const base = (window.__SUPABASE_URL || 'http://127.0.0.1:54321');
-                const key = window.__SUPABASE_ANON_KEY || '';
-                const hdrs = key ? { apikey: key, Authorization: 'Bearer ' + key } : {};
+                // Phase 11.U.K — window.__SUPABASE_URL/__SUPABASE_ANON_KEY were
+                // read here but SET NOWHERE, so this fetch always fell through
+                // to a hardcoded 127.0.0.1 with an EMPTY key (no auth header at
+                // all), while the canvas talked to whichever instance the
+                // preload bridge names. Use that same config — one place decides.
+                const { base, headers: hdrs } = _supabaseRestConfig();
                 // Phase 11.U.H — DB-UUIDs here are 8+ hex chars (e.g.
                 // ff16dc78). On an auto-enter (force_resync race) the 3D
                 // object isn't loaded yet so enterSpace passes the LOCAL
@@ -2554,9 +2557,9 @@
                 const looksUuid = /^[0-9a-f]{6,}$/i.test(String(bubbleDbId || ''));
                 let url;
                 if (bubbleDbId && looksUuid) {
-                    url = `${base}/rest/v1/ideas?id=eq.${encodeURIComponent(bubbleDbId)}&select=title,score,metadata`;
+                    url = `${base}/ideas?id=eq.${encodeURIComponent(bubbleDbId)}&select=title,score,metadata`;
                 } else if (title) {
-                    url = `${base}/rest/v1/ideas?title=eq.${encodeURIComponent(title)}&parent_id=is.null&select=id,title,score,metadata&limit=1`;
+                    url = `${base}/ideas?title=eq.${encodeURIComponent(title)}&parent_id=is.null&select=id,title,score,metadata&limit=1`;
                 } else {
                     return;  // no UUID and no title — can't resolve
                 }

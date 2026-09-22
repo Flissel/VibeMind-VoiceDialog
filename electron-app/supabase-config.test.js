@@ -27,7 +27,7 @@ test('supabase-config falls back to the known dev VM URL and JWT when no env var
     t.after(restoreEnv);
     const { SUPABASE_URL, SUPABASE_ANON_KEY } = freshRequire({});
 
-    assert.equal(SUPABASE_URL, 'http://192.168.178.65:54321');
+    assert.equal(SUPABASE_URL, 'http://127.0.0.1:54321');
     assert.match(SUPABASE_ANON_KEY, /^eyJ/, 'fallback key looks like a JWT');
 });
 
