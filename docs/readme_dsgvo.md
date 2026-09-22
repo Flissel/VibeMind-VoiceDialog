@@ -20,7 +20,7 @@ Das DSGVO-Konzept implementiert Vibeminds Ansatz zur Datensouveränität mit dre
 
 ### Implementiert
 - **Ollama-Client**: Wrapper für lokale LLM-Inference (`python/swarm/ollama_client.py`)
-- **Cloud-Provider-Integration**: OpenAI, Anthropic, OpenRouter über konfigurierbare API-Keys in `python/config.py`
+- **Cloud-Provider-Integration**: OpenAI, Anthropic, OpenRouter über konfigurierbare API-Keys in `python/llm_config.py` und `python/config/llm_models.yml`
 - **Konfigurierbare Endpoints**: `.env`-basierte Konfiguration für verschiedene Provider
 - **Auskunft nach Art. 15 DSGVO**: `kontakt_auskunft(lead_id)` erzeugt einen vollständigen Markdown-Export aller zu einer Person gespeicherten Daten — Stammdaten, Protokoll, Entwürfe (`spaces/sales-claw/docs/06_DSGVO.md`, `spaces/sales-claw/sales-mcp/server.py`); die Übergabe an die betroffene Person prüft der Betreiber von Hand
 - **Verzeichnis von Verarbeitungstätigkeiten nach Art. 30 DSGVO**: für das Marketing-System geführt, inkl. Audit-Log-Tabellen (`marketing.audit_log`, `marketing.n8n_api_audit`) (`spaces/marketing/docs/dsgvo-data-flow.md`)
