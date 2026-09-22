@@ -5,6 +5,28 @@
  * Nodes are HTML divs, edges are SVG lines.
  */
 
+// Phase 11.U.K — Supabase base URL + anon key come from the preload bridge
+// (window.vibemind.supabase, wired in preload.js from supabase-config.js),
+// never as a literal in this file. That keeps exactly one place deciding
+// which Supabase instance the app talks to. If the bridge value is missing
+// at runtime, fail loudly (console.warn) rather than silently falling back
+// to a hardcoded default — a silent stale default is how the old bug (a
+// dead VM address baked into two places here) went unnoticed.
+function _supabaseRestConfig() {
+    const cfg = (window.vibemind && window.vibemind.supabase) || {};
+    if (!cfg.url) {
+        console.warn('[UniverseCanvas] vibemind.supabase.url missing from preload bridge — Supabase REST calls will fail');
+    }
+    if (!cfg.anonKey) {
+        console.warn('[UniverseCanvas] vibemind.supabase.anonKey missing from preload bridge — Supabase REST calls will fail');
+    }
+    const key = cfg.anonKey || '';
+    return {
+        base: `${cfg.url || ''}/rest/v1`,
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+    };
+}
+
 class UniverseCanvas {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -468,7 +490,7 @@ class UniverseCanvas {
         // Phase 11.U.H — IDs are DB-UUIDs directly (post-H.1). Use map-keys
         // straight as PATCH targets. Throttle to 6 in-flight at once to
         // avoid ERR_INSUFFICIENT_RESOURCES.
-        const SUPA = 'http://192.168.178.65:54321/rest/v1';
+        const { base: SUPA, headers: AUTH_HDR } = _supabaseRestConfig();
         const tasks = [];
         positions.forEach((pos, nodeId) => {
             // nodeId is already a Supabase UUID string after H.1
@@ -481,7 +503,7 @@ class UniverseCanvas {
             await Promise.allSettled(slice.map(t => {
                 return fetch(`${SUPA}/canvas_nodes?id=eq.${encodeURIComponent(t.dbId)}`, {
                     method: 'PATCH',
-                    headers: { 'apikey': 'anon', 'Content-Type': 'application/json' },
+                    headers: { ...AUTH_HDR, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ x: t.pos.x, y: t.pos.y }),
                 });
             }));
@@ -1727,8 +1749,7 @@ class UniverseCanvas {
         // arrive via Realtime; this is the explicit-refresh fallback for
         // voice tools / manual triggers.)
         if (!this.bubbleId) return;
-        const SUPA = 'http://192.168.178.65:54321/rest/v1';
-        const HDR = { 'apikey': 'anon' };
+        const { base: SUPA, headers: HDR } = _supabaseRestConfig();
         try {
             const [nRes, eRes] = await Promise.all([
                 fetch(`${SUPA}/canvas_nodes?linked_idea_id=eq.${encodeURIComponent(this.bubbleId)}&select=*`, { headers: HDR }),

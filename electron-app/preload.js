@@ -12,6 +12,7 @@ try {
 } catch (e) { /* Sentry is optional */ }
 
 const { contextBridge, ipcRenderer } = require('electron');
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase-config');
 
 // Expose protected methods to the renderer
 contextBridge.exposeInMainWorld('vibemind', {
@@ -19,6 +20,18 @@ contextBridge.exposeInMainWorld('vibemind', {
     minimize: () => ipcRenderer.send('window-minimize'),
     maximize: () => ipcRenderer.send('window-maximize'),
     close: () => ipcRenderer.send('window-close'),
+
+    // ===== SUPABASE CONFIG =====
+    // Single source of truth is supabase-config.js (also used by the main
+    // process's supabase-client.js). The renderer runs with
+    // contextIsolation: true / nodeIntegration: false and cannot read
+    // process.env itself, so this is the only sanctioned way for renderer
+    // code to learn which Supabase instance to talk to — do not hardcode
+    // a URL or key in renderer/ again.
+    supabase: {
+        url: SUPABASE_URL,
+        anonKey: SUPABASE_ANON_KEY,
+    },
 
     // Bubble interactions
     selectBubble: (bubbleId) => ipcRenderer.send('bubble-selected', bubbleId),

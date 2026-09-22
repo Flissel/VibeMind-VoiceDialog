@@ -7,11 +7,12 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase-config');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'http://192.168.178.65:54321';
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY ||
-  // Local dev default key (from `npx supabase status`)
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+// Kept as SUPABASE_KEY for backward compatibility with this module's
+// existing exports (no other file imports the raw constants today, but the
+// name is part of the public shape of this module).
+const SUPABASE_KEY = SUPABASE_ANON_KEY;
 
 let _client = null;
 
