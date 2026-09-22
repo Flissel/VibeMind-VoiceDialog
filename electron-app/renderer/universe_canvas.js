@@ -723,12 +723,21 @@ class UniverseCanvas {
         // e.preventDefault() bedingungslos auf, um zu zoomen - ein Wheel
         // ueber dem Report-Body wuerde also nie zum Scrollen fuehren.
         // stopPropagation (nicht preventDefault!) verhindert nur, dass das
-        // Event den Container ueberhaupt erreicht - und zwar nur, wenn im
-        // Body ueberhaupt etwas zu scrollen ist. Bei der eingeklappten Karte
-        // (nichts zu scrollen) laeuft das Event unangetastet durch, damit
-        // der Canvas wie gewohnt zoomt.
+        // Event den Container ueberhaupt erreicht.
+        //
+        // scrollHeight ist von `overflow` UNABHAENGIG - es liefert immer die
+        // volle Inhaltshoehe, auch waehrend .collapsed (max-height: 90px,
+        // overflow: hidden) sie klemmt. scrollHeight > clientHeight ist bei
+        // einem echten Report also praktisch IMMER wahr, auch eingeklappt -
+        // dort blockiert overflow:hidden aber gleichzeitig das native
+        // Scrollen, sodass ohne die collapsed-Pruefung das Wheel weder
+        // scrollt noch zoomt (schlechter als vor der Aenderung). Erst das
+        // Fehlen von .collapsed macht den Overflow fuer den Nutzer
+        // tatsaechlich erreichbar - deshalb beide Bedingungen.
         body.addEventListener('wheel', (e) => {
-            if (body.scrollHeight > body.clientHeight) {
+            const scrollable = !body.classList.contains('collapsed')
+                && body.scrollHeight > body.clientHeight;
+            if (scrollable) {
                 e.stopPropagation();
             }
         }, { passive: true });
