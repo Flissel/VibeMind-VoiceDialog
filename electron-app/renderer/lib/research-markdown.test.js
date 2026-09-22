@@ -92,6 +92,62 @@ test('Link-URL mit runden Klammern bleibt vollstaendig erhalten', () => {
     assert.strictEqual(link.v, 'Beispiel');
 });
 
+// --- Bare-URL-Linkifizierung: APA-Zitate im Report sind nackte http(s)-URLs,
+// kein einziges [label](url)-Konstrukt. Der Renderer muss sie trotzdem
+// klickbar machen, ohne safeHref zu umgehen und ohne die Satzzeichen zu
+// verschlucken. ---
+
+test('Ein Klammer-Link gewinnt weiterhin gegen die nackte-URL-Erkennung, auch wenn im selben Satz eine echte nackte URL folgt', () => {
+    // Kombiniert absichtlich beide Faelle im selben Absatz: waere die neue
+    // Alternative falsch einsortiert, koennte sie entweder den Klammer-Link
+    // stoeren oder die zweite, nackte URL gar nicht erst erkennen. Vor der
+    // Aenderung existiert der zweite Link-Span schlicht nicht -> echtes ROT.
+    const [block] = parseMarkdown('Siehe [Quelle](https://example.test/a) und direkt https://example.test/b fuer mehr.');
+    const links = block.spans.filter(s => s.t === 'link');
+    assert.strictEqual(links.length, 2, 'erwartete zwei Link-Spans: Klammer-Link und nackte URL');
+    assert.strictEqual(links[0].v, 'Quelle');
+    assert.strictEqual(links[0].href, 'https://example.test/a');
+    assert.strictEqual(links[1].v, 'https://example.test/b');
+    assert.strictEqual(links[1].href, 'https://example.test/b');
+});
+
+test('Nackte URL am Satzende: der Punkt landet in einem eigenen Text-Span, nicht in der URL', () => {
+    const [block] = parseMarkdown('Abgerufen am 16. September 2026 von https://example.test/a.');
+    const linkIdx = block.spans.findIndex(s => s.t === 'link');
+    assert.notStrictEqual(linkIdx, -1, 'erwartete einen Link-Span fuer die nackte URL');
+    const link = block.spans[linkIdx];
+    assert.strictEqual(link.href, 'https://example.test/a');
+    assert.strictEqual(link.v, 'https://example.test/a');
+    const nachfolger = block.spans[linkIdx + 1];
+    assert.ok(nachfolger, 'erwartete einen Span nach dem Link fuer den Satzpunkt');
+    assert.strictEqual(nachfolger.t, 'text');
+    assert.strictEqual(nachfolger.v, '.');
+});
+
+test('Sichtbares Label der nackten URL ist der geschriebene Text, nicht die normalisierte href', () => {
+    // new URL('https://example.test').href haengt ein "/" an - im Report
+    // soll die Zitation aber so aussehen, wie sie geschrieben wurde.
+    const [block] = parseMarkdown('Quelle: https://example.test');
+    const link = block.spans.find(s => s.t === 'link');
+    assert.ok(link, 'erwartete einen Link-Span');
+    assert.strictEqual(link.v, 'https://example.test');
+    assert.strictEqual(link.href, 'https://example.test/');
+});
+
+test('javascript:-Schema bleibt Text, auch nackt in Prosa neben einer echten http-URL', () => {
+    // Gemischt mit einer echten URL im selben Satz: eine Assertion, die nur
+    // "kein Link" prueft, waere vor der Aenderung trivial gruen (weil noch
+    // gar nichts linkifiziert wird) und damit kein echter Test. Die Pruefung
+    // "genau ein Link-Span, und der ist die http-URL" faellt vor der
+    // Aenderung echt durch.
+    const [block] = parseMarkdown('Nicht ausfuehren: javascript:alert(1) aber schon http://example.test/a im Text.');
+    const links = block.spans.filter(s => s.t === 'link');
+    assert.strictEqual(links.length, 1, 'erwartete genau einen Link-Span, fuer die http-URL');
+    assert.strictEqual(links[0].href, 'http://example.test/a');
+    const zusammen = block.spans.map(s => s.v).join('');
+    assert.match(zusammen, /javascript:alert\(1\)/);
+});
+
 // --- buildInto: die DOM-schreibende Haelfte, mit einem minimalen Fake-Document ---
 //
 // Kein jsdom, kein Package - ein Node-Stub, der nur aufzeichnet, was buildInto

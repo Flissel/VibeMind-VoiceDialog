@@ -503,6 +503,10 @@
 
 .canvas-node[data-node-type="research"] .research-body {
     overflow-y: auto; max-height: 480px; font-size: 12px; line-height: 1.45;
+    /* .canvas-node selbst bleibt user-select:none, damit das Draggen per
+       Header weiter funktioniert - nur der Reporttext soll markier- und
+       kopierbar sein. */
+    user-select: text;
 }
 
 .canvas-node[data-node-type="research"] .research-body.collapsed {

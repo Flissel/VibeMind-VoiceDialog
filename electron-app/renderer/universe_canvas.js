@@ -719,6 +719,20 @@ class UniverseCanvas {
         buildInto(body, parseMarkdown(text), doc);
         contentEl.appendChild(body);
 
+        // Der Container faengt `wheel` global ab (siehe onWheel) und ruft
+        // e.preventDefault() bedingungslos auf, um zu zoomen - ein Wheel
+        // ueber dem Report-Body wuerde also nie zum Scrollen fuehren.
+        // stopPropagation (nicht preventDefault!) verhindert nur, dass das
+        // Event den Container ueberhaupt erreicht - und zwar nur, wenn im
+        // Body ueberhaupt etwas zu scrollen ist. Bei der eingeklappten Karte
+        // (nichts zu scrollen) laeuft das Event unangetastet durch, damit
+        // der Canvas wie gewohnt zoomt.
+        body.addEventListener('wheel', (e) => {
+            if (body.scrollHeight > body.clientHeight) {
+                e.stopPropagation();
+            }
+        }, { passive: true });
+
         const toggle = doc.createElement('button');
         toggle.className = 'research-toggle';
         toggle.textContent = 'Aufklappen';

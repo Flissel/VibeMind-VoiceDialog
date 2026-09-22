@@ -24,7 +24,28 @@ function safeHref(raw) {
 // Der URL-Teil eines Links darf ein einzelnes Paar runder Klammern in sich
 // tragen (z.B. eine Wikipedia-URL ".../Foo_(bar)") - sonst schneidet das
 // erste ")" die URL mitten im Pfad ab.
-const INLINE_RE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\))/;
+//
+// Die letzte Alternative erkennt nackte http(s)-URLs, wie sie in der
+// APA-Zitierweise des Reports vorkommen ("... von https://..."). Sie steht
+// bewusst als LETZTE Alternative, damit ein [label](url)-Konstrukt (das mit
+// "[" beginnt) immer zuerst greift und nie als nackte URL neu geparst wird.
+// Die Zeichenklasse spiegelt spaces/research/brief.py:17 (_URL_RE) - eine
+// Definition von "wie eine URL aussieht" fuer beide Seiten der Kopplung.
+const BARE_URL_RE = /https?:\/\/[^\s<>()\[\]"']+/;
+const INLINE_RE = new RegExp(
+    '(\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|`[^`]+`|\\[[^\\]]+\\]\\((?:[^()\\s]|\\([^()\\s]*\\))+\\)|'
+    + BARE_URL_RE.source + ')'
+);
+
+// Trennt Satzzeichen, die eine APA-Zitation typischerweise ans Ende einer
+// URL haengt (".", ",", ";", ":"), vom Rest ab - spiegelt brief.py:45
+// (url.rstrip(".,;:")). Nur der getrimmte Teil geht durch safeHref/wird
+// Linktext; der Rest bleibt ein eigener Text-Span, damit der Satz seinen
+// Punkt behaelt.
+function splitTrailingPunctuation(url) {
+    const m = /^(.*?)([.,;:]+)$/.exec(url);
+    return m ? { trimmed: m[1], trailer: m[2] } : { trimmed: url, trailer: '' };
+}
 
 function parseInline(text) {
     const spans = [];
@@ -46,6 +67,19 @@ function parseInline(text) {
             // in einem href ist derselbe Einbruch wie ein <script>.
             if (href) spans.push({ t: 'link', v: label, href });
             else spans.push({ t: 'text', v: tok });
+        } else if (/^https?:\/\//.test(tok)) {
+            // Nackte URL (APA-Zitat, kein [label](url)). Satzzeichen am Ende
+            // gehoeren zum Fliesstext, nicht zur URL - siehe
+            // splitTrailingPunctuation. Das sichtbare Label bleibt der
+            // getrimmte Text wie geschrieben; safeHref liefert nur den href.
+            const { trimmed, trailer } = splitTrailingPunctuation(tok);
+            const href = safeHref(trimmed);
+            if (href) {
+                spans.push({ t: 'link', v: trimmed, href });
+                if (trailer) spans.push({ t: 'text', v: trailer });
+            } else {
+                spans.push({ t: 'text', v: tok });
+            }
         } else {
             spans.push({ t: 'em', v: tok.slice(1, -1) });
         }
