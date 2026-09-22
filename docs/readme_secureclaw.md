@@ -8,7 +8,7 @@
 
 SecureClaw existiert derzeit nicht als eigenständiger Space. Die aktuell vorhandene Browser- und Messaging-Automation wird über **Desktop.Space** abgewickelt:
 
-- `openclaw.*` Events werden vom **DesktopAgent** verarbeitet (`python/spaces/desktop/agents/desktop_agent.py`)
+- `openclaw.*` Events werden weiterhin dem **Desktop**-Space zugeordnet — die genannte Datei `python/spaces/desktop/agents/desktop_agent.py` existiert seit 2026-06-16 nicht mehr (Details: `docs/readme_desktop.md`); aktuell läuft die Zuordnung über `config/space_agent_registry.yml` (`desktop.prefixes` enthält `openclaw.`, Agent `brain-desktop`)
 - Clawdbot-Bridge für Messaging-Interaktion ist Teil der Desktop-Tools
 - Browser-Automation läuft über die Desktop-Automation-UI und Moire-Tools
 

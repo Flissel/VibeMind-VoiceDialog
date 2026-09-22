@@ -29,9 +29,39 @@ Voice → IntentClassifier → code.* Event
                       Status-Updates → Electron UI
 ```
 
+> **Hinweis (2026-09-22):** Die im Folgenden beschriebene Implementierung
+> (`python/spaces/coding/agents/`, `engine/`, `tools/`, `broadcast/`) wurde am
+> 2026-06-16 vollständig aus dem Repo entfernt (Commit `ec98a0c6`, u. a.
+> `agents/coding_agent.py` [117 Zeilen], `engine/coding_engine_runner.py`
+> [689 Zeilen — nahe an den unten genannten 690], `tools/coding_tools.py`
+> [595 Zeilen — nahe an den unten genannten 587], `tools/adapted_coding_tools.py`,
+> `tools/voice_coding_tools.py`, `broadcast/coding_broadcast_agent.py`,
+> `engine/project_discovery.py`; insgesamt 3056 Dateien / 923.402 Zeilen allein
+> in diesem Commit unter `spaces/coding/`). `spaces/coding/` existiert im
+> aktuellen Code nicht mehr — auch nicht als leeres Verzeichnis. Der
+> lazy-Import `CodingAgent` in `python/swarm/backend_agents/__init__.py` zeigt
+> auf einen nicht mehr vorhandenen Pfad. Ob und wie die externe
+> `Coding_engine`-Submodule (heute als Top-Level-Submodul `coding-engine/`
+> registriert, nicht mehr unter `spaces/coding/Coding_engine/`) die
+> beschriebene Funktionalität ersetzt, wurde nicht geprüft — der aktuell
+> gepinnte Commit dieser Submodule ist vom hiesigen Remote nicht abrufbar.
+>
+> **Nachtrag (2026-09-22):** Der Zugriffsweg selbst ist aber nicht offen —
+> die aktuelle Routing-SoT `config/space_agent_registry.yml` (Stand
+> 2026-09-08, Commit `af70d5b9` „fix(brain): wire the coding capabilities to
+> the API the engine really serves") zeigt `coding.enabled: true`, Agent
+> `brain-coder`, mit `code.generate`/`code.modify` direkt auf
+> `coding-engine:POST:/api/v1/jobs` geroutet (HTTP statt der alten
+> Subprocess-Bridge). Laut Kommentar dort ist zusätzlich bekannt, dass
+> `code.preview.start`/`code.preview.stop` aktuell bewusst deaktiviert sind
+> (`capabilities.yaml: enabled: false`), weil die Engine keine
+> `/api/preview`-Route mehr bedient — die Registry ist also selbst ehrlich
+> über eine Lücke, keine pauschale Erfolgsmeldung. Der Inhalt des
+> `coding-engine`-Submoduls selbst bleibt ungeprüft (s. o.).
+
 ## Backend-Agent
 
-**Datei:** `python/spaces/coding/agents/coding_agent.py`
+**Datei (nicht mehr vorhanden):** `python/spaces/coding/agents/coding_agent.py`
 
 | Event | Tool-Funktion | Beschreibung |
 |-------|--------------|-------------|
@@ -96,6 +126,10 @@ Der externe Coding_engine enthält BDD-Testing-Infrastruktur:
 > **Hinweis:** Test-Ergebnisse werden vom externen Subprocess verarbeitet. Voice-gesteuerte Test-Ausführung und Ergebnis-Anzeige in Electron sind noch nicht implementiert.
 
 ## Current Status
+
+> Die folgende Liste beschreibt den Stand vor der Entfernung von
+> `spaces/coding/` am 2026-06-16 (siehe Hinweis oben). Sie ist im aktuellen
+> Code nicht mehr nachvollziehbar.
 
 ### Implementiert
 - Voice-gesteuerte Code-Generierung über Intent-Classification

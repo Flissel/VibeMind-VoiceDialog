@@ -8,21 +8,51 @@ AgentFarm.Space erstellt und orchestriert konfigurierbare Multi-Agent-Teams via 
 
 ## Aktueller Implementierungsstand
 
+> **Hinweis (2026-09-22):** Die Python-Backend-Schicht (Backend-Agent, Tool
+> Functions, TeamRunner, MCP Server, Hybrid Pipeline, OpenClaw Bridge — alles
+> unter `python/spaces/autogen/`) wurde am 2026-06-16 komplett aus dem Repo
+> entfernt (Commit `ec98a0c6`, 193 Dateien / 52.905 Zeilen allein unter
+> `spaces/autogen/`, darunter genau die unten genannten Dateien inkl.
+> `agentfarm_tools.py` mit den genannten 510 Zeilen). `spaces/agentfarm/`
+> (die heutige, andere Verzeichnisebene) enthält nur noch ein leeres
+> `agentfarm/__init__.py`-Paket und `runtime-manifest-v1.json`, die selbst
+> `"runtime_status": "blocked"`, `"enabled": false`,
+> `"blocker": "missing_persistent_agentfarm_runtime"` deklariert. Der
+> lazy-Import `AgentFarmBackendAgent` in
+> `python/swarm/backend_agents/__init__.py` zeigt auf einen nicht mehr
+> vorhandenen Pfad. Die Electron-/Dashboard-Zeilen unten sind davon nicht
+> betroffen — diese Dateien existieren weiterhin.
+>
+> **Nachtrag (2026-09-22):** Die entfernte AutoGen-Implementierung ist keine
+> Lücke ohne Ersatz. Per Nutzerentscheidung vom 2026-08-18
+> (`docs/operations/2026-08-18-p1-agentfarm-captain-cook-befund.md`) ist
+> AgentFarm.Space bewusst neu definiert: „Captain Cook IST das agentfarm" —
+> ein eigenständiger, persistenter Dienst (`spaces/captain_cook`, registriertes
+> Submodul, HTTP-Server, Service-Schicht, eigener MCP-Broker) deckt dieselben
+> acht Operationen inhaltlich ab. Die aktuelle Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) bestätigt den
+> Live-Zustand: `agentfarm.enabled: true`, `runtime.status: active`,
+> `runtime.source_path: spaces/captain_cook`, `runtime.transport: mcp`,
+> mit den Events `agentfarm.deliver` → `captain_deliver` und
+> `agentfarm.status` → `captain_codex_status`. Die AutoGen-Implementierung
+> unten ist also nicht der aktuelle Stand des Space — Captain Cook ist es,
+> und dieses Dokument beschreibt Captain Cook nicht.
+
 | Komponente | Status | Ort |
 |-----------|--------|-----|
-| Backend-Agent | **Implementiert** | `python/spaces/autogen/agents/agentfarm_agent.py` |
-| Tool Functions (8 Tools) | **Implementiert** | `python/spaces/autogen/tools/agentfarm_tools.py` (510 Zeilen) |
-| TeamRunner (async AutoGen) | **Implementiert** | `python/spaces/autogen/runner/team_runner.py` |
-| MCP Server | **Implementiert** | `python/spaces/autogen/mcp_server/vibemind_mcp.py` |
-| Hybrid Pipeline | **Implementiert** | `python/spaces/autogen/orchestrator/hybrid_pipeline.py` |
-| OpenClaw Bridge | **Implementiert** | `python/spaces/autogen/orchestrator/openclaw_bridge.py` |
+| Backend-Agent | **Entfernt (2026-06-16)** | `python/spaces/autogen/agents/agentfarm_agent.py` |
+| Tool Functions (8 Tools) | **Entfernt (2026-06-16)** | `python/spaces/autogen/tools/agentfarm_tools.py` (510 Zeilen) |
+| TeamRunner (async AutoGen) | **Entfernt (2026-06-16)** | `python/spaces/autogen/runner/team_runner.py` |
+| MCP Server | **Entfernt (2026-06-16)** | `python/spaces/autogen/mcp_server/vibemind_mcp.py` |
+| Hybrid Pipeline | **Entfernt (2026-06-16)** | `python/spaces/autogen/orchestrator/hybrid_pipeline.py` |
+| OpenClaw Bridge | **Entfernt (2026-06-16)** | `python/spaces/autogen/orchestrator/openclaw_bridge.py` |
 | Electron UI-Shell | Implementiert | `electron-app/agentfarm-manager.js`, `electron-app/agentfarm/` |
 | Next.js Dashboard (AgentFarm-UI) | Implementiert | `electron-app/agentfarm-ui/` |
 | ClawPort Dashboard-Tab | Implementiert | `electron-app/dashboard/src/features/AgentFarm.tsx` |
 
-### Backend Agent
+### Backend Agent (entfernt 2026-06-16, Commit `ec98a0c6`)
 
-**Datei:** `python/spaces/autogen/agents/agentfarm_agent.py`
+**Datei (nicht mehr vorhanden):** `python/spaces/autogen/agents/agentfarm_agent.py`
 **Klasse:** `AgentFarmBackendAgent`
 **Stream:** `events:tasks:agentfarm`
 
@@ -60,12 +90,16 @@ AgentFarm hat einen eigenen Tab im ClawPort React Dashboard mit zwei Sub-Tabs:
 ## Wo AutoGen auch genutzt wird
 
 AutoGen wird zusätzlich in anderen Spaces eingesetzt:
-- **Coding.Space**: `python/spaces/coding/Coding_engine/` — Extensive AutoGen-Nutzung für Code-Generierung
-- **SWE Design**: `python/spaces/shuttles/swe_desgine/external/arch_team/` — AutoGen-basierte Architektur-Validierung
-- **Ideas.Space**: `python/spaces/ideas/tools/autogen_research.py` — AutoGen für Research-Tasks
-- **N8n.Space**: `python/spaces/n8n/society/` — AutoGen-Society für Workflow-Generierung mit 6 Agents
+- **Coding.Space**: `python/spaces/coding/Coding_engine/` — dieser Pfad existiert nicht mehr; `spaces/coding/` wurde am 2026-06-16 komplett entfernt (Commit `ec98a0c6`, 3056 Dateien / 923.402 Zeilen)
+- **SWE Design**: `python/spaces/shuttles/swe_desgine/external/arch_team/` — AutoGen-basierte Architektur-Validierung (geprüft, existiert)
+- **Ideas.Space**: `python/spaces/ideas/tools/autogen_research.py` — dieser Pfad existiert nicht mehr; `spaces/ideas/` enthält aktuell nur noch `mcp_server.py` und `tests/`
+- **N8n.Space**: `python/spaces/n8n/society/` — dieser Pfad existiert nicht mehr; `spaces/n8n/` wurde ebenfalls am 2026-06-16 im selben Commit entfernt
 
 ## Subsysteme
+
+> Alle vier folgenden Pfade unter `python/spaces/autogen/` sind Teil der am
+> 2026-06-16 entfernten Implementierung (siehe Hinweis oben, Commit
+> `ec98a0c6`) und existieren im aktuellen Code nicht mehr.
 
 ### TeamRunner (`python/spaces/autogen/runner/team_runner.py`)
 Non-blocking async Ausführung von AutoGen 0.4 Teams:

@@ -15,6 +15,48 @@ Der Space hat **zwei dedizierte Backend-Agents** (51 Events total):
 
 > **Hinweis:** Rachel ist KEIN Ideas-spezifischer Agent, sondern das zentrale Voice-Interface der gesamten Vibemind-Plattform. Siehe Abschnitt "Rachel Voice-Agent" unten.
 
+> **Hinweis (2026-09-22):** Die im Folgenden beschriebene Implementierung unter
+> `python/spaces/ideas/` (`agents/`, `tools/`, `explorer/`) wurde am 2026-06-16
+> vollständig aus dem Repo entfernt (Commit `ec98a0c6`) — u. a.
+> `agents/bubbles_agent.py` (186 Zeilen), `agents/ideas_agent.py` (548),
+> `agents/rachel_agent.py` (429), `tools/bubble_tools.py` (1715),
+> `tools/idea_tools.py` (2439), `tools/exploration_tools.py` (1885 — nahe an
+> den unten genannten 1883), `tools/format_dispatcher.py` (1254),
+> `tools/summary_tools.py` (2867), sowie das komplette `explorer/`-Verzeichnis
+> (`connection_evaluator.py`, `exploration_clarification.py`,
+> `exploration_repository.py`, `idea_journal.py`, `idea_node.py`,
+> `idea_tree_search.py`) — 16 Dateien / 14.781 Zeilen allein unter
+> `tools/`+`explorer/`, weitere unter `agents/`.
+>
+> **Was davon lebt weiter (geprüft, nicht nur vermutet):** `spaces/ideas/`
+> existiert weiterhin, aber nur noch als `mcp_server.py` (833 Zeilen) +
+> Tests. Dieser MCP-Server implementiert `bubble_create`, `bubble_update`,
+> `bubble_delete`, `bubble_list`, `bubble_get`, `bubble_promote` (vollständig,
+> inkl. Compensation-Logik bei fehlgeschlagener Projekt-Erstellung) und
+> `idea_connect` real und aktuell. Die Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) bindet ihn über die
+> OpenFang-Agenten `brain-bubbles` und `brain-ideas` ein; `bubble.evaluate`
+> und `bubble.promote` sind beide aktiv verdrahtet (`bubble.evaluate` →
+> generisches `vibemind_bubble_update`, `bubble.promote` → `bubble_promote`
+> im MCP-Server). Basis-CRUD für Ideas (list/create/update/delete/find,
+> Formatierungs-Events, Exploration-Events) ist ebenfalls verdrahtet, aber
+> auf generische `db_ideas_*`/`db_canvas_*`-Tools reduziert — nicht auf die
+> spezifischen Funktionen unten (`summarize_idea`, `generate_white_paper`,
+> `expand_ideas`, `classify_idea`, 11-Formate-Dispatch, AI-Scientist
+> Tree-Search).
+>
+> **Wonach gesucht und nichts gefunden:** `exploration_tools.py`,
+> `idea_tree_search.py`, `format_dispatcher.py`, `rachel_agent.py` unter
+> keinem anderen Pfad im Repo (`git ls-tree -r HEAD`, unbegrenzt, in
+> `vibemind-os` und `voice`). Zwei tote Kompatibilitäts-Shims verweisen noch
+> auf die gelöschten Pfade: `voice/python/tools/format_dispatcher.py` und
+> `voice/python/tools/bubble_tools.py` (Letzterer ist für Bubbles irrelevant,
+> da der MCP-Weg oben funktioniert; für das Explorer-Subsystem und den
+> Format-Dispatcher wurde kein lebender Ersatz gefunden). Das
+> Explorer-Subsystem und Rachels dedizierte Wrapper-Klasse sind damit nach
+> aktuellem Kenntnisstand tatsächlich nicht mehr vorhanden — im Unterschied
+> zu Bubbles/Ideas-CRUD, das umgezogen, nicht verschwunden ist.
+
 ## Backend-Agent: BubblesAgent (14 Events)
 
 | Event | Tool-Funktion | Beschreibung |

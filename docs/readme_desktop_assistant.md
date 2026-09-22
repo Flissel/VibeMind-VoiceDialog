@@ -14,7 +14,7 @@ Rather than offering single-purpose AI capabilities, Vibemind's Desktop Assistan
 - **Coding.Space**: Software engineering platform with LLM-driven code generation and preview environments
 - **Desktop.Space**: System-level integration, eye tracking, screen analysis, and desktop automation
 - **Rowboat.Space**: Knowledge graph, data orchestration, and business data integration
-- **AgentFarm.Space**: Electron UI shell for agent orchestration (backend agent geplant)
+- **AgentFarm.Space**: Electron UI shell for agent orchestration; backend runtime is Captain Cook (`spaces/captain_cook`), tool-only by design (no chat agent) — see note below
 - **N8n.Space**: Workflow automation and integration generation with 200+ connectors
 - **Research.Space**: ZeroClaw web research, scraping, and summarization
 - **Minibook.Space**: Inter-space collaboration hub for cross-domain tasks
@@ -26,6 +26,26 @@ Rather than offering single-purpose AI capabilities, Vibemind's Desktop Assistan
 - **Infrastructure Stack**: DSGVO-compliant deployment options (local Ollama, cloud, custom endpoints)
 
 > **Hinweis:** 13 Spaces haben dedizierte Backend-Agents (Bubbles, Ideas, Coding, Desktop, Roarboot, Research, Minibook, Schedule, N8n, AgentFarm, Video, MiroFish, Flowzen). Brain läuft als standalone Microservices.
+>
+> **Nachtrag (2026-09-22):** Diese 13 Namen sind exakt die `__all__`-Liste der
+> alten, Python-lokalen Backend-Agents in
+> `voice/python/swarm/backend_agents/__init__.py`. Am 2026-06-16 (Commit
+> `ec98a0c6`) wurde der Python-Code für mehrere davon entfernt — bestätigt für
+> Desktop, Coding, Bubbles/Ideas; die lazy-Imports zeigen seither auf nicht
+> mehr vorhandene Pfade. Das ist aber keine Lücke: die aktuelle Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) führt praktisch
+> dieselben Spaces mit `enabled: true` und einem eigenen OpenFang-Agenten
+> (`brain-bubbles`, `brain-ideas`, `brain-coder`, `brain-desktop`,
+> `brain-researcher`, `brain-knowledge`, `brain-scheduler`, `brain-n8n`,
+> `brain-video`, `rowboat-chat` für Rowboat/Roarboot, `brain-forecaster` für
+> MiroFish, `brain-wellness` für Flowzen) — „dedizierter Backend-Agent" stimmt
+> für diese 12 weiterhin, nur über einen anderen Mechanismus als 2026-04-02
+> beschrieben (OpenFang statt `python/swarm/backend_agents/`). Die einzige
+> echte Ausnahme ist AgentFarm: dort führt die Registry `agent: null` — laut
+> dortigem Kommentar bewusst „tool-only: no chat agent", weil Captain Cook
+> (`spaces/captain_cook`, aktiver Dienst) die Orchestrierung übernimmt, ohne
+> dass ein Chat-Agent dafür gebraucht wird. Details:
+> `docs/operations/2026-08-18-p1-agentfarm-captain-cook-befund.md`.
 
 ## Current Status
 

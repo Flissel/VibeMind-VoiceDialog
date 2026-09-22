@@ -6,6 +6,31 @@
 
 Desktop.Space gibt Vibemind Augen und Hände auf dem Desktop des Users. Der Space operiert über mehrere integrierte Systeme: Eye/Gaze-Tracking via Webcam (MediaPipe), Screen-Analyse, automatisierte Maus/Tastatur-Steuerung, und eine Messaging-Pipeline für Chat-Automation. Das eyeterm-Subsystem allein umfasst 15 Subdirectories.
 
+> **Hinweis (2026-09-22):** Die im Folgenden beschriebene Implementierung
+> (`python/spaces/desktop/agents/`, `tools/`, `eyeterm/`, `messaging/`) wurde am
+> 2026-06-16 vollständig aus dem Repo entfernt (Commit `ec98a0c6`, u. a.
+> `agents/desktop_agent.py`, `eyeterm/vision/gaze.py`, `eyeterm/vision/wink.py`,
+> `eyeterm/vision/polynomial_mapper.py`, `messaging/incoming_handler.py` — 81
+> Dateien / 14.133 Zeilen allein in diesen vier Verzeichnissen). Sie existiert im
+> aktuellen Code nicht mehr; der lazy-Import `DesktopAgent` in
+> `python/swarm/backend_agents/__init__.py` zeigt auf einen nicht mehr
+> vorhandenen Pfad, `event_router.py` routet `desktop.*`-Events weiterhin in
+> einen Stream ohne aktiven Consumer. Weiterhin vorhanden: `Automation_ui/`
+> (`spaces/desktop/Automation_ui`, eigenständiges FastAPI-Submodul).
+>
+> **Nachtrag (2026-09-22):** Die Desktop-Automation-Fähigkeit selbst ist damit
+> nicht verschwunden, nur umgezogen. Die aktuelle Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) führt `desktop` als
+> `enabled: true` mit Agent `brain-desktop` und den MCP-Servern
+> `[vibemind-db, desktop-automation]`; `openfang/agents/brain-desktop/agent.toml`
+> existiert und ist darauf verdrahtet. Laut `openfang/openfang.vibemind.toml`
+> wurde `desktop-automation` am 2026-06-02 in vier eigenständige MCP-Server
+> aufgeteilt (`data`, `document`, `perception`, `messenger`), die alle auf
+> `spaces/desktop/Automation_ui/backend/moire_agents/` zeigen — also auf das
+> weiterhin vorhandene Submodul, nicht auf die gelöschten Python-Space-Dateien.
+> Das war zwei Wochen vor der Löschung oben: die Umstellung kam zuerst, die
+> Löschung des dann redundanten alten Codes danach.
+
 ## Backend-Agent: DesktopAgent (21 Events)
 
 **Datei:** `python/spaces/desktop/agents/desktop_agent.py`

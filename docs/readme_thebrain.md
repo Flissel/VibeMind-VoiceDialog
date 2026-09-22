@@ -6,7 +6,7 @@
 
 The Brain.Space ist Vibeminds Wissens-Discovery-Engine, aufgebaut als Neuroscience-inspiriertes System. Es ist KEIN traditioneller Backend-Agent, sondern läuft als Set von 5 standalone Microservices mit eigenem Docker-Stack.
 
-> **Hinweis:** Brain hat keinen Backend-Agent in `python/swarm/backend_agents/__init__.py`. Es ist ein eigenständiges System im Git-Submodul `python/spaces/brain/the_brain/` (github.com/Flissel/the_brain).
+> **Hinweis:** Brain hat keinen Backend-Agent in `python/swarm/backend_agents/__init__.py`. Es ist ein eigenständiges System unter `brain/the_brain/` — kein Git-Submodul (mehr): der Code liegt direkt im Repo (Tree-Objekt, kein Gitlink), und `.gitmodules` führt für diesen Pfad keinen Eintrag.
 
 ## 5 Microservices
 

@@ -14,13 +14,13 @@ Definiert in `electron-app/renderer/multiverse.js`:
 |-------|------|-----------|-------|----------|-------|
 | ideas | 💭 | Rachel | Idea Navigator | (0, 0, 0) | 0x4488ff (Blau) |
 | projects | 🧬 | Coding | Project Manager | (16, 0, 11) | 0x44ff88 (Grün) |
-| desktop | 🌟 | Hassan | Desktop Worker | (22, 0, -14) | 0xff8844 (Orange) |
+| desktop | 🌟 | Desktop | Desktop Worker | (22, 0, -14) | 0xff8844 (Orange) |
 | roarboot | 🚣 | Rowboat | Knowledge Navigator | (-17, 0, -8) | 0x22ccaa (Teal) |
 | swedesign | 🏭 | Factory | Spec Generator | (8, 0, 5.5) | 0xff6633 (Rot-Orange) |
 | clawport | 📊 | Dashboard | System Dashboard | (-8, 0, 12) | 0x8866ff (Lila) |
-| agentfarm | 🏠 | Farmer | Agent Orchestrator | (-14, 0, 18) | 0x88aa44 (Olive) |
+| agentfarm | 🏠 | Farmer | Agent Orchestrator | (-2, 0, 18) | 0x88aa44 (Olive) |
 | thebrain | 🧠 | Brain | Knowledge Center | (14, 0, -22) | 0xff66aa (Pink) |
-| video | 🎬 | Director | Video Producer | (-20, 0, 24) | 0xee4466 (Rot) |
+| video | 🎬 | Director | Video Producer | (-10, 0, 24) | 0xee4466 (Rot) |
 
 > **Hinweis:** Agent-Namen sind UI-Labels für die jeweiligen Backend-Agents. Jeder Space ist unabhängig und handelt eigenständig — der Voice-Agent (Rachel) routet lediglich die User-Intention an den richtigen Space-Agent weiter. Die Spaces übernehmen dann die komplette Execution selbstständig.
 
@@ -64,7 +64,7 @@ Definiert in `electron-app/renderer/multiverse.js`:
 - Shuttle Manager für Requirements-Pipeline integriert
 - ClawPort React Dashboard (Schedule, Agents, Chat, Memory, Plugins)
 - Exploration Dialog UI für AI-Scientist Sessions
-- Intent-Routing zu 10 Backend-Agents (alle lazy-loaded in __init__.py)
+- Intent-Routing zu 13 Backend-Agents (alle lazy-loaded in __init__.py)
 
 ## Roadmap
 
