@@ -6,6 +6,18 @@
 
 Desktop.Space gibt Vibemind Augen und Hände auf dem Desktop des Users. Der Space operiert über mehrere integrierte Systeme: Eye/Gaze-Tracking via Webcam (MediaPipe), Screen-Analyse, automatisierte Maus/Tastatur-Steuerung, und eine Messaging-Pipeline für Chat-Automation. Das eyeterm-Subsystem allein umfasst 15 Subdirectories.
 
+> **Hinweis (2026-09-22):** Die im Folgenden beschriebene Implementierung
+> (`python/spaces/desktop/agents/`, `tools/`, `eyeterm/`, `messaging/`) wurde am
+> 2026-06-16 vollständig aus dem Repo entfernt (Commit `ec98a0c6`, u. a.
+> `agents/desktop_agent.py`, `eyeterm/vision/gaze.py`, `eyeterm/vision/wink.py`,
+> `eyeterm/vision/polynomial_mapper.py`, `messaging/incoming_handler.py` — 81
+> Dateien / 14.133 Zeilen allein in diesen vier Verzeichnissen). Sie existiert im
+> aktuellen Code nicht mehr; der lazy-Import `DesktopAgent` in
+> `python/swarm/backend_agents/__init__.py` zeigt auf einen nicht mehr
+> vorhandenen Pfad, `event_router.py` routet `desktop.*`-Events weiterhin in
+> einen Stream ohne aktiven Consumer. Weiterhin vorhanden: `Automation_ui/`
+> (`spaces/desktop/Automation_ui`, eigenständiges FastAPI-Submodul).
+
 ## Backend-Agent: DesktopAgent (21 Events)
 
 **Datei:** `python/spaces/desktop/agents/desktop_agent.py`
