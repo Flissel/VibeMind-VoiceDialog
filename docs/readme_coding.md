@@ -45,6 +45,19 @@ Voice → IntentClassifier → code.* Event
 > registriert, nicht mehr unter `spaces/coding/Coding_engine/`) die
 > beschriebene Funktionalität ersetzt, wurde nicht geprüft — der aktuell
 > gepinnte Commit dieser Submodule ist vom hiesigen Remote nicht abrufbar.
+>
+> **Nachtrag (2026-09-22):** Der Zugriffsweg selbst ist aber nicht offen —
+> die aktuelle Routing-SoT `config/space_agent_registry.yml` (Stand
+> 2026-09-08, Commit `af70d5b9` „fix(brain): wire the coding capabilities to
+> the API the engine really serves") zeigt `coding.enabled: true`, Agent
+> `brain-coder`, mit `code.generate`/`code.modify` direkt auf
+> `coding-engine:POST:/api/v1/jobs` geroutet (HTTP statt der alten
+> Subprocess-Bridge). Laut Kommentar dort ist zusätzlich bekannt, dass
+> `code.preview.start`/`code.preview.stop` aktuell bewusst deaktiviert sind
+> (`capabilities.yaml: enabled: false`), weil die Engine keine
+> `/api/preview`-Route mehr bedient — die Registry ist also selbst ehrlich
+> über eine Lücke, keine pauschale Erfolgsmeldung. Der Inhalt des
+> `coding-engine`-Submoduls selbst bleibt ungeprüft (s. o.).
 
 ## Backend-Agent
 

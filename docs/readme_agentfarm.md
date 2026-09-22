@@ -22,6 +22,21 @@ AgentFarm.Space erstellt und orchestriert konfigurierbare Multi-Agent-Teams via 
 > `python/swarm/backend_agents/__init__.py` zeigt auf einen nicht mehr
 > vorhandenen Pfad. Die Electron-/Dashboard-Zeilen unten sind davon nicht
 > betroffen — diese Dateien existieren weiterhin.
+>
+> **Nachtrag (2026-09-22):** Die entfernte AutoGen-Implementierung ist keine
+> Lücke ohne Ersatz. Per Nutzerentscheidung vom 2026-08-18
+> (`docs/operations/2026-08-18-p1-agentfarm-captain-cook-befund.md`) ist
+> AgentFarm.Space bewusst neu definiert: „Captain Cook IST das agentfarm" —
+> ein eigenständiger, persistenter Dienst (`spaces/captain_cook`, registriertes
+> Submodul, HTTP-Server, Service-Schicht, eigener MCP-Broker) deckt dieselben
+> acht Operationen inhaltlich ab. Die aktuelle Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) bestätigt den
+> Live-Zustand: `agentfarm.enabled: true`, `runtime.status: active`,
+> `runtime.source_path: spaces/captain_cook`, `runtime.transport: mcp`,
+> mit den Events `agentfarm.deliver` → `captain_deliver` und
+> `agentfarm.status` → `captain_codex_status`. Die AutoGen-Implementierung
+> unten ist also nicht der aktuelle Stand des Space — Captain Cook ist es,
+> und dieses Dokument beschreibt Captain Cook nicht.
 
 | Komponente | Status | Ort |
 |-----------|--------|-----|

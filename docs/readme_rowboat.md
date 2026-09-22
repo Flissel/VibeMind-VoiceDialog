@@ -8,7 +8,24 @@ Rowboat.Space (intern: "Roarboot") ist das Daten-Backbone von Vibemind. Es biete
 
 ## Backend-Agent: RoarbootBackendAgent (13 Events)
 
-**Datei:** `python/spaces/rowboat/agents/roarboot_agent.py`
+> **Hinweis (2026-09-22):** `agents/roarboot_agent.py` selbst (die
+> Event-Dispatcher-Klasse) wurde am 2026-06-16 entfernt (Commit `ec98a0c6`,
+> Teil derselben spaces-weiten Bereinigung wie bei Desktop/Coding/AgentFarm/
+> Ideas). **Anders als dort ist das hier kein Fähigkeitsverlust:** die neun
+> Tool-Funktionen, die die Tabelle unten nennt — `search_knowledge`,
+> `query_knowledge`, `draft_email`, `generate_meeting_brief`,
+> `generate_deck`, `process_voice_note`, `get_status`, `open_webview`,
+> `reset_conversation` — existieren wortgleich und aktuell in
+> `spaces/rowboat/tools/roarboot_tools.py` (513 Zeilen); `tools/docker_tools.py`
+> (269 Zeilen), `tools/roarboot_client.py` (350 Zeilen) und
+> `workers/update_checker.py` existieren ebenfalls weiterhin. Nur die
+> Wrapper-Klasse, die Events auf diese Funktionen abbildete, ist weg. Der
+> Zugriff läuft jetzt über die Routing-SoT `config/space_agent_registry.yml`
+> (Stand 2026-09-08, Space-Key `rowboat`, Agent `rowboat-chat`) plus einen
+> neuen `spaces/rowboat/mcp_server.py` (184 Zeilen), der bislang genau ein
+> Tool exponiert (`rowboat_status`).
+
+**Datei (Wrapper-Klasse entfernt, Tool-Funktionen bestehen weiter — s. Hinweis oben):** `python/spaces/rowboat/agents/roarboot_agent.py`
 
 ### Knowledge-Graph (2 Events)
 
@@ -57,21 +74,28 @@ Rowboat.Space (intern: "Roarboot") ist das Daten-Backbone von Vibemind. Es biete
 | Docker Tools | `tools/docker_tools.py` | Container-Management |
 | Roarboot Client | `tools/roarboot_client.py` | HTTP-Client zum Rowboat-Service |
 | Update Checker | `workers/update_checker.py` | Statusprüfung |
-| Rowboat Submodul | `rowboat/` (Git Submodul) | Knowledge-Graph Service |
+| Rowboat-Code | `rowboat/` (kein Git-Submodul mehr — s. Hinweis unten) | Knowledge-Graph Service |
 
-## Rowboat-Submodul
+## Rowboat-Code
+
+> **Hinweis (2026-09-22):** `python/spaces/rowboat/rowboat/` ist kein
+> Git-Submodul (mehr): `git ls-tree` zeigt ein Tree-Objekt (Modus `040000`),
+> kein Gitlink (`160000`), und `.gitmodules` führt dafür keinen Eintrag. Der
+> Code liegt direkt im Repo vendort.
 
 Das eigentliche Knowledge-Graph-System läuft als Docker-Container:
 
 ```
-python/spaces/rowboat/rowboat/  (Git Submodul)
+python/spaces/rowboat/rowboat/
 ├── apps/           # Rowboat-Anwendungen
-├── data/           # Daten-Verzeichnis
 ├── docker-compose.yml
-├── Dockerfile
 ├── start.sh
 └── README.md
 ```
+
+(Kein separates `data/` oder `Dockerfile` auf dieser Ebene — stattdessen
+`Dockerfile.qdrant` sowie zusätzlich `assets/`, `config/`, `docs/`,
+`packages/`, `scripts/`, die das Dokument nicht nennt.)
 
 ## Technology Stack
 

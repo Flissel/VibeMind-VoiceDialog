@@ -21,6 +21,15 @@ Das Core-Team sind echte Menschen, die von den ersten Momenten an bei Vibemind d
 
 > Jedes Teammitglied hat sich entschieden, von den ersten Momenten an mit Vibemind zu arbeiten und die Plattform als erste Nutzer zu validieren. Die Namen im 3D-Multiverse repräsentieren echte Teammitglieder — nicht AI-Persönlichkeiten.
 
+> **Hinweis (2026-09-22):** Dieser letzte Satz ist gegen den Code nicht
+> nachvollziehbar. Die Agent-Namen der 9 Spaces in
+> `electron-app/renderer/multiverse.js` sind Rachel, Coding, Desktop,
+> Rowboat, Factory, Dashboard, Farmer, Brain, Director — keiner dieser Namen
+> stimmt mit einem der sechs oben genannten Teammitglieder überein, und
+> keiner der sechs Namen kommt in `electron-app/renderer/` vor (geprüft).
+> Ob die Aussage sich auf eine andere, hier nicht identifizierte Zuordnung
+> bezieht, konnte nicht geklärt werden.
+
 ## Transparenz-Ansatz
 
 Das Team setzt auf offene Kommunikation über den Einsatz von AI-Technologie:

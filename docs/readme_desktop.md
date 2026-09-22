@@ -17,6 +17,19 @@ Desktop.Space gibt Vibemind Augen und Hände auf dem Desktop des Users. Der Spac
 > vorhandenen Pfad, `event_router.py` routet `desktop.*`-Events weiterhin in
 > einen Stream ohne aktiven Consumer. Weiterhin vorhanden: `Automation_ui/`
 > (`spaces/desktop/Automation_ui`, eigenständiges FastAPI-Submodul).
+>
+> **Nachtrag (2026-09-22):** Die Desktop-Automation-Fähigkeit selbst ist damit
+> nicht verschwunden, nur umgezogen. Die aktuelle Routing-SoT
+> `config/space_agent_registry.yml` (Stand 2026-09-08) führt `desktop` als
+> `enabled: true` mit Agent `brain-desktop` und den MCP-Servern
+> `[vibemind-db, desktop-automation]`; `openfang/agents/brain-desktop/agent.toml`
+> existiert und ist darauf verdrahtet. Laut `openfang/openfang.vibemind.toml`
+> wurde `desktop-automation` am 2026-06-02 in vier eigenständige MCP-Server
+> aufgeteilt (`data`, `document`, `perception`, `messenger`), die alle auf
+> `spaces/desktop/Automation_ui/backend/moire_agents/` zeigen — also auf das
+> weiterhin vorhandene Submodul, nicht auf die gelöschten Python-Space-Dateien.
+> Das war zwei Wochen vor der Löschung oben: die Umstellung kam zuerst, die
+> Löschung des dann redundanten alten Codes danach.
 
 ## Backend-Agent: DesktopAgent (21 Events)
 
