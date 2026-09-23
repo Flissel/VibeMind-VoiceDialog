@@ -72,6 +72,26 @@ def _derive_space_agent_map() -> Dict[str, str]:
     return dict(_LEGACY_STATIC_FALLBACK)
 
 
+def _openfang_auth_headers() -> Dict[str, str]:
+    """Bearer-Header fuer :4200 (D1 Stufe 2; seit OpenFang 0.6.9 auch fuer
+    Loopback Pflicht). Key aus der Umgebung, sonst aus der .env im Repo-Root
+    — gleiches Muster wie vibemind-os/scripts/verify_openfang_mcp_registration.py."""
+    key = os.environ.get("OPENFANG_API_KEY", "").strip()
+    if not key:
+        from pathlib import Path
+
+        here = Path(__file__).resolve()
+        root = next((p for p in here.parents if (p / "vibemind-os").is_dir()), None)
+        env_file = root / ".env" if root else None
+        if env_file is not None and env_file.is_file():
+            for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if line.startswith("OPENFANG_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
+
 # Name kept for backwards-compat — content is now registry-derived.
 LEGACY_SPACE_AGENT_MAP: Dict[str, str] = _derive_space_agent_map()
 
@@ -92,6 +112,7 @@ class BrainOpenFangBridge:
     ):
         self._brain_url = brain_url.rstrip("/")
         self._openfang_url = openfang_url.rstrip("/")
+        self._openfang_headers = _openfang_auth_headers()
         self._space_map = space_agent_map or LEGACY_SPACE_AGENT_MAP
         self._voice_timeout = voice_timeout_s
         self._min_confidence = min_confidence
@@ -374,7 +395,9 @@ class BrainOpenFangBridge:
 
         try:
             timeout = aiohttp.ClientTimeout(total=0.3)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession(
+                timeout=timeout, headers=self._openfang_headers
+            ) as session:
                 # List agents to find by name
                 async with session.get(f"{self._openfang_url}/api/agents") as resp:
                     if resp.status != 200:
@@ -410,7 +433,9 @@ class BrainOpenFangBridge:
     async def _send_to_openfang(self, agent_id: str, message: str) -> str:
         """POST /api/agents/{id}/message → response text."""
         timeout = aiohttp.ClientTimeout(total=10.0)  # Outer timeout managed by caller
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(
+            timeout=timeout, headers=self._openfang_headers
+        ) as session:
             async with session.post(
                 f"{self._openfang_url}/api/agents/{agent_id}/message",
                 json={"message": message},
