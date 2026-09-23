@@ -112,3 +112,11 @@ python/vibemind.db.before-wipe-*.db
 graphify-out/
 .graphifyignore
 python/spaces.bak-*
+
+# python/spaces is a TRACKED symlink → ../../spaces (vibemind-os/spaces). On
+# Windows with core.symlinks=false git walks INTO the symlink target and lists
+# the whole vibemind-os/spaces/ tree (~2000 files) as untracked. Ignore the
+# walked-through contents so they aren't re-committed here; the symlink object
+# itself stays tracked (it is not matched by this trailing-slash rule).
+python/spaces/
+python/.pytest-cache/
