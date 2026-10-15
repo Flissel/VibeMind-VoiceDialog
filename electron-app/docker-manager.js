@@ -12,7 +12,7 @@ const path = require('path');
 const execAsync = promisify(exec);
 
 class DockerManager {
-  constructor() {
+  constructor(options = {}) {
     this.containers = new Map();
     this.engineProcess = null;
     this.engineRunning = false;
@@ -34,8 +34,13 @@ class DockerManager {
     // Callback for forwarding structured progress data to dashboard
     this._onProgress = null;
 
+    // Startprofil (Spec 2026-10-15): Container beim Beenden nur mit "docker-cleanup" entfernen.
+    this._policy = options.policy || null;
+    this._exec = options.execAsync || execAsync;
+    this._logger = options.logger || console;
+
     // Resolve Python executable path (Electron may not inherit shell PATH)
-    this.pythonPath = this._findPython();
+    this.pythonPath = options.pythonPath || this._findPython();
   }
 
   /**
@@ -783,7 +788,7 @@ class DockerManager {
    */
   async stopClaudeRunner() {
     try {
-      await execAsync('docker rm -f claude-runner');
+      await this._exec('docker rm -f claude-runner');
     } catch { /* container doesn't exist */ }
     this.claudeRunner = null;
     return { success: true };
@@ -817,14 +822,22 @@ class DockerManager {
   }
 
   /**
-   * Stop all containers on app quit
+   * Beim Beenden: Container nur mit Startprofil "docker-cleanup" entfernen.
    */
   async stopAllContainers() {
-    const stopPromises = Array.from(this.containers.keys()).map(id =>
-      this.stopProjectContainer(id)
-    );
-    stopPromises.push(this.stopClaudeRunner());
-    await Promise.all(stopPromises);
+    const ownProjects = Array.from(this.containers.keys());
+    const targets = [...ownProjects.map((id) => `project-${id}`), 'claude-runner'];
+    if (!this._policy || !this._policy.isAllowed('docker-cleanup')) {
+      const would = `beim Beenden docker rm -f ${targets.join(' ')}`;
+      if (this._policy) this._policy.logSkipped('docker-cleanup', would);
+      else this._logger.warn(`[DockerManager] kein Startprofil – nichts entfernt (${would})`);
+      return { stopped: [], skipped: targets };
+    }
+    await Promise.all([
+      ...ownProjects.map((id) => this.stopProjectContainer(id)),
+      this.stopClaudeRunner(),
+    ]);
+    return { stopped: targets, skipped: [] };
   }
 
   /**

@@ -15,7 +15,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 class PortAllocator {
-  constructor() {
+  constructor(options = {}) {
     // VNC ports start at 6200 to avoid Windows/Hyper-V TCP exclusion range
     // (Hyper-V often reserves 5940-6139 on Windows 11 + Docker Desktop)
     this.vncBasePort = 6200;
@@ -25,6 +25,11 @@ class PortAllocator {
     this.allocations = new Map();
     this.usedVncPorts = new Set();
     this.usedAppPorts = new Set();
+
+    // Startprofil (Spec 2026-10-15): Aufraeumen nur mit "docker-cleanup".
+    this._policy = options.policy || null;
+    this._exec = options.execAsync || execAsync;
+    this._logger = options.logger || console;
   }
 
   /**
@@ -187,31 +192,42 @@ class PortAllocator {
   }
 
   /**
-   * Cleanup all stale generation/project containers.
-   * Call this on app startup for a clean slate.
+   * Entfernt generation-/project-Container frueherer Sitzungen – nur mit
+   * Startprofil "docker-cleanup". Sonst wird nur geloggt, was entfernt worden waere.
    */
   async cleanupStaleContainers() {
+    let names;
     try {
-      const { stdout } = await execAsync('docker ps -a --format "{{.Names}}"');
-
-      const containers = stdout.split('\n')
-        .filter(name => name.startsWith('generation-') || name.startsWith('project-'));
-
-      for (const name of containers) {
-        console.log(`[PortAllocator] Removing stale container: ${name}`);
-        try {
-          await execAsync(`docker rm -f ${name}`);
-        } catch { /* already gone */ }
-      }
-
-      this.allocations.clear();
-      this.usedVncPorts.clear();
-      this.usedAppPorts.clear();
-
-      console.log(`[PortAllocator] Cleaned up ${containers.length} stale containers`);
+      const { stdout } = await this._exec('docker ps -a --format "{{.Names}}"');
+      names = String(stdout)
+        .split(/\r?\n/)
+        .map((name) => name.trim())
+        .filter((name) => name.startsWith('generation-') || name.startsWith('project-'));
     } catch {
-      console.log('[PortAllocator] No stale containers to clean');
+      this._logger.log('[PortAllocator] No stale containers to clean');
+      return { removed: [], skipped: [] };
     }
+
+    if (!this._policy || !this._policy.isAllowed('docker-cleanup')) {
+      const would = names.length > 0
+        ? `docker rm -f ${names.join(' ')}`
+        : 'keine generation-/project-Container vorhanden';
+      if (this._policy) this._policy.logSkipped('docker-cleanup', would);
+      else this._logger.warn(`[PortAllocator] kein Startprofil – nichts entfernt (${would})`);
+      return { removed: [], skipped: names };
+    }
+
+    for (const name of names) {
+      this._logger.log(`[PortAllocator] Removing stale container: ${name}`);
+      try {
+        await this._exec(`docker rm -f ${name}`);
+      } catch { /* already gone */ }
+    }
+    this.allocations.clear();
+    this.usedVncPorts.clear();
+    this.usedAppPorts.clear();
+    this._logger.log(`[PortAllocator] Cleaned up ${names.length} stale containers`);
+    return { removed: names, skipped: [] };
   }
 }
 

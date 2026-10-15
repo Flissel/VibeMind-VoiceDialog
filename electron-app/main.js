@@ -40,6 +40,13 @@ const {
     createStartupAudit,
     createStartupPolicy,
 } = require('./startup-policy');
+const {
+    killZombiePythonProcesses,
+    provisionN8nOwner,
+    startMediaCompose,
+    startMiroFishLocal,
+    startN8nLocal,
+} = require('./local-startup');
 const startupPolicy = createStartupPolicy(process.env);
 const startupAudit = createStartupAudit();
 
@@ -438,31 +445,12 @@ function createWindow() {
 
 // ============================================================================
 
-function killZombiePythonProcesses() {
-    // Kill stale Python processes on ports we need (8099=eyeTerm, 8009=AutomationUI)
-    if (process.platform !== 'win32') return;
-    const { execFileSync } = require('child_process');
-    for (const port of [8099, 8009]) {
-        try {
-            const out = execFileSync('netstat', ['-ano'], { timeout: 3000, encoding: 'utf8' });
-            const lines = out.split('\n').filter(l => l.includes(`:${port}`) && l.includes('LISTEN'));
-            for (const line of lines) {
-                const parts = line.trim().split(/\s+/);
-                const pid = parseInt(parts[parts.length - 1], 10);
-                if (pid > 0 && pid !== process.pid) {
-                    console.log(`[Main] Killing zombie process on port ${port} (PID ${pid})`);
-                    try {
-                        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 3000 });
-                    } catch (_) { /* may already be dead */ }
-                }
-            }
-        } catch (_) { /* netstat may fail — ignore */ }
-    }
-}
-
 function startPythonBackend() {
-    // Kill leftover Python processes from previous sessions
-    killZombiePythonProcesses();
+    // Reste frueherer Sitzungen auf :8099/:8009 – beendet nur mit Startprofil "zombie-kill"
+    killZombiePythonProcesses({
+        policy: startupPolicy,
+        execFileSync: require('child_process').execFileSync,
+    });
 
     // Use venv Python 3.12 to ensure MediaPipe and all dependencies are available
     const pythonPath = process.platform === 'win32'
@@ -3227,32 +3215,22 @@ app.whenReady().then(async () => {
 
     await startupPolicy.runExternalStartup('Docker bootstrap', async () => {
         startupAudit.markDockerBootstrapStarted();
-        // Initialize Coding Engine managers
-        dockerManager = new DockerManager();
-        portAllocator = new PortAllocator();
-
-        // Clean up stale containers from previous sessions and release their ports
+        // Coding-Engine-Manager; Aufraeumen nur mit Startprofil "docker-cleanup"
+        dockerManager = new DockerManager({ policy: startupPolicy });
+        portAllocator = new PortAllocator({ policy: startupPolicy });
         try {
             await portAllocator.cleanupStaleContainers();
         } catch (e) {
             console.warn('[Main] Container cleanup failed (Docker may not be running):', e.message);
         }
-
-        // Start media server container (video/audio playback for Rowboat)
-        try {
-            const { execSync } = require('child_process');
-            const path = require('path');
-            const fs = require('fs');
-            const mediaCompose = path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml');
-            if (fs.existsSync(mediaCompose)) {
-                execSync(`docker compose -f "${mediaCompose}" up -d media`, {
-                    timeout: 15000, stdio: 'ignore',
-                });
-                console.log('[Main] Media server container started (port 9877)');
-            }
-        } catch (e) {
-            console.warn('[Main] Media server container failed (videos may not play):', e.message);
-        }
+    });
+    await startupPolicy.runExternalStartup('media-compose', async () => {
+        startMediaCompose({
+            policy: startupPolicy,
+            composePath: path.join(__dirname, '..', 'python', 'spaces', 'video', 'docker-compose.media.yml'),
+            existsSync: fs.existsSync,
+            execSync: require('child_process').execSync,
+        });
     });
 
     setupIpcHandlers();
@@ -3359,118 +3337,34 @@ app.whenReady().then(async () => {
         console.log(marker);
     }
 
-    await startupPolicy.runExternalStartup('post-window external services', async () => {
-        // Initialize eyeTerm Camera Preview Manager
+    await startupPolicy.runExternalStartup('eyeTerm manager', async () => {
         eyetermManager = new EyeTermManager(mainWindow);
-
-    // ========================================
-    // N8N DOCKER AUTO-START
-    // ========================================
-    // Start n8n container in background if N8N_ENABLED=true
-    if (process.env.N8N_ENABLED === 'true') {
-        const n8nCompose = path.join(__dirname, '..', 'docker-compose.n8n.yml');
-        if (fs.existsSync(n8nCompose)) {
-            console.log('[Main] Starting n8n Docker container...');
-            const { exec: execCb } = require('child_process');
-            execCb(
-                `docker compose -f "${n8nCompose}" up -d`,
-                { cwd: path.join(__dirname, '..') },
-                (err, stdout, stderr) => {
-                    if (err) {
-                        console.warn('[Main] n8n Docker start failed:', err.message);
-                    } else {
-                        console.log('[Main] n8n Docker started successfully');
-                        if (stdout.trim()) console.log('[Main] n8n:', stdout.trim());
-                        // Auto-provision owner account with retry (n8n needs time to boot)
-                        const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
-                        let provisionAttempts = 0;
-                        const provisionOwner = () => {
-                            provisionAttempts++;
-                            const http = require('http');
-                            const url = new URL(`${n8nUrl}/rest/owner/setup`);
-                            const body = JSON.stringify({
-                                email: 'admin@vibemind.local',
-                                password: 'Vibemind1',
-                                firstName: 'VibeMind',
-                                lastName: 'Admin',
-                            });
-                            const req = http.request({
-                                hostname: url.hostname,
-                                port: url.port,
-                                path: url.pathname,
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-                            }, (res) => {
-                                if (res.statusCode === 200) {
-                                    console.log('[Main] n8n owner account provisioned');
-                                } else {
-                                    console.log('[Main] n8n owner already exists or setup skipped (status ' + res.statusCode + ')');
-                                }
-                                res.resume();
-                            });
-                            req.on('error', () => {
-                                if (provisionAttempts < 6) {
-                                    console.log(`[Main] n8n not ready yet, retry ${provisionAttempts}/6...`);
-                                    setTimeout(provisionOwner, 5000);
-                                } else {
-                                    console.warn('[Main] n8n owner provision gave up after 6 attempts');
-                                }
-                            });
-                            req.write(body);
-                            req.end();
-                        };
-                        // Wait for n8n to be fully ready before provisioning
-                        setTimeout(provisionOwner, 5000);
-                    }
-                }
-            );
-        } else {
-            console.warn('[Main] docker-compose.n8n.yml not found, skipping n8n auto-start');
-        }
-    }
-
-    // ========================================
-    // MIROFISH DOCKER AUTO-START
-    // ========================================
-    // Start MiroFish containers in background if MIROFISH_ENABLED=true
-    if (process.env.MIROFISH_ENABLED === 'true') {
-        const mirofishCompose = path.join(__dirname, '..', 'docker-compose.mirofish.yml');
-        if (fs.existsSync(mirofishCompose)) {
-            console.log('[Main] Starting MiroFish Docker containers...');
-            const { exec: execMf } = require('child_process');
-            execMf(
-                `docker compose -f "${mirofishCompose}" up -d`,
-                { cwd: path.join(__dirname, '..') },
-                (err, stdout, stderr) => {
-                    if (err) {
-                        console.warn('[Main] MiroFish Docker start failed:', err.message);
-                    } else {
-                        console.log('[Main] MiroFish Docker started successfully');
-                        if (stdout.trim()) console.log('[Main] MiroFish:', stdout.trim());
-                    }
-                }
-            );
-        } else {
-            console.warn('[Main] docker-compose.mirofish.yml not found, skipping MiroFish auto-start');
-        }
-    }
-
-    // ========================================
-    // ROWBOAT CORE BRIDGE (child process)
-    // ========================================
-    // Starts @x/core as a separate Node.js process.
-    // initConfigs + bus subscriptions happen inside the bridge.
-    // Event relay (runs:events, services:events) is handled by
-    // RowboatManager._onBridgeLine → relayEvent().
-    try {
-        await rowboatManager.startBridge();
-        await autoConfigureRowboatModels();
-        console.log('[Rowboat] Core bridge started, models configured');
-    } catch (err) {
-        console.error('[Rowboat] Core bridge start failed:', err.message);
-        console.error('[Rowboat] Chat will not work — knowledge/graph view still functional');
-    }
-
+    });
+    await startupPolicy.runExternalStartup('n8n-local', async () => {
+        startN8nLocal({
+            policy: startupPolicy,
+            env: process.env,
+            composePath: path.join(__dirname, '..', 'docker-compose.n8n.yml'),
+            cwd: path.join(__dirname, '..'),
+            existsSync: fs.existsSync,
+            exec: require('child_process').exec,
+            provisionOwner: (n8nUrl) => provisionN8nOwner(n8nUrl),
+        });
+    });
+    await startupPolicy.runExternalStartup('mirofish-local', async () => {
+        startMiroFishLocal({
+            policy: startupPolicy,
+            env: process.env,
+            composePath: path.join(__dirname, '..', 'docker-compose.mirofish.yml'),
+            cwd: path.join(__dirname, '..'),
+            existsSync: fs.existsSync,
+            exec: require('child_process').exec,
+        });
+    });
+    // Rowboat-Core-Bridge und autoConfigureRowboatModels() (schreibt ~/.rowboat/config/models.json)
+    // starten in Teil 1 bewusst NICHT – Rowboat-Einbettung ist Teil 2 der Spec.
+    console.log('[Main] Rowboat-Bridge nicht gestartet – kommt mit Teil 2');
+    await startupPolicy.runExternalStartup('Python backend', async () => {
         startPythonBackend();
     });
     // createTray();  // Uncomment when icon is available
