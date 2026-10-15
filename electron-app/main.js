@@ -28,12 +28,16 @@ protocol.registerSchemesAsPrivileged([
     },
 ]);
 
-// Load .env files with priority: Vibemind_V1/.env (master) > vibemind-os/voice/.env (overrides)
-// First-win strategy: master keys are not overridden by voice-specific config
-const _rootEnv = path.join(__dirname, '..', '..', '..', '.env');  // Vibemind_V1/.env
-const _voiceEnv = path.join(__dirname, '..', '.env');              // vibemind-os/voice/.env
-require('dotenv').config({ path: _rootEnv });                      // master first
-require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
+// .env: VIBEMIND_ENV_FILE (Launcher: <Vibemind_V1>\.env) oder Vibemind_V1/.env relativ,
+// danach vibemind-os/voice/.env (nur fehlende Schluessel). Startprofil nur aus dem Prozess.
+const { loadEnvFiles } = require('./env-files');
+const _envFiles = loadEnvFiles({
+    dirname: __dirname,
+    env: process.env,
+    dotenv: require('dotenv'),
+    existsSync: fs.existsSync,
+});
+console.log('[Main] .env-Dateien:', _envFiles.rootEnv, '+', _envFiles.voiceEnv);
 const {
     ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
     buildPythonBackendEnv,
