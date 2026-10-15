@@ -36,6 +36,7 @@ require('dotenv').config({ path: _rootEnv });                      // master fir
 require('dotenv').config({ path: _voiceEnv, override: false });    // voice-only keys added
 const {
     ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
+    buildPythonBackendEnv,
     createStartupAudit,
     createStartupPolicy,
 } = require('./startup-policy');
@@ -489,17 +490,24 @@ function startPythonBackend() {
         return;
     }
 
-    // PYTHONPATH: add vibemind-os root so 'brain' and 'spaces' packages are importable
+    // PYTHONPATH: vibemind-os root, damit 'brain' und 'spaces' importierbar sind;
+    // Python-Schalter (Autoclean, Bubble-Sync, Reformat) kommen aus dem Startprofil.
     const vibemindRoot = path.join(__dirname, '..', '..');
-    const existingPythonPath = process.env.PYTHONPATH || '';
-    const newPythonPath = existingPythonPath
-        ? `${vibemindRoot}${path.delimiter}${existingPythonPath}`
-        : vibemindRoot;
+    const pythonEnv = buildPythonBackendEnv({
+        baseEnv: process.env,
+        policy: startupPolicy,
+        vibemindRoot,
+        delimiter: path.delimiter,
+    });
+    console.log('[Main] Python-Schalter aus Startprofil:',
+        `VIBEMIND_ROWBOAT_AUTOCLEAN=${pythonEnv.VIBEMIND_ROWBOAT_AUTOCLEAN}`,
+        `VIBEMIND_BUBBLE_SYNC_ENABLED=${pythonEnv.VIBEMIND_BUBBLE_SYNC_ENABLED}`,
+        `VIBEMIND_CANVAS_REFORMAT_ENABLED=${pythonEnv.VIBEMIND_CANVAS_REFORMAT_ENABLED}`);
 
     pythonProcess = spawn(pythonPath, [backendPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: path.join(__dirname, '..', 'python'),
-        env: { ...process.env, PYTHONPATH: newPythonPath },
+        env: pythonEnv,
     });
     
     console.log('[Main] Python process started with PID:', pythonProcess.pid);

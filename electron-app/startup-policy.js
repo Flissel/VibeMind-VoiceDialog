@@ -86,6 +86,14 @@ function createStartupPolicy(environment, options = {}) {
       assertKnown(name);
       logger.log(`[Startprofil] ${name} uebersprungen – haette: ${wouldHaveDone}`);
     },
+    pythonEnv() {
+      const flag = (name) => (allowed.includes(name) ? '1' : '0');
+      return {
+        VIBEMIND_ROWBOAT_AUTOCLEAN: flag('rowboat-autoclean'),
+        VIBEMIND_BUBBLE_SYNC_ENABLED: flag('bubble-sync'),
+        VIBEMIND_CANVAS_REFORMAT_ENABLED: flag('bubble-sync'),
+      };
+    },
     async runExternalStartup(name, start) {
       if (isIsolatedStartup) return false;
       if (shuttingDown) {
@@ -107,6 +115,16 @@ function createStartupPolicy(environment, options = {}) {
       return true;
     },
   });
+}
+
+function buildPythonBackendEnv({ baseEnv, policy, vibemindRoot, delimiter }) {
+  const existing = baseEnv.PYTHONPATH || '';
+  return {
+    ...baseEnv,
+    PYTHONPATH: existing ? `${vibemindRoot}${delimiter}${existing}` : vibemindRoot,
+    // Profil gewinnt gegen .env (Spec Abschnitt 1)
+    ...policy.pythonEnv(),
+  };
 }
 
 function stripAnsi(value) {
@@ -131,6 +149,7 @@ function createStartupAudit() {
 }
 
 module.exports = {
+  buildPythonBackendEnv,
   DOCKER_BOOTSTRAP_MARKER,
   ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
   STARTUP_SIDE_EFFECTS,

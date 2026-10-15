@@ -6,6 +6,7 @@ const {
   ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
   STARTUP_SIDE_EFFECTS,
   createStartupAudit,
+  buildPythonBackendEnv,
   createStartupPolicy,
   findForbiddenStartupMarkers,
   formatStartupProfileLine,
@@ -244,4 +245,36 @@ test('Beenden waehrend ein Block laeuft: laufender Block endet, Folgeblock start
   assert.equal(await running, true);
   assert.equal(await policy.runExternalStartup('Python backend', async () => calls.push('python')), false);
   assert.deepEqual(calls, ['start', 'ende']);
+});
+
+test('Profil aus: Python-Schalter sind 0 und schlagen .env-Werte', () => {
+  const policy = createStartupPolicy({}, { logger: recordingLogger() });
+  const env = buildPythonBackendEnv({
+    baseEnv: {
+      VIBEMIND_ROWBOAT_AUTOCLEAN: '1',
+      VIBEMIND_BUBBLE_SYNC_ENABLED: '1',
+      VIBEMIND_CANVAS_REFORMAT_ENABLED: 'true',
+      PYTHONPATH: 'C:\alt',
+      BEHALTEN: 'x',
+    },
+    policy,
+    vibemindRoot: 'C:\vos',
+    delimiter: ';',
+  });
+  assert.equal(env.VIBEMIND_ROWBOAT_AUTOCLEAN, '0');
+  assert.equal(env.VIBEMIND_BUBBLE_SYNC_ENABLED, '0');
+  assert.equal(env.VIBEMIND_CANVAS_REFORMAT_ENABLED, '0');
+  assert.equal(env.PYTHONPATH, 'C:\vos;C:\alt');
+  assert.equal(env.BEHALTEN, 'x');
+});
+
+test('Profil erlaubt rowboat-autoclean und bubble-sync: Schalter sind 1', () => {
+  const policy = createStartupPolicy({ VIBEMIND_STARTUP_ALLOW: 'rowboat-autoclean,bubble-sync' });
+  assert.deepEqual(policy.pythonEnv(), {
+    VIBEMIND_ROWBOAT_AUTOCLEAN: '1',
+    VIBEMIND_BUBBLE_SYNC_ENABLED: '1',
+    VIBEMIND_CANVAS_REFORMAT_ENABLED: '1',
+  });
+  const env = buildPythonBackendEnv({ baseEnv: {}, policy, vibemindRoot: 'C:\vos', delimiter: ';' });
+  assert.equal(env.PYTHONPATH, 'C:\vos');
 });
