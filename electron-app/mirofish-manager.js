@@ -7,14 +7,20 @@
  * Pattern: identical to agentfarm-manager.js.
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 
 const _MF_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (MiroFish/Desktop family)
 function _mfLog(...a) { process.stdout.write(`${_MF_C}[MiroFishManager] ${a.join(' ')}${_RST}\n`); }
 
 class MiroFishManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.mirofishView = null;
     this.isVisible = false;
@@ -23,7 +29,7 @@ class MiroFishManager {
     this.topOffset = 32 + 43;
 
     // MiroFish Flask+Vue app URL
-    this.mirofishUrl = process.env.MIROFISH_URL || 'http://localhost:3001';
+    this.mirofishUrl = this._env.MIROFISH_URL || 'http://localhost:3001';
 
     // Retry state for connection-refused errors
     this.retryCount = 0;
@@ -46,7 +52,7 @@ class MiroFishManager {
   createView() {
     if (this.mirofishView) return this.mirofishView;
 
-    this.mirofishView = new BrowserView({
+    this.mirofishView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'mirofish-preload.js'),
         contextIsolation: true,
@@ -55,9 +61,12 @@ class MiroFishManager {
       },
     });
 
-    // Load MiroFish web app
-    _mfLog('Loading from:', this.mirofishUrl);
-    this.mirofishView.webContents.loadURL(this.mirofishUrl);
+    // Pruefung vor dem Laden: erreichbar (2 s) und wirklich MiroFish, sonst Statuskarte
+    _mfLog('Pruefe und lade:', this.mirofishUrl);
+    this.overlayReady = loadOverlay(this.mirofishView.webContents, {
+      space: 'MiroFish',
+      targets: [{ kind: 'url', url: this.mirofishUrl, expectTitle: /MiroFish/i }],
+    }, this._overlayDeps);
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
@@ -66,7 +75,7 @@ class MiroFishManager {
 
     // Handle external link navigation
     this.mirofishView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 

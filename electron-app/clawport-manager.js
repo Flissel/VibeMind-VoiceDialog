@@ -7,7 +7,7 @@
  * Pattern: identical to rowboat-manager.js (Rowboat Space).
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 
@@ -15,7 +15,14 @@ const _CP_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (ClawPort/Dashboard)
 function _cpLog(...a) { process.stdout.write(`${_CP_C}[ClawPortManager] ${a.join(' ')}${_RST}\n`); }
 
 class ClawPortManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._rendererPathOverride = dependencies.rendererPath || null;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.clawportView = null;
     this.isVisible = false;
@@ -24,7 +31,7 @@ class ClawPortManager {
     this.topOffset = 32 + 43;
 
     // Renderer dist path (dev vs production)
-    this.isDev = !!process.env.CLAWPORT_DEV_URL;
+    this.isDev = !!this._env.CLAWPORT_DEV_URL;
 
     // Listen for window resize
     if (this.mainWindow) {
@@ -56,7 +63,7 @@ class ClawPortManager {
   createView() {
     if (this.clawportView) return this.clawportView;
 
-    this.clawportView = new BrowserView({
+    this.clawportView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'clawport-preload.js'),
         contextIsolation: true,
@@ -65,15 +72,12 @@ class ClawPortManager {
       },
     });
 
-    // Load renderer
-    if (this.isDev) {
-      _cpLog('Loading from dev server:', process.env.CLAWPORT_DEV_URL);
-      this.clawportView.webContents.loadURL(process.env.CLAWPORT_DEV_URL);
-    } else {
-      const rendererPath = this._resolveRendererPath();
-      _cpLog('Loading from file:', rendererPath);
-      this.clawportView.webContents.loadFile(rendererPath);
-    }
+    // Pruefung vor dem Laden: Build vorhanden bzw. Dev-URL erreichbar, sonst Statuskarte
+    const targets = this.isDev
+      ? [{ kind: 'url', url: this._env.CLAWPORT_DEV_URL }]
+      : [{ kind: 'file', path: this._rendererPathOverride || this._resolveRendererPath() }];
+    _cpLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.clawportView.webContents, { space: 'ClawPort', targets }, this._overlayDeps);
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -82,7 +86,7 @@ class ClawPortManager {
 
     // Handle external link navigation
     this.clawportView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 

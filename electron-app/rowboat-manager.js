@@ -10,7 +10,7 @@
  * not reached by BrowserWindow.getAllWindows()).
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, resolveElectronParts } = require('./overlay-status');
 const { spawn } = require('child_process');
 const readline = require('readline');
 const path = require('path');
@@ -20,7 +20,14 @@ const _RB_C = '\x1b[94m', _RST = '\x1b[0m'; // Blue (Rowboat)
 function _rbLog(...args) { process.stdout.write(`${_RB_C}[RowboatManager] ${args.join(' ')}${_RST}\n`); }
 
 class RowboatManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    // Teil 1: Rowboat ist nur Platzhalter ("kommt mit Teil 2"), Bridge und Renderer starten nicht.
+    this.placeholderReason = dependencies.placeholderReason || '';
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.rowboatView = null;
     this.isVisible = false;
@@ -74,7 +81,7 @@ class RowboatManager {
   createView() {
     if (this.rowboatView) return this.rowboatView;
 
-    this.rowboatView = new BrowserView({
+    this.rowboatView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'rowboat-preload.js'),
         contextIsolation: true,
@@ -83,15 +90,18 @@ class RowboatManager {
       },
     });
 
-    // Load renderer
-    if (this.isDev) {
-      _rbLog('Loading from dev server:', process.env.ROWBOAT_DEV_URL);
-      this.rowboatView.webContents.loadURL(process.env.ROWBOAT_DEV_URL);
-    } else {
-      const rendererPath = this._resolveRendererPath();
-      _rbLog('Loading from file:', rendererPath);
-      this.rowboatView.webContents.loadFile(rendererPath);
+    if (this.placeholderReason) {
+      this.overlayReady = loadOverlay(this.rowboatView.webContents, {
+        space: 'Rowboat',
+        targets: [{ kind: 'unavailable', reason: this.placeholderReason, target: 'Rowboat-Einbettung' }],
+      }, this._overlayDeps);
+      return this.rowboatView;
     }
+
+    const targets = this.isDev
+      ? [{ kind: 'url', url: process.env.ROWBOAT_DEV_URL }]
+      : [{ kind: 'file', path: this._resolveRendererPath() }];
+    this.overlayReady = loadOverlay(this.rowboatView.webContents, { space: 'Rowboat', targets }, this._overlayDeps);
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -100,7 +110,7 @@ class RowboatManager {
 
     // Handle external link navigation
     this.rowboatView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
@@ -242,6 +252,10 @@ class RowboatManager {
    * Returns a promise that resolves when bridge:ready is received.
    */
   startBridge() {
+    if (this.placeholderReason) {
+      _rbLog('Bridge nicht gestartet -', this.placeholderReason);
+      return Promise.resolve(false);
+    }
     if (this.bridgeProcess) return Promise.resolve();
 
     // CWD must be apps/x/apps/main/ where pnpm workspace symlinks resolve

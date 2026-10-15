@@ -10,6 +10,7 @@
 const { BrowserView, session: electronSession } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { loadOverlay } = require('./overlay-status');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
@@ -65,15 +66,11 @@ class AgentFarmManager {
       },
     });
 
-    // Load renderer
-    if (this.isDev) {
-      _afLog('Loading from dev server:', process.env.AGENTFARM_DEV_URL);
-      this.agentfarmView.webContents.loadURL(process.env.AGENTFARM_DEV_URL);
-    } else {
-      const rendererPath = this._resolveRendererPath();
-      _afLog('Loading from file:', rendererPath);
-      this.agentfarmView.webContents.loadFile(rendererPath);
-    }
+    const targets = this.isDev
+      ? [{ kind: 'url', url: process.env.AGENTFARM_DEV_URL }]
+      : [{ kind: 'file', path: this._resolveRendererPath() }];
+    _afLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.agentfarmView.webContents, { space: 'AgentFarm', targets });
 
     // Strip X-Frame-Options / CSP from embedded iframe targets so their UIs
     // can load inside AgentFarm:

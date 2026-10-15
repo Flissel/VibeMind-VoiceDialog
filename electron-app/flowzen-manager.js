@@ -10,6 +10,7 @@
 
 const { BrowserView } = require('electron');
 const path = require('path');
+const { loadOverlay } = require('./overlay-status');
 
 const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
 function _fzLog(...a) { process.stdout.write(`${_FZ_C}[FlowzenManager] ${a.join(' ')}${_RST}\n`); }
@@ -51,8 +52,8 @@ class FlowzenManager {
 
     // Load the local diary HTML page
     const diaryPath = path.join(__dirname, 'flowzen-diary.html');
-    _fzLog('Loading diary from:', diaryPath);
-    this.flowzenView.webContents.loadFile(diaryPath);
+    _fzLog('Pruefe und lade:', diaryPath);
+    this.overlayReady = loadOverlay(this.flowzenView.webContents, { space: 'Flowzen', targets: [{ kind: 'file', path: diaryPath }] });
 
     // Handle external link navigation
     this.flowzenView.webContents.setWindowOpenHandler(({ url }) => {

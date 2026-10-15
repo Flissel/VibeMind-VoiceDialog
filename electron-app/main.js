@@ -3249,7 +3249,7 @@ app.whenReady().then(async () => {
         }
     });
     await startupPolicy.runExternalStartup('Rowboat manager', async () => {
-        rowboatManager = new RowboatManager(mainWindow);
+        rowboatManager = new RowboatManager(mainWindow, { placeholderReason: 'kommt mit Teil 2' });
     });
     await startupPolicy.runExternalStartup('SWE Design manager', async () => {
         sweDesignManager = new SweDesignManager(mainWindow);
