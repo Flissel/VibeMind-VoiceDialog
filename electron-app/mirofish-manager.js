@@ -28,8 +28,9 @@ class MiroFishManager {
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
-    // MiroFish Flask+Vue app URL
-    this.mirofishUrl = this._env.MIROFISH_URL || 'http://localhost:3001';
+    // MiroFish-Oberflaeche (Overlay). MIROFISH_UI_URL zuerst: MIROFISH_URL ist fuer Python die API
+    // (/health, :5101); der Launcher setzt nur MIROFISH_UI_URL. Rueckfall fuer alte Aufrufer.
+    this.mirofishUrl = this._env.MIROFISH_UI_URL || this._env.MIROFISH_URL || 'http://localhost:3001';
 
     // Listen for window resize
     if (this.mainWindow) {

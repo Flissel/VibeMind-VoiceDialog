@@ -95,6 +95,23 @@ test('MiroFish: fremde App (falscher Titel) ergibt Statuskarte, echte App laedt'
   } finally { await stop(fremd.server); await stop(echt.server); }
 });
 
+test('MiroFish: MIROFISH_UI_URL gewinnt gegen MIROFISH_URL (API fuer Python), sonst Rueckfall auf MIROFISH_URL', async () => {
+  const echt = await startServer(titled('MiroFish Offline - Predict Everything'));
+  try {
+    const h = harness();
+    const api = 'http://127.0.0.1:1/api-nicht-laden';
+    const a = new MiroFishManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: { MIROFISH_UI_URL: echt.url, MIROFISH_URL: api }, overlayDeps: { logger: quiet } });
+    assert.equal(a.mirofishUrl, echt.url);
+    a.show();
+    await a.overlayReady;
+    assert.deepEqual(h.views[0].loads, [['url', echt.url]]);
+    const b = new MiroFishManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: { MIROFISH_URL: echt.url }, overlayDeps: { logger: quiet } });
+    assert.equal(b.mirofishUrl, echt.url);
+    const c = new MiroFishManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: { MIROFISH_UI_URL: '', MIROFISH_URL: echt.url }, overlayDeps: { logger: quiet } });
+    assert.equal(c.mirofishUrl, echt.url);
+  } finally { await stop(echt.server); }
+});
+
 test('ClawPort: fehlender Build ergibt Statuskarte, vorhandener Build laedt', async () => {
   const h = harness();
   const fehlt = new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:\\nirgends\\index.html', overlayDeps: { existsSync: () => false, logger: quiet } });
