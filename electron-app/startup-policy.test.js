@@ -128,10 +128,10 @@ test('Docker bootstrap audit marker records only an entered normal-mode callback
   assert.doesNotMatch(DOCKER_BOOTSTRAP_MARKER, /[A-Z]:\\|token|secret/i);
 });
 
-test('Startprofil kennt genau die neun Nebenwirkungen der Spec', () => {
+test('Startprofil kennt genau die zehn Nebenwirkungen (Spec + Final Review: rowboat-publish)', () => {
   assert.deepEqual([...STARTUP_SIDE_EFFECTS], [
     'docker-cleanup', 'media-compose', 'n8n-local', 'mirofish-local',
-    'openfang-spawn', 'brain-spawn', 'rowboat-autoclean', 'bubble-sync', 'zombie-kill',
+    'openfang-spawn', 'brain-spawn', 'rowboat-autoclean', 'rowboat-publish', 'bubble-sync', 'zombie-kill',
   ]);
 });
 
@@ -183,11 +183,11 @@ test('Log-Zeile hat das Spec-Format', () => {
   createStartupPolicy({}, { logger }).logStartupProfile();
   assert.deepEqual(logger.lines, [[
     'log',
-    '[Startprofil] erlaubt=[] uebersprungen=[docker-cleanup,media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,bubble-sync,zombie-kill]',
+    '[Startprofil] erlaubt=[] uebersprungen=[docker-cleanup,media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,rowboat-publish,bubble-sync,zombie-kill]',
   ]]);
   assert.equal(
     formatStartupProfileLine(['docker-cleanup', 'zombie-kill']),
-    '[Startprofil] erlaubt=[docker-cleanup,zombie-kill] uebersprungen=[media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,bubble-sync]',
+    '[Startprofil] erlaubt=[docker-cleanup,zombie-kill] uebersprungen=[media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,rowboat-publish,bubble-sync]',
   );
 });
 
@@ -254,6 +254,9 @@ test('Profil aus: Python-Schalter sind 0 und schlagen .env-Werte', () => {
       VIBEMIND_ROWBOAT_AUTOCLEAN: '1',
       VIBEMIND_BUBBLE_SYNC_ENABLED: '1',
       VIBEMIND_CANVAS_REFORMAT_ENABLED: 'true',
+      // Root-.env schaltet Rowboat-Publish und Brain-Seeding ein (Final Review, Important 2)
+      ROWBOAT_PUBLISH_ENABLED: 'true',
+      BRAIN_SEEDING_ENABLED: 'true',
       PYTHONPATH: 'C:\alt',
       BEHALTEN: 'x',
     },
@@ -264,17 +267,31 @@ test('Profil aus: Python-Schalter sind 0 und schlagen .env-Werte', () => {
   assert.equal(env.VIBEMIND_ROWBOAT_AUTOCLEAN, '0');
   assert.equal(env.VIBEMIND_BUBBLE_SYNC_ENABLED, '0');
   assert.equal(env.VIBEMIND_CANVAS_REFORMAT_ENABLED, '0');
+  assert.equal(env.ROWBOAT_PUBLISH_ENABLED, '0');
+  assert.equal(env.BRAIN_SEEDING_ENABLED, '0');
   assert.equal(env.PYTHONPATH, 'C:\vos;C:\alt');
   assert.equal(env.BEHALTEN, 'x');
 });
 
-test('Profil erlaubt rowboat-autoclean und bubble-sync: Schalter sind 1', () => {
+test('Profil erlaubt rowboat-autoclean und bubble-sync: Schalter sind 1, Publish bleibt aus', () => {
   const policy = createStartupPolicy({ VIBEMIND_STARTUP_ALLOW: 'rowboat-autoclean,bubble-sync' });
   assert.deepEqual(policy.pythonEnv(), {
     VIBEMIND_ROWBOAT_AUTOCLEAN: '1',
+    ROWBOAT_PUBLISH_ENABLED: '0',
+    BRAIN_SEEDING_ENABLED: '0',
     VIBEMIND_BUBBLE_SYNC_ENABLED: '1',
     VIBEMIND_CANVAS_REFORMAT_ENABLED: '1',
   });
   const env = buildPythonBackendEnv({ baseEnv: {}, policy, vibemindRoot: 'C:\vos', delimiter: ';' });
   assert.equal(env.PYTHONPATH, 'C:\vos');
+});
+
+test('Profil erlaubt rowboat-publish: Publish und Seeding sind "true" (Python liest BRAIN_SEEDING_ENABLED nur als "true")', () => {
+  const policy = createStartupPolicy({ VIBEMIND_STARTUP_ALLOW: 'rowboat-publish' });
+  assert.equal(policy.isAllowed('rowboat-publish'), true);
+  const env = policy.pythonEnv();
+  assert.equal(env.ROWBOAT_PUBLISH_ENABLED, 'true');
+  assert.equal(env.BRAIN_SEEDING_ENABLED, 'true');
+  assert.equal(env.VIBEMIND_ROWBOAT_AUTOCLEAN, '0');
+  assert.equal(env.VIBEMIND_BUBBLE_SYNC_ENABLED, '0');
 });

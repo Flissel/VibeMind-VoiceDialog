@@ -14,6 +14,8 @@ const STARTUP_SIDE_EFFECTS = Object.freeze([
   'openfang-spawn',
   'brain-spawn',
   'rowboat-autoclean',
+  // Final Review 2026-10-15 (Important 2): Rowboat-Publish (sync_all, sync_all_spaces) und Brain-Seeding
+  'rowboat-publish',
   'bubble-sync',
   'zombie-kill',
 ]);
@@ -88,8 +90,12 @@ function createStartupPolicy(environment, options = {}) {
     },
     pythonEnv() {
       const flag = (name) => (allowed.includes(name) ? '1' : '0');
+      // python/publishing/config.py nimmt true/1/yes, brain/brain_seeder.py NUR "true" -> beide "true".
+      const publish = allowed.includes('rowboat-publish') ? 'true' : '0';
       return {
         VIBEMIND_ROWBOAT_AUTOCLEAN: flag('rowboat-autoclean'),
+        ROWBOAT_PUBLISH_ENABLED: publish,
+        BRAIN_SEEDING_ENABLED: publish,
         VIBEMIND_BUBBLE_SYNC_ENABLED: flag('bubble-sync'),
         VIBEMIND_CANVAS_REFORMAT_ENABLED: flag('bubble-sync'),
       };
