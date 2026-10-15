@@ -3185,6 +3185,7 @@ function registerShortcuts() {
 // ============================================================================
 
 app.whenReady().then(async () => {
+    startupPolicy.logStartupProfile();
     // Initialize Sentry error tracking (requires app to be ready)
     await startupPolicy.runExternalStartup('Sentry', async () => sentry.initSentry());
 
@@ -3249,100 +3250,100 @@ app.whenReady().then(async () => {
     setupIpcHandlers();
     createWindow();
 
-    await startupPolicy.runExternalStartup('auxiliary managers and services', async () => {
-        // Initialize Dashboard Manager after window is created
+    await startupPolicy.runExternalStartup('Dashboard manager', async () => {
         dashboardManager = new DashboardManager(mainWindow);
-
-    // Forward engine log lines and structured progress to the dashboard renderer
-    if (dockerManager && dashboardManager) {
-        dockerManager.setLogCallback((logLine) => {
-            dashboardManager.sendMessage('engine:log', logLine);
-        });
-        dockerManager.setProgressCallback((progressData) => {
-            dashboardManager.sendMessage('engine:progress', progressData);
-        });
-    }
-
-    // Initialize Rowboat Manager for Roarboot Space
-    rowboatManager = new RowboatManager(mainWindow);
-
-    // Initialize SWE Design Manager for Factory Space
-    sweDesignManager = new SweDesignManager(mainWindow);
-
-    // Initialize ClawPort Dashboard Manager
-    clawportManager = new ClawPortManager(mainWindow);
-
-    // Initialize Brain Dashboard Manager.
-    // Phase A: when the Brain runs as a container (started by
-    // Vibemind.debug.ps1), SKIP_BRAIN_SPAWN=1 stops Electron from spawning
-    // its OWN competing venv Brain on :5000. The BrowserView still works —
-    // BrainManager.startHeadless()'s port-busy adoption path
-    // (brain-manager.js:108-115) attaches to the running container instead.
-    brainManager = new BrainManager(mainWindow);
-    if (process.env.SKIP_BRAIN_SPAWN === '1' || process.env.SKIP_BRAIN_SPAWN === 'true') {
-      console.log('[Main] SKIP_BRAIN_SPAWN set — not spawning embedded Brain (using external/container Brain on :' + (process.env.BRAIN_PORT || '5000') + ')');
-    } else {
-      brainManager.startHeadless().catch(err =>
-        console.warn('[Main] Brain headless start failed:', err.message)
-      );
-    }
-
-    // Initialize OpenFang Agent OS + start daemon immediately
-    openfangManager = new OpenFangManager();
-    openfangManager.start().catch(err =>
-      console.warn('[Main] OpenFang start failed:', err.message)
-    );
-
-    // Initialize Supabase Realtime subscriptions (live DB -> UI)
-    // Subscribes to ideas, projects, canvas_nodes etc. and translates
-    // Postgres changes to the same IPC messages the Python backend sends.
-    realtimeChannels = initRealtimeSubscriptions(mainWindow);
-
-    // Phase 11.G — Brain Space-Event Bridge
-    // Subscribes to Brain's /api/events/stream SSE and forwards bubble.* /
-    // idea.* events to the renderer as bubble_created/node_added/etc IPC
-    // messages. Works regardless of Supabase-Realtime status.
-    try {
+        // Forward engine log lines and structured progress to the dashboard renderer
+        if (dockerManager && dashboardManager) {
+            dockerManager.setLogCallback((logLine) => {
+                dashboardManager.sendMessage('engine:log', logLine);
+            });
+            dockerManager.setProgressCallback((progressData) => {
+                dashboardManager.sendMessage('engine:progress', progressData);
+            });
+        }
+    });
+    await startupPolicy.runExternalStartup('Rowboat manager', async () => {
+        rowboatManager = new RowboatManager(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('SWE Design manager', async () => {
+        sweDesignManager = new SweDesignManager(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('ClawPort manager', async () => {
+        clawportManager = new ClawPortManager(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('Brain manager', async () => {
+        // Phase A: SKIP_BRAIN_SPAWN=1 verhindert ein eigenes Brain (Brain kommt aus dem Swarm-Stack).
+        brainManager = new BrainManager(mainWindow);
+        if (process.env.SKIP_BRAIN_SPAWN === '1' || process.env.SKIP_BRAIN_SPAWN === 'true') {
+            console.log('[Main] SKIP_BRAIN_SPAWN set — not spawning embedded Brain (using external/container Brain on :' + (process.env.BRAIN_PORT || '5000') + ')');
+        } else {
+            brainManager.startHeadless().catch(err =>
+                console.warn('[Main] Brain headless start failed:', err.message)
+            );
+        }
+    });
+    await startupPolicy.runExternalStartup('OpenFang', async () => {
+        openfangManager = new OpenFangManager();
+        openfangManager.start().catch(err =>
+            console.warn('[Main] OpenFang start failed:', err.message)
+        );
+    });
+    await startupPolicy.runExternalStartup('Supabase realtime', async () => {
+        // Subscribes to ideas, projects, canvas_nodes etc. (live DB -> UI)
+        realtimeChannels = initRealtimeSubscriptions(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('Brain bridge', async () => {
+        // Phase 11.G — Brain Space-Event Bridge (SSE -> renderer IPC)
         initBrainEventBridge(mainWindow);
-    } catch (e) {
-        console.warn('[Main] BrainEventBridge init failed:', e.message);
-    }
-
-    // Initialize Agent Farm Manager
-    agentfarmManager = new AgentFarmManager(mainWindow);
-
-    // Initialize MiroFish Manager
-    mirofishManager = new MiroFishManager(mainWindow);
-
-        // Initialize Flowzen Diary (Blue Rose Journal) Manager
+    });
+    await startupPolicy.runExternalStartup('AgentFarm manager', async () => {
+        agentfarmManager = new AgentFarmManager(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('MiroFish manager', async () => {
+        mirofishManager = new MiroFishManager(mainWindow);
+    });
+    await startupPolicy.runExternalStartup('Flowzen manager', async () => {
         flowzenManager = new FlowzenManager(mainWindow, sendToPython);
     });
 
-    const lauraRendererUrl = pathToFileURL(resolveLauraRendererPath({
-        dirname: __dirname,
-        resourcesPath: process.resourcesPath,
-        existsSync: fs.existsSync,
-    })).href;
-    lauraEmbedHost = createLauraEmbedHost({
-        app,
-        dialog,
-        env: process.env,
-        ipcMain,
-        isAllowedSender: (event) => isAllowedLauraIpcEvent(
-            event,
-            videoManager?.videoView?.webContents,
-            lauraRendererUrl,
-        ),
-        logger: console,
-        net,
-        protocol: session.fromPartition(LAURA_SESSION_PARTITION).protocol,
-        shell,
-    });
-    lauraEmbedHost.install();
-
-    // Initialize Video Space Manager
-    videoManager = new VideoManager(mainWindow);
-    console.log('[Main] Laura host and VideoManager initialized');
+    // Fehlt der Laura-Renderer (z. B. Laufzeit-Checkout ohne spaces/video/laura),
+    // darf das NICHT den Rest des Starts (Python, Shortcuts) abbrechen.
+    let lauraRendererUrl = null;
+    try {
+        lauraRendererUrl = pathToFileURL(resolveLauraRendererPath({
+            dirname: __dirname,
+            resourcesPath: process.resourcesPath,
+            existsSync: fs.existsSync,
+        })).href;
+    } catch (err) {
+        console.warn('[Main] Laura-Renderer fehlt – Video-Overlay zeigt Statuskarte:', err.message);
+    }
+    try {
+        lauraEmbedHost = createLauraEmbedHost({
+            app,
+            dialog,
+            env: process.env,
+            ipcMain,
+            isAllowedSender: (event) => isAllowedLauraIpcEvent(
+                event,
+                videoManager?.videoView?.webContents,
+                lauraRendererUrl,
+            ),
+            logger: console,
+            net,
+            protocol: session.fromPartition(LAURA_SESSION_PARTITION).protocol,
+            shell,
+        });
+        lauraEmbedHost.install();
+    } catch (err) {
+        console.error('[Main] Laura-Host nicht installiert:', err.message);
+    }
+    try {
+        videoManager = new VideoManager(mainWindow);
+        console.log('[Main] Laura host and VideoManager initialized');
+    } catch (err) {
+        console.error('[Main] VideoManager nicht verfuegbar:', err.message);
+    }
     if (startupPolicy.isIsolatedStartup) {
         console.log('[Main] VIBEMIND_E2E_ISOLATED_STARTUP active — external startup side effects disabled');
     }
@@ -3499,6 +3500,7 @@ app.on('window-all-closed', () => {
 
 let dockerCleanupDone = false;
 app.on('before-quit', (event) => {
+    startupPolicy.beginShutdown();
     const cleanedVideoBeforeQuit = startupPolicy.runIsolatedPreQuitCleanup(() => {
         if (videoManager) videoManager.destroy();
     });

@@ -4,11 +4,20 @@ const test = require('node:test');
 const {
   DOCKER_BOOTSTRAP_MARKER,
   ISOLATED_PRE_QUIT_VIDEO_CLEANUP_MARKER,
+  STARTUP_SIDE_EFFECTS,
   createStartupAudit,
   createStartupPolicy,
   findForbiddenStartupMarkers,
+  formatStartupProfileLine,
+  parseStartupAllow,
   stripAnsi,
 } = require('./startup-policy');
+
+function recordingLogger() {
+  const lines = [];
+  const rec = (level) => (...parts) => lines.push([level, parts.map(String).join(' ')]);
+  return { lines, log: rec('log'), info: rec('info'), warn: rec('warn'), error: rec('error') };
+}
 
 const EXTERNAL_STARTS = [
   'stale-container cleanup',
@@ -116,4 +125,123 @@ test('Docker bootstrap audit marker records only an entered normal-mode callback
   );
   assert.deepEqual(normalAudit.publicMarkers(), [DOCKER_BOOTSTRAP_MARKER]);
   assert.doesNotMatch(DOCKER_BOOTSTRAP_MARKER, /[A-Z]:\\|token|secret/i);
+});
+
+test('Startprofil kennt genau die neun Nebenwirkungen der Spec', () => {
+  assert.deepEqual([...STARTUP_SIDE_EFFECTS], [
+    'docker-cleanup', 'media-compose', 'n8n-local', 'mirofish-local',
+    'openfang-spawn', 'brain-spawn', 'rowboat-autoclean', 'bubble-sync', 'zombie-kill',
+  ]);
+});
+
+test('Vorgabe: ohne VIBEMIND_STARTUP_ALLOW ist alles aus', () => {
+  const policy = createStartupPolicy({}, { logger: recordingLogger() });
+  assert.deepEqual([...policy.allowed], []);
+  assert.deepEqual([...policy.skipped], [...STARTUP_SIDE_EFFECTS]);
+  for (const name of STARTUP_SIDE_EFFECTS) assert.equal(policy.isAllowed(name), false);
+  assert.equal(createStartupPolicy({ VIBEMIND_STARTUP_ALLOW: '' }).isAllowed('docker-cleanup'), false);
+});
+
+test('Liste wird getrimmt, kleingeschrieben, dedupliziert und in fester Reihenfolge gefuehrt', () => {
+  const policy = createStartupPolicy(
+    { VIBEMIND_STARTUP_ALLOW: ' Docker-Cleanup , brain-spawn,docker-cleanup,, ZOMBIE-KILL ' },
+    { logger: recordingLogger() },
+  );
+  assert.deepEqual([...policy.allowed], ['docker-cleanup', 'brain-spawn', 'zombie-kill']);
+  assert.equal(policy.isAllowed('docker-cleanup'), true);
+  assert.equal(policy.isAllowed('media-compose'), false);
+  assert.deepEqual(parseStartupAllow(undefined), { allowed: [], unknown: [] });
+});
+
+test('unbekannte Namen werden mit Warnung ignoriert', () => {
+  const logger = recordingLogger();
+  const policy = createStartupPolicy({ VIBEMIND_STARTUP_ALLOW: 'n8n-local,eyeterm,Eyeterm' }, { logger });
+  assert.deepEqual([...policy.allowed], ['n8n-local']);
+  assert.deepEqual([...policy.unknown], ['eyeterm']);
+  policy.logStartupProfile();
+  const warnings = logger.lines.filter(([level]) => level === 'warn').map(([, msg]) => msg);
+  assert.deepEqual(warnings, ['[Startprofil] unbekannter Name ignoriert: eyeterm']);
+});
+
+test('isAllowed wirft bei Tippfehlern im Code', () => {
+  const policy = createStartupPolicy({});
+  assert.throws(() => policy.isAllowed('docker-clean'), /Unbekannte Startprofil-Nebenwirkung: docker-clean/);
+});
+
+test('VIBEMIND_E2E_ISOLATED_STARTUP schlaegt die Erlaubnisliste', () => {
+  const policy = createStartupPolicy({
+    VIBEMIND_E2E_ISOLATED_STARTUP: 'true',
+    VIBEMIND_STARTUP_ALLOW: 'docker-cleanup,brain-spawn',
+  });
+  assert.equal(policy.isAllowed('docker-cleanup'), false);
+  assert.deepEqual([...policy.allowed], []);
+});
+
+test('Log-Zeile hat das Spec-Format', () => {
+  const logger = recordingLogger();
+  createStartupPolicy({}, { logger }).logStartupProfile();
+  assert.deepEqual(logger.lines, [[
+    'log',
+    '[Startprofil] erlaubt=[] uebersprungen=[docker-cleanup,media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,bubble-sync,zombie-kill]',
+  ]]);
+  assert.equal(
+    formatStartupProfileLine(['docker-cleanup', 'zombie-kill']),
+    '[Startprofil] erlaubt=[docker-cleanup,zombie-kill] uebersprungen=[media-compose,n8n-local,mirofish-local,openfang-spawn,brain-spawn,rowboat-autoclean,bubble-sync]',
+  );
+});
+
+test('logSkipped beschreibt, was getan worden waere', () => {
+  const logger = recordingLogger();
+  createStartupPolicy({}, { logger }).logSkipped('docker-cleanup', 'docker rm -f generation-a');
+  assert.deepEqual(logger.lines, [['log', '[Startprofil] docker-cleanup uebersprungen – haette: docker rm -f generation-a']]);
+});
+
+test('ein Fehler in einem Block bricht die Folgebloecke nicht ab', async () => {
+  const logger = recordingLogger();
+  const policy = createStartupPolicy({}, { logger });
+  const calls = [];
+  const results = [
+    await policy.runExternalStartup('eins', async () => calls.push('eins')),
+    await policy.runExternalStartup('Laura', async () => { throw new Error('Laura renderer missing'); }),
+    await policy.runExternalStartup('Python backend', async () => calls.push('python')),
+    await policy.runExternalStartup('kaputt-ohne-Error', async () => { throw 'nur ein String'; }),
+  ];
+  assert.deepEqual(results, [true, false, true, false]);
+  assert.deepEqual(calls, ['eins', 'python']);
+  const errors = logger.lines.filter(([level]) => level === 'error').map(([, msg]) => msg);
+  assert.deepEqual(errors, [
+    '[Startprofil] Startblock "Laura" fehlgeschlagen: Laura renderer missing',
+    '[Startprofil] Startblock "kaputt-ohne-Error" fehlgeschlagen: nur ein String',
+  ]);
+});
+
+test('nach beginShutdown laufen keine weiteren Startbloecke', async () => {
+  const logger = recordingLogger();
+  const policy = createStartupPolicy({}, { logger });
+  const calls = [];
+  assert.equal(await policy.runExternalStartup('vorher', async () => calls.push('vorher')), true);
+  assert.equal(policy.isShuttingDown(), false);
+  policy.beginShutdown();
+  assert.equal(policy.isShuttingDown(), true);
+  assert.equal(await policy.runExternalStartup('Python backend', async () => calls.push('python')), false);
+  assert.deepEqual(calls, ['vorher']);
+  assert.ok(logger.lines.some(([level, msg]) =>
+    level === 'log' && msg === '[Startprofil] Startblock "Python backend" uebersprungen – App wird beendet'));
+});
+
+test('Beenden waehrend ein Block laeuft: laufender Block endet, Folgeblock startet nicht', async () => {
+  const policy = createStartupPolicy({}, { logger: recordingLogger() });
+  const calls = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const running = policy.runExternalStartup('post-window', async () => {
+    calls.push('start');
+    await gate;
+    calls.push('ende');
+  });
+  policy.beginShutdown();
+  release();
+  assert.equal(await running, true);
+  assert.equal(await policy.runExternalStartup('Python backend', async () => calls.push('python')), false);
+  assert.deepEqual(calls, ['start', 'ende']);
 });
