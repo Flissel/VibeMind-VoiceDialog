@@ -8,15 +8,21 @@
  * Pattern: similar to mirofish-manager.js but loads a local file.
  */
 
-const { BrowserView } = require('electron');
 const path = require('path');
-const { loadOverlay } = require('./overlay-status');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 
 const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
 function _fzLog(...a) { process.stdout.write(`${_FZ_C}[FlowzenManager] ${a.join(' ')}${_RST}\n`); }
 
 class FlowzenManager {
-  constructor(mainWindow, sendToPythonFn) {
+  constructor(mainWindow, sendToPythonFn, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._ipcMain = dependencies.ipcMain || null;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
+    this.overlayResult = null;
     this.mainWindow = mainWindow;
     this.sendToPython = sendToPythonFn || null;
     this.flowzenView = null;
@@ -36,12 +42,29 @@ class FlowzenManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const diaryPath = path.join(__dirname, 'flowzen-diary.html');
+    _fzLog('Pruefe und lade:', diaryPath);
+    const targets = [{ kind: 'file', path: diaryPath }];
+    this.overlayReady = loadOverlay(this.flowzenView.webContents, { space: 'Flowzen', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.flowzenView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the Flowzen diary
    */
   createView() {
     if (this.flowzenView) return this.flowzenView;
 
-    this.flowzenView = new BrowserView({
+    this.flowzenView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'flowzen-preload.js'),
         contextIsolation: true,
@@ -50,19 +73,16 @@ class FlowzenManager {
       },
     });
 
-    // Load the local diary HTML page
-    const diaryPath = path.join(__dirname, 'flowzen-diary.html');
-    _fzLog('Pruefe und lade:', diaryPath);
-    this.overlayReady = loadOverlay(this.flowzenView.webContents, { space: 'Flowzen', targets: [{ kind: 'file', path: diaryPath }] });
+    this._startOverlay();
 
     // Handle external link navigation
     this.flowzenView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
     // Forward 'to-python' IPC from the diary BrowserView to the Python backend
-    const { ipcMain } = require('electron');
+    const ipcMain = this._ipcMain || require('electron').ipcMain;
     ipcMain.on('to-python', (_event, message) => {
       if (this.sendToPython) {
         this.sendToPython(message);
@@ -77,7 +97,7 @@ class FlowzenManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'flowzen_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _fzLog('Diary loaded');
@@ -115,6 +135,8 @@ class FlowzenManager {
 
     if (!this.flowzenView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.addBrowserView(this.flowzenView);
@@ -190,7 +212,7 @@ class FlowzenManager {
    */
   reload() {
     if (this.flowzenView && !this.flowzenView.webContents.isDestroyed()) {
-      this.flowzenView.webContents.reload();
+      this._startOverlay();
     }
   }
 

@@ -113,6 +113,13 @@ async function loadOverlay(webContents, { space, targets }, deps = {}) {
   if (webContents.isDestroyed && webContents.isDestroyed()) {
     return chosen ? chosen.result : { ok: false, reason: 'Ansicht geschlossen', target: '' };
   }
+  if (deps.onResult) {
+    deps.onResult(chosen ? chosen.result : {
+      ok: false,
+      reason: failures.map((x) => x.reason).join('; '),
+      target: failures.map((x) => x.target).filter(Boolean).join(' | '),
+    });
+  }
   try {
     if (chosen) {
       if (chosen.target.kind === 'file') await webContents.loadFile(chosen.target.path);
@@ -130,12 +137,20 @@ async function loadOverlay(webContents, { space, targets }, deps = {}) {
   }
 }
 
+/** Statusfeld fuer die *_view_status-Meldung: Karte ist nicht "ready". */
+function loadStatus(result) {
+  return result && !result.ok
+    ? { status: 'unavailable', message: result.reason }
+    : { status: 'ready' };
+}
+
 module.exports = {
   CARD_PREFIX,
   DEFAULT_TIMEOUT_MS,
   checkOverlayTarget,
   extractTitle,
   loadOverlay,
+  loadStatus,
   resolveElectronParts,
   statusCardHtml,
   statusCardUrl,

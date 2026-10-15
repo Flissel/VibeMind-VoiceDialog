@@ -48,6 +48,24 @@ class DashboardManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const targets = [];
+    if (this.dashboardUrl) targets.push({ kind: 'url', url: this.dashboardUrl, expectTitle: /DaveLovable/i });
+    targets.push({ kind: 'file', path: this.dashboardPath });
+    _dmLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.dashboardView.webContents, { space: 'Dashboard (Coding Engine)', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.dashboardView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the dashboard
    */
   createView() {
@@ -64,11 +82,7 @@ class DashboardManager {
       },
     });
 
-    const targets = [];
-    if (this.dashboardUrl) targets.push({ kind: 'url', url: this.dashboardUrl, expectTitle: /DaveLovable/i });
-    targets.push({ kind: 'file', path: this.dashboardPath });
-    _dmLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
-    this.overlayReady = loadOverlay(this.dashboardView.webContents, { space: 'Dashboard (Coding Engine)', targets }, this._overlayDeps);
+    this._startOverlay();
 
     // Open DevTools always while debugging the embed
     this.dashboardView.webContents.openDevTools({ mode: 'detach' });
@@ -96,6 +110,8 @@ class DashboardManager {
     // Create view if not exists
     if (!this.dashboardView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     // Add view to window
@@ -164,7 +180,7 @@ class DashboardManager {
    */
   reload() {
     if (this.dashboardView) {
-      this.dashboardView.webContents.reload();
+      this._startOverlay();
     }
   }
 

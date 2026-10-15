@@ -10,7 +10,7 @@
  * not reached by BrowserWindow.getAllWindows()).
  */
 
-const { loadOverlay, resolveElectronParts } = require('./overlay-status');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { spawn } = require('child_process');
 const readline = require('readline');
 const path = require('path');
@@ -76,6 +76,25 @@ class RowboatManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const targets = this.placeholderReason
+      ? [{ kind: 'unavailable', reason: this.placeholderReason, target: 'Rowboat-Einbettung' }]
+      : this.isDev
+        ? [{ kind: 'url', url: process.env.ROWBOAT_DEV_URL }]
+        : [{ kind: 'file', path: this._resolveRendererPath() }];
+    this.overlayReady = loadOverlay(this.rowboatView.webContents, { space: 'Rowboat', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.rowboatView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the Rowboat renderer
    */
   createView() {
@@ -90,18 +109,7 @@ class RowboatManager {
       },
     });
 
-    if (this.placeholderReason) {
-      this.overlayReady = loadOverlay(this.rowboatView.webContents, {
-        space: 'Rowboat',
-        targets: [{ kind: 'unavailable', reason: this.placeholderReason, target: 'Rowboat-Einbettung' }],
-      }, this._overlayDeps);
-      return this.rowboatView;
-    }
-
-    const targets = this.isDev
-      ? [{ kind: 'url', url: process.env.ROWBOAT_DEV_URL }]
-      : [{ kind: 'file', path: this._resolveRendererPath() }];
-    this.overlayReady = loadOverlay(this.rowboatView.webContents, { space: 'Rowboat', targets }, this._overlayDeps);
+    this._startOverlay();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -129,7 +137,7 @@ class RowboatManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'rowboat_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _rbLog('Renderer loaded');
@@ -161,6 +169,8 @@ class RowboatManager {
 
     if (!this.rowboatView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.rowboatView);
@@ -454,7 +464,7 @@ class RowboatManager {
    */
   reload() {
     if (this.rowboatView) {
-      this.rowboatView.webContents.reload();
+      this._startOverlay();
     }
   }
 

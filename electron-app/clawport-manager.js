@@ -7,7 +7,7 @@
  * Pattern: identical to rowboat-manager.js (Rowboat Space).
  */
 
-const { loadOverlay, resolveElectronParts } = require('./overlay-status');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 
@@ -58,6 +58,24 @@ class ClawPortManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const targets = this.isDev
+      ? [{ kind: 'url', url: this._env.CLAWPORT_DEV_URL }]
+      : [{ kind: 'file', path: this._rendererPathOverride || this._resolveRendererPath() }];
+    _cpLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.clawportView.webContents, { space: 'ClawPort', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.clawportView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the ClawPort dashboard
    */
   createView() {
@@ -72,12 +90,7 @@ class ClawPortManager {
       },
     });
 
-    // Pruefung vor dem Laden: Build vorhanden bzw. Dev-URL erreichbar, sonst Statuskarte
-    const targets = this.isDev
-      ? [{ kind: 'url', url: this._env.CLAWPORT_DEV_URL }]
-      : [{ kind: 'file', path: this._rendererPathOverride || this._resolveRendererPath() }];
-    _cpLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
-    this.overlayReady = loadOverlay(this.clawportView.webContents, { space: 'ClawPort', targets }, this._overlayDeps);
+    this._startOverlay();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -95,7 +108,7 @@ class ClawPortManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'clawport_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _cpLog('Dashboard loaded');
@@ -126,6 +139,8 @@ class ClawPortManager {
 
     if (!this.clawportView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.clawportView);
@@ -193,7 +208,7 @@ class ClawPortManager {
    */
   reload() {
     if (this.clawportView) {
-      this.clawportView.webContents.reload();
+      this._startOverlay();
     }
   }
 

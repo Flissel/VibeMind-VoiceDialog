@@ -137,3 +137,12 @@ test('Statuskarte escaped HTML', () => {
   assert.match(out, /&lt;b&gt;X&lt;\/b&gt; nicht verfuegbar – &quot;a&quot; &amp; b/);
   assert.equal(extractTitle('<TITLE> Hallo </TITLE>'), 'Hallo');
 });
+
+test('onResult wird vor dem Laden mit dem Ergebnis aufgerufen', async () => {
+  const order = [];
+  const wc = fakeWebContents();
+  wc.loadURL = async () => { order.push('load'); };
+  await loadOverlay(wc, { space: 'X', targets: [{ kind: 'unavailable', reason: 'weg', target: 't' }] },
+    { logger: quiet, onResult: (r) => order.push(`result:${r.ok}`) });
+  assert.deepEqual(order, ['result:false', 'load']);
+});

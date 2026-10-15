@@ -159,3 +159,133 @@ test('Video/Laura: fehlender Renderer ergibt Statuskarte statt Absturz', async (
   assert.match(text, /Video\/Laura nicht verfuegbar – Renderer fehlt \(pnpm laura:build\)/);
   assert.match(text, /checked C:\\x\\index\.html/);
 });
+
+// ---- Fix-Runde 1: erneute Pruefung bei show()/reload(), Statusmeldung, kein ungeprueftes Retry ----
+
+function tick() { return new Promise((resolve) => setImmediate(resolve)); }
+
+function withStatusSink(h) {
+  const sent = [];
+  h.mainWindow.webContents.send = (channel, payload) => { sent.push([channel, payload]); };
+  return sent;
+}
+
+const AgentFarmManager = require('./agentfarm-manager');
+const FlowzenManager = require('./flowzen-manager');
+
+const FILE_CASES = [
+  ['ClawPort', (h, deps) => new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:/x/index.html', overlayDeps: deps }), /ClawPort nicht verfuegbar/],
+  ['Dashboard', (h, deps) => new DashboardManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: {}, dashboardPath: 'C:/x/index.html', overlayDeps: deps }), /Dashboard \(Coding Engine\) nicht verfuegbar/],
+  ['Rowboat', (h, deps) => new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, overlayDeps: deps }), /Rowboat nicht verfuegbar/],
+  ['AgentFarm', (h, deps) => new AgentFarmManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, n8nLogin: false, overlayDeps: deps }), /AgentFarm nicht verfuegbar/],
+  ['Flowzen', (h, deps) => new FlowzenManager(h.mainWindow, null, { ipcMain: { on() {} }, BrowserView: h.FakeBrowserView, shell: h.shell, overlayDeps: deps }), /Flowzen nicht verfuegbar/],
+];
+
+for (const [name, make, cardRe] of FILE_CASES) {
+  test(`${name}: war das Ziel beim ersten show() weg, laedt show() es nach Rueckkehr; reload() prueft erneut`, async () => {
+    const h = harness();
+    let present = false;
+    const m = make(h, { existsSync: () => present, logger: quiet });
+    m.show();
+    await m.overlayReady;
+    assert.equal(h.views.length, 1);
+    assert.match(card(h.views[0].loads[0]), cardRe);
+
+    present = true;
+    m.show();
+    await m.overlayReady;
+    assert.equal(h.views.length, 1, 'View wird wiederverwendet');
+    assert.equal(h.views[0].loads.length, 2);
+    assert.equal(h.views[0].loads[1][0], 'file');
+
+    present = false;
+    m.reload();
+    await m.overlayReady;
+    assert.equal(h.views[0].loads.length, 3);
+    assert.match(card(h.views[0].loads[2]), cardRe);
+
+    present = true;
+    m.reload();
+    await m.overlayReady;
+    assert.equal(h.views[0].loads[3][0], 'file');
+  });
+}
+
+test('show() prueft nicht erneut, solange das Ziel geladen ist', async () => {
+  const h = harness();
+  const m = new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:/x/index.html', overlayDeps: { existsSync: () => true, logger: quiet } });
+  m.show();
+  await m.overlayReady;
+  m.show();
+  await m.overlayReady;
+  assert.equal(h.views[0].loads.length, 1);
+});
+
+test('MiroFish: Ziel erst weg (Karte), dann da (laedt); reload() prueft wieder inkl. Titelwaechter', async () => {
+  let mode = 'down';
+  const { server, url } = await startServer((req, res) => {
+    if (mode === 'down') { res.writeHead(502); res.end('x'); return; }
+    titled(mode === 'fremd' ? 'Rowboat' : 'MiroFish Offline - Predict Everything')(req, res);
+  });
+  try {
+    const h = harness();
+    const m = new MiroFishManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: { MIROFISH_URL: url }, overlayDeps: { logger: quiet } });
+    m.show();
+    await m.overlayReady;
+    assert.match(card(h.views[0].loads[0]), /HTTP 502/);
+
+    mode = 'echt';
+    m.show();
+    await m.overlayReady;
+    assert.deepEqual(h.views[0].loads[1], ['url', url]);
+
+    mode = 'fremd';
+    m.reload();
+    await m.overlayReady;
+    assert.match(card(h.views[0].loads[2]), /fremde App \(Titel „Rowboat“\)/);
+  } finally { await stop(server); }
+});
+
+test('MiroFish: did-fail-load -102 startet kein ungeprueftes Retry mehr', async () => {
+  const { server, url } = await startServer(titled('MiroFish Offline - Predict Everything'));
+  try {
+    const h = harness();
+    const sent = withStatusSink(h);
+    const m = new MiroFishManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: { MIROFISH_URL: url }, overlayDeps: { logger: quiet } });
+    m.show();
+    await m.overlayReady;
+    h.views[0].handlers.get('did-fail-load')(null, -102, 'ERR_CONNECTION_REFUSED');
+    assert.equal(m.retryTimer == null, true, 'kein Retry-Timer');
+    assert.equal(sent.at(-1)[1].status, 'error');
+    assert.equal(h.views[0].loads.length, 1);
+  } finally { await stop(server); }
+});
+
+test('did-finish-load meldet bei Statuskarte „unavailable“ mit Grund, sonst „ready“', async () => {
+  let up = false;
+  const h = harness();
+  const sent = withStatusSink(h);
+  const m = new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:/x/index.html', overlayDeps: { existsSync: () => up, logger: quiet } });
+  m.show();
+  await m.overlayReady;
+  h.views[0].handlers.get('did-finish-load')();
+  assert.deepEqual(sent.at(-1), ['python-message', { type: 'clawport_view_status', status: 'unavailable', message: 'Datei fehlt' }]);
+
+  up = true;
+  m.show();
+  await m.overlayReady;
+  h.views[0].handlers.get('did-finish-load')();
+  assert.deepEqual(sent.at(-1), ['python-message', { type: 'clawport_view_status', status: 'ready' }]);
+});
+
+test('Rowboat-Platzhalter meldet „unavailable“ statt „ready“', async () => {
+  const h = harness();
+  const sent = withStatusSink(h);
+  const r = new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, placeholderReason: 'kommt mit Teil 2', overlayDeps: { logger: quiet } });
+  r.show();
+  await r.overlayReady;
+  await tick();
+  assert.equal(h.views[0].handlers.has('did-finish-load'), true, 'Handler auch im Platzhalter-Modus');
+  h.views[0].handlers.get('did-finish-load')();
+  assert.deepEqual(sent.at(-1), ['python-message', { type: 'rowboat_view_status', status: 'unavailable', message: 'kommt mit Teil 2' }]);
+});

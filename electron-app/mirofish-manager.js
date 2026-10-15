@@ -7,7 +7,7 @@
  * Pattern: identical to agentfarm-manager.js.
  */
 
-const { loadOverlay, resolveElectronParts } = require('./overlay-status');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 
 const _MF_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (MiroFish/Desktop family)
@@ -31,11 +31,6 @@ class MiroFishManager {
     // MiroFish Flask+Vue app URL
     this.mirofishUrl = this._env.MIROFISH_URL || 'http://localhost:3001';
 
-    // Retry state for connection-refused errors
-    this.retryCount = 0;
-    this.maxRetries = 10;
-    this.retryTimer = null;
-
     // Listen for window resize
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
@@ -44,6 +39,22 @@ class MiroFishManager {
         }
       });
     }
+  }
+
+  /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    _mfLog('Pruefe und lade:', this.mirofishUrl);
+    const targets = [{ kind: 'url', url: this.mirofishUrl, expectTitle: /MiroFish/i }];
+    this.overlayReady = loadOverlay(this.mirofishView.webContents, { space: 'MiroFish', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.mirofishView) this._startOverlay();
   }
 
   /**
@@ -61,12 +72,7 @@ class MiroFishManager {
       },
     });
 
-    // Pruefung vor dem Laden: erreichbar (2 s) und wirklich MiroFish, sonst Statuskarte
-    _mfLog('Pruefe und lade:', this.mirofishUrl);
-    this.overlayReady = loadOverlay(this.mirofishView.webContents, {
-      space: 'MiroFish',
-      targets: [{ kind: 'url', url: this.mirofishUrl, expectTitle: /MiroFish/i }],
-    }, this._overlayDeps);
+    this._startOverlay();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
@@ -81,30 +87,18 @@ class MiroFishManager {
 
     // Notify VibeMind renderer of load status
     this.mirofishView.webContents.on('did-finish-load', () => {
-      this.retryCount = 0;
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'mirofish_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _mfLog('MiroFish loaded');
     });
 
     this.mirofishView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      // ERR_CONNECTION_REFUSED (-102): server not up yet — retry with backoff
-      if (errorCode === -102 && this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        const delay = Math.min(1000 * this.retryCount, 5000);
-        _mfLog(`Server not ready, retry ${this.retryCount}/${this.maxRetries} in ${delay}ms`);
-        this.retryTimer = setTimeout(() => {
-          if (this.mirofishView && !this.mirofishView.webContents.isDestroyed()) {
-            this.mirofishView.webContents.loadURL(this.mirofishUrl);
-          }
-        }, delay);
-        return;
-      }
-
+      // Kein automatisches Retry mehr: Erreichbarkeit und Titelwaechter laufen ueber
+      // loadOverlay (show()/reload()); ein direktes loadURL wuerde die Pruefung umgehen.
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'mirofish_view_status',
@@ -129,6 +123,8 @@ class MiroFishManager {
 
     if (!this.mirofishView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.mirofishView);
@@ -195,7 +191,7 @@ class MiroFishManager {
    */
   reload() {
     if (this.mirofishView) {
-      this.mirofishView.webContents.reload();
+      this._startOverlay();
     }
   }
 
@@ -203,10 +199,6 @@ class MiroFishManager {
    * Destroy the MiroFish view
    */
   destroy() {
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
     if (this.mirofishView) {
       this.hide();
       this.mirofishView = null;
