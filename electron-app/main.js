@@ -3258,21 +3258,26 @@ app.whenReady().then(async () => {
         clawportManager = new ClawPortManager(mainWindow);
     });
     await startupPolicy.runExternalStartup('Brain manager', async () => {
-        // Phase A: SKIP_BRAIN_SPAWN=1 verhindert ein eigenes Brain (Brain kommt aus dem Swarm-Stack).
-        brainManager = new BrainManager(mainWindow);
-        if (process.env.SKIP_BRAIN_SPAWN === '1' || process.env.SKIP_BRAIN_SPAWN === 'true') {
-            console.log('[Main] SKIP_BRAIN_SPAWN set — not spawning embedded Brain (using external/container Brain on :' + (process.env.BRAIN_PORT || '5000') + ')');
-        } else {
-            brainManager.startHeadless().catch(err =>
-                console.warn('[Main] Brain headless start failed:', err.message)
-            );
-        }
+        // Nur uebernehmen auf BRAIN_PORT; eigener Start nur mit "brain-spawn" und ohne SKIP_BRAIN_SPAWN.
+        brainManager = new BrainManager(mainWindow, { policy: startupPolicy });
+        brainManager.startHeadless().catch(err =>
+            console.warn('[Main] Brain headless start failed:', err.message)
+        );
     });
     await startupPolicy.runExternalStartup('OpenFang', async () => {
-        openfangManager = new OpenFangManager();
-        openfangManager.start().catch(err =>
-            console.warn('[Main] OpenFang start failed:', err.message)
-        );
+        // Nur uebernehmen; Start/taskkill nur mit Startprofil "openfang-spawn".
+        openfangManager = new OpenFangManager({ policy: startupPolicy });
+        openfangManager.start()
+            .then(() => {
+                if (openfangManager.status.state === 'fehlt' && mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('python-message', {
+                        type: 'openfang_status',
+                        status: 'unavailable',
+                        message: `OpenFang nicht verfuegbar – ${openfangManager.status.reason}`,
+                    });
+                }
+            })
+            .catch(err => console.warn('[Main] OpenFang start failed:', err.message));
     });
     await startupPolicy.runExternalStartup('Supabase realtime', async () => {
         // Subscribes to ideas, projects, canvas_nodes etc. (live DB -> UI)

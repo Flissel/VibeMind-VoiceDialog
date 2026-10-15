@@ -12,17 +12,48 @@
 
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
-const FANG_COLOR = '\x1b[35m';  // Magenta
-const RST = '\x1b[0m';
+const FANG_COLOR = '[35m';  // Magenta
+const RST = '[0m';
+
+// Spec 2026-10-15: nur uebernehmen. Grosszuegige Probe (3 s x 3), damit ein langsam
+// antwortendes, laufendes OpenFang nie ein zweites openfang.exe ausloest.
+const DEFAULT_HEALTH_URL = 'http://127.0.0.1:4200/api/health';
+const HEALTH_TIMEOUT_MS = 3000;
+const HEALTH_ATTEMPTS = 3;
+const HEALTH_RETRY_DELAY_MS = 500;
+
+function probeHttpOk(url, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      res.resume();
+      done(res.statusCode === 200);
+    });
+    req.on('error', () => done(false));
+    req.on('timeout', () => { req.destroy(); done(false); });
+  });
+}
 
 class OpenFangManager {
-  constructor() {
+  constructor(dependencies = {}) {
     this._process = null;
     this._ready = false;
     this._starting = false;
+    this._adopted = false;
     this.port = null;
+    this.status = { state: 'unbekannt', reason: '' };
+
+    this._policy = dependencies.policy || null;
+    this._spawn = dependencies.spawn || spawn;
+    this._execFileSync = dependencies.execFileSync || execFileSync;
+    this._probe = dependencies.probeHealth || probeHttpOk;
+    this._healthUrl = dependencies.healthUrl || DEFAULT_HEALTH_URL;
+    this._logger = dependencies.logger || console;
+    this._sleep = dependencies.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
     // Find binary: release → debug → PATH
     const projectRoot = path.resolve(__dirname, '..', '..'); // vibemind-os/
@@ -40,30 +71,39 @@ class OpenFangManager {
     this._cwd = path.join(projectRoot, 'openfang');
   }
 
+  async _isRunningExternally() {
+    for (let attempt = 0; attempt < HEALTH_ATTEMPTS; attempt += 1) {
+      if (await this._probe(this._healthUrl, HEALTH_TIMEOUT_MS)) return true;
+      if (attempt < HEALTH_ATTEMPTS - 1) await this._sleep(HEALTH_RETRY_DELAY_MS);
+    }
+    return false;
+  }
+
+  _spawnAllowed() {
+    return !!this._policy && this._policy.isAllowed('openfang-spawn');
+  }
+
   /**
    * Start the OpenFang daemon. Resolves when the API is ready.
    */
   async start() {
     if (this._ready || this._starting) return;
 
-    // Check if already running externally
-    try {
-      const http = require('http');
-      const running = await new Promise((resolve) => {
-        const req = http.get('http://127.0.0.1:4200/api/health', { timeout: 1000 }, (res) => {
-          resolve(res.statusCode === 200);
-          res.resume();
-        });
-        req.on('error', () => resolve(false));
-        req.on('timeout', () => { req.destroy(); resolve(false); });
-      });
-      if (running) {
-        console.log(`${FANG_COLOR}[OpenFang]${RST} Already running externally on port 4200`);
-        this.port = 4200;
-        this._ready = true;
-        return;
-      }
-    } catch { /* continue to spawn */ }
+    if (await this._isRunningExternally()) {
+      this.port = Number(new URL(this._healthUrl).port) || 4200;
+      this._ready = true;
+      this._adopted = true;
+      this.status = { state: 'uebernommen', reason: '' };
+      this._logger.log(`${FANG_COLOR}[OpenFang]${RST} Laeuft bereits auf Port ${this.port} – uebernommen`);
+      return;
+    }
+
+    if (!this._spawnAllowed()) {
+      this.status = { state: 'fehlt', reason: `keine Antwort von ${this._healthUrl} (openfang-spawn aus)` };
+      if (this._policy) this._policy.logSkipped('openfang-spawn', `${this._binary} start`);
+      this._logger.warn(`${FANG_COLOR}[OpenFang]${RST} nicht verfuegbar – ${this.status.reason}`);
+      return;
+    }
 
     if (!fs.existsSync(this._binary) && this._binary !== 'openfang') {
       console.warn(`${FANG_COLOR}[OpenFang]${RST} Binary not found at ${this._binary}, skipping`);
@@ -76,7 +116,7 @@ class OpenFangManager {
     return new Promise((resolve) => {
       const _configFile = path.join(this._cwd, 'openfang.vibemind.toml');
       const _configArgs = fs.existsSync(_configFile) ? ['--config', _configFile] : [];
-      const proc = spawn(this._binary, ['start', ..._configArgs], {
+      const proc = this._spawn(this._binary, ['start', ..._configArgs], {
         cwd: this._cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env },
@@ -84,6 +124,7 @@ class OpenFangManager {
       });
 
       this._process = proc;
+      this.status = { state: 'gestartet', reason: '' };
       let resolved = false;
 
       // Timeout: assume ready after 20s
@@ -165,7 +206,8 @@ class OpenFangManager {
    * Graceful shutdown: POST /api/shutdown, then kill.
    */
   async stop() {
-    if (!this._process && !this._ready) return;
+    // Nie einen uebernommenen (fremden) Daemon herunterfahren – nur den eigenen.
+    if (!this._process) return;
 
     // Try graceful shutdown via API
     if (this._ready && this.port) {
@@ -212,7 +254,7 @@ class OpenFangManager {
     const pid = this._process.pid;
     try {
       if (process.platform === 'win32') {
-        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
+        this._execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
       } else {
         process.kill(-pid, 'SIGKILL');
       }
@@ -223,3 +265,4 @@ class OpenFangManager {
 }
 
 module.exports = OpenFangManager;
+module.exports.probeHttpOk = probeHttpOk;
