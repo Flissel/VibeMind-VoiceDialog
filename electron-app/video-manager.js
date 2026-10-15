@@ -14,6 +14,7 @@ const {
   LAURA_SESSION_PARTITION,
   resolveLauraRendererPath,
 } = require('./laura-embed-config');
+const { loadOverlay } = require('./overlay-status');
 
 class VideoManager {
   constructor(mainWindow, dependencies = {}) {
@@ -26,11 +27,25 @@ class VideoManager {
     this.BrowserView = dependencies.BrowserView || electron.BrowserView;
     this.shell = dependencies.shell || electron.shell;
     this.logger = dependencies.logger || console;
-    this.rendererPath = dependencies.rendererPath || resolveLauraRendererPath({
-      dirname: __dirname,
-      resourcesPath: process.resourcesPath || '',
-      existsSync: fs.existsSync,
-    });
+    this.rendererPath = null;
+    this.rendererMissing = '';
+    if (dependencies.rendererPath) {
+      this.rendererPath = dependencies.rendererPath;
+    } else {
+      const resolveRendererPath = dependencies.resolveRendererPath || (() => resolveLauraRendererPath({
+        dirname: __dirname,
+        resourcesPath: process.resourcesPath || '',
+        existsSync: fs.existsSync,
+      }));
+      try {
+        this.rendererPath = resolveRendererPath();
+      } catch (err) {
+        this.rendererMissing = err.message;
+        this.logger.warn('[VideoManager] Laura-Renderer fehlt - Statuskarte statt Abbruch');
+      }
+    }
+    this._overlayDeps = dependencies.overlayDeps || { logger: this.logger };
+    this.overlayReady = null;
     this.videoView = null;
     this.isVisible = false;
 
@@ -63,6 +78,14 @@ class VideoManager {
         partition: LAURA_SESSION_PARTITION,
       },
     });
+
+    if (!this.rendererPath) {
+      this.overlayReady = loadOverlay(this.videoView.webContents, {
+        space: 'Video/Laura',
+        targets: [{ kind: 'unavailable', reason: 'Renderer fehlt (pnpm laura:build)', target: this.rendererMissing }],
+      }, this._overlayDeps);
+      return this.videoView;
+    }
 
     this.logger.info('[VideoManager] Loading Laura renderer');
     this._loadRenderer('[VideoManager] initial renderer load failed');

@@ -137,8 +137,8 @@ _TAG_COLORS = {
     "[Automation_ui]": SpaceColors.DESKTOP,    # Bright Magenta — Desktop space
     "[eyeTerm]":       SpaceColors.DESKTOP,    # Bright Magenta — Desktop space
     "[Coding Engine]": SpaceColors.CODING,     # Bright Yellow
-    "[GraphBuilder]":  SpaceColors.ROWBOAT,    # Blue
-    "[Rowboat]":       SpaceColors.ROWBOAT,    # Blue
+    "[GraphBuilder]":  SpaceColors.ROARBOOT,   # Blue (ABSORB-8: ROWBOAT -> ROARBOOT)
+    "[Rowboat]":       SpaceColors.ROARBOOT,   # Blue
     "[Brain-Server]":  SpaceColors.BRAIN,      # Dark Green
     "[BrainManager]":  SpaceColors.BRAIN,      # Dark Green
     "[Minibook]":      SpaceColors.MINIBOOK,   # White Bold

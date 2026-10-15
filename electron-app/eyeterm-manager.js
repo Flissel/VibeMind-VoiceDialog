@@ -7,14 +7,19 @@
  * Pattern: follows clawport-manager.js (BrowserView overlay).
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 
 const _ET_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (Desktop)
 function _etLog(...a) { process.stdout.write(`${_ET_C}[EyeTermManager] ${a.join(' ')}${_RST}\n`); }
 
 class EyeTermManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView } = resolveElectronParts(dependencies, ['BrowserView']);
+    this.BrowserView = BrowserView;
+    this._env = dependencies.env || process.env;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.eyetermView = null;
     this.isVisible = false;
@@ -25,7 +30,7 @@ class EyeTermManager {
     this.margin = 12;
 
     // MJPEG stream URL (Python camera_server.py)
-    this.streamPort = parseInt(process.env.EYETERM_STREAM_PORT || '8099', 10);
+    this.streamPort = parseInt(this._env.EYETERM_STREAM_PORT || '8099', 10);
     this.streamUrl = `http://127.0.0.1:${this.streamPort}`;
 
     // Listen for window resize
@@ -44,7 +49,7 @@ class EyeTermManager {
   createView() {
     if (this.eyetermView) return this.eyetermView;
 
-    this.eyetermView = new BrowserView({
+    this.eyetermView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'eyeterm-preload.js'),
         contextIsolation: true,
@@ -53,9 +58,11 @@ class EyeTermManager {
       },
     });
 
-    // Load simple HTML page with MJPEG stream
-    const html = `data:text/html;charset=utf-8,${encodeURIComponent(this._getHTML())}`;
-    this.eyetermView.webContents.loadURL(html);
+    // eyeTerm ist geloescht (16.06., ec98a0c6): Statuskarte statt MJPEG-Stream.
+    this.overlayReady = loadOverlay(this.eyetermView.webContents, {
+      space: 'eyeTerm',
+      targets: [{ kind: 'unavailable', reason: 'entfernt', target: this.streamUrl }],
+    }, this._overlayDeps);
 
     this.eyetermView.webContents.on('did-finish-load', () => {
       _etLog('Camera preview loaded');

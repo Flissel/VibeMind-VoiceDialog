@@ -10,7 +10,7 @@
  *   destroy() → stop server + kill Python process
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -20,8 +20,31 @@ const BRAIN_COLOR = '\x1b[32m';   // Dark Green (matches SpaceLogger)
 const BRAIN_MGR_COLOR = '\x1b[32m'; // Dark Green
 const RST = '\x1b[0m';
 
+function parseBrainPort(value, logger = console) {
+  if (value === undefined || value === null || String(value).trim() === '') return 5000;
+  const text = String(value).trim();
+  if (/^\d+$/.test(text)) {
+    const port = Number(text);
+    if (port >= 1 && port <= 65535) return port;
+  }
+  logger.warn(`[BrainManager] BRAIN_PORT="${text}" ungueltig – nutze 5000`);
+  return 5000;
+}
+
 class BrainManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._policy = dependencies.policy || null;
+    this._spawn = dependencies.spawn || spawn;
+    this._logger = dependencies.logger || console;
+    this._probe = dependencies.probeHealth || ((port) => this._probeHealth(port));
+    this._overlayDeps = dependencies.overlayDeps || { logger: this._logger };
+    this._adopted = false;
+    this._statusCardView = false;
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.view = null;
     this.isVisible = false;
@@ -60,7 +83,7 @@ class BrainManager {
       this.brainProjectRoot = standalonePath; // fallback
     }
 
-    this.port = 5000;
+    this.port = parseBrainPort(this._env.BRAIN_PORT, this._logger);
     this._loadRetries = 0;
     this._maxLoadRetries = 10;
 
@@ -168,7 +191,7 @@ class BrainManager {
         // Make sure brain.the_brain package + spaces siblings are importable
         PYTHONPATH: process.env.PYTHONPATH || this.brainProjectRoot,
       };
-      const proc = spawn(this.pythonPath, [
+      const proc = this._spawn(this.pythonPath, [
         '-m', serverModule,
         '--port', String(port),
       ], {
@@ -261,21 +284,62 @@ class BrainManager {
     });
   }
 
+  _spawnAllowed() {
+    const skip = this._env.SKIP_BRAIN_SPAWN === '1' || this._env.SKIP_BRAIN_SPAWN === 'true';
+    return !skip && !!this._policy && this._policy.isAllowed('brain-spawn');
+  }
+
   /**
-   * Start the Brain server without UI (headless mode).
-   * Called at app startup so routing + shadow training are available immediately.
+   * Spec 2026-10-15: Brain nur uebernehmen (BRAIN_PORT), eigener Start nur mit
+   * Startprofil "brain-spawn" und ohne SKIP_BRAIN_SPAWN. Keine Neustart-Schleife.
+   */
+  async _ensureServer() {
+    if (this._serverReady) return { ok: true };
+    if (this._spawnAllowed()) {
+      this.port = await this._startServer();
+      return { ok: true };
+    }
+    if (await this._probe(this.port)) {
+      this._serverReady = true;
+      this._adopted = true;
+      this._logger.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Brain auf :${this.port} uebernommen`);
+      return { ok: true };
+    }
+    if (this._policy) this._policy.logSkipped('brain-spawn', `python -m web.brain_server --port ${this.port}`);
+    return { ok: false, reason: `kein Brain auf :${this.port} (brain-spawn aus)` };
+  }
+
+  _showStatusCard(reason) {
+    if (!this.view) {
+      this.view = new this.BrowserView({ webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+      this._statusCardView = true;
+    }
+    this.mainWindow.setBrowserView(this.view);
+    this._updateBounds();
+    this.isVisible = true;
+    this.overlayReady = loadOverlay(this.view.webContents, {
+      space: 'Brain',
+      targets: [{ kind: 'unavailable', reason, target: `http://localhost:${this.port}/brain` }],
+    }, this._overlayDeps);
+  }
+
+  /**
+   * Start the Brain server without UI (headless mode): adopt only unless brain-spawn is allowed.
    */
   async startHeadless() {
     if (this._serverReady || this._starting) return;
     this._starting = true;
     try {
-      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Starting brain server (headless)...`);
-      this.port = await this._startServer();
-      this._starting = false;
-      console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Brain server ready on port ${this.port} (headless)`);
+      const result = await this._ensureServer();
+      if (result.ok) {
+        this._logger.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Brain bereit auf Port ${this.port} (${this._adopted ? 'uebernommen' : 'headless'})`);
+      } else {
+        this._logger.warn(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Brain nicht verfuegbar – ${result.reason}`);
+      }
     } catch (err) {
+      this._logger.warn(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Headless start failed: ${err.message}`);
+    } finally {
       this._starting = false;
-      console.warn(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Headless start failed: ${err.message}`);
     }
   }
 
@@ -296,17 +360,28 @@ class BrainManager {
     }
 
     try {
-      // Start server if not running
       if (!this._serverReady) {
         this._starting = true;
-        console.log(`${BRAIN_MGR_COLOR}[BrainManager]${RST} Starting brain dashboard server...`);
-        this.port = await this._startServer();
-        this._starting = false;
+        let result;
+        try {
+          result = await this._ensureServer();
+        } finally {
+          this._starting = false;
+        }
+        if (!result.ok) {
+          this._showStatusCard(result.reason);
+          return;
+        }
+      }
+      if (this._statusCardView) {
+        try { this.view.webContents.close(); } catch (_) { /* schon zu */ }
+        this.view = null;
+        this._statusCardView = false;
       }
 
       // Create BrowserView if needed
       if (!this.view) {
-        this.view = new BrowserView({
+        this.view = new this.BrowserView({
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
@@ -325,7 +400,7 @@ class BrainManager {
 
         // Handle external links
         this.view.webContents.setWindowOpenHandler(({ url }) => {
-          require('electron').shell.openExternal(url);
+          this.shell.openExternal(url);
           return { action: 'deny' };
         });
 
@@ -466,3 +541,4 @@ class BrainManager {
 }
 
 module.exports = BrainManager;
+module.exports.parseBrainPort = parseBrainPort;

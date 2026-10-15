@@ -7,14 +7,20 @@
  * Pattern: identical to agentfarm-manager.js.
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 
 const _MF_C = '\x1b[95m', _RST = '\x1b[0m'; // Magenta (MiroFish/Desktop family)
 function _mfLog(...a) { process.stdout.write(`${_MF_C}[MiroFishManager] ${a.join(' ')}${_RST}\n`); }
 
 class MiroFishManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.mirofishView = null;
     this.isVisible = false;
@@ -22,13 +28,9 @@ class MiroFishManager {
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
-    // MiroFish Flask+Vue app URL
-    this.mirofishUrl = process.env.MIROFISH_URL || 'http://localhost:3001';
-
-    // Retry state for connection-refused errors
-    this.retryCount = 0;
-    this.maxRetries = 10;
-    this.retryTimer = null;
+    // MiroFish-Oberflaeche (Overlay). MIROFISH_UI_URL zuerst: MIROFISH_URL ist fuer Python die API
+    // (/health, :5101); der Launcher setzt nur MIROFISH_UI_URL. Rueckfall fuer alte Aufrufer.
+    this.mirofishUrl = this._env.MIROFISH_UI_URL || this._env.MIROFISH_URL || 'http://localhost:3001';
 
     // Listen for window resize
     if (this.mainWindow) {
@@ -41,12 +43,28 @@ class MiroFishManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    _mfLog('Pruefe und lade:', this.mirofishUrl);
+    const targets = [{ kind: 'url', url: this.mirofishUrl, expectTitle: /MiroFish/i }];
+    this.overlayReady = loadOverlay(this.mirofishView.webContents, { space: 'MiroFish', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.mirofishView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for MiroFish
    */
   createView() {
     if (this.mirofishView) return this.mirofishView;
 
-    this.mirofishView = new BrowserView({
+    this.mirofishView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'mirofish-preload.js'),
         contextIsolation: true,
@@ -55,9 +73,7 @@ class MiroFishManager {
       },
     });
 
-    // Load MiroFish web app
-    _mfLog('Loading from:', this.mirofishUrl);
-    this.mirofishView.webContents.loadURL(this.mirofishUrl);
+    this._startOverlay();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
@@ -66,36 +82,24 @@ class MiroFishManager {
 
     // Handle external link navigation
     this.mirofishView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
     // Notify VibeMind renderer of load status
     this.mirofishView.webContents.on('did-finish-load', () => {
-      this.retryCount = 0;
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'mirofish_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _mfLog('MiroFish loaded');
     });
 
     this.mirofishView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      // ERR_CONNECTION_REFUSED (-102): server not up yet — retry with backoff
-      if (errorCode === -102 && this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        const delay = Math.min(1000 * this.retryCount, 5000);
-        _mfLog(`Server not ready, retry ${this.retryCount}/${this.maxRetries} in ${delay}ms`);
-        this.retryTimer = setTimeout(() => {
-          if (this.mirofishView && !this.mirofishView.webContents.isDestroyed()) {
-            this.mirofishView.webContents.loadURL(this.mirofishUrl);
-          }
-        }, delay);
-        return;
-      }
-
+      // Kein automatisches Retry mehr: Erreichbarkeit und Titelwaechter laufen ueber
+      // loadOverlay (show()/reload()); ein direktes loadURL wuerde die Pruefung umgehen.
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'mirofish_view_status',
@@ -120,6 +124,8 @@ class MiroFishManager {
 
     if (!this.mirofishView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.mirofishView);
@@ -186,7 +192,7 @@ class MiroFishManager {
    */
   reload() {
     if (this.mirofishView) {
-      this.mirofishView.webContents.reload();
+      this._startOverlay();
     }
   }
 
@@ -194,10 +200,6 @@ class MiroFishManager {
    * Destroy the MiroFish view
    */
   destroy() {
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
     if (this.mirofishView) {
       this.hide();
       this.mirofishView = null;

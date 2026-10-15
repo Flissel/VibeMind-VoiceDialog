@@ -7,7 +7,7 @@
  * Pattern: identical to rowboat-manager.js (Rowboat Space).
  */
 
-const { BrowserView } = require('electron');
+const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 
@@ -15,7 +15,14 @@ const _CP_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (ClawPort/Dashboard)
 function _cpLog(...a) { process.stdout.write(`${_CP_C}[ClawPortManager] ${a.join(' ')}${_RST}\n`); }
 
 class ClawPortManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._rendererPathOverride = dependencies.rendererPath || null;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.clawportView = null;
     this.isVisible = false;
@@ -24,7 +31,7 @@ class ClawPortManager {
     this.topOffset = 32 + 43;
 
     // Renderer dist path (dev vs production)
-    this.isDev = !!process.env.CLAWPORT_DEV_URL;
+    this.isDev = !!this._env.CLAWPORT_DEV_URL;
 
     // Listen for window resize
     if (this.mainWindow) {
@@ -51,12 +58,30 @@ class ClawPortManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const targets = this.isDev
+      ? [{ kind: 'url', url: this._env.CLAWPORT_DEV_URL }]
+      : [{ kind: 'file', path: this._rendererPathOverride || this._resolveRendererPath() }];
+    _cpLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.clawportView.webContents, { space: 'ClawPort', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.clawportView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the ClawPort dashboard
    */
   createView() {
     if (this.clawportView) return this.clawportView;
 
-    this.clawportView = new BrowserView({
+    this.clawportView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'clawport-preload.js'),
         contextIsolation: true,
@@ -65,15 +90,7 @@ class ClawPortManager {
       },
     });
 
-    // Load renderer
-    if (this.isDev) {
-      _cpLog('Loading from dev server:', process.env.CLAWPORT_DEV_URL);
-      this.clawportView.webContents.loadURL(process.env.CLAWPORT_DEV_URL);
-    } else {
-      const rendererPath = this._resolveRendererPath();
-      _cpLog('Loading from file:', rendererPath);
-      this.clawportView.webContents.loadFile(rendererPath);
-    }
+    this._startOverlay();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -82,7 +99,7 @@ class ClawPortManager {
 
     // Handle external link navigation
     this.clawportView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
@@ -91,7 +108,7 @@ class ClawPortManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'clawport_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _cpLog('Dashboard loaded');
@@ -122,6 +139,8 @@ class ClawPortManager {
 
     if (!this.clawportView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.clawportView);
@@ -189,7 +208,7 @@ class ClawPortManager {
    */
   reload() {
     if (this.clawportView) {
-      this.clawportView.webContents.reload();
+      this._startOverlay();
     }
   }
 

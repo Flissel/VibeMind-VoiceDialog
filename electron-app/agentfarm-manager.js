@@ -7,15 +7,25 @@
  * Pattern: identical to clawport-manager.js (ClawPort Dashboard).
  */
 
-const { BrowserView, session: electronSession } = require('electron');
+const { resolveElectronParts } = require('./overlay-status');
+const getElectronSession = () => require('electron').session;
 const path = require('path');
 const fs = require('fs');
+const { loadOverlay, loadStatus } = require('./overlay-status');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
 
 class AgentFarmManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._env = dependencies.env || process.env;
+    this._n8nLoginEnabled = dependencies.n8nLogin !== false;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this.overlayReady = null;
+    this.overlayResult = null;
     this.mainWindow = mainWindow;
     this.agentfarmView = null;
     this.isVisible = false;
@@ -24,7 +34,7 @@ class AgentFarmManager {
     this.topOffset = 32 + 43;
 
     // Renderer dist path (dev vs production)
-    this.isDev = !!process.env.AGENTFARM_DEV_URL;
+    this.isDev = !!this._env.AGENTFARM_DEV_URL;
 
     // Listen for window resize
     if (this.mainWindow) {
@@ -51,12 +61,30 @@ class AgentFarmManager {
   }
 
   /**
+   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
+   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
+   */
+  _startOverlay() {
+    this.overlayResult = null;
+    const targets = this.isDev
+      ? [{ kind: 'url', url: this._env.AGENTFARM_DEV_URL }]
+      : [{ kind: 'file', path: this._resolveRendererPath() }];
+    _afLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
+    this.overlayReady = loadOverlay(this.agentfarmView.webContents, { space: 'AgentFarm', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _recheckOverlay() {
+    if (this.overlayResult && !this.overlayResult.ok && this.agentfarmView) this._startOverlay();
+  }
+
+  /**
    * Create the BrowserView for the Agent Farm
    */
   createView() {
     if (this.agentfarmView) return this.agentfarmView;
 
-    this.agentfarmView = new BrowserView({
+    this.agentfarmView = new this.BrowserView({
       webPreferences: {
         preload: path.join(__dirname, 'agentfarm-preload.js'),
         contextIsolation: true,
@@ -65,15 +93,7 @@ class AgentFarmManager {
       },
     });
 
-    // Load renderer
-    if (this.isDev) {
-      _afLog('Loading from dev server:', process.env.AGENTFARM_DEV_URL);
-      this.agentfarmView.webContents.loadURL(process.env.AGENTFARM_DEV_URL);
-    } else {
-      const rendererPath = this._resolveRendererPath();
-      _afLog('Loading from file:', rendererPath);
-      this.agentfarmView.webContents.loadFile(rendererPath);
-    }
+    this._startOverlay();
 
     // Strip X-Frame-Options / CSP from embedded iframe targets so their UIs
     // can load inside AgentFarm:
@@ -102,7 +122,7 @@ class AgentFarmManager {
 
     // Handle external link navigation
     this.agentfarmView.webContents.setWindowOpenHandler(({ url }) => {
-      require('electron').shell.openExternal(url);
+      this.shell.openExternal(url);
       return { action: 'deny' };
     });
 
@@ -111,7 +131,7 @@ class AgentFarmManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'agentfarm_view_status',
-          status: 'ready',
+          ...loadStatus(this.overlayResult),
         });
       }
       _afLog('Agent Farm loaded');
@@ -129,7 +149,7 @@ class AgentFarmManager {
     });
 
     // Auto-login to n8n so the embedded iframe is authenticated
-    this._loginToN8n();
+    if (this._n8nLoginEnabled) this._loginToN8n();
 
     return this.agentfarmView;
   }
@@ -165,7 +185,7 @@ class AgentFarmManager {
             // because the embedded n8n <iframe> may use a different partition.
             const sessions = [
               this.agentfarmView.webContents.session,
-              electronSession.defaultSession,
+              getElectronSession().defaultSession,
             ];
             for (const raw of cookies) {
               // Parse cookie name=value from "n8n-auth=xxx; Path=/; ..."
@@ -186,7 +206,7 @@ class AgentFarmManager {
                     sameSite: 'no_restriction',
                   }))
                   .then(() => {
-                    _afLog(`n8n cookie "${name}" set in ${sess === electronSession.defaultSession ? 'default' : 'view'} session`);
+                    _afLog(`n8n cookie "${name}" set in ${sess === getElectronSession().defaultSession ? 'default' : 'view'} session`);
                   })
                   .catch((err) => {
                     console.warn('[AgentFarmManager] Failed to set n8n cookie:', err.message);
@@ -233,6 +253,8 @@ class AgentFarmManager {
 
     if (!this.agentfarmView) {
       this.createView();
+    } else {
+      this._recheckOverlay();
     }
 
     this.mainWindow.setBrowserView(this.agentfarmView);
@@ -300,7 +322,7 @@ class AgentFarmManager {
    */
   reload() {
     if (this.agentfarmView) {
-      this.agentfarmView.webContents.reload();
+      this._startOverlay();
     }
   }
 
