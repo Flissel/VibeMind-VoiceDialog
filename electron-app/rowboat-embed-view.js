@@ -38,10 +38,16 @@ async function proxyAppRequest(request, client, fetchImpl = globalThis.fetch) {
   const headers = { authorization: `Bearer ${info.token}` };
   const range = request.headers.get('range');
   if (range) headers.range = range;
-  return fetchImpl(`http://127.0.0.1:${info.port}/app/${url.host}${url.pathname}${url.search}`, {
-    method: request.method === 'HEAD' ? 'HEAD' : 'GET',
-    headers,
-  });
+  try {
+    return await fetchImpl(`http://127.0.0.1:${info.port}/app/${url.host}${url.pathname}${url.search}`, {
+      method: request.method === 'HEAD' ? 'HEAD' : 'GET',
+      headers,
+      signal: request.signal,
+    });
+  } catch {
+    // Rowboat kann nach der Verbindungspruefung weggestorben sein; Token und Ziel bleiben aussen vor.
+    return new Response('Rowboat nicht erreichbar', { status: 502 });
+  }
 }
 
 function registerAppProtocol(session, client, fetchImpl) {

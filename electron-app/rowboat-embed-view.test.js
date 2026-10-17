@@ -103,3 +103,24 @@ test('registerAppProtocol haengt am Protokoll genau dieser Sitzung; Schema-Recht
   assert.equal(APP_PARTITION, 'persist:rowboat-embed');
   assert.deepEqual(APP_SCHEME_PRIVILEGES, { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } });
 });
+
+test('app://-Proxy: Abbruch am Upstream schlaegt fehl -> 502, ohne Token oder Ziel im Body', async () => {
+  const fetchImpl = async () => { throw Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); };
+  const res = await proxyAppRequest(new Request('app://-/index.html'), fakeClient(), fetchImpl);
+  assert.equal(res.status, 502);
+  const body = await res.text();
+  assert.equal(body, 'Rowboat nicht erreichbar');
+  assert.ok(!body.includes('tok-geheim'));
+  assert.ok(!body.includes('127.0.0.1'));
+});
+
+test('app://-Proxy leitet den Abbruch des Renderers (request.signal) an den Upstream weiter', async () => {
+  const seen = [];
+  const controller = new AbortController();
+  await proxyAppRequest(new Request('app://-/index.html', { signal: controller.signal }), fakeClient(), async (url, init) => { seen.push(init); return new Response(''); });
+  const [init] = seen;
+  assert.ok(init.signal, 'signal fehlt im fetch-init');
+  assert.equal(init.signal.aborted, false);
+  controller.abort();
+  assert.equal(init.signal.aborted, true);
+});
