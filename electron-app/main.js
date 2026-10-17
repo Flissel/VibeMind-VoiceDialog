@@ -433,6 +433,9 @@ function createWindow() {
         mainWindow = null;
     });
 
+    // Supabase config for the sandboxed preload (cannot require local files)
+    require('./supabase-config-ipc').registerSupabaseConfigHandler(ipcMain, require('./supabase-config'));
+
     // Handle window controls from renderer
     ipcMain.on('window-minimize', () => mainWindow && mainWindow.minimize());
     ipcMain.on('window-maximize', () => {

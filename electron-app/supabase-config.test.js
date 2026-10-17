@@ -50,7 +50,9 @@ test('supabase-client.js and preload.js both read from the same supabase-config 
     const preloadSource = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
 
     assert.match(clientSource, /require\(['"]\.\/supabase-config['"]\)/);
-    assert.match(preloadSource, /require\(['"]\.\/supabase-config['"]\)/);
+    // Sandboxed preload cannot require local files: it gets the values via IPC from the main process.
+    assert.doesNotMatch(preloadSource, /require\(['"]\.\//);
+    assert.match(preloadSource, /sendSync\(['"]vibemind:supabase-config['"]\)/);
 
     // The fallback values must not be duplicated as literals in either
     // consumer — that duplication is exactly the drift this module exists

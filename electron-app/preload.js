@@ -12,7 +12,11 @@ try {
 } catch (e) { /* Sentry is optional */ }
 
 const { contextBridge, ipcRenderer } = require('electron');
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase-config');
+// Sandboxed preloads cannot require() local files: the Supabase config comes
+// from the main process (supabase-config-ipc.js) via synchronous IPC.
+const supabaseConfig = ipcRenderer.sendSync('vibemind:supabase-config') || {};
+const SUPABASE_URL = supabaseConfig.url;
+const SUPABASE_ANON_KEY = supabaseConfig.anonKey;
 
 // Expose protected methods to the renderer
 contextBridge.exposeInMainWorld('vibemind', {
