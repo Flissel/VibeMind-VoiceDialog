@@ -10,10 +10,13 @@
  *   destroy() → stop server + kill Python process
  */
 
-const { BrowserView } = require('electron');
+const { resolveElectronParts, statusCardUrl } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+
+const SPACE_NAME = 'SWE Design';
+const MAX_REASON_STDERR = 160;
 
 // ANSI colors for SWE Design space logs
 const SWE_COLOR = '\x1b[96m';     // Bright Cyan
@@ -65,8 +68,37 @@ function resolveSpacesPath(projectRoot, ...parts) {
   return viaSymlink;
 }
 
+/**
+ * Python fuer den SWE-Design-Server. Bevorzugt die eigene venv des Space
+ * (<reProjectRoot>\.venv, vom Update-Skript angelegt), weil dessen requirements.txt
+ * (openai, anthropic, transformers, ...) die voice-venv nicht beruehren darf.
+ * Rueckfall: voice/.venv312, dann 'python'.
+ */
+function resolvePythonPath(projectRoot, reProjectRoot, existsSync = fs.existsSync) {
+  const sweVenv = path.join(reProjectRoot, '.venv', 'Scripts', 'python.exe');
+  if (existsSync(sweVenv)) return sweVenv;
+  const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
+  return existsSync(venv312) ? venv312 : 'python';
+}
+
+/** Kurzgrund fuer die Statuskarte: "Server beendet (Exit N): <Zeile aus stderr>". */
+function exitReason(code, stderr) {
+  const lines = String(stderr || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Python-Traceback: die aussagekraeftige Zeile (Exception) steht am Ende, sonst die erste.
+  const line = lines.length === 0 ? '' : (lines[0].startsWith('Traceback') ? lines[lines.length - 1] : lines[0]);
+  const short = line.length > MAX_REASON_STDERR ? `${line.slice(0, MAX_REASON_STDERR - 1)}…` : line;
+  return `Server beendet (Exit ${code})${short ? `: ${short}` : ''}`;
+}
+
 class SweDesignManager {
-  constructor(mainWindow) {
+  constructor(mainWindow, dependencies = {}) {
+    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    this.BrowserView = BrowserView;
+    this.shell = shell;
+    this._existsSync = dependencies.existsSync || fs.existsSync;
+    this._spawn = dependencies.spawn || spawn;
+    this._overlayDeps = dependencies.overlayDeps || {};
+    this._cardShown = false;
     this.mainWindow = mainWindow;
     this.view = null;
     this.isVisible = false;
@@ -77,10 +109,7 @@ class SweDesignManager {
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
-    // Python path: prefer .venv312 from project root
-    const projectRoot = path.resolve(__dirname, '..');
-    const venv312 = path.join(projectRoot, '.venv312', 'Scripts', 'python.exe');
-    this.pythonPath = fs.existsSync(venv312) ? venv312 : 'python';
+    const projectRoot = dependencies.projectRoot || path.resolve(__dirname, '..');
 
     // RE project root (where start_dashboard.py lives).
     //
@@ -93,6 +122,9 @@ class SweDesignManager {
     this.reProjectRoot = resolveSpacesPath(
       projectRoot, 'shuttles', 'swe_desgine'
     );
+
+    // Python path: own swe_desgine/.venv first, then voice/.venv312, then 'python'
+    this.pythonPath = resolvePythonPath(projectRoot, this.reProjectRoot, this._existsSync);
 
     this.port = 8086; // 8085 often held by zombie; use 8086 as default
 
@@ -147,7 +179,7 @@ class SweDesignManager {
     return new Promise((resolve, reject) => {
       console.log(`[SweDesignManager] Starting server on port ${port}...`);
 
-      const proc = spawn(this.pythonPath, [
+      const proc = this._spawn(this.pythonPath, [
         scriptPath,
         '--port', String(port),
         '--no-browser',
@@ -215,7 +247,10 @@ class SweDesignManager {
           resolved = true;
           clearTimeout(timeout);
           // Include stderr in error for port-conflict detection
-          reject(new Error(`Server exited with code ${code}: ${stderrBuf.slice(-300)}`));
+          const err = new Error(`Server exited with code ${code}: ${stderrBuf.slice(-300)}`);
+          err.exitCode = code;
+          err.stderr = stderrBuf;
+          reject(err);
         }
       });
     });
@@ -248,63 +283,21 @@ class SweDesignManager {
 
       // Create BrowserView if needed
       if (!this.view) {
-        this.view = new BrowserView({
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: false,
-          },
-        });
-
-        // Position and attach
-        this.mainWindow.setBrowserView(this.view);
-        this._updateBounds();
-
-        // Load the server URL (cache-bust to avoid stale Chromium cache)
-        const url = `http://localhost:${this.port}?_t=${Date.now()}`;
-        console.log('[SweDesignManager] Loading:', url);
-        this.view.webContents.session.clearCache().then(() => {
-          this.view.webContents.loadURL(url);
-        });
-
-        // Handle external links
-        this.view.webContents.setWindowOpenHandler(({ url }) => {
-          require('electron').shell.openExternal(url);
-          return { action: 'deny' };
-        });
-
-        // Notify renderer of load status
-        this.view.webContents.on('did-finish-load', () => {
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send('python-message', {
-              type: 'swedesign_view_status',
-              status: 'ready',
-            });
-          }
-          console.log('[SweDesignManager] Dashboard loaded');
-        });
-
-        this.view.webContents.on('did-fail-load', (_ev, code, desc) => {
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send('python-message', {
-              type: 'swedesign_view_status',
-              status: 'error',
-              message: `Load failed: ${desc} (${code})`,
-            });
-          }
-          console.error('[SweDesignManager] Load failed:', code, desc);
-        });
+        this._createView();
+        this._loadDashboard();
       } else {
         // Re-attach existing view
         this.mainWindow.setBrowserView(this.view);
         this._updateBounds();
+        // Eine fruehere Statuskarte durch das jetzt laufende Dashboard ersetzen
+        if (this._cardShown) this._loadDashboard();
       }
-
       this.isVisible = true;
       console.log('[SweDesignManager] Shown');
     } catch (err) {
       this._starting = false;
       console.error('[SweDesignManager] Failed to show:', err.message);
+      if (err.exitCode !== undefined) this._showCard(exitReason(err.exitCode, err.stderr));
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
           type: 'swedesign_view_status',
@@ -312,6 +305,75 @@ class SweDesignManager {
           message: err.message,
         });
       }
+    }
+  }
+
+  /** Create the BrowserView, attach it and wire the status events. */
+  _createView() {
+    this.view = new this.BrowserView({
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    // Position and attach
+    this.mainWindow.setBrowserView(this.view);
+    this._updateBounds();
+
+    // Handle external links
+    this.view.webContents.setWindowOpenHandler(({ url }) => {
+      this.shell.openExternal(url);
+      return { action: 'deny' };
+    });
+
+    // Notify renderer of load status
+    this.view.webContents.on('did-finish-load', () => {
+      if (this._cardShown) return;
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('python-message', {
+          type: 'swedesign_view_status',
+          status: 'ready',
+        });
+      }
+      console.log('[SweDesignManager] Dashboard loaded');
+    });
+
+    this.view.webContents.on('did-fail-load', (_ev, code, desc) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('python-message', {
+          type: 'swedesign_view_status',
+          status: 'error',
+          message: `Load failed: ${desc} (${code})`,
+        });
+      }
+      console.error('[SweDesignManager] Load failed:', code, desc);
+    });
+  }
+
+  /** Load the running dashboard into the view (cache-bust to avoid stale Chromium cache). */
+  _loadDashboard() {
+    this._cardShown = false;
+    const url = `http://localhost:${this.port}?_t=${Date.now()}`;
+    console.log('[SweDesignManager] Loading:', url);
+    this.view.webContents.session.clearCache().then(() => {
+      this.view.webContents.loadURL(url);
+    });
+  }
+
+  /** Statuskarte statt leerer Flaeche, wenn der Server nicht startet. */
+  _showCard(reason) {
+    try {
+      if (!this.view) this._createView();
+      else this.mainWindow.setBrowserView(this.view);
+      this._updateBounds();
+      this._cardShown = true;
+      this.isVisible = true;
+      const target = path.join(this.reProjectRoot, 'start_dashboard.py');
+      this.view.webContents.loadURL(statusCardUrl({ space: SPACE_NAME, reason, target }));
+    } catch (cardErr) {
+      console.error('[SweDesignManager] Statuskarte fehlgeschlagen:', cardErr.message);
     }
   }
 
@@ -390,3 +452,5 @@ class SweDesignManager {
 }
 
 module.exports = SweDesignManager;
+module.exports.resolvePythonPath = resolvePythonPath;
+module.exports.exitReason = exitReason;
