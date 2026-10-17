@@ -145,16 +145,6 @@ test('Dashboard: DASHBOARD_DEV_URL mit fremder App (Rowboat) ergibt Statuskarte'
   } finally { await stop(fremd.server); }
 });
 
-test('Rowboat: Platzhalter „kommt mit Teil 2“, Bridge startet nicht', async () => {
-  const h = harness();
-  const r = new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, placeholderReason: 'kommt mit Teil 2', overlayDeps: { logger: quiet } });
-  r.show();
-  await r.overlayReady;
-  assert.match(card(h.views[0].loads[0]), /Rowboat nicht verfuegbar – kommt mit Teil 2/);
-  assert.equal(await r.startBridge(), false);
-  assert.equal(r.bridgeProcess, null);
-});
-
 test('eyeTerm: Statuskarte „entfernt“', async () => {
   const h = harness();
   const e = new EyeTermManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: {}, overlayDeps: { logger: quiet } });
@@ -193,7 +183,6 @@ const FlowzenManager = require('./flowzen-manager');
 const FILE_CASES = [
   ['ClawPort', (h, deps) => new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:/x/index.html', overlayDeps: deps }), /ClawPort nicht verfuegbar/],
   ['Dashboard', (h, deps) => new DashboardManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: {}, dashboardPath: 'C:/x/index.html', overlayDeps: deps }), /Dashboard \(Coding Engine\) nicht verfuegbar/],
-  ['Rowboat', (h, deps) => new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, overlayDeps: deps }), /Rowboat nicht verfuegbar/],
   ['AgentFarm', (h, deps) => new AgentFarmManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, n8nLogin: false, overlayDeps: deps }), /AgentFarm nicht verfuegbar/],
   ['Flowzen', (h, deps) => new FlowzenManager(h.mainWindow, null, { ipcMain: { on() {} }, BrowserView: h.FakeBrowserView, shell: h.shell, overlayDeps: deps }), /Flowzen nicht verfuegbar/],
 ];
@@ -295,14 +284,124 @@ test('did-finish-load meldet bei Statuskarte „unavailable“ mit Grund, sonst 
   assert.deepEqual(sent.at(-1), ['python-message', { type: 'clawport_view_status', status: 'ready' }]);
 });
 
-test('Rowboat-Platzhalter meldet „unavailable“ statt „ready“', async () => {
-  const h = harness();
-  const sent = withStatusSink(h);
-  const r = new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, placeholderReason: 'kommt mit Teil 2', overlayDeps: { logger: quiet } });
+const { EventEmitter } = require('node:events');
+const { APP_PARTITION, BROWSER_PANE_NOTE } = require('./rowboat-embed-view');
+
+function rowboatClient(connected) {
+  const c = new EventEmitter();
+  c.connected = connected;
+  c.reason = connected ? '' : 'Rowboat laeuft nicht (start_desktop.py --embed)';
+  c.info = connected ? { port: 1, token: 't', pid: 1, preloadPath: 'C:/rb/preload.js' } : null;
+  c.invokeChannels = connected ? ['workspace:exists', 'browser:setVisible'] : [];
+  c.invoke = async () => ({});
+  c.shown = 0;
+  c.showApp = () => { c.shown += 1; return true; };
+  return c;
+}
+function withIpc(h) {
+  const Base = h.FakeBrowserView;
+  h.FakeBrowserView = class extends Base {
+    constructor(options) {
+      super(options);
+      const handlers = new Map();
+      this.ipcHandlers = handlers;
+      this.webContents.ipc = { handle: (ch, fn) => handlers.set(ch, fn), removeHandler: (ch) => handlers.delete(ch) };
+    }
+  };
+  return h;
+}
+function rowboat(h, client, extra = {}) {
+  return new RowboatManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, client, overlayDeps: { logger: quiet }, ...extra });
+}
+
+test('Rowboat: nicht verbunden ergibt Statuskarte mit Hinweis auf start_desktop.py --embed', async () => {
+  const h = withIpc(harness());
+  const r = rowboat(h, rowboatClient(false));
   r.show();
   await r.overlayReady;
+  assert.match(card(h.views[0].loads[0]), /Rowboat nicht verfuegbar – Rowboat laeuft nicht \(start_desktop\.py --embed\)/);
+});
+
+test('Rowboat: verbunden laedt app://-/index.html mit Rowboats Preload in eigener Sitzung, Sandbox an', async () => {
+  const h = withIpc(harness());
+  const r = rowboat(h, rowboatClient(true));
+  r.show();
+  await r.overlayReady;
+  const prefs = h.views[0].options.webPreferences;
+  assert.equal(prefs.preload, 'C:/rb/preload.js');
+  assert.equal(prefs.partition, APP_PARTITION);
+  assert.equal(prefs.sandbox, true);
+  assert.equal(prefs.nodeIntegration, false);
+  assert.deepEqual(h.views[0].loads[0], ['url', 'app://-/index.html']);
+  assert.deepEqual([...h.views[0].ipcHandlers.keys()], ['workspace:exists', 'browser:setVisible']);
+});
+
+test('Rowboat: Verbindung kommt spaeter – Ansicht wird mit Preload neu gebaut und bleibt sichtbar', async () => {
+  const h = withIpc(harness());
+  const attached = [];
+  h.mainWindow.setBrowserView = (v) => attached.push(v);
+  const client = rowboatClient(false);
+  const r = rowboat(h, client);
+  r.show();
+  await r.overlayReady;
+  Object.assign(client, { connected: true, reason: '', info: { port: 1, token: 't', pid: 1, preloadPath: 'C:/rb/preload.js' }, invokeChannels: ['workspace:exists'] });
+  client.emit('connected', { invokeChannels: client.invokeChannels, preloadPath: 'C:/rb/preload.js' });
+  await r.overlayReady;
+  assert.equal(h.views.length, 2);
+  assert.equal(h.views[1].options.webPreferences.preload, 'C:/rb/preload.js');
+  assert.deepEqual(h.views[1].loads[0], ['url', 'app://-/index.html']);
+  assert.equal(attached.at(-1), h.views[1]);
+});
+
+test('Rowboat: Abbruch zeigt die Statuskarte, Neuverbindung laedt neu ohne neue Ansicht (gleicher Preload)', async () => {
+  const h = withIpc(harness());
+  const client = rowboatClient(true);
+  const r = rowboat(h, client);
+  r.show();
+  await r.overlayReady;
+  Object.assign(client, { connected: false, reason: 'Verbindung zu Rowboat getrennt', info: null, invokeChannels: [] });
+  client.emit('disconnected', client.reason);
+  await r.overlayReady;
+  assert.match(card(h.views[0].loads[1]), /Verbindung zu Rowboat getrennt/);
+  assert.equal(h.views[0].ipcHandlers.size, 0, 'Handler beim Abbruch entfernt');
+  Object.assign(client, { connected: true, reason: '', info: { port: 2, token: 't2', pid: 2, preloadPath: 'C:/rb/preload.js' }, invokeChannels: ['workspace:exists'] });
+  client.emit('connected', { invokeChannels: client.invokeChannels, preloadPath: 'C:/rb/preload.js' });
+  await r.overlayReady;
+  assert.equal(h.views.length, 1);
+  assert.deepEqual(h.views[0].loads[2], ['url', 'app://-/index.html']);
+});
+
+test('Rowboat: Browser-Bereich zeigt den Hinweis einmal pro Sitzung, „In Rowboat öffnen“ holt Rowboats Fenster', async () => {
+  const h = withIpc(harness());
+  const client = rowboatClient(true);
+  const boxes = [];
+  const dialog = { showMessageBox: async (_win, opts) => { boxes.push(opts); return { response: 0 }; } };
+  const r = rowboat(h, client, { dialog });
+  r.show();
+  await r.overlayReady;
+  const setVisible = h.views[0].ipcHandlers.get('browser:setVisible');
+  await setVisible({}, { visible: true }).catch(() => {});
+  await setVisible({}, { visible: true }).catch(() => {});
   await tick();
-  assert.equal(h.views[0].handlers.has('did-finish-load'), true, 'Handler auch im Platzhalter-Modus');
+  assert.equal(boxes.length, 1);
+  assert.equal(boxes[0].message, BROWSER_PANE_NOTE);
+  assert.deepEqual(boxes[0].buttons, ['In Rowboat öffnen', 'Abbrechen']);
+  assert.equal(client.shown, 1);
+});
+
+test('Rowboat: Statusmeldung „unavailable“ ohne Verbindung, „ready“ mit Verbindung', async () => {
+  const h = withIpc(harness());
+  const sent = withStatusSink(h);
+  const r = rowboat(h, rowboatClient(false));
+  r.show();
+  await r.overlayReady;
   h.views[0].handlers.get('did-finish-load')();
-  assert.deepEqual(sent.at(-1), ['python-message', { type: 'rowboat_view_status', status: 'unavailable', message: 'kommt mit Teil 2' }]);
+  assert.deepEqual(sent.at(-1), ['python-message', { type: 'rowboat_view_status', status: 'unavailable', message: 'Rowboat laeuft nicht (start_desktop.py --embed)' }]);
+  const h2 = withIpc(harness());
+  const sent2 = withStatusSink(h2);
+  const r2 = rowboat(h2, rowboatClient(true));
+  r2.show();
+  await r2.overlayReady;
+  h2.views[0].handlers.get('did-finish-load')();
+  assert.deepEqual(sent2.at(-1), ['python-message', { type: 'rowboat_view_status', status: 'ready' }]);
 });

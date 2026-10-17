@@ -20,12 +20,15 @@ const {
     isAllowedLauraIpcEvent,
     resolveLauraRendererPath,
 } = require('./laura-embed-config');
+const { APP_PARTITION: ROWBOAT_PARTITION, APP_SCHEME_PRIVILEGES: ROWBOAT_APP_SCHEME, registerAppProtocol: registerRowboatAppProtocol } = require('./rowboat-embed-view');
+const { RowboatEmbedClient } = require('./rowboat-embed-client');
 
 protocol.registerSchemesAsPrivileged([
     {
         scheme: 'laura-media',
         privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
     },
+    ROWBOAT_APP_SCHEME,
 ]);
 
 // .env: VIBEMIND_ENV_FILE (Launcher: <Vibemind_V1>\.env) oder Vibemind_V1/.env relativ,
@@ -132,6 +135,7 @@ let dashboardManager = null;
 
 // Rowboat (Roarboot Space) manager
 let rowboatManager = null;
+let rowboatEmbedClient = null;
 
 // SWE Design (Factory Space) manager
 let sweDesignManager = null;
@@ -162,113 +166,6 @@ let eyetermManager = null;
 
 // Pending Python response handlers (for request-response IPC pattern)
 const pendingPythonResponses = new Map();
-
-// Rowboat @x/core services — now handled by child-process bridge
-// (see rowboat-core-bridge.mjs, managed by RowboatManager)
-
-/**
- * Auto-configure Rowboat's ~/.rowboat/config/models.json from VibeMind .env
- * Priority: ANTHROPIC_API_KEY > OPENROUTER > OPENAI
- * Note: Claude Code OAuth tokens are NOT valid Anthropic API keys and cannot
- * be used for direct API calls to api.anthropic.com.
- */
-async function autoConfigureRowboatModels() {
-    const os = require('os');
-    const modelsPath = path.join(os.homedir(), '.rowboat', 'config', 'models.json');
-    try {
-        let currentConfig = null;
-        try {
-            const raw = await fs.promises.readFile(modelsPath, 'utf8');
-            currentConfig = JSON.parse(raw);
-        } catch { /* file doesn't exist yet — will create */ }
-
-        // Default priority: ANTHROPIC > OPENROUTER > OPENAI.
-        // Override via ROWBOAT_PROVIDER (openai|anthropic|openrouter) to pin a
-        // specific provider regardless of which keys are present.
-        let desiredConfig = null;
-        let source = '';
-
-        // Check for global model override (takes precedence over provider-specific defaults)
-        const rowboatModelOverride = process.env.LLM_MODEL_ROWBOAT || process.env.ROWBOAT_MODEL;
-        const providerOverride = (process.env.ROWBOAT_PROVIDER || '').trim().toLowerCase();
-
-        // Rowboat-specific OpenAI config — falls back to the shared key/defaults
-        // so Rowboat can use its own key/model without affecting the rest.
-        const rowboatOpenAIKey = process.env.ROWBOAT_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-        const rowboatOpenAIModel = rowboatModelOverride || process.env.ROWBOAT_OPENAI_MODEL || 'gpt-4.1';
-
-        // 0. Explicit provider pin (ROWBOAT_PROVIDER). Wins over the priority chain.
-        if (providerOverride === 'openai' && rowboatOpenAIKey) {
-            desiredConfig = {
-                provider: { flavor: 'openai', apiKey: rowboatOpenAIKey },
-                model: rowboatOpenAIModel,
-            };
-            source = 'OpenAI (pinned via ROWBOAT_PROVIDER)';
-        } else if (providerOverride === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
-            desiredConfig = {
-                provider: { flavor: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY },
-                model: rowboatModelOverride || 'claude-sonnet-4-20250514',
-            };
-            source = 'Anthropic (pinned via ROWBOAT_PROVIDER)';
-        } else if (providerOverride === 'openrouter' && process.env.OPENROUTER_API_KEY) {
-            desiredConfig = {
-                provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
-                model: rowboatModelOverride || 'anthropic/claude-sonnet-4',
-            };
-            source = 'OpenRouter (pinned via ROWBOAT_PROVIDER)';
-        }
-
-        // 1. Explicit Anthropic API key from .env
-        if (!desiredConfig) {
-            const anthropicKey = process.env.ANTHROPIC_API_KEY;
-            if (anthropicKey && !anthropicKey.includes('DEIN_KEY') && !anthropicKey.includes('your_')) {
-                desiredConfig = {
-                    provider: { flavor: 'anthropic', apiKey: anthropicKey },
-                    model: rowboatModelOverride || 'claude-sonnet-4-20250514',
-                };
-                source = 'Anthropic';
-            }
-        }
-
-        // 2. OpenRouter
-        if (!desiredConfig && process.env.OPENROUTER_API_KEY) {
-            desiredConfig = {
-                provider: { flavor: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
-                model: rowboatModelOverride || 'anthropic/claude-sonnet-4',
-            };
-            source = 'OpenRouter';
-        }
-
-        // 3. OpenAI (fallback) — uses the rowboat-specific key/model if set
-        if (!desiredConfig && rowboatOpenAIKey) {
-            desiredConfig = {
-                provider: { flavor: 'openai', apiKey: rowboatOpenAIKey },
-                model: rowboatOpenAIModel,
-            };
-            source = 'OpenAI';
-        }
-
-        if (!desiredConfig) {
-            console.log('[Main] No LLM API key found in .env — configure in Roarboot Settings');
-            return;
-        }
-
-        // Always write if: no config yet, different provider flavor, or different apiKey
-        const needsUpdate = !currentConfig
-            || !currentConfig.provider
-            || currentConfig.provider.flavor !== desiredConfig.provider.flavor
-            || currentConfig.provider.apiKey !== desiredConfig.provider.apiKey;
-
-        if (needsUpdate) {
-            await fs.promises.writeFile(modelsPath, JSON.stringify(desiredConfig, null, 2));
-            console.log(`[Main] Rowboat auto-configured with ${source}`);
-        } else {
-            console.log(`[Main] Rowboat models already match (${source}), skipping`);
-        }
-    } catch (e) {
-        console.warn('[Main] Could not auto-configure Rowboat models:', e.message);
-    }
-}
 
 // =============================================================================
 // COLORED CONSOLE.LOG — colorize [Tag] prefixed messages globally
@@ -541,16 +438,6 @@ function startPythonBackend() {
                 // Handle space navigation
                 if (message.type === 'navigate_to_space') {
                     handleSpaceNavigation(message);
-                }
-
-                // Handle Rowboat update available — relay to BrowserView
-                if (message.type === 'rowboat_update_available') {
-                    rowboatManager?.relayEvent('rowboat:updateAvailable', message);
-                }
-
-                // Handle Rowboat update auto-applied
-                if (message.type === 'rowboat_update_applied') {
-                    rowboatManager?.relayEvent('rowboat:updateApplied', message);
                 }
 
                 // Handle structured content updates
@@ -1952,175 +1839,6 @@ function setupIpcHandlers() {
     });
 
     // ========================================
-    // ROWBOAT IPC STUBS
-    // Rowboat renderer calls these — we stub them so it
-    // skips onboarding/login and runs in offline mode.
-    // ========================================
-    const _fs = require('fs');
-    const _path = require('path');
-    // Use the real Rowboat workspace where user data lives
-    const _rowboatWorkspace = _path.join(app.getPath('home'), '.rowboat');
-
-    // Skip onboarding/sign-in entirely
-    ipcMain.handle('onboarding:getStatus',  () => ({ showOnboarding: false }));
-    ipcMain.handle('onboarding:markComplete', () => ({}));
-
-    // OAuth — not connected, no providers
-    ipcMain.handle('oauth:getState',  () => ({ config: {}, providers: {} }));
-    ipcMain.handle('oauth:connect',   () => ({ success: false, error: 'OAuth not available in VibeMind' }));
-    ipcMain.handle('oauth:disconnect',() => ({}));
-    ipcMain.handle('oauth:didConnect',() => ({}));
-
-    // Workspace — serve files from rowboat workspace dir
-    _fs.mkdirSync(_rowboatWorkspace, { recursive: true });
-    _fs.mkdirSync(_path.join(_rowboatWorkspace, 'config'), { recursive: true });
-
-    ipcMain.handle('workspace:getRoot', () => ({ root: _rowboatWorkspace }));
-    ipcMain.handle('workspace:exists',  (_e, { path: p }) => ({
-        exists: _fs.existsSync(_path.join(_rowboatWorkspace, p))
-    }));
-    ipcMain.handle('workspace:readFile', (_e, { path: p, encoding }) => {
-        const full = _path.join(_rowboatWorkspace, p);
-        if (!_fs.existsSync(full)) throw new Error('File not found: ' + p);
-        const enc = encoding || 'utf8';
-        const data = _fs.readFileSync(full, enc);
-        const s = _fs.statSync(full);
-        return {
-            path: p,
-            encoding: enc,
-            data,
-            stat: { size: s.size, mtimeMs: s.mtimeMs, kind: s.isDirectory() ? 'dir' : 'file' },
-            etag: `${s.size}-${s.mtimeMs}`,
-        };
-    });
-    ipcMain.handle('workspace:writeFile', (_e, args) => {
-        const { path: p, data, content, opts } = args || {};
-        if (!p) throw new Error('No path provided');
-        const full = _path.join(_rowboatWorkspace, p);
-        _fs.mkdirSync(_path.dirname(full), { recursive: true });
-        _fs.writeFileSync(full, data ?? content ?? '', 'utf8');
-        const s = _fs.statSync(full);
-        return {
-            path: p,
-            stat: { size: s.size, mtimeMs: s.mtimeMs, kind: 'file' },
-            etag: `${s.size}-${s.mtimeMs}`,
-        };
-    });
-    ipcMain.handle('workspace:mkdir', (_e, args) => {
-        const { path: p, recursive } = args || {};
-        if (!p) return { success: false, error: 'No path' };
-        _fs.mkdirSync(_path.join(_rowboatWorkspace, p), { recursive: recursive !== false });
-        return { success: true };
-    });
-    // workspace:readdir — used by Rowboat to list directories
-    // Returns DirEntry[] directly (array, not object), with kind:'dir'|'file', optional stat
-    ipcMain.handle('workspace:readdir', (_e, args) => {
-        const { path: p, opts } = args || {};
-        const recursive = opts && opts.recursive;
-        const includeStats = opts && opts.includeStats;
-        const full = _path.join(_rowboatWorkspace, p || '');
-        if (!_fs.existsSync(full)) return [];
-        const collectEntries = (dir, relBase) => {
-            let results = [];
-            try {
-                const items = _fs.readdirSync(dir, { withFileTypes: true });
-                for (const e of items) {
-                    if (e.name.startsWith('.') && !(opts && opts.includeHidden)) continue;
-                    const entryRelPath = (relBase ? relBase + '/' + e.name : (p ? p + '/' + e.name : e.name)).replace(/\\/g, '/');
-                    const isDir = e.isDirectory();
-                    const entry = { name: e.name, path: entryRelPath, kind: isDir ? 'dir' : 'file' };
-                    if (includeStats) {
-                        try {
-                            const s = _fs.statSync(_path.join(dir, e.name));
-                            entry.stat = { size: s.size, mtimeMs: s.mtimeMs };
-                        } catch {}
-                    }
-                    results.push(entry);
-                    if (isDir && recursive) {
-                        results = results.concat(collectEntries(_path.join(dir, e.name), entryRelPath));
-                    }
-                }
-            } catch {}
-            return results;
-        };
-        return collectEntries(full, p || '');
-    });
-    // workspace:stat — file/dir metadata (match Rowboat schema: kind, stat)
-    ipcMain.handle('workspace:stat', (_e, args) => {
-        const { path: p } = args || {};
-        const full = _path.join(_rowboatWorkspace, p || '');
-        if (!_fs.existsSync(full)) throw new Error('Path not found: ' + p);
-        const s = _fs.statSync(full);
-        return {
-            kind: s.isDirectory() ? 'dir' : 'file',
-            stat: { size: s.size, mtimeMs: s.mtimeMs },
-        };
-    });
-    ipcMain.handle('workspace:remove', (_e, args) => {
-        const { path: p } = args || {};
-        if (p) {
-            const full = _path.join(_rowboatWorkspace, p);
-            if (_fs.existsSync(full)) _fs.rmSync(full, { recursive: true, force: true });
-        }
-        return { success: true };
-    });
-    ipcMain.handle('workspace:deleteFile', (_e, args) => {
-        const { path: p } = args || {};
-        if (p) { const full = _path.join(_rowboatWorkspace, p); if (_fs.existsSync(full)) _fs.unlinkSync(full); }
-        return { success: true };
-    });
-    ipcMain.handle('workspace:rename', (_e, args) => {
-        const { from: f, to: t } = args || {};
-        if (f && t) _fs.renameSync(_path.join(_rowboatWorkspace, f), _path.join(_rowboatWorkspace, t));
-        return { success: true };
-    });
-    // Stub remaining channels so they don't error-spam
-    ipcMain.handle('search:query',             () => ({ results: [] }));
-    ipcMain.handle('bases',                    () => ({ bases: [] }));
-    ipcMain.handle('knowledge:history',        () => ({ commits: [] }));
-    ipcMain.handle('knowledge:fileAtCommit',   () => ({ content: '' }));
-    ipcMain.handle('knowledge:restore',        () => ({ success: true }));
-    // runs:* — backed by Rowboat core bridge (child process)
-    const BRIDGE_RPC_CHANNELS = [
-        'runs:create', 'runs:createMessage', 'runs:list', 'runs:fetch',
-        'runs:stop', 'runs:delete', 'runs:provideHumanInput', 'runs:authorizePermission',
-    ];
-    for (const ch of BRIDGE_RPC_CHANNELS) {
-        ipcMain.handle(ch, async (_e, args) => {
-            if (!rowboatManager?.bridgeReady) {
-                throw new Error('Rowboat bridge not ready — services still loading');
-            }
-            return rowboatManager.sendRpc(ch, args);
-        });
-    }
-    // runs:events is push-only (bridge stdout → relayEvent → BrowserView)
-    ipcMain.handle('runs:events', () => ({ events: [] }));
-    ipcMain.handle('agent-schedule:getConfig', () => ({ schedules: [] }));
-    ipcMain.handle('export:note',              () => ({ success: true }));
-    ipcMain.handle('meeting:checkScreenPermission',       () => ({ granted: false }));
-    ipcMain.handle('meeting:openScreenRecordingSettings', () => ({}));
-    ipcMain.handle('meeting:summarize',        () => ({ summary: '' }));
-
-    // Integration configs — all disabled/unconfigured
-    const _stubConfig = () => ({ enabled: false, configured: false });
-    ipcMain.handle('composio:use-composio-for-google',          _stubConfig);
-    ipcMain.handle('composio:use-composio-for-google-calendar', _stubConfig);
-    ipcMain.handle('granola:getConfig',  _stubConfig);
-    ipcMain.handle('slack:getConfig',    _stubConfig);
-    ipcMain.handle('voice:getConfig',    () => ({ deepgram: null, elevenlabs: null }));
-    ipcMain.handle('agent-schedule:getState', () => ({ schedules: [] }));
-    // agent-schedule:updateAgent — App.tsx calls this; without a handler the
-    // schedule UI throws "No handler registered". Forward to the bridge when
-    // ready; degrade gracefully otherwise (the knowledge-graph itself is
-    // bridge-independent and unaffected).
-    ipcMain.handle('agent-schedule:updateAgent', async (_e, args) => {
-        if (!rowboatManager?.bridgeReady) {
-            return { ok: false, error: 'Rowboat bridge not ready' };
-        }
-        return rowboatManager.sendRpc('agent-schedule:updateAgent', args);
-    });
-
-    // ========================================
     // CLAUDE CODE TOKEN (for Settings UI badge)
     // ========================================
 
@@ -3051,44 +2769,6 @@ function setupIpcHandlers() {
         }
     });
 
-    // ========================================
-    // ROWBOAT AUTO-UPDATE
-    // ========================================
-
-    ipcMain.handle('rowboat:triggerUpdate', async (event, { version }) => {
-        const { exec } = require('child_process');
-        const { promisify } = require('util');
-        const execAsync = promisify(exec);
-        const submodulePath = path.join(__dirname, '..', 'python', 'spaces', 'rowboat', 'rowboat');
-
-        try {
-            // Notify BrowserView: fetching
-            rowboatManager?.relayEvent('rowboat:updateProgress', { stage: 'fetching', version });
-
-            await execAsync(`git fetch --tags origin`, { cwd: submodulePath, timeout: 60000 });
-            await execAsync(`git checkout tags/${version} --force`, { cwd: submodulePath, timeout: 30000 });
-
-            // Notify BrowserView: building
-            rowboatManager?.relayEvent('rowboat:updateProgress', { stage: 'building', version });
-
-            await execAsync(`bash scripts/build-rowboat.sh`, { cwd: __dirname, timeout: 300000 });
-
-            // Notify BrowserView: complete
-            rowboatManager?.relayEvent('rowboat:updateProgress', { stage: 'complete', version });
-
-            console.log(`[Main] Rowboat updated to ${version}`);
-            return { success: true, version };
-        } catch (err) {
-            console.error('[Main] Rowboat update failed:', err.message);
-            rowboatManager?.relayEvent('rowboat:updateProgress', {
-                stage: 'error',
-                version,
-                error: err.message,
-            });
-            return { success: false, error: err.message };
-        }
-    });
-
     ipcMain.on('app:restart', () => {
         console.log('[Main] App restart requested');
         app.relaunch();
@@ -3256,7 +2936,11 @@ app.whenReady().then(async () => {
         }
     });
     await startupPolicy.runExternalStartup('Rowboat manager', async () => {
-        rowboatManager = new RowboatManager(mainWindow, { placeholderReason: 'kommt mit Teil 2' });
+        // Rowboat (Teil 2): Verbindung zum laufenden Rowboat (start_desktop.py --embed); voice startet es nicht.
+        rowboatEmbedClient = new RowboatEmbedClient({ logger: console });
+        registerRowboatAppProtocol(session.fromPartition(ROWBOAT_PARTITION), rowboatEmbedClient);
+        rowboatEmbedClient.start();
+        rowboatManager = new RowboatManager(mainWindow, { client: rowboatEmbedClient });
     });
     await startupPolicy.runExternalStartup('SWE Design manager', async () => {
         sweDesignManager = new SweDesignManager(mainWindow);
@@ -3373,9 +3057,6 @@ app.whenReady().then(async () => {
             exec: require('child_process').exec,
         });
     });
-    // Rowboat-Core-Bridge und autoConfigureRowboatModels() (schreibt ~/.rowboat/config/models.json)
-    // starten in Teil 1 bewusst NICHT – Rowboat-Einbettung ist Teil 2 der Spec.
-    console.log('[Main] Rowboat-Bridge nicht gestartet – kommt mit Teil 2');
     await startupPolicy.runExternalStartup('Python backend', async () => {
         startPythonBackend();
     });
@@ -3470,8 +3151,9 @@ app.on('will-quit', () => {
         pythonProcess = null;
     }
 
-    // Destroy BrowserView managers (stopBridge is called inside destroy)
+    // Destroy BrowserView managers
     if (rowboatManager) rowboatManager.destroy();
+    if (rowboatEmbedClient) rowboatEmbedClient.stop();
     if (sweDesignManager) sweDesignManager.destroy();
     if (clawportManager) clawportManager.destroy();
     if (brainManager) brainManager.destroy();
