@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
 
-const { APP_PARTITION, APP_SCHEME_PRIVILEGES, attachEmbedIpc, proxyAppRequest, registerAppProtocol } = require('./rowboat-embed-view');
+const { APP_PARTITION, APP_SCHEME_PRIVILEGES, EMBED_ALLOWED_PERMISSIONS, attachEmbedIpc, configureEmbedSession, proxyAppRequest, registerAppProtocol } = require('./rowboat-embed-view');
 
 function fakeWebContents() {
   const handlers = new Map();
@@ -94,11 +94,39 @@ test('app://-Proxy ohne Verbindung: 503, kein Abruf', async () => {
   assert.equal(called, false);
 });
 
+function fakeSession() {
+  const handlers = {};
+  return {
+    handlers,
+    setPermissionRequestHandler(fn) { handlers.request = fn; },
+    setPermissionCheckHandler(fn) { handlers.check = fn; },
+  };
+}
+
+test('Einbettungssitzung erlaubt nur Rowboats eigene Berechtigungen', () => {
+  const ses = fakeSession();
+  configureEmbedSession(ses);
+  assert.deepEqual([...EMBED_ALLOWED_PERMISSIONS].sort(), ['clipboard-read', 'clipboard-sanitized-write', 'display-capture', 'media']);
+  for (const perm of ['media', 'display-capture', 'clipboard-read', 'clipboard-sanitized-write']) {
+    assert.equal(ses.handlers.check(null, perm), true, perm);
+    let granted;
+    ses.handlers.request(null, perm, (ok) => { granted = ok; });
+    assert.equal(granted, true, perm);
+  }
+  for (const perm of ['geolocation', 'notifications', 'openExternal', 'midi', 'pointerLock', 'fullscreen']) {
+    assert.equal(ses.handlers.check(null, perm), false, perm);
+    let granted;
+    ses.handlers.request(null, perm, (ok) => { granted = ok; });
+    assert.equal(granted, false, perm);
+  }
+});
+
 test('registerAppProtocol haengt am Protokoll genau dieser Sitzung; Schema-Rechte wie in Rowboat', async () => {
   const handled = [];
-  const ses = { protocol: { handle: (scheme, fn) => handled.push([scheme, fn]) } };
+  const ses = { ...fakeSession(), protocol: { handle: (scheme, fn) => handled.push([scheme, fn]) } };
   registerAppProtocol(ses, fakeClient(), async () => new Response('x'));
   assert.equal(handled[0][0], 'app');
+  assert.equal(typeof ses.handlers.request, 'function', 'Berechtigungen der Sitzung nicht eingeschraenkt');
   assert.equal(await (await handled[0][1](new Request('app://-/index.html'))).text(), 'x');
   assert.equal(APP_PARTITION, 'persist:rowboat-embed');
   assert.deepEqual(APP_SCHEME_PRIVILEGES, { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } });

@@ -5,7 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { WebSocketServer } = require('ws');
 
-const { RowboatEmbedClient, NOT_RUNNING } = require('./rowboat-embed-client');
+const { RowboatEmbedClient, NOT_RUNNING, BACKOFF_MS, MAX_MESSAGE_BYTES } = require('./rowboat-embed-client');
 
 const TOKEN = 'tok-geheim-123';
 
@@ -208,4 +208,72 @@ test('Frame null nach welcome: kein Absturz, bleibt verbunden, invoke geht weite
     assert.equal(c.connected, true);
     assert.deepEqual(await c.invoke('workspace:exists', { path: 'a' }), { echo: { path: 'a' } });
   } finally { c.stop(); await rb.kill(); }
+});
+
+test('zu grosser Aufruf: nur dieser wird mit embed_too_large abgelehnt, nichts gesendet, Verbindung bleibt', async () => {
+  const file = tmpEmbedFile();
+  const rb = await fakeRowboat();
+  writeInfo(file, rb.port);
+  const c = new RowboatEmbedClient({ embedFile: file, backoffMs: [20], logger: quiet() });
+  try {
+    c.start();
+    await once(c, 'connected');
+    const before = rb.seen.length;
+    const big = 'x'.repeat(MAX_MESSAGE_BYTES);
+    await assert.rejects(c.invoke('workspace:writeFile', { data: big }),
+      (err) => err.code === 'embed_too_large' && /workspace:writeFile/.test(err.message));
+    assert.equal(c._pending.size, 0);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(rb.seen.length, before);
+    assert.equal(c.connected, true);
+    assert.deepEqual(await c.invoke('workspace:exists', { path: 'a' }), { echo: { path: 'a' } });
+  } finally { c.stop(); await rb.kill(); }
+});
+
+test('ws.send wirft: Aufruf wird abgelehnt und nicht als offen gefuehrt', async () => {
+  const file = tmpEmbedFile();
+  const rb = await fakeRowboat();
+  writeInfo(file, rb.port);
+  const c = new RowboatEmbedClient({ embedFile: file, backoffMs: [20], logger: quiet() });
+  try {
+    c.start();
+    await once(c, 'connected');
+    const realSend = c._ws.send.bind(c._ws);
+    c._ws.send = () => { throw new Error('socket kaputt'); };
+    await assert.rejects(c.invoke('workspace:exists', { path: 'a' }), /socket kaputt/);
+    assert.equal(c._pending.size, 0);
+    c._ws.send = realSend;
+    assert.deepEqual(await c.invoke('workspace:exists', { path: 'b' }), { echo: { path: 'b' } });
+  } finally { c.stop(); await rb.kill(); }
+});
+
+test('Backoff: hoechstens 10 s zwischen zwei Versuchen', () => {
+  assert.deepEqual(BACKOFF_MS, [1000, 2000, 5000, 10000]);
+});
+
+test('welcome mit unbekannter Protokollversion: nicht verbunden, Grund nennt v, versucht es spaeter erneut', async () => {
+  const file = tmpEmbedFile();
+  let hellos = 0;
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await new Promise((r) => wss.on('listening', r));
+  wss.on('connection', (ws) => ws.on('message', (d) => {
+    const m = JSON.parse(String(d));
+    if (m.type === 'hello') { hellos += 1; ws.send(JSON.stringify({ type: 'welcome', v: 2, invokeChannels: [] })); }
+  }));
+  writeInfo(file, wss.address().port);
+  const c = new RowboatEmbedClient({ embedFile: file, backoffMs: [20], logger: quiet() });
+  let connected = false;
+  c.on('connected', () => { connected = true; });
+  try {
+    c.start();
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(connected, false);
+    assert.equal(c.connected, false);
+    assert.equal(c.reason, 'Rowboat-Protokoll unbekannt (v=2)');
+    assert.ok(hellos >= 2, `erneuter Versuch erwartet, hellos=${hellos}`);
+  } finally {
+    c.stop();
+    for (const s of wss.clients) s.terminate();
+    await new Promise((r) => wss.close(r));
+  }
 });

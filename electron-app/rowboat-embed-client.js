@@ -11,7 +11,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
+const BACKOFF_MS = [1000, 2000, 5000, 10000]; // Obergrenze 10 s: Rowboat-Neustart soll schnell sichtbar werden
+const PROTOCOL_VERSION = 1;
 const HELLO_TIMEOUT_MS = 5000;
 const MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
 const NOT_RUNNING = 'Rowboat laeuft nicht (start_desktop.py --embed)';
@@ -86,9 +87,28 @@ class RowboatEmbedClient extends EventEmitter {
   invoke(channel, args) {
     if (!this.connected || !this._ws) return Promise.reject(new Error('Rowboat nicht verbunden'));
     const id = this._nextId++;
+    let text;
+    try {
+      text = JSON.stringify({ type: 'invoke', id, channel, args });
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    // Rowboat schliesst bei Ueberschreitung von maxPayload die ganze Verbindung (alle Ansichten).
+    // Darum nur diesen Aufruf ablehnen, ohne zu senden.
+    if (Buffer.byteLength(text) > MAX_MESSAGE_BYTES) {
+      const err = new Error(`embed_too_large: Aufruf ${channel} ist groesser als ${MAX_MESSAGE_BYTES} Bytes`);
+      err.code = 'embed_too_large';
+      return Promise.reject(err);
+    }
+    const ws = this._ws;
     return new Promise((resolve, reject) => {
       this._pending.set(id, { resolve, reject });
-      this._ws.send(JSON.stringify({ type: 'invoke', id, channel, args }));
+      try {
+        ws.send(text);
+      } catch (err) {
+        this._pending.delete(id);
+        reject(err);
+      }
     });
   }
 
@@ -134,13 +154,18 @@ class RowboatEmbedClient extends EventEmitter {
     const ws = new this.WebSocket(`ws://127.0.0.1:${info.port}/embed`, { maxPayload: MAX_MESSAGE_BYTES });
     this._ws = ws;
     const helloTimer = setTimeout(() => ws.terminate(), this.helloTimeoutMs);
-    ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', v: 1, token: info.token })));
+    let closeReason = null;
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', v: PROTOCOL_VERSION, token: info.token })));
     ws.on('message', (data) => {
       let msg;
       if (this._ws !== ws) return;
       try { msg = JSON.parse(String(data)); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
-      if (msg.type === 'welcome') {
+      if (msg.type === 'welcome' && msg.v !== PROTOCOL_VERSION) {
+        clearTimeout(helloTimer);
+        closeReason = `Rowboat-Protokoll unbekannt (v=${msg.v})`;
+        ws.terminate();
+      } else if (msg.type === 'welcome') {
         clearTimeout(helloTimer);
         this.info = info;
         this.invokeChannels = Array.isArray(msg.invokeChannels) ? msg.invokeChannels : [];
@@ -171,10 +196,10 @@ class RowboatEmbedClient extends EventEmitter {
       this._ws = null;
       for (const pending of this._pending.values()) pending.reject(new Error('Verbindung zu Rowboat getrennt'));
       this._pending.clear();
-      this._down(code === 4401 ? 'Anmeldung bei Rowboat abgelehnt' : 'Verbindung zu Rowboat getrennt');
+      this._down(closeReason || (code === 4401 ? 'Anmeldung bei Rowboat abgelehnt' : 'Verbindung zu Rowboat getrennt'));
       this._schedule();
     });
   }
 }
 
-module.exports = { RowboatEmbedClient, readEmbedInfo, defaultEmbedFile, NOT_RUNNING };
+module.exports = { RowboatEmbedClient, readEmbedInfo, defaultEmbedFile, NOT_RUNNING, BACKOFF_MS, MAX_MESSAGE_BYTES };

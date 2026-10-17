@@ -50,8 +50,23 @@ async function proxyAppRequest(request, client, fetchImpl = globalThis.fetch) {
   }
 }
 
+// Dieselbe Liste wie Rowboats ALLOWED_SESSION_PERMISSIONS (Fork apps/x/apps/main/src/main.ts):
+// Electrons Vorgabe ohne Handler waere „alles erlaubt“.
+const EMBED_ALLOWED_PERMISSIONS = new Set(['media', 'display-capture', 'clipboard-read', 'clipboard-sanitized-write']);
+
+function configureEmbedSession(session) {
+  session.setPermissionCheckHandler((_webContents, permission) => EMBED_ALLOWED_PERMISSIONS.has(permission));
+  session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(EMBED_ALLOWED_PERMISSIONS.has(permission));
+  });
+}
+
 function registerAppProtocol(session, client, fetchImpl) {
+  configureEmbedSession(session);
   session.protocol.handle('app', (request) => proxyAppRequest(request, client, fetchImpl));
 }
 
-module.exports = { APP_PARTITION, APP_SCHEME_PRIVILEGES, BROWSER_PANE_NOTE, attachEmbedIpc, proxyAppRequest, registerAppProtocol };
+module.exports = {
+  APP_PARTITION, APP_SCHEME_PRIVILEGES, BROWSER_PANE_NOTE, EMBED_ALLOWED_PERMISSIONS,
+  attachEmbedIpc, configureEmbedSession, proxyAppRequest, registerAppProtocol,
+};
