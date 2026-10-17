@@ -137,7 +137,9 @@ class RowboatEmbedClient extends EventEmitter {
     ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', v: 1, token: info.token })));
     ws.on('message', (data) => {
       let msg;
+      if (this._ws !== ws) return;
       try { msg = JSON.parse(String(data)); } catch { return; }
+      if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'welcome') {
         clearTimeout(helloTimer);
         this.info = info;
@@ -165,7 +167,8 @@ class RowboatEmbedClient extends EventEmitter {
     ws.on('error', (err) => this.logger.warn(`[RowboatEmbed] ${err.code || err.message}`));
     ws.on('close', (code) => {
       clearTimeout(helloTimer);
-      if (this._ws === ws) this._ws = null;
+      if (this._ws !== ws) return; // veralteter Socket (stop()/start()): nicht den neuen stoeren
+      this._ws = null;
       for (const pending of this._pending.values()) pending.reject(new Error('Verbindung zu Rowboat getrennt'));
       this._pending.clear();
       this._down(code === 4401 ? 'Anmeldung bei Rowboat abgelehnt' : 'Verbindung zu Rowboat getrennt');

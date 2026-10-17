@@ -173,3 +173,39 @@ test('das Token erscheint in keiner Log-Zeile', async () => {
   assert.ok(logger.lines.length > 0);
   assert.ok(logger.lines.every((l) => !l.includes(TOKEN)));
 });
+
+test('stop() direkt gefolgt von start(): genau eine Verbindung, kein zweiter Reconnect', async () => {
+  const file = tmpEmbedFile();
+  const rb = await fakeRowboat();
+  writeInfo(file, rb.port);
+  const c = new RowboatEmbedClient({ embedFile: file, backoffMs: [20], logger: quiet() });
+  try {
+    c.start();
+    await once(c, 'connected');
+    let connectedCount = 0;
+    c.on('connected', () => { connectedCount += 1; });
+    c.stop();
+    c.start();
+    await once(c, 'connected');
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(connectedCount, 1);
+    assert.equal(c.connected, true);
+    assert.equal(rb.wss.clients.size, 1);
+    assert.equal(rb.seen.filter((m) => m.type === 'hello').length, 2);
+  } finally { c.stop(); await rb.kill(); }
+});
+
+test('Frame null nach welcome: kein Absturz, bleibt verbunden, invoke geht weiter', async () => {
+  const file = tmpEmbedFile();
+  const rb = await fakeRowboat();
+  writeInfo(file, rb.port);
+  const c = new RowboatEmbedClient({ embedFile: file, backoffMs: [20], logger: quiet() });
+  try {
+    c.start();
+    await once(c, 'connected');
+    for (const s of rb.wss.clients) s.send('null');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(c.connected, true);
+    assert.deepEqual(await c.invoke('workspace:exists', { path: 'a' }), { echo: { path: 'a' } });
+  } finally { c.stop(); await rb.kill(); }
+});
