@@ -1,482 +1,210 @@
 /**
- * Rowboat Manager for VibeMind
+ * Rowboat Manager for VibeMind (Spec vibemind-os 2026-10-17-rowboat-einbettung, Abschnitt 4).
  *
- * Manages the Rowboat Electron app renderer as a BrowserView overlay.
- * Shown when user navigates to the Roarboot space.
- *
- * Pattern: identical to dashboard-manager.js (Coding Engine Dashboard).
- * Addition: relayEvent() for pushing runs/workspace/service events to
- * the BrowserView (since BrowserView is not a BrowserWindow and thus
- * not reached by BrowserWindow.getAllWindows()).
+ * Zeigt die echte Rowboat-Oberflaeche als BrowserView im Roarboot-Space. Rowboat laeuft als eigener
+ * Prozess (start_desktop.py --embed); diese Ansicht laedt Rowboats eigenen Preload, ihre Aufrufe
+ * beantwortet Rowboats Hauptprozess ueber RowboatEmbedClient. Ohne Verbindung: Statuskarte.
  */
-
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
-const { spawn } = require('child_process');
-const readline = require('readline');
-const path = require('path');
-const fs = require('fs');
+const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
 
+const APP_URL = 'app://-/index.html';
 const _RB_C = '\x1b[94m', _RST = '\x1b[0m'; // Blue (Rowboat)
 function _rbLog(...args) { process.stdout.write(`${_RB_C}[RowboatManager] ${args.join(' ')}${_RST}\n`); }
 
 class RowboatManager {
   constructor(mainWindow, dependencies = {}) {
-    const { BrowserView, shell } = resolveElectronParts(dependencies, ['BrowserView', 'shell']);
+    const { BrowserView, shell, dialog } = resolveElectronParts(dependencies, ['BrowserView', 'shell', 'dialog']);
+    if (!dependencies.client) throw new TypeError('RowboatManager braucht dependencies.client (RowboatEmbedClient)');
     this.BrowserView = BrowserView;
     this.shell = shell;
-    // Teil 1: Rowboat ist nur Platzhalter ("kommt mit Teil 2"), Bridge und Renderer starten nicht.
-    this.placeholderReason = dependencies.placeholderReason || '';
+    this.dialog = dialog;
+    this.client = dependencies.client;
     this._overlayDeps = dependencies.overlayDeps || {};
-    this.overlayReady = null;
     this.mainWindow = mainWindow;
     this.rowboatView = null;
     this.isVisible = false;
+    this.overlayReady = null;
+    this.overlayResult = null;
+    this._viewPreload = null;
+    this._detachIpc = null;
+    this._browserNoteShown = false;
 
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
-    // Renderer dist path (dev vs production)
-    this.isDev = !!process.env.ROWBOAT_DEV_URL;
+    this.client.on('connected', () => this._onConnected());
+    this.client.on('disconnected', () => { if (this.rowboatView) this._load(); });
 
-    // Bridge (child process) state
-    this.bridgeProcess = null;
-    this.bridgeReady = false;
-    this.pendingRpc = new Map();
-    this.rpcCounter = 0;
-    this.bridgeRestartCount = 0;
-    this._bridgeReadyResolve = null;
-
-    // Listen for window resize
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
-        if (this.isVisible && this.rowboatView) {
-          this.updateBounds();
-        }
+        if (this.isVisible && this.rowboatView) this.updateBounds();
       });
     }
   }
 
-  /**
-   * Resolve path to built renderer dist/index.html
-   */
-  _resolveRendererPath() {
-    // Development: built renderer in submodule. electron-app -> voice ->
-    // vibemind-os -> spaces/rowboat/rowboat (NOT voice/python, which has no
-    // rowboat checkout — that broken path was the original "tab won't open").
-    const devPath = path.join(
-      __dirname, '..', '..', 'spaces', 'rowboat', 'rowboat',
-      'apps', 'x', 'apps', 'renderer', 'dist', 'index.html'
-    );
-    // Production: extraResources
-    const prodPath = path.join(process.resourcesPath || '', 'rowboat-renderer', 'index.html');
-
-    if (fs.existsSync(prodPath)) return prodPath;
-    if (fs.existsSync(devPath)) return devPath;
-    return devPath; // Will fail gracefully if missing
-  }
-
-  /**
-   * Prueft das Ziel und laedt es bzw. die Statuskarte. Wird beim Erzeugen der Ansicht,
-   * bei reload() und bei show() nach einer Statuskarte erneut aufgerufen.
-   */
-  _startOverlay() {
-    this.overlayResult = null;
-    const targets = this.placeholderReason
-      ? [{ kind: 'unavailable', reason: this.placeholderReason, target: 'Rowboat-Einbettung' }]
-      : this.isDev
-        ? [{ kind: 'url', url: process.env.ROWBOAT_DEV_URL }]
-        : [{ kind: 'file', path: this._resolveRendererPath() }];
-    this.overlayReady = loadOverlay(this.rowboatView.webContents, { space: 'Rowboat', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
-    return this.overlayReady;
-  }
-
-  _recheckOverlay() {
-    if (this.overlayResult && !this.overlayResult.ok && this.rowboatView) this._startOverlay();
-  }
-
-  /**
-   * Create the BrowserView for the Rowboat renderer
-   */
-  createView() {
-    if (this.rowboatView) return this.rowboatView;
-
-    this.rowboatView = new this.BrowserView({
+  _createView() {
+    const preload = this.client.connected && this.client.info ? this.client.info.preloadPath : null;
+    const view = new this.BrowserView({
       webPreferences: {
-        preload: path.join(__dirname, 'rowboat-preload.js'),
+        ...(preload ? { preload } : {}),
+        partition: APP_PARTITION,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false, // Required for contextBridge + ipcRenderer
+        sandbox: true,
+        // PDFs in <iframe> wie in Rowboats eigenem Fenster
+        plugins: true,
       },
     });
+    this.rowboatView = view;
+    this._viewPreload = preload;
 
-    this._startOverlay();
-
-    // Open DevTools in development
-    if (process.env.NODE_ENV === 'development' || this.isDev) {
-      this.rowboatView.webContents.openDevTools({ mode: 'detach' });
-    }
-
-    // Handle external link navigation
-    this.rowboatView.webContents.setWindowOpenHandler(({ url }) => {
+    view.webContents.setWindowOpenHandler(({ url }) => {
       this.shell.openExternal(url);
       return { action: 'deny' };
     });
-
-    // CSS injection: remove Rowboat's macOS traffic-light reservation
-    // (VibeMind handles its own titlebar at 32px)
-    this.rowboatView.webContents.on('dom-ready', () => {
-      this.rowboatView.webContents.insertCSS(`
-        .titlebar-drag-region {
-          -webkit-app-region: no-drag !important;
-        }
-      `);
+    // Wie in Rowboats Fenster: was nicht app:// ist, geht in den System-Browser.
+    view.webContents.on('will-navigate', (event, url) => {
+      if (url.startsWith('app://')) return;
+      event.preventDefault();
+      this.shell.openExternal(url);
     });
-
-    // Notify VibeMind renderer of load status
-    this.rowboatView.webContents.on('did-finish-load', () => {
+    // Rowboats macOS-Titelleisten-Reservierung entfernen (VibeMind hat eine eigene Titelleiste)
+    view.webContents.on('dom-ready', () => {
+      view.webContents.insertCSS('.titlebar-drag-region { -webkit-app-region: no-drag !important; }');
+    });
+    view.webContents.on('did-finish-load', () => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('python-message', {
-          type: 'rowboat_view_status',
-          ...loadStatus(this.overlayResult),
-        });
+        this.mainWindow.webContents.send('python-message', { type: 'rowboat_view_status', ...loadStatus(this.overlayResult) });
       }
       _rbLog('Renderer loaded');
-
     });
-
-    this.rowboatView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', {
-          type: 'rowboat_view_status',
-          status: 'error',
-          message: `Load failed: ${errorDescription} (${errorCode})`,
+          type: 'rowboat_view_status', status: 'error', message: `Load failed: ${errorDescription} (${errorCode})`,
         });
       }
       console.error('[RowboatManager] Load failed:', errorCode, errorDescription);
     });
 
-    return this.rowboatView;
+    this._load();
+    return view;
   }
 
-  /**
-   * Show the Rowboat overlay
-   */
+  /** Laedt Rowboat (verbunden + Preload passt) oder die Statuskarte. */
+  _load() {
+    const view = this.rowboatView;
+    if (this._detachIpc) { this._detachIpc(); this._detachIpc = null; }
+    if (this.client.connected && this._viewPreload) {
+      this._detachIpc = attachEmbedIpc(view.webContents, this.client, this.client.invokeChannels, {
+        onBrowserPane: () => this._browserPaneNote(),
+      });
+      this.overlayResult = { ok: true, target: APP_URL };
+      this.overlayReady = view.webContents.loadURL(APP_URL).then(
+        () => this.overlayResult,
+        (err) => {
+          _rbLog(`Laden fehlgeschlagen – ${err.message}`);
+          return this.overlayResult;
+        },
+      );
+      return this.overlayReady;
+    }
+    const reason = this.client.reason || 'Rowboat nicht verbunden';
+    this.overlayReady = loadOverlay(view.webContents,
+      { space: 'Rowboat', targets: [{ kind: 'unavailable', reason, target: 'Rowboat-Einbettung' }] },
+      { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    return this.overlayReady;
+  }
+
+  _onConnected() {
+    if (!this.rowboatView) return;
+    if (this._viewPreload === this.client.info.preloadPath) this._load();
+    else this._rebuildView();
+  }
+
+  /** Der Preload steht beim Erzeugen fest: Ansicht ohne (oder mit anderem) Preload neu bauen. */
+  _rebuildView() {
+    const wasVisible = this.isVisible;
+    this._disposeView();
+    this._createView();
+    if (wasVisible) {
+      this.mainWindow.setBrowserView(this.rowboatView);
+      this.updateBounds();
+    }
+  }
+
+  _disposeView() {
+    if (this._detachIpc) { this._detachIpc(); this._detachIpc = null; }
+    if (!this.rowboatView) return;
+    if (this.isVisible && this.mainWindow) this.mainWindow.setBrowserView(null);
+    try { this.rowboatView.webContents.close(); } catch { /* schon zu */ }
+    this.rowboatView = null;
+  }
+
+  _browserPaneNote() {
+    if (this._browserNoteShown) return;
+    this._browserNoteShown = true;
+    this.dialog.showMessageBox(this.mainWindow, {
+      type: 'info', message: BROWSER_PANE_NOTE, buttons: ['In Rowboat öffnen', 'Abbrechen'], defaultId: 0, cancelId: 1,
+    }).then(({ response }) => {
+      if (response === 0) this.openInRowboat();
+    }).catch(() => {});
+  }
+
+  /** Holt Rowboats eigenes (verstecktes) Fenster nach vorn. */
+  openInRowboat() {
+    return this.client.showApp();
+  }
+
   show() {
     if (!this.mainWindow) {
       console.error('[RowboatManager] No main window available');
       return;
     }
-
-    if (!this.rowboatView) {
-      this.createView();
-    } else {
-      this._recheckOverlay();
-    }
-
+    if (!this.rowboatView) this._createView();
+    else if (this.overlayResult && !this.overlayResult.ok) this._onConnectedOrCard();
     this.mainWindow.setBrowserView(this.rowboatView);
     this.updateBounds();
     this.isVisible = true;
     _rbLog('Rowboat shown');
   }
 
-  /**
-   * Hide the Rowboat overlay
-   */
+  /** show() nach einer Statuskarte: verbunden → Rowboat laden, sonst Karte mit aktuellem Grund. */
+  _onConnectedOrCard() {
+    if (this.client.connected) this._onConnected();
+    else this._load();
+  }
+
   hide() {
     if (!this.mainWindow || !this.rowboatView) return;
-
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
     _rbLog('Rowboat hidden');
   }
 
-  /**
-   * Toggle visibility
-   */
   toggle() {
-    if (this.isVisible) {
-      this.hide();
-    } else {
-      this.show();
-    }
+    if (this.isVisible) this.hide();
+    else this.show();
   }
 
-  /**
-   * Update BrowserView bounds to match window size
-   */
   updateBounds() {
     if (!this.mainWindow || !this.rowboatView) return;
-
     const bounds = this.mainWindow.getContentBounds();
-    this.rowboatView.setBounds({
-      x: 0,
-      y: this.topOffset,
-      width: bounds.width,
-      height: bounds.height - this.topOffset,
-    });
+    this.rowboatView.setBounds({ x: 0, y: this.topOffset, width: bounds.width, height: bounds.height - this.topOffset });
   }
 
-  /**
-   * Check if Rowboat is currently visible
-   */
   getIsVisible() {
     return this.isVisible;
   }
 
-  /**
-   * Relay a push event to the Rowboat BrowserView.
-   * Called from main.js after subscribing to bus/serviceBus.
-   */
-  relayEvent(channel, payload) {
-    if (this.rowboatView && !this.rowboatView.webContents.isDestroyed()) {
-      this.rowboatView.webContents.send(channel, payload);
-    }
-  }
-
-  /**
-   * Check if Claude Code OAuth token is available.
-   * Reads credentials directly (we are in the main process).
-   */
-  _isClaudeCodeAvailable() {
-    try {
-      const os = require('os');
-      const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-      if (!fs.existsSync(credPath)) return false;
-      const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-      const oauth = creds?.claudeAiOauth;
-      if (!oauth?.accessToken) return false;
-      if (oauth.expiresAt && oauth.expiresAt < Date.now() + 300000) return false;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // Bridge (Child Process) — runs @x/core in a separate
-  // Node.js process, communicates via JSON-RPC on stdio.
-  // ═══════════════════════════════════════════════════════
-
-  /**
-   * Start the core bridge process.
-   * Returns a promise that resolves when bridge:ready is received.
-   */
-  startBridge() {
-    if (this.placeholderReason) {
-      _rbLog('Bridge nicht gestartet -', this.placeholderReason);
-      return Promise.resolve(false);
-    }
-    if (this.bridgeProcess) return Promise.resolve();
-
-    // CWD must be apps/x/apps/main/ where pnpm workspace symlinks resolve
-    // @x/core, @x/shared. Same path correction as _resolveRendererPath:
-    // electron-app -> voice -> vibemind-os -> spaces/rowboat/rowboat.
-    const coreDir = path.join(
-      __dirname, '..', '..', 'spaces', 'rowboat', 'rowboat', 'apps', 'x', 'apps', 'main'
-    );
-    const bridgeScript = path.join(__dirname, 'rowboat-core-bridge.mjs');
-
-    if (!fs.existsSync(bridgeScript)) {
-      _rbLog('Bridge script not found:', bridgeScript);
-      return Promise.reject(new Error('Bridge script not found'));
-    }
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Bridge startup timed out (15s)'));
-      }, 15000);
-
-      this._bridgeReadyResolve = () => {
-        clearTimeout(timeout);
-        resolve();
-      };
-
-      // Use the system Node.js (not Electron's, which may lack ESM support in packaged builds)
-      const nodeBin = process.env.ROWBOAT_NODE_BIN || 'node';
-
-      this.bridgeProcess = spawn(nodeBin, [bridgeScript], {
-        cwd: coreDir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, NODE_NO_WARNINGS: '1' },
-      });
-
-      // Parse stdout line by line (JSON-RPC messages)
-      const rl = readline.createInterface({ input: this.bridgeProcess.stdout });
-      rl.on('line', (line) => this._onBridgeLine(line));
-
-      // Forward stderr to console (bridge logging)
-      this.bridgeProcess.stderr.on('data', (chunk) => {
-        const text = chunk.toString().trimEnd();
-        if (text) _rbLog(text);
-      });
-
-      // Handle unexpected exit
-      this.bridgeProcess.on('close', (code) => {
-        this.bridgeProcess = null;
-        this.bridgeReady = false;
-
-        // Reject all pending RPCs
-        for (const [id, { reject: rej, timer }] of this.pendingRpc) {
-          clearTimeout(timer);
-          rej(new Error('Bridge process exited'));
-        }
-        this.pendingRpc.clear();
-
-        if (code !== 0 && code !== null) {
-          _rbLog(`Bridge exited with code ${code}`);
-          this._handleBridgeRestart();
-        }
-      });
-
-      this.bridgeProcess.on('error', (err) => {
-        clearTimeout(timeout);
-        _rbLog('Bridge spawn error:', err.message);
-        reject(err);
-      });
-    });
-  }
-
-  /**
-   * Stop the bridge process gracefully.
-   */
-  stopBridge() {
-    if (!this.bridgeProcess) return;
-
-    _rbLog('Stopping bridge...');
-    this.bridgeReady = false;
-
-    try {
-      this.bridgeProcess.stdin.end();
-    } catch { /* stdin may already be closed */ }
-
-    const proc = this.bridgeProcess;
-    setTimeout(() => {
-      try { proc.kill('SIGTERM'); } catch { /* already dead */ }
-    }, 3000);
-
-    this.bridgeProcess = null;
-  }
-
-  /**
-   * Send a JSON-RPC request to the bridge and wait for the response.
-   */
-  sendRpc(method, params, timeoutMs = 30000) {
-    if (!this.bridgeProcess || !this.bridgeReady) {
-      return Promise.reject(new Error('Rowboat bridge not ready'));
-    }
-
-    const id = String(++this.rpcCounter);
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingRpc.delete(id);
-        reject(new Error(`RPC timeout for ${method} (${timeoutMs}ms)`));
-      }, timeoutMs);
-
-      this.pendingRpc.set(id, { resolve, reject, timer });
-
-      const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n';
-      try {
-        this.bridgeProcess.stdin.write(msg);
-      } catch (err) {
-        clearTimeout(timer);
-        this.pendingRpc.delete(id);
-        reject(err);
-      }
-    });
-  }
-
-  /**
-   * Parse a JSON line from bridge stdout.
-   * RPC responses have an `id`, push events have a `method`.
-   */
-  _onBridgeLine(line) {
-    if (!line.trim()) return;
-
-    let msg;
-    try {
-      msg = JSON.parse(line);
-    } catch {
-      _rbLog('Malformed bridge output:', line.slice(0, 120));
-      return;
-    }
-
-    // RPC response (has id)
-    if (msg.id !== undefined) {
-      const pending = this.pendingRpc.get(msg.id);
-      if (pending) {
-        this.pendingRpc.delete(msg.id);
-        clearTimeout(pending.timer);
-        if (msg.error) {
-          pending.reject(new Error(msg.error.message || 'Bridge RPC error'));
-        } else {
-          pending.resolve(msg.result);
-        }
-      }
-      return;
-    }
-
-    // Push event (notification)
-    if (msg.method === 'bridge:ready') {
-      this.bridgeReady = true;
-      this.bridgeRestartCount = 0;
-      _rbLog('Bridge ready');
-      if (this._bridgeReadyResolve) {
-        this._bridgeReadyResolve();
-        this._bridgeReadyResolve = null;
-      }
-      return;
-    }
-
-    if (msg.method === 'runs:events') {
-      this.relayEvent('runs:events', msg.params);
-      return;
-    }
-
-    if (msg.method === 'services:events') {
-      this.relayEvent('services:events', msg.params);
-      return;
-    }
-  }
-
-  /**
-   * Auto-restart bridge with exponential backoff (max 3 attempts).
-   */
-  _handleBridgeRestart() {
-    if (this.bridgeRestartCount >= 3) {
-      _rbLog('Bridge restart limit reached (3) — giving up');
-      return;
-    }
-
-    const delay = Math.pow(2, this.bridgeRestartCount) * 1000; // 1s, 2s, 4s
-    this.bridgeRestartCount++;
-    _rbLog(`Restarting bridge in ${delay}ms (attempt ${this.bridgeRestartCount}/3)`);
-
-    setTimeout(() => {
-      this.startBridge().catch((err) => {
-        _rbLog('Bridge restart failed:', err.message);
-      });
-    }, delay);
-  }
-
-  /**
-   * Reload the Rowboat renderer
-   */
   reload() {
-    if (this.rowboatView) {
-      this._startOverlay();
-    }
+    if (this.rowboatView) this._load();
   }
 
-  /**
-   * Destroy the Rowboat view and stop the bridge.
-   */
   destroy() {
-    this.stopBridge();
-    if (this.rowboatView) {
-      this.hide();
-      this.rowboatView = null;
-    }
+    this._disposeView();
+    this.isVisible = false;
   }
 }
 

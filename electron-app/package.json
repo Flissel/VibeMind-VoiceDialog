@@ -16,7 +16,7 @@
     "build:mac": "npm run video:build && electron-builder --mac",
     "build:linux": "npm run video:build && electron-builder --linux",
     "test:e2e": "npx playwright test",
-    "test:unit": "node --test laura-embed-config.test.js laura-preload.test.js laura-embed-host.test.js video-manager.test.js laura-packaging.test.js laura-live-proof.test.js startup-policy.test.js supabase-config.test.js local-startup.test.js docker-cleanup.test.js overlay-status.test.js overlay-managers.test.js adopt-managers.test.js env-files.test.js preload-sandbox.test.js swe-design-manager.test.js",
+    "test:unit": "node --test laura-embed-config.test.js laura-preload.test.js laura-embed-host.test.js video-manager.test.js laura-packaging.test.js laura-live-proof.test.js startup-policy.test.js supabase-config.test.js local-startup.test.js docker-cleanup.test.js overlay-status.test.js overlay-managers.test.js adopt-managers.test.js env-files.test.js preload-sandbox.test.js swe-design-manager.test.js rowboat-embed-client.test.js rowboat-embed-view.test.js",
     "laura:live-proof": "node scripts/laura-ui-live-proof.js",
     "laura:build": "pnpm --dir ../../spaces/video/laura/apps/desktop build:embed"
   },
@@ -74,7 +74,6 @@
     "files": [
       "**/*",
       "rowboat-services.cjs",
-      "rowboat-preload.js",
       "dashboard/dist/**/*",
       "clawport-manager.js",
       "clawport-preload.js"
@@ -88,6 +87,7 @@
     "dotenv": "^17.3.1",
     "node-fetch": "^3.3.2",
     "playwright": "^1.58.2",
-    "three": "^0.128.0"
+    "three": "^0.128.0",
+    "ws": "^8.20.0"
   }
 }
