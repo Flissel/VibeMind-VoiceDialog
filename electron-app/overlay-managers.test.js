@@ -405,3 +405,102 @@ test('Rowboat: Statusmeldung „unavailable“ ohne Verbindung, „ready“ mit 
   h2.views[0].handlers.get('did-finish-load')();
   assert.deepEqual(sent2.at(-1), ['python-message', { type: 'rowboat_view_status', status: 'ready' }]);
 });
+
+function openUrlHarness(connected, onNavigate, now) {
+  const h = withIpc(harness());
+  const client = rowboatClient(connected);
+  client.invokeChannels = connected ? ['app:consumePendingDeepLink'] : [];
+  client.invoke = async (ch) => ({ forwarded: ch });
+  const r = rowboat(h, client, { onNavigate, ...(now ? { now } : {}) });
+  return { h, client, r };
+}
+
+test('Rowboat: app:openUrl bei nicht geladener Ansicht ruft onNavigate und liefert die URL einmal lokal', async () => {
+  let navs = 0;
+  const { h, client, r } = openUrlHarness(false, () => { navs += 1; });
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=a' });
+  assert.equal(navs, 1);
+  assert.equal(r.consumePendingUrl(), 'rowboat://open?path=a');
+  assert.equal(r.consumePendingUrl(), null);
+  r.show();
+  await r.overlayReady;
+  assert.equal(h.views.length, 1);
+});
+
+test('Rowboat: pendingUrl wird nach dem Verbinden ueber app:consumePendingDeepLink einmal lokal beantwortet', async () => {
+  const { h, client, r } = openUrlHarness(false, () => {});
+  r.show();
+  await r.overlayReady;
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=b' });
+  Object.assign(client, { connected: true, reason: '', info: { port: 1, token: 't', pid: 1, preloadPath: 'C:/rb/preload.js' }, invokeChannels: ['app:consumePendingDeepLink'] });
+  client.emit('connected', { invokeChannels: client.invokeChannels, preloadPath: 'C:/rb/preload.js' });
+  await r.overlayReady;
+  const handler = h.views.at(-1).ipcHandlers.get('app:consumePendingDeepLink');
+  assert.deepEqual(await handler({}, null), { url: 'rowboat://open?path=b' });
+  assert.deepEqual(await handler({}, null), { forwarded: 'app:consumePendingDeepLink' });
+});
+
+test('Rowboat: app:openUrl bei geladener Ansicht ruft onNavigate, merkt nichts, Push geht an die Ansicht', async () => {
+  let navs = 0;
+  const { h, client, r } = openUrlHarness(true, () => { navs += 1; });
+  r.show();
+  await r.overlayReady;
+  h.views[0].handlers.get('did-finish-load')();
+  const sent = [];
+  h.views[0].webContents.send = (ch, p) => sent.push([ch, p]);
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=c' });
+  assert.equal(navs, 1);
+  assert.equal(r.consumePendingUrl(), null);
+  assert.deepEqual(sent, [['app:openUrl', { url: 'rowboat://open?path=c' }]]);
+});
+
+test('Rowboat: andere Push-Kanaele und Push ohne url loesen onNavigate nicht aus', () => {
+  let navs = 0;
+  const { client, r } = openUrlHarness(false, () => { navs += 1; });
+  client.emit('push', 'runs:events', { url: 'rowboat://open?x' });
+  client.emit('push', 'app:openUrl', {});
+  client.emit('push', 'app:openUrl', undefined);
+  assert.equal(navs, 0);
+  assert.equal(r.consumePendingUrl(), null);
+});
+
+test('Rowboat: gemerkte URL verfaellt nach 30 s (Fake-Uhr), danach wird weitergereicht', async () => {
+  let t = 1000;
+  const { h, client, r } = openUrlHarness(false, () => {}, () => t);
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=old' });
+  t += 30001;
+  assert.equal(r.consumePendingUrl(), null);
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=fresh' });
+  t += 30000;
+  assert.equal(r.consumePendingUrl(), 'rowboat://open?path=fresh');
+  void h;
+});
+
+test('Rowboat: disconnected loescht die gemerkte URL', () => {
+  const { client, r } = openUrlHarness(false, () => {});
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=d' });
+  client.emit('disconnected', 'weg');
+  assert.equal(r.consumePendingUrl(), null);
+});
+
+test('Rowboat: Push waehrend des Ladens (angeschlossen, did-finish-load fehlt) wird gemerkt und einmal geliefert', async () => {
+  const { h, client, r } = openUrlHarness(true, () => {});
+  r.show();
+  await r.overlayReady;
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=e' });
+  assert.equal(r.consumePendingUrl(), 'rowboat://open?path=e');
+  assert.equal(r.consumePendingUrl(), null);
+  void h;
+});
+
+test('Rowboat: Neuaufbau beim Verbinden behaelt eine frische gemerkte URL', async () => {
+  const { h, client, r } = openUrlHarness(false, () => {});
+  r.show();
+  await r.overlayReady;
+  client.emit('push', 'app:openUrl', { url: 'rowboat://open?path=f' });
+  Object.assign(client, { connected: true, reason: '', info: { port: 1, token: 't', pid: 1, preloadPath: 'C:/rb/preload.js' }, invokeChannels: ['app:consumePendingDeepLink'] });
+  client.emit('connected', { invokeChannels: client.invokeChannels, preloadPath: 'C:/rb/preload.js' });
+  await r.overlayReady;
+  assert.equal(h.views.length, 2);
+  assert.equal(r.consumePendingUrl(), 'rowboat://open?path=f');
+});

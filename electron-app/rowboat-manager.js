@@ -9,6 +9,7 @@ const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-sta
 const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
 
 const APP_URL = 'app://-/index.html';
+const PENDING_URL_TTL_MS = 30000;
 const _RB_C = '\x1b[94m', _RST = '\x1b[0m'; // Blue (Rowboat)
 function _rbLog(...args) { process.stdout.write(`${_RB_C}[RowboatManager] ${args.join(' ')}${_RST}\n`); }
 
@@ -20,6 +21,10 @@ class RowboatManager {
     this.shell = shell;
     this.dialog = dialog;
     this.client = dependencies.client;
+    this._onNavigate = dependencies.onNavigate || null;
+    this._pendingUrl = null; // { url, at }
+    this._now = dependencies.now || Date.now;
+    this._pageLoaded = false;
     this._overlayDeps = dependencies.overlayDeps || {};
     this.mainWindow = mainWindow;
     this.rowboatView = null;
@@ -34,7 +39,8 @@ class RowboatManager {
     this.topOffset = 32 + 43;
 
     this.client.on('connected', () => this._onConnected());
-    this.client.on('disconnected', () => { if (this.rowboatView) this._load(); });
+    this.client.on('disconnected', () => { this._pendingUrl = null; if (this.rowboatView) this._load(); });
+    this.client.on('push', (channel, payload) => this._onPush(channel, payload));
 
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
@@ -74,6 +80,7 @@ class RowboatManager {
       view.webContents.insertCSS('.titlebar-drag-region { -webkit-app-region: no-drag !important; }');
     });
     view.webContents.on('did-finish-load', () => {
+      this._pageLoaded = true;
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('python-message', { type: 'rowboat_view_status', ...loadStatus(this.overlayResult) });
       }
@@ -95,10 +102,12 @@ class RowboatManager {
   /** Laedt Rowboat (verbunden + Preload passt) oder die Statuskarte. */
   _load() {
     const view = this.rowboatView;
+    this._pageLoaded = false;
     if (this._detachIpc) { this._detachIpc(); this._detachIpc = null; }
     if (this.client.connected && this._viewPreload) {
       this._detachIpc = attachEmbedIpc(view.webContents, this.client, this.client.invokeChannels, {
         onBrowserPane: () => this._browserPaneNote(),
+        consumePendingUrl: () => this.consumePendingUrl(),
       });
       this.overlayResult = { ok: true, target: APP_URL };
       this.overlayReady = view.webContents.loadURL(APP_URL).then(
@@ -115,6 +124,27 @@ class RowboatManager {
       { space: 'Rowboat', targets: [{ kind: 'unavailable', reason, target: 'Rowboat-Einbettung' }] },
       { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
     return this.overlayReady;
+  }
+
+  /**
+   * Rowboat-Navigation (rowboat://open?...) kommt als Push app:openUrl. Ist die Ansicht geladen, hoert sie
+   * den Push selbst (attachEmbedIpc); sonst merken wir die URL, bis die Oberflaeche sie abholt.
+   */
+  _onPush(channel, payload) {
+    if (channel !== 'app:openUrl') return;
+    const url = payload && typeof payload.url === 'string' ? payload.url : null;
+    if (!url) return;
+    if (!(this._detachIpc && this._pageLoaded)) this._pendingUrl = { url, at: this._now() };
+    if (this._onNavigate) {
+      try { this._onNavigate(url); } catch (err) { _rbLog(`onNavigate fehlgeschlagen – ${err.message}`); }
+    }
+  }
+
+  /** Gibt die gemerkte Navigations-URL genau einmal zurueck, nur wenn juenger als 30 s. */
+  consumePendingUrl() {
+    const pending = this._pendingUrl;
+    this._pendingUrl = null;
+    return pending && this._now() - pending.at <= PENDING_URL_TTL_MS ? pending.url : null;
   }
 
   _onConnected() {
@@ -203,6 +233,7 @@ class RowboatManager {
   }
 
   destroy() {
+    this._pendingUrl = null;
     this._disposeView();
     this.isVisible = false;
   }

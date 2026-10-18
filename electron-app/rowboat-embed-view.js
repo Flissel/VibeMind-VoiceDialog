@@ -14,9 +14,14 @@ const APP_SCHEME_PRIVILEGES = {
 };
 const BROWSER_PANE_NOTE = 'Der Browser-Bereich laeuft nur im Rowboat-Fenster.';
 
-function attachEmbedIpc(webContents, client, channels, { onBrowserPane } = {}) {
+function attachEmbedIpc(webContents, client, channels, { onBrowserPane, consumePendingUrl } = {}) {
   for (const channel of channels) {
     webContents.ipc.handle(channel, (_event, args) => {
+      if (channel === 'app:consumePendingDeepLink' && consumePendingUrl) {
+        // Link, der ankam, bevor die Ansicht Rowboats Push hoeren konnte: voice antwortet selbst, einmalig.
+        const url = consumePendingUrl();
+        if (url) return { url };
+      }
       if (channel === 'browser:setVisible' && args && args.visible === true && onBrowserPane) onBrowserPane();
       return client.invoke(channel, args);
     });
@@ -66,7 +71,16 @@ function registerAppProtocol(session, client, fetchImpl) {
   session.protocol.handle('app', (request) => proxyAppRequest(request, client, fetchImpl));
 }
 
+// rowboat_open (app:openUrl) soll das Fenster wirklich nach vorn holen: minimiert -> restore, dann show + focus.
+function focusWindow(win) {
+  if (!win || (typeof win.isDestroyed === 'function' && win.isDestroyed())) return false;
+  if (typeof win.isMinimized === 'function' && win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return true;
+}
+
 module.exports = {
   APP_PARTITION, APP_SCHEME_PRIVILEGES, BROWSER_PANE_NOTE, EMBED_ALLOWED_PERMISSIONS,
-  attachEmbedIpc, configureEmbedSession, proxyAppRequest, registerAppProtocol,
+  attachEmbedIpc, configureEmbedSession, focusWindow, proxyAppRequest, registerAppProtocol,
 };

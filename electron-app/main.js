@@ -20,7 +20,7 @@ const {
     isAllowedLauraIpcEvent,
     resolveLauraRendererPath,
 } = require('./laura-embed-config');
-const { APP_PARTITION: ROWBOAT_PARTITION, APP_SCHEME_PRIVILEGES: ROWBOAT_APP_SCHEME, registerAppProtocol: registerRowboatAppProtocol } = require('./rowboat-embed-view');
+const { APP_PARTITION: ROWBOAT_PARTITION, APP_SCHEME_PRIVILEGES: ROWBOAT_APP_SCHEME, registerAppProtocol: registerRowboatAppProtocol, focusWindow: focusRowboatWindow } = require('./rowboat-embed-view');
 const { RowboatEmbedClient } = require('./rowboat-embed-client');
 
 protocol.registerSchemesAsPrivileged([
@@ -756,6 +756,35 @@ function handleAgentTransfer(message) {
         // Also notify Python backend
         sendToPython({ type: 'navigate_to_space', space: targetSpace });
     }
+}
+
+function showRowboatExclusive() {
+    if (!rowboatManager) return;
+    // Mutual exclusion: hide all other BrowserViews when showing rowboat
+    if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+    if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+    if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+    if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+    if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+    if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+    if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
+    rowboatManager.show();
+    console.log('[Main] Rowboat shown');
+}
+
+/**
+ * Rowboat-Navigation (app:openUrl): Roarboot-Space nach vorn. Wechselt der Space, loest space_changed im
+ * Renderer navigateToSpace aus, dessen Ankunft show-rowboat sendet. Ist voice schon im Roarboot-Space
+ * (kein space_changed), zeigen wir die Ansicht direkt. Danach das Fenster selbst nach vorn
+ * (minimiert -> restore, show, focus).
+ */
+function bringRowboatToFront() {
+    if (currentSpace === 'roarboot') {
+        if (rowboatManager && !rowboatManager.getIsVisible()) showRowboatExclusive();
+    } else {
+        handleSpaceNavigation({ target_space: 'roarboot' });
+    }
+    focusRowboatWindow(mainWindow);
 }
 
 function handleSpaceNavigation(message) {
@@ -1812,20 +1841,7 @@ function setupIpcHandlers() {
     // ROWBOAT (ROARBOOT SPACE) VIEW CONTROL
     // ========================================
 
-    ipcMain.on('show-rowboat', () => {
-        if (rowboatManager) {
-            // Mutual exclusion: hide all other BrowserViews when showing rowboat
-            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
-            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
-            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
-            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
-            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
-            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
-            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
-            rowboatManager.show();
-            console.log('[Main] Rowboat shown');
-        }
-    });
+    ipcMain.on('show-rowboat', () => showRowboatExclusive());
 
     ipcMain.on('hide-rowboat', () => {
         if (rowboatManager) {
@@ -2940,7 +2956,7 @@ app.whenReady().then(async () => {
         rowboatEmbedClient = new RowboatEmbedClient({ logger: console });
         registerRowboatAppProtocol(session.fromPartition(ROWBOAT_PARTITION), rowboatEmbedClient);
         rowboatEmbedClient.start();
-        rowboatManager = new RowboatManager(mainWindow, { client: rowboatEmbedClient });
+        rowboatManager = new RowboatManager(mainWindow, { client: rowboatEmbedClient, onNavigate: () => bringRowboatToFront() });
     });
     await startupPolicy.runExternalStartup('SWE Design manager', async () => {
         sweDesignManager = new SweDesignManager(mainWindow);

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
 
-const { APP_PARTITION, APP_SCHEME_PRIVILEGES, EMBED_ALLOWED_PERMISSIONS, attachEmbedIpc, configureEmbedSession, proxyAppRequest, registerAppProtocol } = require('./rowboat-embed-view');
+const { APP_PARTITION, APP_SCHEME_PRIVILEGES, EMBED_ALLOWED_PERMISSIONS, attachEmbedIpc, configureEmbedSession, focusWindow, proxyAppRequest, registerAppProtocol } = require('./rowboat-embed-view');
 
 function fakeWebContents() {
   const handlers = new Map();
@@ -151,4 +151,51 @@ test('app://-Proxy leitet den Abbruch des Renderers (request.signal) an den Upst
   assert.equal(init.signal.aborted, false);
   controller.abort();
   assert.equal(init.signal.aborted, true);
+});
+
+test('app:consumePendingDeepLink: liefert consumePendingUrl lokal, sonst wird weitergereicht', async () => {
+  const wc = fakeWebContents();
+  const client = fakeClient();
+  const queue = ['rowboat://open?x=1'];
+  attachEmbedIpc(wc, client, ['app:consumePendingDeepLink'], { consumePendingUrl: () => queue.shift() || null });
+  assert.deepEqual(await wc.handlers.get('app:consumePendingDeepLink')({}, null), { url: 'rowboat://open?x=1' });
+  assert.deepEqual(client.calls, []);
+  assert.deepEqual(await wc.handlers.get('app:consumePendingDeepLink')({}, null), { ok: true, ch: 'app:consumePendingDeepLink' });
+  assert.equal(client.calls.length, 1);
+});
+
+function fakeWindow({ minimized = false, destroyed = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    isDestroyed: () => destroyed,
+    isMinimized: () => minimized,
+    restore() { calls.push('restore'); },
+    show() { calls.push('show'); },
+    focus() { calls.push('focus'); },
+  };
+}
+
+test('focusWindow: minimiertes Fenster erst restore, dann show und focus', () => {
+  const win = fakeWindow({ minimized: true });
+  assert.equal(focusWindow(win), true);
+  assert.deepEqual(win.calls, ['restore', 'show', 'focus']);
+});
+
+test('focusWindow: sichtbares Fenster nur show und focus; fehlendes/zerstoertes nichts', () => {
+  const win = fakeWindow();
+  focusWindow(win);
+  assert.deepEqual(win.calls, ['show', 'focus']);
+  const dead = fakeWindow({ destroyed: true });
+  assert.equal(focusWindow(dead), false);
+  assert.deepEqual(dead.calls, []);
+  assert.equal(focusWindow(null), false);
+});
+
+test('bringRowboatToFront holt nach dem Space-Wechsel das Hauptfenster nach vorn', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, 'main.js'), 'utf8');
+  const body = src.slice(src.indexOf('function bringRowboatToFront()'), src.indexOf('function handleSpaceNavigation('));
+  assert.match(body, /handleSpaceNavigation\(\{ target_space: 'roarboot' \}\)/);
+  assert.match(body, /focusRowboatWindow\(mainWindow\);\s*\}\s*$/);
+  assert.match(src, /focusWindow: focusRowboatWindow \} = require\('\.\/rowboat-embed-view'\)/);
 });
