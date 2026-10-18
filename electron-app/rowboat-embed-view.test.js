@@ -152,3 +152,14 @@ test('app://-Proxy leitet den Abbruch des Renderers (request.signal) an den Upst
   controller.abort();
   assert.equal(init.signal.aborted, true);
 });
+
+test('app:consumePendingDeepLink: liefert consumePendingUrl lokal, sonst wird weitergereicht', async () => {
+  const wc = fakeWebContents();
+  const client = fakeClient();
+  const queue = ['rowboat://open?x=1'];
+  attachEmbedIpc(wc, client, ['app:consumePendingDeepLink'], { consumePendingUrl: () => queue.shift() || null });
+  assert.deepEqual(await wc.handlers.get('app:consumePendingDeepLink')({}, null), { url: 'rowboat://open?x=1' });
+  assert.deepEqual(client.calls, []);
+  assert.deepEqual(await wc.handlers.get('app:consumePendingDeepLink')({}, null), { ok: true, ch: 'app:consumePendingDeepLink' });
+  assert.equal(client.calls.length, 1);
+});

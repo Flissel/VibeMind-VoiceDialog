@@ -20,6 +20,8 @@ class RowboatManager {
     this.shell = shell;
     this.dialog = dialog;
     this.client = dependencies.client;
+    this._onNavigate = dependencies.onNavigate || null;
+    this._pendingUrl = null;
     this._overlayDeps = dependencies.overlayDeps || {};
     this.mainWindow = mainWindow;
     this.rowboatView = null;
@@ -35,6 +37,7 @@ class RowboatManager {
 
     this.client.on('connected', () => this._onConnected());
     this.client.on('disconnected', () => { if (this.rowboatView) this._load(); });
+    this.client.on('push', (channel, payload) => this._onPush(channel, payload));
 
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
@@ -99,6 +102,7 @@ class RowboatManager {
     if (this.client.connected && this._viewPreload) {
       this._detachIpc = attachEmbedIpc(view.webContents, this.client, this.client.invokeChannels, {
         onBrowserPane: () => this._browserPaneNote(),
+        consumePendingUrl: () => this.consumePendingUrl(),
       });
       this.overlayResult = { ok: true, target: APP_URL };
       this.overlayReady = view.webContents.loadURL(APP_URL).then(
@@ -115,6 +119,27 @@ class RowboatManager {
       { space: 'Rowboat', targets: [{ kind: 'unavailable', reason, target: 'Rowboat-Einbettung' }] },
       { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
     return this.overlayReady;
+  }
+
+  /**
+   * Rowboat-Navigation (rowboat://open?...) kommt als Push app:openUrl. Ist die Ansicht geladen, hoert sie
+   * den Push selbst (attachEmbedIpc); sonst merken wir die URL, bis die Oberflaeche sie abholt.
+   */
+  _onPush(channel, payload) {
+    if (channel !== 'app:openUrl') return;
+    const url = payload && typeof payload.url === 'string' ? payload.url : null;
+    if (!url) return;
+    if (!this._detachIpc) this._pendingUrl = url;
+    if (this._onNavigate) {
+      try { this._onNavigate(url); } catch (err) { _rbLog(`onNavigate fehlgeschlagen – ${err.message}`); }
+    }
+  }
+
+  /** Gibt die gemerkte Navigations-URL genau einmal zurueck. */
+  consumePendingUrl() {
+    const url = this._pendingUrl;
+    this._pendingUrl = null;
+    return url;
   }
 
   _onConnected() {

@@ -758,6 +758,33 @@ function handleAgentTransfer(message) {
     }
 }
 
+function showRowboatExclusive() {
+    if (!rowboatManager) return;
+    // Mutual exclusion: hide all other BrowserViews when showing rowboat
+    if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
+    if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
+    if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
+    if (brainManager && brainManager.getIsVisible()) brainManager.hide();
+    if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
+    if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
+    if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
+    rowboatManager.show();
+    console.log('[Main] Rowboat shown');
+}
+
+/**
+ * Rowboat-Navigation (app:openUrl): Roarboot-Space nach vorn. Wechselt der Space, loest space_changed im
+ * Renderer navigateToSpace aus, dessen Ankunft show-rowboat sendet. Ist voice schon im Roarboot-Space
+ * (kein space_changed), zeigen wir die Ansicht direkt.
+ */
+function bringRowboatToFront() {
+    if (currentSpace === 'roarboot') {
+        if (rowboatManager && !rowboatManager.getIsVisible()) showRowboatExclusive();
+        return;
+    }
+    handleSpaceNavigation({ target_space: 'roarboot' });
+}
+
 function handleSpaceNavigation(message) {
     /**
      * Handle space navigation from Python (voice command).
@@ -1812,20 +1839,7 @@ function setupIpcHandlers() {
     // ROWBOAT (ROARBOOT SPACE) VIEW CONTROL
     // ========================================
 
-    ipcMain.on('show-rowboat', () => {
-        if (rowboatManager) {
-            // Mutual exclusion: hide all other BrowserViews when showing rowboat
-            if (dashboardManager && dashboardManager.getIsVisible()) dashboardManager.hide();
-            if (sweDesignManager && sweDesignManager.getIsVisible()) sweDesignManager.hide();
-            if (clawportManager && clawportManager.getIsVisible()) clawportManager.hide();
-            if (brainManager && brainManager.getIsVisible()) brainManager.hide();
-            if (agentfarmManager && agentfarmManager.getIsVisible()) agentfarmManager.hide();
-            if (mirofishManager && mirofishManager.getIsVisible()) mirofishManager.hide();
-            if (flowzenManager && flowzenManager.getIsVisible()) flowzenManager.hide();
-            rowboatManager.show();
-            console.log('[Main] Rowboat shown');
-        }
-    });
+    ipcMain.on('show-rowboat', () => showRowboatExclusive());
 
     ipcMain.on('hide-rowboat', () => {
         if (rowboatManager) {
@@ -2940,7 +2954,7 @@ app.whenReady().then(async () => {
         rowboatEmbedClient = new RowboatEmbedClient({ logger: console });
         registerRowboatAppProtocol(session.fromPartition(ROWBOAT_PARTITION), rowboatEmbedClient);
         rowboatEmbedClient.start();
-        rowboatManager = new RowboatManager(mainWindow, { client: rowboatEmbedClient });
+        rowboatManager = new RowboatManager(mainWindow, { client: rowboatEmbedClient, onNavigate: () => bringRowboatToFront() });
     });
     await startupPolicy.runExternalStartup('SWE Design manager', async () => {
         sweDesignManager = new SweDesignManager(mainWindow);

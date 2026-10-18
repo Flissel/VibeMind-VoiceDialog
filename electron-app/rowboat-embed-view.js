@@ -14,9 +14,14 @@ const APP_SCHEME_PRIVILEGES = {
 };
 const BROWSER_PANE_NOTE = 'Der Browser-Bereich laeuft nur im Rowboat-Fenster.';
 
-function attachEmbedIpc(webContents, client, channels, { onBrowserPane } = {}) {
+function attachEmbedIpc(webContents, client, channels, { onBrowserPane, consumePendingUrl } = {}) {
   for (const channel of channels) {
     webContents.ipc.handle(channel, (_event, args) => {
+      if (channel === 'app:consumePendingDeepLink' && consumePendingUrl) {
+        // Link, der ankam, bevor die Ansicht Rowboats Push hoeren konnte: voice antwortet selbst, einmalig.
+        const url = consumePendingUrl();
+        if (url) return { url };
+      }
       if (channel === 'browser:setVisible' && args && args.visible === true && onBrowserPane) onBrowserPane();
       return client.invoke(channel, args);
     });
