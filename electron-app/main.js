@@ -20,7 +20,7 @@ const {
     isAllowedLauraIpcEvent,
     resolveLauraRendererPath,
 } = require('./laura-embed-config');
-const { APP_PARTITION: ROWBOAT_PARTITION, APP_SCHEME_PRIVILEGES: ROWBOAT_APP_SCHEME, registerAppProtocol: registerRowboatAppProtocol } = require('./rowboat-embed-view');
+const { APP_PARTITION: ROWBOAT_PARTITION, APP_SCHEME_PRIVILEGES: ROWBOAT_APP_SCHEME, registerAppProtocol: registerRowboatAppProtocol, focusWindow: focusRowboatWindow } = require('./rowboat-embed-view');
 const { RowboatEmbedClient } = require('./rowboat-embed-client');
 
 protocol.registerSchemesAsPrivileged([
@@ -775,14 +775,16 @@ function showRowboatExclusive() {
 /**
  * Rowboat-Navigation (app:openUrl): Roarboot-Space nach vorn. Wechselt der Space, loest space_changed im
  * Renderer navigateToSpace aus, dessen Ankunft show-rowboat sendet. Ist voice schon im Roarboot-Space
- * (kein space_changed), zeigen wir die Ansicht direkt.
+ * (kein space_changed), zeigen wir die Ansicht direkt. Danach das Fenster selbst nach vorn
+ * (minimiert -> restore, show, focus).
  */
 function bringRowboatToFront() {
     if (currentSpace === 'roarboot') {
         if (rowboatManager && !rowboatManager.getIsVisible()) showRowboatExclusive();
-        return;
+    } else {
+        handleSpaceNavigation({ target_space: 'roarboot' });
     }
-    handleSpaceNavigation({ target_space: 'roarboot' });
+    focusRowboatWindow(mainWindow);
 }
 
 function handleSpaceNavigation(message) {

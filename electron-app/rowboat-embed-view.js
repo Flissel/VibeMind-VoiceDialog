@@ -71,7 +71,16 @@ function registerAppProtocol(session, client, fetchImpl) {
   session.protocol.handle('app', (request) => proxyAppRequest(request, client, fetchImpl));
 }
 
+// rowboat_open (app:openUrl) soll das Fenster wirklich nach vorn holen: minimiert -> restore, dann show + focus.
+function focusWindow(win) {
+  if (!win || (typeof win.isDestroyed === 'function' && win.isDestroyed())) return false;
+  if (typeof win.isMinimized === 'function' && win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return true;
+}
+
 module.exports = {
   APP_PARTITION, APP_SCHEME_PRIVILEGES, BROWSER_PANE_NOTE, EMBED_ALLOWED_PERMISSIONS,
-  attachEmbedIpc, configureEmbedSession, proxyAppRequest, registerAppProtocol,
+  attachEmbedIpc, configureEmbedSession, focusWindow, proxyAppRequest, registerAppProtocol,
 };
