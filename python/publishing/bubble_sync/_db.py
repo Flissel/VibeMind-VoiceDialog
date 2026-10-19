@@ -1,14 +1,16 @@
-"""Thin DB access layer for the marketing sync workers.
+"""Thin DB access layer for the bubble-sync workers (originally verbatim from marketing).
 
-We support two ways to reach supabase-db:
-  1) DIRECT: via TCP to localhost — needs a SUPABASE_DB_URL env (Phase 2+,
-     for the sync worker running on the host).
-  2) DOCKER-EXEC: via `docker exec <container> psql ...` — works without
-     direct postgres-port-exposure. Slower (process spawn per query) but
-     zero extra setup.
+Reaching supabase-db, selected at call time:
 
-For renderer testing (Phase 2) we use docker-exec — the sync worker
-(Phase 4+) will prefer a long-lived psycopg connection.
+  A) REMOTE docker-exec over SSH: when SUPABASE_SSH_HOST is set, run
+     `ssh <host> docker exec -i <SUPABASE_DB_CONTAINER> psql ...`. Since 2026-10-19 the mini-PC
+     Supabase (offload-vm, container debian-supabase-db-1) is the only source of truth and the PC no
+     longer runs vibemind_supabase-db; same mechanism as the marketing sync (spaces/marketing/sync/_db.py).
+  B) LOCAL docker-exec: `docker exec` against the local container (SUPABASE_DB_CONTAINER, else the
+     running vibemind_supabase-db). Active when SUPABASE_SSH_HOST is unset.
+
+In both modes the SQL travels on stdin (`-f -`), never on a command line, and psql runs with
+ON_ERROR_STOP so a failing statement raises instead of returning an empty result.
 
 Both expose the same `query(sql, params) -> list[dict]` interface.
 """
@@ -21,7 +23,14 @@ from typing import Any
 
 
 def find_supabase_container() -> str:
-    """Locate the running supabase-db container ID."""
+    """Name/ID of the supabase-db container to exec into (see module docstring for the modes)."""
+    name = os.environ.get("SUPABASE_DB_CONTAINER", "").strip()
+    if os.environ.get("SUPABASE_SSH_HOST", "").strip():
+        if not name:
+            raise RuntimeError("SUPABASE_SSH_HOST is set but SUPABASE_DB_CONTAINER is missing")
+        return name
+    if name:
+        return name
     res = subprocess.run(
         ["docker", "ps", "-qf", "name=vibemind_supabase-db"],
         capture_output=True, text=True, encoding="utf-8", check=True,
@@ -30,6 +39,19 @@ def find_supabase_container() -> str:
     if not cid:
         raise RuntimeError("vibemind_supabase-db container not running")
     return cid
+
+
+def _run_psql(sql: str, container: str) -> subprocess.CompletedProcess:
+    """Run SQL through psql in the container, locally or over SSH; SQL goes on stdin."""
+    inner = ["docker", "exec", "-i", container, "psql", "-U", "supabase_admin", "-d", "postgres",
+             "-v", "ON_ERROR_STOP=1", "-tA", "-f", "-"]
+    host = os.environ.get("SUPABASE_SSH_HOST", "").strip()
+    # The fixed tokens contain no spaces, so joining them for the remote shell needs no quoting.
+    argv = ["ssh", "-o", "BatchMode=yes", host, " ".join(inner)] if host else inner
+    # encoding="utf-8" is REQUIRED: psql emits UTF-8, but text=True defaults to the Windows locale
+    # codepage (cp1252) here -> mojibake (geprüft -> geprÃ¼ft) in non-ASCII content.
+    return subprocess.run(argv, input=sql, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", check=False)
 
 
 def query_via_docker(sql: str, params: dict | None = None, container: str | None = None) -> list[dict]:
@@ -73,12 +95,7 @@ def query_via_docker(sql: str, params: dict | None = None, container: str | None
     json_sql = (
         f"SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) AS rows FROM ({full}) t"
     )
-    cmd = ["docker", "exec", container, "psql", "-U", "supabase_admin", "-d", "postgres",
-           "-tAc", json_sql]
-    # encoding="utf-8" is REQUIRED: psql emits UTF-8, but text=True defaults to the
-    # Windows locale codepage (cp1252) here → double-decode mojibake (geprüft→geprÃ¼ft)
-    # in any non-ASCII content_json / description. (Verified: locale=cp1252.)
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=False)
+    res = _run_psql(json_sql, container)
     if res.returncode != 0:
         raise RuntimeError(f"psql failed: {res.stderr.strip()[:500]}")
     out = res.stdout.strip()
@@ -93,13 +110,10 @@ def query_one(sql: str, params: dict | None = None, container: str | None = None
 
 
 def execute_via_docker(sql: str, container: str | None = None) -> str:
-    """Run a write/DDL statement via docker-exec, return stdout."""
+    """Run a write/DDL statement, return stdout."""
     if container is None:
         container = find_supabase_container()
-    res = subprocess.run(
-        ["docker", "exec", container, "psql", "-U", "supabase_admin", "-d", "postgres", "-tAc", sql],
-        capture_output=True, text=True, encoding="utf-8", check=False,
-    )
+    res = _run_psql(sql, container)
     if res.returncode != 0:
         raise RuntimeError(f"psql exec failed: {res.stderr.strip()[:500]}")
     return res.stdout
