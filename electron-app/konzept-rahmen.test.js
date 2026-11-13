@@ -27,6 +27,26 @@ test('eingesperrte Rahmen (R43): alles unter app://workspace/knowledge/, im Zwei
   }
 });
 
+test('PDFs unter knowledge/ bleiben frei (R49), Umgehungen ueber den Namen nicht', () => {
+  for (const p of ['knowledge/a.pdf', 'knowledge/K/Bericht.PDF', 'knowledge/a.pdf?v=2', 'knowledge/a.pdf#page=3',
+    'knowledge/a%2Epdf', 'knowledge/a.pdf.', 'Knowledge/x%20y.pdf', 'knowledge%2Fa.pdf']) {
+    assert.equal(istEingesperrterRahmen(`app://workspace/${p}`), false, p);
+    assert.equal(rahmenNavigation(`app://workspace/${p}`), 'allow', p);
+  }
+  for (const p of ['knowledge/a.pdf/x.html', 'knowledge/a.pdf.html', 'knowledge/a.pdf%3Fx.html', 'knowledge/a.pdf/..',
+    'knowledge/a.pdf%2F..', 'knowledge/a%2Epdf%00', 'knowledge/%ZZ.pdf', 'knowledge/a.pdfx']) {
+    assert.equal(istEingesperrterRahmen(`app://workspace/${p}`), true, p);
+  }
+  assert.equal(rahmenNavigation('app://workspace/knowledge/a.pdf', true), 'block', 'laut Zustand eingesperrt');
+  const pdf = 'app://workspace/knowledge/a.pdf';
+  assert.equal(anfrageEntscheidung({
+    url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html', resourceType: 'subFrame', rahmenId: 7,
+    rahmenUrl: pdf, vorfahrenIds: [1], imBaum: true, ketteUnterWissen: istEingesperrterRahmen(pdf),
+    confined: new Set(), kuerzlich: new Map(), jetzt: 1000,
+  }), false);
+  assert.equal(eingesperrtNachNavigation(pdf, false), false);
+});
+
 test('eingesperrtNachNavigation: knowledge/ oder Kind eines eingesperrten Rahmens', () => {
   assert.equal(eingesperrtNachNavigation(K, false), true);
   assert.equal(eingesperrtNachNavigation('app://workspace/knowledge/seite', false), true);
@@ -90,6 +110,10 @@ test('anfrageEntscheidung (R44-R47): jeder Zweig, der Verweiser zaehlt nie', () 
   }
   assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'about:blank' }), true, 'selbst nach about:blank');
   assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'https://example.com/x', url: 'https://example.com/y' }), true);
+  // R48: "eigenes Dokument" nur fuer eine Adresse unter knowledge/
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'https://x/', url: 'https://x/?d=1' }), true);
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'https://x/', url: 'https://x/' }), true);
+  assert.equal(anfrageEntscheidung({ ...basis, rahmenUrl: `${K}?v=3`, url: `${K}?v=4` }), false);
   assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenId: 8, rahmenUrl: 'about:srcdoc', vorfahrenIds: [7, 1], url: 'app://-/x.js' }), true);
   assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, ...kuerzlich, jetzt: 1000 + NACHFRIST_MS }), true);
   const app = { ...basis, ketteUnterWissen: false, rahmenId: 1, rahmenUrl: 'app://-/index.html', vorfahrenIds: [] };

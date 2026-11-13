@@ -35,10 +35,14 @@ function istEingesperrterRahmen(url) {
   } catch {
     return true;
   }
-  return [roh, dekodiert].some((pfad) => {
-    const segs = segmente(pfad);
-    return segs.includes('..') || (segs.length >= 1 && segName(segs[0]) === 'knowledge');
-  });
+  const formen = [segmente(roh), segmente(dekodiert)];
+  if (formen.some((segs) => segs.includes('..'))) return true;
+  if (!formen.some((segs) => segs.length >= 1 && segName(segs[0]) === 'knowledge')) return false;
+  // R49: PDFs zeigt Chromiums eingebauter Betrachter (chrome-extension:) im Rahmen; sie bleiben wie vorher.
+  // Der dekodierte letzte Name entscheidet. Rowboat liefert x.pdf nach Namen als application/pdf aus; kaeme sie
+  // je als text/html, bekaeme sie Rowboats Regel (CSP mit sandbox).
+  const letzte = formen[1][formen[1].length - 1];
+  return !(formen[1].length >= 2 && segName(letzte).endsWith('.pdf'));
 }
 
 /**
@@ -128,7 +132,9 @@ function anfrageEntscheidung({ url, resourceType, rahmenId, rahmenUrl, vorfahren
   if (s !== null && DOKUMENT_SCHEMATA.has(s)) return false;
   const kette = rahmenId === null ? [] : [rahmenId, ...vorfahrenIds];
   if (ketteUnterWissen || ketteEingesperrt(kette, confined, kuerzlich, jetzt)) {
-    return !(rahmenUrl !== null && rahmenUrl !== undefined && ohneQueryUndFragment(url) === ohneQueryUndFragment(rahmenUrl));
+    // R48: "eigenes Dokument" nur fuer eine Rahmen-Adresse unter app://workspace/knowledge/, nie fuer eine Netz-Adresse
+    if (istEingesperrterRahmen(rahmenUrl) && ohneQueryUndFragment(url) === ohneQueryUndFragment(rahmenUrl)) return false;
+    return true;
   }
   if (rahmenId !== null && imBaum) return false;
   if (s !== null && UNBEKANNT_FREI.has(s)) return false;
