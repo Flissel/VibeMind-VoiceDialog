@@ -2,8 +2,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
-  NACHFRIST_MS, anfrageEntscheidung, eingesperrtNachNavigation, istEingesperrterRahmen, neuerStand, rahmenImBaum,
-  rahmenNavigation, rahmenUebernommen, rahmenVerfolgen, rueckhaltAnmelden,
+  NACHFRIST_MS, anfrageEntscheidung, eingesperrtNachNavigation, istEingesperrterRahmen, ketteEingesperrt, neuerStand,
+  rahmenGesperrt, rahmenImBaum, rahmenNavigation, rahmenUebernommen, rahmenVerfolgen, rueckhaltAnmelden,
 } = require('./konzept-rahmen');
 
 const K = 'app://workspace/knowledge/a.html';
@@ -35,23 +35,21 @@ test('eingesperrtNachNavigation: knowledge/ oder Kind eines eingesperrten Rahmen
   assert.equal(eingesperrtNachNavigation('https://www.youtube.com/embed/x', false), false);
 });
 
-test('Rueckhalt-Zustand (R46): In-Page entlaesst nie, Dokumentwechsel und Abbau entlassen nach kuerzlich, Ablauf', () => {
+test('Rueckhalt-Zustand (R47): eingesperrt auf Lebenszeit, nur der Abbau entlaesst, Ablauf nach 5 s', () => {
   const st = neuerStand();
-  rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url: K, inPage: false, jetzt: 1000 });
+  rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url: K, jetzt: 1000 });
   assert.deepEqual([...st.confined], [7]);
-  rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url: 'https://example.com/#x', inPage: true, jetzt: 1100 });
-  assert.equal(st.confined.has(7), true, 'In-Page entlaesst nie');
-  rahmenUebernommen(st, { rahmenId: 9, elternId: 1, url: `${K}#teil`, inPage: true, jetzt: 1100 });
-  assert.equal(st.confined.has(9), true, 'In-Page unter knowledge/ nimmt auf');
-  rahmenUebernommen(st, { rahmenId: 8, elternId: 7, url: 'about:srcdoc', inPage: false, jetzt: 1150 });
-  assert.equal(st.confined.has(8), true, 'Kind eines eingesperrten Rahmens');
-  rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url: 'https://www.figma.com/embed', inPage: false, jetzt: 1200 });
-  assert.equal(st.confined.has(7), false);
-  assert.equal(st.kuerzlich.get(7), 1200);
-  rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url: K, inPage: false, jetzt: 1300 });
-  assert.equal(st.confined.has(7), true);
-  assert.equal(st.kuerzlich.has(7), false);
-  rahmenImBaum(st, new Set([1, 7]), 2000);
+  for (const url of ['https://example.com/#x', 'about:blank', 'https://www.figma.com/embed', 'app://-/index.html']) {
+    rahmenUebernommen(st, { rahmenId: 7, elternId: 1, url, jetzt: 1100 });
+    assert.equal(st.confined.has(7), true, url);
+  }
+  assert.equal(st.kuerzlich.size, 0);
+  rahmenUebernommen(st, { rahmenId: 9, elternId: 1, url: `${K}#teil`, jetzt: 1100 });
+  rahmenUebernommen(st, { rahmenId: 8, elternId: 7, url: 'about:srcdoc', jetzt: 1150 });
+  assert.equal(st.confined.has(9) && st.confined.has(8), true);
+  rahmenUebernommen(st, { rahmenId: 12, elternId: 1, url: 'https://www.youtube.com/embed/x', jetzt: 1150 });
+  assert.equal(st.confined.has(12), false);
+  rahmenImBaum(st, new Set([1, 7, 12]), 2000);
   assert.deepEqual([...st.confined], [7]);
   assert.equal(st.kuerzlich.get(8), 2000);
   assert.equal(st.kuerzlich.get(9), 2000);
@@ -62,37 +60,57 @@ test('Rueckhalt-Zustand (R46): In-Page entlaesst nie, Dokumentwechsel und Abbau 
   assert.equal(NACHFRIST_MS, 5000);
 });
 
-test('anfrageEntscheidung (R44-R46): jeder Zweig, der Verweiser zaehlt nie', () => {
+test('Navigationssperre nach Zustand (R47): Rahmen oder Vorfahr eingesperrt -> block', () => {
+  const confined = new Set([7]);
+  const kuerzlich = new Map([[9, 1000]]);
+  assert.equal(ketteEingesperrt([7, 1], confined, kuerzlich, 1000), true);
+  assert.equal(ketteEingesperrt([8, 7, 1], confined, kuerzlich, 1000), true);
+  assert.equal(ketteEingesperrt([9, 1], confined, kuerzlich, 1000 + NACHFRIST_MS), true);
+  assert.equal(ketteEingesperrt([9, 1], confined, kuerzlich, 1001 + NACHFRIST_MS), false);
+  assert.equal(ketteEingesperrt([12, 1], confined, kuerzlich, 1000), false);
+  assert.equal(rahmenNavigation('about:blank', true), 'block');
+  assert.equal(rahmenNavigation('https://example.com/', true), 'block');
+  assert.equal(rahmenNavigation('https://www.youtube.com/embed/x', false), 'allow');
+});
+
+test('anfrageEntscheidung (R44-R47): jeder Zweig, der Verweiser zaehlt nie', () => {
   const leer = { confined: new Set(), kuerzlich: new Map() };
   const offen = { confined: new Set([7]), kuerzlich: new Map() };
   const kuerzlich = { confined: new Set(), kuerzlich: new Map([[7, 1000]]) };
   const basis = {
-    url: 'https://example.com/x', resourceType: 'image', rahmenId: 7, vorfahrenIds: [1], imBaum: true,
-    ketteUnterWissen: false, ...offen, jetzt: 1000,
+    url: 'https://example.com/x', resourceType: 'image', rahmenId: 7, rahmenUrl: K, vorfahrenIds: [1], imBaum: true,
+    ketteUnterWissen: true, ...offen, jetzt: 1000,
   };
-  assert.equal(anfrageEntscheidung(basis), true);
-  assert.equal(anfrageEntscheidung({ ...basis, ...kuerzlich, jetzt: 1000 + NACHFRIST_MS }), true);
-  assert.equal(anfrageEntscheidung({ ...basis, ...kuerzlich, jetzt: 1001 + NACHFRIST_MS }), false);
-  assert.equal(anfrageEntscheidung({ ...basis, rahmenId: 8, vorfahrenIds: [7, 1] }), true, 'Vorfahr eingesperrt');
-  assert.equal(anfrageEntscheidung({ ...basis, rahmenId: 8, vorfahrenIds: [7, 1], ...kuerzlich, jetzt: 1500 }), true);
-  assert.equal(anfrageEntscheidung({ ...basis, rahmenId: 1, vorfahrenIds: [] }), false, 'App selbst');
-  assert.equal(anfrageEntscheidung({ ...basis, rahmenId: 12, vorfahrenIds: [1] }), false, 'Einbettung');
-  assert.equal(anfrageEntscheidung({ ...basis, ...leer, rahmenId: 12, ketteUnterWissen: true }), true);
-  assert.equal(anfrageEntscheidung({ ...basis, rahmenId: 1, vorfahrenIds: [], referrer: K, ...leer }), false, 'Verweiser zaehlt nicht');
-  for (const rahmen of [{ rahmenId: null }, { rahmenId: 12, imBaum: false }]) {
+  for (const url of ['data:,x', 'blob:null/1', 'about:blank', K, `${K}#teil`, `${K}?v=2`]) {
+    assert.equal(anfrageEntscheidung({ ...basis, url }), false, url);
+  }
+  for (const url of ['https://example.com/x', 'app://workspace/knowledge/b.html', 'app://workspace/knowledge/b.png',
+    'app://-/index.html', 'devtools://devtools/x', 'chrome-extension://pdf/x.js', 'http://127.0.0.1:8765/', 'kein-schema']) {
+    assert.equal(anfrageEntscheidung({ ...basis, url }), true, url);
+  }
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'about:blank' }), true, 'selbst nach about:blank');
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenUrl: 'https://example.com/x', url: 'https://example.com/y' }), true);
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, rahmenId: 8, rahmenUrl: 'about:srcdoc', vorfahrenIds: [7, 1], url: 'app://-/x.js' }), true);
+  assert.equal(anfrageEntscheidung({ ...basis, ketteUnterWissen: false, ...kuerzlich, jetzt: 1000 + NACHFRIST_MS }), true);
+  const app = { ...basis, ketteUnterWissen: false, rahmenId: 1, rahmenUrl: 'app://-/index.html', vorfahrenIds: [] };
+  for (const url of ['https://api.example.com/v1', 'app://-/x.js', 'chrome-extension://pdf/x.js', 'wss://sync.example/']) {
+    assert.equal(anfrageEntscheidung({ ...app, url }), false, url);
+  }
+  assert.equal(anfrageEntscheidung({ ...app, referrer: K }), false, 'Verweiser zaehlt nicht');
+  assert.equal(anfrageEntscheidung({ ...app, rahmenId: 12, vorfahrenIds: [1], rahmenUrl: 'https://www.youtube.com/embed/x' }), false);
+  assert.equal(anfrageEntscheidung({ ...basis, ...kuerzlich, ketteUnterWissen: false, jetzt: 1001 + NACHFRIST_MS }), false);
+  for (const rahmen of [{ rahmenId: null, rahmenUrl: null, vorfahrenIds: [] }, { rahmenId: 12, rahmenUrl: null, vorfahrenIds: [], imBaum: false }]) {
+    const u = { ...basis, ...rahmen, ketteUnterWissen: false };
     const n = JSON.stringify(rahmen);
-    assert.equal(anfrageEntscheidung({ ...basis, ...rahmen }), true, n);
-    assert.equal(anfrageEntscheidung({ ...basis, ...rahmen, ...kuerzlich, jetzt: 2000 }), true, n);
-    assert.equal(anfrageEntscheidung({ ...basis, ...rahmen, ...kuerzlich, jetzt: 1001 + NACHFRIST_MS }), false, n);
-    assert.equal(anfrageEntscheidung({ ...basis, ...rahmen, ...leer }), false, n);
+    assert.equal(anfrageEntscheidung(u), true, n);
+    assert.equal(anfrageEntscheidung({ ...u, ...kuerzlich, jetzt: 2000 }), true, n);
+    assert.equal(anfrageEntscheidung({ ...u, ...kuerzlich, jetzt: 1001 + NACHFRIST_MS }), false, n);
+    assert.equal(anfrageEntscheidung({ ...u, ...leer }), false, n);
+    for (const url of ['app://-/x.js', 'devtools://devtools/x', 'data:,x']) assert.equal(anfrageEntscheidung({ ...u, url }), false, url);
+    for (const url of ['chrome-extension://pdf/x.js', 'http://localhost:9999/', 'kein-schema']) assert.equal(anfrageEntscheidung({ ...u, url }), true, url);
   }
-  for (const url of ['app://-/x.js', 'app://workspace/knowledge/b.png', 'data:,x', 'blob:null/1', 'about:blank',
-    'devtools://devtools/x', 'chrome-extension://pdf/x.js']) {
-    assert.equal(anfrageEntscheidung({ ...basis, url, ketteUnterWissen: true }), false, url);
-  }
-  assert.equal(anfrageEntscheidung({ ...basis, url: 'kein-schema' }), true);
-  assert.equal(anfrageEntscheidung({ ...basis, resourceType: 'mainFrame', ketteUnterWissen: true }), false);
-  assert.equal(anfrageEntscheidung({ ...basis, resourceType: 'mainFrame', rahmenId: null }), false);
+  assert.equal(anfrageEntscheidung({ ...basis, resourceType: 'mainFrame' }), false);
+  assert.equal(anfrageEntscheidung({ ...basis, resourceType: 'mainFrame', rahmenId: null, ketteUnterWissen: false }), false);
 });
 
 function fakeAnsicht(id) {
@@ -117,7 +135,7 @@ function fakeAnsicht(id) {
   return ansicht;
 }
 
-test('Rueckhalt (R46) verdrahtet: Konzept, Kind, In-Page, Schliessen mit Nachfrist, Zerstoeren', () => {
+test('Rueckhalt (R47) verdrahtet: Konzept, Kind, Selbst-Navigation, Schliessen mit Nachfrist, Zerstoeren', () => {
   let hoerer = null;
   rueckhaltAnmelden({ webRequest: { onBeforeRequest: (fn) => { hoerer = fn; } } });
   const frage = (details) => {
@@ -130,6 +148,7 @@ test('Rueckhalt (R46) verdrahtet: Konzept, Kind, In-Page, Schliessen mit Nachfri
   const { haupt } = ansicht;
   const konzept = { url: 'about:blank', parent: haupt, frameTreeNodeId: 7, processId: 9, routingId: 7 };
   ansicht.rahmen.push(konzept);
+  assert.equal(rahmenGesperrt(ansicht, konzept), false, 'erster Ladevorgang eines neuen Rahmens frei');
   ansicht.navigiert(konzept, K);
   const kind = { url: 'about:blank', parent: konzept, frameTreeNodeId: 8, processId: 9, routingId: 8 };
   ansicht.rahmen.push(kind);
@@ -140,15 +159,24 @@ test('Rueckhalt (R46) verdrahtet: Konzept, Kind, In-Page, Schliessen mit Nachfri
   const w = ansicht;
 
   assert.deepEqual(frage({ url: 'https://example.com/', frame: konzept, resourceType: 'image', webContents: w }), { cancel: true });
+  assert.deepEqual(frage({ url: 'app://workspace/knowledge/b.html', frame: konzept, resourceType: 'xhr', webContents: w }), { cancel: true });
+  assert.deepEqual(frage({ url: `${K}?neu=1`, frame: konzept, resourceType: 'xhr', webContents: w }), {});
   assert.deepEqual(frage({ url: 'https://example.com/', frame: kind, resourceType: 'subFrame', webContents: w }), { cancel: true });
   assert.deepEqual(frage({ url: 'data:image/png;base64,AA', frame: konzept, resourceType: 'image', webContents: w }), {});
   assert.deepEqual(frage({ url: 'https://example.com/', frame: haupt, resourceType: 'xhr', webContents: w }), {}, 'App selbst');
   assert.deepEqual(frage({ url: 'https://www.youtube.com/y.js', frame: youtube, resourceType: 'script', webContents: w }), {});
   assert.deepEqual(frage({ url: 'https://example.com/?r=1', frame: haupt, resourceType: 'xhr', referrer: K, webContents: w }), {});
 
-  // In-Page-Navigation zu einer fremden Adresse entlaesst nicht (Befund 1)
-  ansicht.imSeiteNavigiert(kind, 'https://example.com/');
-  assert.deepEqual(frage({ url: 'https://example.com/', frame: kind, resourceType: 'xhr', webContents: w }), { cancel: true });
+  // Konzept schickt sich selbst weg (about:blank, fremde Seite, In-Page): bleibt eingesperrt, Navigation gesperrt
+  ansicht.navigiert(konzept, 'about:blank');
+  assert.equal(rahmenGesperrt(w, konzept), true);
+  assert.equal(rahmenNavigation(konzept.url, rahmenGesperrt(w, konzept)), 'block');
+  assert.deepEqual(frage({ url: 'https://example.com/', frame: konzept, resourceType: 'image', webContents: w }), { cancel: true });
+  ansicht.navigiert(konzept, 'https://example.com/seite');
+  ansicht.imSeiteNavigiert(konzept, 'https://example.com/seite#x');
+  assert.deepEqual(frage({ url: 'https://example.com/b.js', frame: konzept, resourceType: 'script', webContents: w }), { cancel: true });
+  assert.equal(rahmenGesperrt(w, kind), true, 'Kind ueber den Vorfahren');
+  assert.equal(rahmenGesperrt(w, youtube), false);
 
   // Rahmen verworfen oder ohne Rahmen, Konzept offen -> abbrechen; Hauptrahmen-Laden und app: frei
   const weg = { get frameTreeNodeId() { throw new Error('disposed'); }, url: K, parent: null };
@@ -157,12 +185,15 @@ test('Rueckhalt (R46) verdrahtet: Konzept, Kind, In-Page, Schliessen mit Nachfri
   assert.deepEqual(frage({ url: 'app://-/x.js', resourceType: 'script', webContents: w }), {});
   assert.deepEqual(frage({ url: 'app://-/index.html', frame: weg, resourceType: 'mainFrame', webContents: w }), {});
 
-  // Konzept geschlossen: Rahmen haengt nicht mehr im Baum, liest sich aber noch (Befund 2) -> 5 s weiter abbrechen
+  // Konzept geschlossen (neu laden = neuer Rahmen): alter Knoten nicht mehr im Baum -> 5 s weiter abbrechen
   ansicht.rahmen = [haupt, youtube];
   const abgeloest = { url: 'about:blank', parent: null, frameTreeNodeId: 7 };
   assert.deepEqual(frage({ url: 'http://127.0.0.1:8765/flut', frame: abgeloest, resourceType: 'xhr', webContents: w }), { cancel: true });
   assert.deepEqual(frage({ url: 'http://127.0.0.1:8765/flut', resourceType: 'xhr', webContents: w }), { cancel: true });
   assert.deepEqual(frage({ url: 'https://www.youtube.com/z.js', frame: youtube, resourceType: 'script', webContents: w }), {});
+  const neu = { url: 'about:blank', parent: haupt, frameTreeNodeId: 13, processId: 9, routingId: 13 };
+  ansicht.rahmen.push(neu);
+  assert.equal(rahmenGesperrt(w, neu), false, 'neu eingehaengter Rahmen laedt');
   const echtesJetzt = Date.now;
   try {
     Date.now = () => echtesJetzt() + NACHFRIST_MS + 50;
@@ -171,7 +202,6 @@ test('Rueckhalt (R46) verdrahtet: Konzept, Kind, In-Page, Schliessen mit Nachfri
     Date.now = echtesJetzt;
   }
 
-  // Ansicht zerstoert: Zustand weg; ohne Ansicht keine Renderer-Anfrage
   ansicht.zerstoert();
   assert.deepEqual(frage({ url: 'https://example.com/', resourceType: 'image', webContents: w }), {});
   assert.deepEqual(frage({ url: 'https://example.com/', resourceType: 'image' }), {});

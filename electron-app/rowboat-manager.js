@@ -7,7 +7,7 @@
  */
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
-const { rahmenNavigation, rahmenVerfolgen } = require('./konzept-rahmen');
+const { rahmenGesperrt, rahmenNavigation, rahmenVerfolgen } = require('./konzept-rahmen');
 
 const APP_URL = 'app://-/index.html';
 const PENDING_URL_TTL_MS = 30000;
@@ -81,7 +81,11 @@ class RowboatManager {
     // Andere Rahmen (Einbettungen, Hintergrund-Berichte) bleiben wie bisher.
     view.webContents.on('will-frame-navigate', (event) => {
       if (event.isMainFrame) return;
-      if (rahmenNavigation(event.frame ? event.frame.url : '') === 'block') event.preventDefault();
+      // R47: auch gesperrt, wenn der Rueckhalt-Zustand den Rahmen (oder einen Vorfahren) einsperrt –
+      // ein Konzept, das sich selbst weggeschickt hat, bleibt eingesperrt. Neu laden = neuer Rahmen.
+      let rahmenUrl = '';
+      try { rahmenUrl = event.frame ? event.frame.url : ''; } catch { rahmenUrl = ''; }
+      if (rahmenNavigation(rahmenUrl, rahmenGesperrt(view.webContents, event.frame)) === 'block') event.preventDefault();
     });
     // Eingesperrte Rahmen beim Navigieren festhalten (R45): der Rueckhalt der Sitzung bricht danach auch
     // Anfragen eines Rahmens ab, der gerade abgebaut wird (Konzept geschlossen oder neu geladen).

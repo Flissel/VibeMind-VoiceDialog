@@ -4,7 +4,7 @@
  *
  * Abschrift der reinen Entscheidungen aus dem Rowboat-Fork, apps/x/packages/shared/src/konzept.ts
  * (isKnowledgeFrameUrl, frameNavigationDecision, isConfinedCommit, noteFrameCommit, noteFramesAttached,
- * backstopDecision; Zweig cc/konzept-flaeche, 2026-11-13, Rulings R43-R46) und der Verdrahtung in
+ * isFrameChainConfined, backstopDecision; Zweig cc/konzept-flaeche, 2026-11-13, Rulings R43-R47) und der Verdrahtung in
  * apps/x/apps/main/src/main.ts. Die voice-App kann @x/shared nicht laden: Aenderungen
  * dort hier nachziehen. Anders als Rowboat kennt die voice-App keine "als Wissens-HTML ausgelieferten"
  * Adressen (sie liefert die Dateien nicht selbst aus); dafuer sorgen Rowboats Antwortkoepfe (CSP mit sandbox).
@@ -41,9 +41,12 @@ function istEingesperrterRahmen(url) {
   });
 }
 
-/** frameNavigationDecision: 'block' fuer einen eingesperrten Rahmen, sonst 'allow'. */
-function rahmenNavigation(rahmenUrl) {
-  return istEingesperrterRahmen(rahmenUrl) ? 'block' : 'allow';
+/**
+ * frameNavigationDecision: 'block' fuer einen Rahmen unter knowledge/ oder einen, den der Rueckhalt-Zustand (auch
+ * ueber einen Vorfahren) sperrt (R47, eingesperrtNachStand); sonst 'allow'.
+ */
+function rahmenNavigation(rahmenUrl, eingesperrtNachStand = false) {
+  return eingesperrtNachStand === true || istEingesperrterRahmen(rahmenUrl) ? 'block' : 'allow';
 }
 
 function schema(url) {
@@ -51,13 +54,20 @@ function schema(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
-/** Bleibt im Dokument bzw. in der App, nie im Netz (chrome-extension: = Chromiums PDF-Betrachter). */
-const FREIE_SCHEMATA = new Set(['data', 'blob', 'about', 'app', 'devtools', 'chrome-extension']);
+/** Bleibt im Dokument, nie im Netz: fuer jede Anfrage frei (R47). */
+const DOKUMENT_SCHEMATA = new Set(['data', 'blob', 'about']);
 
-/** Nachfrist nach dem Entlassen eines eingesperrten Rahmens (R46). */
+/** Verkehr der App, frei bei unbekanntem Rahmen trotz offenem Konzept (R47); aus einer eingesperrten Kette nie. */
+const UNBEKANNT_FREI = new Set(['app', 'devtools']);
+
+function ohneQueryUndFragment(url) {
+  return String(url).split(/[?#]/)[0];
+}
+
+/** Nachfrist nach dem Abbau eines eingesperrten Rahmens (R46). */
 const NACHFRIST_MS = 5000;
 
-/** Zustand je Ansicht (R46): confined = eingesperrte Rahmen, kuerzlich = entlassene mit Zeitpunkt (frameTreeNodeId). */
+/** Zustand je Ansicht (R46/R47): confined = eingesperrt auf Lebenszeit, kuerzlich = abgebaut mit Zeitpunkt. */
 function neuerStand() {
   return { confined: new Set(), kuerzlich: new Map() };
 }
@@ -67,12 +77,17 @@ function nochKuerzlich(kuerzlich, id, jetzt) {
   return t !== undefined && jetzt - t <= NACHFRIST_MS; // Uhr zurueckgesprungen: weiter eingesperrt
 }
 
-function entlassen(stand, id, jetzt) {
-  if (stand.confined.delete(id)) stand.kuerzlich.set(id, jetzt);
-}
-
 function abgelaufeneVergessen(stand, jetzt) {
   for (const id of [...stand.kuerzlich.keys()]) if (!nochKuerzlich(stand.kuerzlich, id, jetzt)) stand.kuerzlich.delete(id);
+}
+
+/** isFrameChainConfined: Rahmen oder Vorfahr (Knoten-Ids) eingesperrt oder vor hoechstens 5 s abgebaut. */
+function ketteEingesperrt(ids, confined, kuerzlich, jetzt) {
+  return ids.some((id) => confined.has(id) || nochKuerzlich(kuerzlich, id, jetzt));
+}
+
+function konzeptInAnsicht(confined, kuerzlich, jetzt) {
+  return confined.size > 0 || [...kuerzlich.keys()].some((id) => nochKuerzlich(kuerzlich, id, jetzt));
 }
 
 /** isConfinedCommit: Dokument unter knowledge/, oder der Elternrahmen ist eingesperrt. */
@@ -80,38 +95,44 @@ function eingesperrtNachNavigation(url, elternEingesperrt) {
   return elternEingesperrt === true || istEingesperrterRahmen(url);
 }
 
-/** noteFrameCommit (R46): eingesperrt -> aufnehmen; sonst nur bei echtem Dokumentwechsel entlassen, nie bei In-Page. */
-function rahmenUebernommen(stand, { rahmenId, elternId, url, inPage, jetzt }) {
+/** noteFrameCommit (R47): eingesperrt -> aufnehmen, auf Lebenszeit; keine Navigation entlaesst. */
+function rahmenUebernommen(stand, { rahmenId, elternId, url, jetzt }) {
   abgelaufeneVergessen(stand, jetzt);
   const elternEingesperrt = elternId !== null && elternId !== undefined && stand.confined.has(elternId);
   if (eingesperrtNachNavigation(url, elternEingesperrt)) {
     stand.confined.add(rahmenId);
     stand.kuerzlich.delete(rahmenId);
-  } else if (!inPage) {
-    entlassen(stand, rahmenId, jetzt);
   }
 }
 
-/** noteFramesAttached (R46): Rahmen, die nicht mehr im Baum haengen, entlassen. */
+/** noteFramesAttached (R47): nur der Abbau entlaesst, fuer 5 s nach kuerzlich. */
 function rahmenImBaum(stand, ids, jetzt) {
-  for (const id of [...stand.confined]) if (!ids.has(id)) entlassen(stand, id, jetzt);
+  for (const id of [...stand.confined]) {
+    if (!ids.has(id)) {
+      stand.confined.delete(id);
+      stand.kuerzlich.set(id, jetzt);
+    }
+  }
   abgelaufeneVergessen(stand, jetzt);
 }
 
 /**
- * backstopDecision (R44-R46), reine Werte; der Verweiser zaehlt nie. Hauptrahmen, freie Schemata: durchlassen.
- * Rahmen oder Vorfahr mit Adresse unter knowledge/: abbrechen. Rahmen identifiziert und im Baum: abbrechen, wenn er
- * oder ein Vorfahr in confined oder nicht abgelaufen in kuerzlich steht. Sonst: abbrechen, solange confined nicht leer
- * ist oder kuerzlich einen nicht abgelaufenen Eintrag hat.
+ * backstopDecision (R44-R47), reine Werte; der Verweiser zaehlt nie. Hauptrahmen, data:/blob:/about:: frei.
+ * Eingesperrte Kette (Adresse unter knowledge/ oder Id in confined/kuerzlich, Rahmen oder Vorfahr): nur das eigene
+ * Dokument (ohne Query/Fragment), sonst nichts. Bekannter, angehaengter, nicht eingesperrter Rahmen: frei. Sonst
+ * app:/devtools: frei, alles andere abbrechen, solange die Ansicht einen Rahmen sperrt oder bis 5 s nach dem Abbau.
  */
-function anfrageEntscheidung({ url, resourceType, rahmenId, vorfahrenIds, imBaum, ketteUnterWissen, confined, kuerzlich, jetzt }) {
+function anfrageEntscheidung({ url, resourceType, rahmenId, rahmenUrl, vorfahrenIds, imBaum, ketteUnterWissen, confined, kuerzlich, jetzt }) {
   if (resourceType === 'mainFrame') return false;
   const s = schema(url);
-  if (s !== null && FREIE_SCHEMATA.has(s)) return false;
-  if (ketteUnterWissen) return true;
-  const eingesperrt = (id) => confined.has(id) || nochKuerzlich(kuerzlich, id, jetzt);
-  if (rahmenId !== null && imBaum) return [rahmenId, ...vorfahrenIds].some(eingesperrt);
-  return confined.size > 0 || [...kuerzlich.keys()].some((id) => nochKuerzlich(kuerzlich, id, jetzt));
+  if (s !== null && DOKUMENT_SCHEMATA.has(s)) return false;
+  const kette = rahmenId === null ? [] : [rahmenId, ...vorfahrenIds];
+  if (ketteUnterWissen || ketteEingesperrt(kette, confined, kuerzlich, jetzt)) {
+    return !(rahmenUrl !== null && rahmenUrl !== undefined && ohneQueryUndFragment(url) === ohneQueryUndFragment(rahmenUrl));
+  }
+  if (rahmenId !== null && imBaum) return false;
+  if (s !== null && UNBEKANNT_FREI.has(s)) return false;
+  return konzeptInAnsicht(confined, kuerzlich, jetzt);
 }
 
 /**
@@ -133,12 +154,36 @@ function rahmenIds(webContents) {
   }
 }
 
+/** Ids und Adressen des Rahmens und seiner Vorfahren (Rahmen zuerst); null, wenn nicht lesbar. */
+function rahmenKette(rahmen) {
+  if (!rahmen) return null;
+  try {
+    const ids = [];
+    const urls = [];
+    for (let r = rahmen; r; r = r.parent) {
+      ids.push(r.frameTreeNodeId);
+      urls.push(r.url);
+    }
+    return typeof ids[0] === 'number' ? { ids, urls } : null;
+  } catch {
+    return null; // Rahmen schon verworfen
+  }
+}
+
+/** Sperrt der Zustand der Ansicht diesen Rahmen oder einen Vorfahren? Fuer die Navigationssperre (R47). */
+function rahmenGesperrt(webContents, rahmen) {
+  const stand = webContents ? standJeAnsicht.get(ansichtSchluessel(webContents)) : undefined;
+  const kette = rahmenKette(rahmen);
+  if (!stand || !kette) return false;
+  return ketteEingesperrt(kette.ids, stand.confined, stand.kuerzlich, Date.now());
+}
+
 function rahmenVerfolgen(webContents) {
   const schluessel = ansichtSchluessel(webContents);
   if (standJeAnsicht.has(schluessel)) return standJeAnsicht.get(schluessel);
   const stand = neuerStand();
   standJeAnsicht.set(schluessel, stand);
-  const uebernommen = (url, istHauptrahmen, processId, routingId, inPage) => {
+  const uebernommen = (url, istHauptrahmen, processId, routingId) => {
     const jetzt = Date.now();
     const ids = rahmenIds(webContents);
     if (ids) rahmenImBaum(stand, ids, jetzt);
@@ -150,7 +195,6 @@ function rahmenVerfolgen(webContents) {
         rahmenId: rahmen.frameTreeNodeId,
         elternId: rahmen.parent ? rahmen.parent.frameTreeNodeId : null,
         url,
-        inPage,
         jetzt,
       });
     } catch {
@@ -158,9 +202,9 @@ function rahmenVerfolgen(webContents) {
     }
   };
   webContents.on('did-frame-navigate', (_e, url, _code, _text, istHauptrahmen, processId, routingId) =>
-    uebernommen(url, istHauptrahmen, processId, routingId, false));
+    uebernommen(url, istHauptrahmen, processId, routingId));
   webContents.on('did-navigate-in-page', (_e, url, istHauptrahmen, processId, routingId) =>
-    uebernommen(url, istHauptrahmen, processId, routingId, true));
+    uebernommen(url, istHauptrahmen, processId, routingId));
   webContents.on('destroyed', () => standJeAnsicht.delete(schluessel));
   return stand;
 }
@@ -168,7 +212,7 @@ function rahmenVerfolgen(webContents) {
 const LEER_IDS = new Set();
 const LEER_KUERZLICH = new Map();
 
-/** Rueckhalt in der Einbettungssitzung (R40, R44-R46). Fehler im Rueckhalt: abbrechen (ausser Hauptrahmen). */
+/** Rueckhalt in der Einbettungssitzung (R40, R44-R47). Fehler im Rueckhalt: abbrechen (ausser Hauptrahmen). */
 function rueckhaltAnmelden(session) {
   session.webRequest.onBeforeRequest((details, callback) => {
     let sperren = true;
@@ -178,27 +222,16 @@ function rueckhaltAnmelden(session) {
       const stand = wc ? standJeAnsicht.get(ansichtSchluessel(wc)) : undefined;
       const ids = wc ? rahmenIds(wc) : null;
       if (stand && ids) rahmenImBaum(stand, ids, jetzt);
-      let rahmenId = null;
-      const vorfahrenIds = [];
-      let ketteUnterWissen = false;
-      try {
-        if (details.frame) {
-          rahmenId = details.frame.frameTreeNodeId;
-          for (let r = details.frame; r; r = r.parent) {
-            if (r !== details.frame) vorfahrenIds.push(r.frameTreeNodeId);
-            if (istEingesperrterRahmen(r.url)) ketteUnterWissen = true;
-          }
-        }
-      } catch {
-        rahmenId = null; // Rahmen schon verworfen
-      }
+      const kette = rahmenKette(details.frame);
+      const rahmenId = kette ? kette.ids[0] : null;
       sperren = anfrageEntscheidung({
         url: details.url,
         resourceType: details.resourceType,
-        rahmenId: typeof rahmenId === 'number' ? rahmenId : null,
-        vorfahrenIds,
-        imBaum: typeof rahmenId === 'number' && ids !== null && ids.has(rahmenId),
-        ketteUnterWissen,
+        rahmenId,
+        rahmenUrl: kette ? kette.urls[0] : null,
+        vorfahrenIds: kette ? kette.ids.slice(1) : [],
+        imBaum: rahmenId !== null && ids !== null && ids.has(rahmenId),
+        ketteUnterWissen: kette ? kette.urls.some(istEingesperrterRahmen) : false,
         confined: stand ? stand.confined : LEER_IDS,
         kuerzlich: stand ? stand.kuerzlich : LEER_KUERZLICH,
         jetzt,
@@ -215,7 +248,9 @@ module.exports = {
   anfrageEntscheidung,
   eingesperrtNachNavigation,
   istEingesperrterRahmen,
+  ketteEingesperrt,
   neuerStand,
+  rahmenGesperrt,
   rahmenImBaum,
   rahmenNavigation,
   rahmenUebernommen,
