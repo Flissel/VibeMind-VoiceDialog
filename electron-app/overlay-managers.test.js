@@ -378,6 +378,9 @@ test('Rowboat: Rahmen mit Wissens-HTML darf nicht wegnavigieren, andere Rahmen w
   await r.overlayReady;
   const navigiere = h.views[0].handlers.get('will-frame-navigate');
   assert.equal(typeof navigiere, 'function', 'will-frame-navigate nicht angemeldet');
+  for (const ereignis of ['did-frame-navigate', 'did-navigate-in-page', 'destroyed']) {
+    assert.equal(typeof h.views[0].handlers.get(ereignis), 'function', `${ereignis} nicht angemeldet (R45)`);
+  }
   const versuch = (isMainFrame, frameUrl, url) => {
     let verhindert = false;
     navigiere({ isMainFrame, frame: frameUrl === null ? null : { url: frameUrl }, url, preventDefault: () => { verhindert = true; } });

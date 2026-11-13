@@ -7,7 +7,7 @@
  */
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
-const { rahmenNavigation } = require('./konzept-rahmen');
+const { rahmenNavigation, rahmenVerfolgen } = require('./konzept-rahmen');
 
 const APP_URL = 'app://-/index.html';
 const PENDING_URL_TTL_MS = 30000;
@@ -83,6 +83,9 @@ class RowboatManager {
       if (event.isMainFrame) return;
       if (rahmenNavigation(event.frame ? event.frame.url : '') === 'block') event.preventDefault();
     });
+    // Eingesperrte Rahmen beim Navigieren festhalten (R45): der Rueckhalt der Sitzung bricht danach auch
+    // Anfragen eines Rahmens ab, der gerade abgebaut wird (Konzept geschlossen oder neu geladen).
+    rahmenVerfolgen(view.webContents);
     // Rowboats macOS-Titelleisten-Reservierung entfernen (VibeMind hat eine eigene Titelleiste)
     view.webContents.on('dom-ready', () => {
       view.webContents.insertCSS('.titlebar-drag-region { -webkit-app-region: no-drag !important; }');
