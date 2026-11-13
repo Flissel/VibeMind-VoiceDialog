@@ -38,11 +38,14 @@ function istEingesperrterRahmen(url) {
   const formen = [segmente(roh), segmente(dekodiert)];
   if (formen.some((segs) => segs.includes('..'))) return true;
   if (!formen.some((segs) => segs.length >= 1 && segName(segs[0]) === 'knowledge')) return false;
-  // R49: PDFs zeigt Chromiums eingebauter Betrachter (chrome-extension:) im Rahmen; sie bleiben wie vorher.
-  // Der dekodierte letzte Name entscheidet. Rowboat liefert x.pdf nach Namen als application/pdf aus; kaeme sie
-  // je als text/html, bekaeme sie Rowboats Regel (CSP mit sandbox).
-  const letzte = formen[1][formen[1].length - 1];
-  return !(formen[1].length >= 2 && segName(letzte).endsWith('.pdf'));
+  // R49/R51: PDFs zeigt Chromiums eingebauter Betrachter (chrome-extension:) im Rahmen; sie bleiben wie vorher.
+  // Es zaehlt der genaue, einmal dekodierte letzte Name (ohne Kuerzen von Punkten/Leerzeichen, ohne Steuerzeichen),
+  // so wie Rowboat den Typ waehlt: x.pdf geht als application/pdf hinaus; kaeme sie je als text/html, bekaeme sie
+  // Rowboats Regel (CSP mit sandbox).
+  const teile = dekodiert.split(/[\\/]/);
+  const letzte = teile[teile.length - 1];
+  // eslint-disable-next-line no-control-regex
+  return !(formen[1].length >= 2 && /\.pdf$/i.test(letzte) && !/[\u0000-\u001f\u007f]/.test(letzte));
 }
 
 /**
