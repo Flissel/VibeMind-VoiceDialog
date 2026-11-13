@@ -1,14 +1,13 @@
 /**
- * Konzept-Flaeche in der eingebetteten Rowboat-Ansicht: ein Rahmen, der ein Wissens-HTML zeigt
- * (app://workspace/knowledge/...html), darf nicht wegnavigieren und nichts aus dem Netz laden.
+ * Konzept-Flaeche in der eingebetteten Rowboat-Ansicht: ein Rahmen, der ein Dokument unter
+ * app://workspace/knowledge/ zeigt, darf nicht wegnavigieren und nichts aus dem Netz laden.
  *
  * Abschrift der reinen Entscheidungen aus dem Rowboat-Fork, apps/x/packages/shared/src/konzept.ts
- * (isKnowledgeHtmlDocumentUrl, frameNavigationDecision, shouldBlockFrameRequest; Zweig cc/konzept-flaeche,
- * 2026-11-13). Die voice-App kann @x/shared nicht laden: Aenderungen dort hier nachziehen.
- * Anders als Rowboat entscheidet die voice-App nur nach der Adresse (sie liefert die Dateien nicht selbst aus,
- * kennt also Symlink-Ziel und Content-Type nicht); dafuer sorgen dort die Antwortkoepfe (CSP mit sandbox).
+ * (isKnowledgeFrameUrl, frameNavigationDecision, shouldBlockFrameRequest, shouldBlockRequest; Zweig
+ * cc/konzept-flaeche, 2026-11-13, Rulings R43/R44). Die voice-App kann @x/shared nicht laden: Aenderungen
+ * dort hier nachziehen. Anders als Rowboat kennt die voice-App keine "als Wissens-HTML ausgelieferten"
+ * Adressen (sie liefert die Dateien nicht selbst aus); dafuer sorgen Rowboats Antwortkoepfe (CSP mit sandbox).
  */
-const WORKSPACE_PRAEFIX = 'app://workspace/';
 
 function segmente(pfad) {
   return pfad.replace(/\\/g, '/').split('/').filter((s) => s !== '' && s !== '.');
@@ -19,39 +18,31 @@ function segName(s) {
   return s.replace(/[. ]+$/, '').toLowerCase();
 }
 
-function istHtmlPfad(pfad) {
-  return /\.(html?|xhtml)$/i.test(pfad);
-}
-
-/** Erstes Segment `knowledge`; bei `..` sicherheitshalber ja. */
-function imWissensordner(pfad) {
-  const segs = segmente(pfad);
-  if (segs.includes('..')) return true;
-  return segs.length >= 2 && segName(segs[0]) === 'knowledge';
-}
-
-/** Rohform und, falls anders, prozent-dekodierte Form des Pfadteils (ohne `?`/`#`). */
-function pfadFormen(pfadOderUrl) {
-  const roh = pfadOderUrl.split(/[?#]/)[0];
-  try {
-    const dekodiert = decodeURIComponent(roh);
-    return dekodiert === roh ? [roh] : [roh, dekodiert];
-  } catch {
-    return [roh];
-  }
-}
-
-/** Zeigt diese Adresse ein Wissens-HTML? Nach Namen, roh und dekodiert; im Zweifel ja. */
-function istWissensHtmlAdresse(url) {
+/**
+ * isKnowledgeFrameUrl (R43): Dokument unter app://workspace/knowledge/, gleich welcher Endung. Schema und Host
+ * ohne Gross/Klein; Pfad roh und prozent-dekodiert; ungueltige Kodierung oder `..`: eingesperrt. Adressen
+ * ausserhalb von app://workspace (auch leer/about:blank beim ersten Laden): nicht eingesperrt.
+ */
+function istEingesperrterRahmen(url) {
   if (typeof url !== 'string') return false;
-  if (url.slice(0, WORKSPACE_PRAEFIX.length).toLowerCase() !== WORKSPACE_PRAEFIX) return false;
-  const formen = pfadFormen(url.slice(WORKSPACE_PRAEFIX.length));
-  return formen.some(imWissensordner) && formen.some((f) => istHtmlPfad(f.replace(/[. ]+$/, '')));
+  const m = /^app:\/\/workspace(?=[/?#]|$)/i.exec(url);
+  if (m === null) return false;
+  const roh = url.slice(m[0].length).split(/[?#]/)[0];
+  let dekodiert;
+  try {
+    dekodiert = decodeURIComponent(roh);
+  } catch {
+    return true;
+  }
+  return [roh, dekodiert].some((pfad) => {
+    const segs = segmente(pfad);
+    return segs.includes('..') || (segs.length >= 1 && segName(segs[0]) === 'knowledge');
+  });
 }
 
-/** frameNavigationDecision: 'block' fuer einen Rahmen mit Wissens-HTML, sonst 'allow'. */
+/** frameNavigationDecision: 'block' fuer einen eingesperrten Rahmen, sonst 'allow'. */
 function rahmenNavigation(rahmenUrl) {
-  return istWissensHtmlAdresse(rahmenUrl) ? 'block' : 'allow';
+  return istEingesperrterRahmen(rahmenUrl) ? 'block' : 'allow';
 }
 
 function ohneFragment(url) {
@@ -59,38 +50,64 @@ function ohneFragment(url) {
   return i === -1 ? url : url.slice(0, i);
 }
 
-/**
- * shouldBlockFrameRequest: Anfrage aus einem Rahmen mit Wissens-HTML abbrechen, ausser `data:`, `blob:`,
- * `about:` oder die eigene Adresse des Rahmens. Andere Rahmen bleiben unberuehrt; ohne Schema: abbrechen.
- */
+function schema(url) {
+  const m = /^([a-z][a-z0-9+.-]*):/i.exec(String(url));
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** Bleibt im Dokument, nie im Netz (chrome-extension: = Chromiums PDF-Betrachter). */
+const DOKUMENT_SCHEMATA = new Set(['data', 'blob', 'about', 'chrome-extension']);
+
+/** shouldBlockFrameRequest: Anfrage aus einem eingesperrten Rahmen abbrechen, ausser im Dokument oder an die eigene Adresse. */
 function anfrageSperren(rahmenUrl, anfrageUrl) {
-  if (!istWissensHtmlAdresse(rahmenUrl)) return false;
-  const m = /^([a-z][a-z0-9+.-]*):/i.exec(String(anfrageUrl));
-  const schema = m ? m[1].toLowerCase() : null;
-  if (schema === 'data' || schema === 'blob' || schema === 'about') return false;
+  if (!istEingesperrterRahmen(rahmenUrl)) return false;
+  const s = schema(anfrageUrl);
+  if (s !== null && DOKUMENT_SCHEMATA.has(s)) return false;
   return ohneFragment(String(anfrageUrl)) !== ohneFragment(rahmenUrl);
 }
 
 /**
- * Rueckhalt in der Einbettungssitzung: Anfragen aus Rahmen (oder deren Vorfahren) mit Wissens-HTML abbrechen.
- * Ohne `details.frame` (aeltere Electron-Fassung, Rahmen schon weg) entscheidet die CSP allein.
+ * shouldBlockRequest (R44), reine Werte: Hauptrahmen nie; Rahmenkette bekannt -> nach ihr; unbekannt -> Verweiser
+ * eingesperrt -> abbrechen; sonst app:, devtools: und Dokument-Schemata frei, alles andere nur abbrechen, solange
+ * in derselben Ansicht ein eingesperrter Rahmen offen ist.
+ */
+function anfrageEntscheidung({ url, resourceType, rahmen, referrer, konzeptOffen }) {
+  if (resourceType === 'mainFrame') return false;
+  if (rahmen !== null) return rahmen.some((r) => anfrageSperren(r, url));
+  if (referrer && anfrageSperren(referrer, url)) return true;
+  const s = schema(url);
+  if (s !== null && (s === 'app' || s === 'devtools' || DOKUMENT_SCHEMATA.has(s))) return false;
+  return konzeptOffen === true;
+}
+
+/**
+ * Rueckhalt in der Einbettungssitzung. Rahmen ueber details.frame (samt Vorfahren); fehlt er, zaehlen der Verweiser
+ * und ob die Ansicht (details.webContents) gerade einen eingesperrten Rahmen zeigt.
  */
 function rueckhaltAnmelden(session) {
   session.webRequest.onBeforeRequest((details, callback) => {
-    let sperren = false;
+    let rahmen = null;
     try {
-      for (let rahmen = details.frame || null; rahmen; rahmen = rahmen.parent) {
-        if (anfrageSperren(rahmen.url, details.url)) {
-          sperren = true;
-          break;
-        }
+      if (details.frame) {
+        rahmen = [];
+        for (let r = details.frame; r; r = r.parent) rahmen.push(r.url);
       }
     } catch {
-      // Rahmen schon verworfen: im Zweifel nichts durchlassen, ausser dem Laden der Oberflaeche selbst.
-      sperren = details.resourceType !== 'mainFrame';
+      rahmen = null; // Rahmen schon verworfen: wie unbekannt
     }
+    let konzeptOffen = false;
+    if (rahmen === null && details.webContents) {
+      try {
+        konzeptOffen = details.webContents.mainFrame.framesInSubtree.some((f) => istEingesperrterRahmen(f.url));
+      } catch {
+        konzeptOffen = true;
+      }
+    }
+    const sperren = anfrageEntscheidung({
+      url: details.url, resourceType: details.resourceType, rahmen, referrer: details.referrer, konzeptOffen,
+    });
     callback(sperren ? { cancel: true } : {});
   });
 }
 
-module.exports = { anfrageSperren, istWissensHtmlAdresse, rahmenNavigation, rueckhaltAnmelden };
+module.exports = { anfrageEntscheidung, anfrageSperren, istEingesperrterRahmen, rahmenNavigation, rueckhaltAnmelden };
