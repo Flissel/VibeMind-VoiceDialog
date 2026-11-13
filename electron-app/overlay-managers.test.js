@@ -371,6 +371,28 @@ test('Rowboat: Abbruch zeigt die Statuskarte, Neuverbindung laedt neu ohne neue 
   assert.deepEqual(h.views[0].loads[2], ['url', 'app://-/index.html']);
 });
 
+test('Rowboat: Rahmen mit Wissens-HTML darf nicht wegnavigieren, andere Rahmen wie bisher', async () => {
+  const h = withIpc(harness());
+  const r = rowboat(h, rowboatClient(true));
+  r.show();
+  await r.overlayReady;
+  const navigiere = h.views[0].handlers.get('will-frame-navigate');
+  assert.equal(typeof navigiere, 'function', 'will-frame-navigate nicht angemeldet');
+  const versuch = (isMainFrame, frameUrl, url) => {
+    let verhindert = false;
+    navigiere({ isMainFrame, frame: frameUrl === null ? null : { url: frameUrl }, url, preventDefault: () => { verhindert = true; } });
+    return verhindert;
+  };
+  assert.equal(versuch(false, 'app://workspace/knowledge/Konzepte/k.html', 'https://example.com/?d=geheim'), true);
+  assert.equal(versuch(false, 'app://workspace/knowledge/Konzepte/k.html', 'app://workspace/knowledge/b.html'), true);
+  // erster Ladevorgang des Rahmens (noch about:blank), Hauptrahmen, Einbettungen, Hintergrund-Berichte: unberuehrt
+  assert.equal(versuch(false, 'about:blank', 'app://workspace/knowledge/Konzepte/k.html'), false);
+  assert.equal(versuch(false, null, 'app://workspace/knowledge/Konzepte/k.html'), false);
+  assert.equal(versuch(true, 'app://-/index.html', 'app://-/index.html'), false);
+  assert.equal(versuch(false, 'https://www.youtube.com/embed/x', 'https://www.youtube.com/watch?v=x'), false);
+  assert.equal(versuch(false, 'app://workspace/bg-tasks/x/index.html', 'https://example.com/'), false);
+});
+
 test('Rowboat: Browser-Bereich zeigt den Hinweis einmal pro Sitzung, „In Rowboat öffnen“ holt Rowboats Fenster', async () => {
   const h = withIpc(harness());
   const client = rowboatClient(true);

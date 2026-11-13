@@ -7,6 +7,7 @@
  */
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
+const { rahmenNavigation } = require('./konzept-rahmen');
 
 const APP_URL = 'app://-/index.html';
 const PENDING_URL_TTL_MS = 30000;
@@ -74,6 +75,13 @@ class RowboatManager {
       if (url.startsWith('app://')) return;
       event.preventDefault();
       this.shell.openExternal(url);
+    });
+    // Konzept-Flaeche: ein Rahmen mit Wissens-HTML (app://workspace/knowledge/...html) darf nicht
+    // wegnavigieren (location.href, meta refresh, Link, Formular) – wie in Rowboats eigenem Fenster.
+    // Andere Rahmen (Einbettungen, Hintergrund-Berichte) bleiben wie bisher.
+    view.webContents.on('will-frame-navigate', (event) => {
+      if (event.isMainFrame) return;
+      if (rahmenNavigation(event.frame ? event.frame.url : '') === 'block') event.preventDefault();
     });
     // Rowboats macOS-Titelleisten-Reservierung entfernen (VibeMind hat eine eigene Titelleiste)
     view.webContents.on('dom-ready', () => {

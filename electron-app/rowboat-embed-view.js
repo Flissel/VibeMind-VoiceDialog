@@ -7,6 +7,8 @@
  * - app:// (Oberflaeche, Workspace-Dateien, Vorschauen) laeuft in der eigenen Sitzung
  *   APP_PARTITION und wird hier im Hauptprozess mit dem Token weitergeleitet.
  */
+const { rueckhaltAnmelden } = require('./konzept-rahmen');
+
 const APP_PARTITION = 'persist:rowboat-embed';
 const APP_SCHEME_PRIVILEGES = {
   scheme: 'app',
@@ -68,6 +70,8 @@ function configureEmbedSession(session) {
 
 function registerAppProtocol(session, client, fetchImpl) {
   configureEmbedSession(session);
+  // Konzept-Flaeche: Rahmen mit Wissens-HTML laden nichts aus dem Netz (Rueckhalt hinter Rowboats CSP).
+  rueckhaltAnmelden(session);
   session.protocol.handle('app', (request) => proxyAppRequest(request, client, fetchImpl));
 }
 

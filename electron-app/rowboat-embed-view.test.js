@@ -100,6 +100,7 @@ function fakeSession() {
     handlers,
     setPermissionRequestHandler(fn) { handlers.request = fn; },
     setPermissionCheckHandler(fn) { handlers.check = fn; },
+    webRequest: { onBeforeRequest(fn) { handlers.beforeRequest = fn; } },
   };
 }
 
@@ -127,6 +128,7 @@ test('registerAppProtocol haengt am Protokoll genau dieser Sitzung; Schema-Recht
   registerAppProtocol(ses, fakeClient(), async () => new Response('x'));
   assert.equal(handled[0][0], 'app');
   assert.equal(typeof ses.handlers.request, 'function', 'Berechtigungen der Sitzung nicht eingeschraenkt');
+  assert.equal(typeof ses.handlers.beforeRequest, 'function', 'Rueckhalt der Konzept-Flaeche nicht angemeldet');
   assert.equal(await (await handled[0][1](new Request('app://-/index.html'))).text(), 'x');
   assert.equal(APP_PARTITION, 'persist:rowboat-embed');
   assert.deepEqual(APP_SCHEME_PRIVILEGES, { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } });
