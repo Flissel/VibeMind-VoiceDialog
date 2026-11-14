@@ -252,13 +252,63 @@ function rueckhaltAnmelden(session) {
   });
 }
 
+// ---- Gastbereich: in der eingebetteten Ansicht bewusst NICHT eingerichtet ----
+//
+// Rowboat zeigt Konzepte (HTML unter knowledge/) nur noch in einem <webview partition="konzept">, den Rowboats eigener
+// Hauptprozess einrichtet und einsperrt (Fork cc/konzept-flaeche, apps/x/apps/main/src/konzept-gast.ts, Stand c5bf4566).
+// In VibeMind ist die voice-App der Hauptprozess; sie richtet diesen Gastbereich nicht ein (Begruendung:
+// .superpowers/sdd/2026-11-14-konzept-flaeche-gastbereich/task-3-report.md). Darum: kein webviewTag, kein Kennzeichen,
+// jedes Anhaengen verweigert. Rowboats Oberflaeche zeigt dann „Konzepte lassen sich hier nicht anzeigen.“ und fuehrt
+// das Konzept nicht aus.
+
+/** Zusatzargument, an dem Rowboats App-Preload den Gastbereich erkennt (KONZEPT_GAST_ARG im Fork). */
+const KONZEPT_GAST_ARG = '--rowboat-konzept-gast';
+
+/**
+ * Was Rowboats App-Preload als `featureFlags.konzeptGast` meldet: `process.argv.includes(KONZEPT_GAST_ARG)`
+ * (apps/x/apps/preload/src/preload.ts). `argumente` = die Argumente des Renderers.
+ */
+function gastKennzeichen(argumente) {
+  return Array.isArray(argumente) && argumente.includes(KONZEPT_GAST_ARG);
+}
+
+/** Darf die eingebettete Ansicht einen Gast anhaengen? Nie – es gibt hier keinen eingerichteten Gastbereich. */
+function gastAnhaengenErlaubt(_src) {
+  return false;
+}
+
+/**
+ * webPreferences der eingebetteten Ansicht ohne Gastbereich: `webviewTag` aus und das Kennzeichen nie in
+ * `additionalArguments` (die Oberflaeche sieht `konzeptGast === false`). Liefert eine Kopie.
+ */
+function ohneGastbereich(webPreferences) {
+  const argumente = Array.isArray(webPreferences.additionalArguments) ? webPreferences.additionalArguments : [];
+  return {
+    ...webPreferences,
+    webviewTag: false,
+    additionalArguments: argumente.filter((a) => a !== KONZEPT_GAST_ARG),
+  };
+}
+
+/** Zweite Sperre neben `webviewTag: false`: jedes `will-attach-webview` dieser Ansicht zerstoert den Gast. */
+function anhaengenVerweigern(webContents) {
+  webContents.on('will-attach-webview', (event, _webPreferences, params) => {
+    if (!gastAnhaengenErlaubt(params ? params.src : undefined)) event.preventDefault();
+  });
+}
+
 module.exports = {
+  KONZEPT_GAST_ARG,
   NACHFRIST_MS,
   anfrageEntscheidung,
+  anhaengenVerweigern,
   eingesperrtNachNavigation,
+  gastAnhaengenErlaubt,
+  gastKennzeichen,
   istEingesperrterRahmen,
   ketteEingesperrt,
   neuerStand,
+  ohneGastbereich,
   rahmenGesperrt,
   rahmenImBaum,
   rahmenNavigation,

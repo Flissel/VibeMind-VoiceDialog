@@ -1,9 +1,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
+const fs = require('node:fs');
+const path = require('node:path');
+
 const {
-  NACHFRIST_MS, anfrageEntscheidung, eingesperrtNachNavigation, istEingesperrterRahmen, ketteEingesperrt, neuerStand,
-  rahmenGesperrt, rahmenImBaum, rahmenNavigation, rahmenUebernommen, rahmenVerfolgen, rueckhaltAnmelden,
+  KONZEPT_GAST_ARG, NACHFRIST_MS, anfrageEntscheidung, anhaengenVerweigern, eingesperrtNachNavigation, gastAnhaengenErlaubt,
+  gastKennzeichen, istEingesperrterRahmen, ketteEingesperrt, neuerStand, ohneGastbereich, rahmenGesperrt, rahmenImBaum,
+  rahmenNavigation, rahmenUebernommen, rahmenVerfolgen, rueckhaltAnmelden,
 } = require('./konzept-rahmen');
 
 const K = 'app://workspace/knowledge/a.html';
@@ -230,4 +234,78 @@ test('Rueckhalt (R47) verdrahtet: Konzept, Kind, Selbst-Navigation, Schliessen m
   ansicht.zerstoert();
   assert.deepEqual(frage({ url: 'https://example.com/', resourceType: 'image', webContents: w }), {});
   assert.deepEqual(frage({ url: 'https://example.com/', resourceType: 'image' }), {});
+});
+
+// ---- Gastbereich (Konzepte im <webview partition="konzept">): in der eingebetteten Ansicht NICHT eingerichtet ----
+// Adressen, die der Fork (cc/konzept-flaeche, guestAttachAllowed in apps/x/packages/shared/src/konzept.test.ts, Stand
+// c5bf4566) als Gast ZULAESST, plus solche, die er ablehnt: hier wird jede verweigert.
+const FORK_ERLAUBT = [
+  'app://workspace/knowledge/Konzepte/k.html', 'app://workspace/knowledge/Konzepte/k.html?v=3',
+  'APP://WORKSPACE/knowledge/Kanal/q.html', 'app://workspace/knowledge/Konzepte/Mein%20Konzept%20%C3%A4.html?v=2',
+  'app://workspace/knowledge/Kanal/q.html#x', 'app://workspace/knowledge/a.b/k.html',
+];
+const FORK_ABGELEHNT = [
+  'https://example.com/', 'file:///c:/x.html', 'app://-/index.html', 'app://workspace/bg-tasks/r/index.html',
+  'app://workspace/knowledge/../config/x.html', 'data:text/html,<b>x</b>', 'about:blank', '',
+];
+
+test('Gastbereich fehlt: jedes Anhaengen wird verweigert, auch was der Fork zuliesse', () => {
+  assert.equal(KONZEPT_GAST_ARG, '--rowboat-konzept-gast', 'Name wie KONZEPT_GAST_ARG im Fork');
+  for (const src of [...FORK_ERLAUBT, ...FORK_ABGELEHNT, undefined, null, 42]) {
+    assert.equal(gastAnhaengenErlaubt(src), false, String(src));
+  }
+});
+
+test('Kennzeichen wie Rowboats App-Preload (process.argv.includes): nur mit dem Zusatzargument an', () => {
+  assert.equal(gastKennzeichen(['--x', KONZEPT_GAST_ARG]), true, 'so saehe es Rowboats eigenes Fenster');
+  for (const args of [[], ['--rowboat-konzept-gast=1'], ['--Rowboat-Konzept-Gast'], undefined, null, 'x']) {
+    assert.equal(gastKennzeichen(args), false, JSON.stringify(args));
+  }
+});
+
+test('ohneGastbereich: webviewTag aus, Kennzeichen nie im Zusatzargument, Rest unveraendert, Eingabe nicht veraendert', () => {
+  const ein = {
+    preload: 'C:/rb/preload.js', partition: 'persist:rowboat-embed', sandbox: true, webviewTag: true,
+    additionalArguments: ['--a', KONZEPT_GAST_ARG, '--b'],
+  };
+  const aus = ohneGastbereich(ein);
+  assert.equal(aus.webviewTag, false);
+  assert.deepEqual(aus.additionalArguments, ['--a', '--b']);
+  assert.equal(gastKennzeichen(aus.additionalArguments), false, 'eingebettete Oberflaeche sieht konzeptGast=false');
+  assert.equal(aus.preload, 'C:/rb/preload.js');
+  assert.equal(aus.partition, 'persist:rowboat-embed');
+  assert.equal(aus.sandbox, true);
+  assert.equal(ein.webviewTag, true, 'Eingabe bleibt');
+  assert.deepEqual(ein.additionalArguments, ['--a', KONZEPT_GAST_ARG, '--b']);
+  const leer = ohneGastbereich({ partition: 'p' });
+  assert.equal(leer.webviewTag, false);
+  assert.deepEqual(leer.additionalArguments, []);
+  assert.equal(gastKennzeichen(leer.additionalArguments), false);
+});
+
+test('anhaengenVerweigern: will-attach-webview der Ansicht verhindert jeden Gast', () => {
+  const handler = new Map();
+  anhaengenVerweigern({ on: (ereignis, fn) => handler.set(ereignis, fn) });
+  const anhaengen = handler.get('will-attach-webview');
+  assert.equal(typeof anhaengen, 'function', 'will-attach-webview nicht angemeldet');
+  for (const src of [...FORK_ERLAUBT, ...FORK_ABGELEHNT]) {
+    let verhindert = false;
+    const prefs = { partition: 'konzept', preload: 'C:/rb/konzept-gast.js' };
+    anhaengen({ preventDefault: () => { verhindert = true; } }, prefs, { src, partition: 'konzept' });
+    assert.equal(verhindert, true, src);
+  }
+  let verhindert = false;
+  anhaengen({ preventDefault: () => { verhindert = true; } }, undefined, undefined);
+  assert.equal(verhindert, true, 'ohne Parameter');
+});
+
+test('kein Hauptprozess-Modul der voice-App schaltet webviewTag ein oder setzt das Gast-Kennzeichen', () => {
+  const treffer = [];
+  for (const name of fs.readdirSync(__dirname)) {
+    if (!name.endsWith('.js') || name.endsWith('.test.js') || name === 'konzept-rahmen.js') continue;
+    const text = fs.readFileSync(path.join(__dirname, name), 'utf8');
+    if (/webviewTag\s*:\s*(?!false\b)/.test(text)) treffer.push(`${name}: webviewTag`);
+    if (text.includes(KONZEPT_GAST_ARG)) treffer.push(`${name}: ${KONZEPT_GAST_ARG}`);
+  }
+  assert.deepEqual(treffer, []);
 });

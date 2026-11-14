@@ -396,6 +396,23 @@ test('Rowboat: Rahmen mit Wissens-HTML darf nicht wegnavigieren, andere Rahmen w
   assert.equal(versuch(false, 'app://workspace/bg-tasks/x/index.html', 'https://example.com/'), false);
 });
 
+test('Rowboat: ohne Gastbereich – kein webviewTag, kein Gast-Kennzeichen, jedes Anhaengen verweigert (auch als Statuskarte)', async () => {
+  for (const verbunden of [true, false]) {
+    const h = withIpc(harness());
+    const r = rowboat(h, rowboatClient(verbunden));
+    r.show();
+    await r.overlayReady;
+    const prefs = h.views[0].options.webPreferences;
+    assert.equal(prefs.webviewTag, false, `webviewTag (verbunden=${verbunden})`);
+    assert.deepEqual(prefs.additionalArguments, [], 'kein --rowboat-konzept-gast: Oberflaeche zeigt den Hinweis');
+    const anhaengen = h.views[0].handlers.get('will-attach-webview');
+    assert.equal(typeof anhaengen, 'function', 'will-attach-webview nicht angemeldet');
+    let verhindert = false;
+    anhaengen({ preventDefault: () => { verhindert = true; } }, {}, { src: 'app://workspace/knowledge/Konzepte/k.html?v=0', partition: 'konzept' });
+    assert.equal(verhindert, true);
+  }
+});
+
 test('Rowboat: Browser-Bereich zeigt den Hinweis einmal pro Sitzung, „In Rowboat öffnen“ holt Rowboats Fenster', async () => {
   const h = withIpc(harness());
   const client = rowboatClient(true);

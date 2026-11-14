@@ -7,7 +7,7 @@
  */
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { APP_PARTITION, BROWSER_PANE_NOTE, attachEmbedIpc } = require('./rowboat-embed-view');
-const { rahmenGesperrt, rahmenNavigation, rahmenVerfolgen } = require('./konzept-rahmen');
+const { anhaengenVerweigern, ohneGastbereich, rahmenGesperrt, rahmenNavigation, rahmenVerfolgen } = require('./konzept-rahmen');
 
 const APP_URL = 'app://-/index.html';
 const PENDING_URL_TTL_MS = 30000;
@@ -53,7 +53,9 @@ class RowboatManager {
   _createView() {
     const preload = this.client.connected && this.client.info ? this.client.info.preloadPath : null;
     const view = new this.BrowserView({
-      webPreferences: {
+      // Konzept-Flaeche: kein Gastbereich (<webview partition="konzept">) in der eingebetteten Ansicht – kein
+      // webviewTag, kein Kennzeichen; Rowboats Oberflaeche zeigt statt des Konzepts einen Hinweis.
+      webPreferences: ohneGastbereich({
         ...(preload ? { preload } : {}),
         partition: APP_PARTITION,
         contextIsolation: true,
@@ -61,10 +63,11 @@ class RowboatManager {
         sandbox: true,
         // PDFs in <iframe> wie in Rowboats eigenem Fenster
         plugins: true,
-      },
+      }),
     });
     this.rowboatView = view;
     this._viewPreload = preload;
+    anhaengenVerweigern(view.webContents);
 
     view.webContents.setWindowOpenHandler(({ url }) => {
       this.shell.openExternal(url);
