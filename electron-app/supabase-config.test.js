@@ -74,3 +74,32 @@ test('renderer/universe_canvas.js no longer hardcodes a Supabase URL or the "ano
     assert.doesNotMatch(rendererSource, /'apikey':\s*'anon'/);
     assert.match(rendererSource, /window\.vibemind\s*&&\s*window\.vibemind\.supabase/);
 });
+
+test('buildRealtimeOptions hands the ws package to Realtime when the runtime has no global WebSocket (Electron main = Node 20)', () => {
+    const { buildRealtimeOptions } = require('./supabase-config');
+    const fakeWs = function FakeWebSocket() {};
+    const options = buildRealtimeOptions({ nativeWebSocket: undefined, loadWs: () => fakeWs });
+
+    assert.equal(options.transport, fakeWs);
+    assert.deepEqual(options.params, { eventsPerSecond: 10 });
+});
+
+test('buildRealtimeOptions leaves the transport alone when a global WebSocket exists', () => {
+    const { buildRealtimeOptions } = require('./supabase-config');
+    let loaded = false;
+    const options = buildRealtimeOptions({
+        nativeWebSocket: function NativeWebSocket() {},
+        loadWs: () => { loaded = true; return null; },
+    });
+
+    assert.equal('transport' in options, false);
+    assert.equal(loaded, false, 'ws is not even loaded');
+});
+
+test('supabase-client.js builds its Realtime options through buildRealtimeOptions', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const clientSource = fs.readFileSync(path.join(__dirname, 'supabase-client.js'), 'utf8');
+
+    assert.match(clientSource, /realtime:\s*buildRealtimeOptions\(\)/);
+});

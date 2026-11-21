@@ -25,4 +25,22 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ||
   // Local dev default key (from `npx supabase status`)
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
-module.exports = { SUPABASE_URL, SUPABASE_ANON_KEY };
+/**
+ * Realtime options for the main-process client.
+ *
+ * Electron's main process runs on a Node without a global WebSocket (Electron 33
+ * = Node 20). supabase-js then refuses to build its Realtime client ("Node.js
+ * detected but native WebSocket not found"), so the live DB -> UI updates never
+ * start. In that case the `ws` package is handed in as transport. `ws` is only
+ * loaded when it is needed, which keeps this module cheap for preload consumers.
+ */
+function buildRealtimeOptions({
+  nativeWebSocket = globalThis.WebSocket,
+  loadWs = () => require('ws'),
+} = {}) {
+  const options = { params: { eventsPerSecond: 10 } };
+  if (typeof nativeWebSocket !== 'function') options.transport = loadWs();
+  return options;
+}
+
+module.exports = { SUPABASE_URL, SUPABASE_ANON_KEY, buildRealtimeOptions };
