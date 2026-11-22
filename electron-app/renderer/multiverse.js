@@ -139,109 +139,8 @@ class MultiverseApp {
     // SHADERS
     // ========================================================================
     
-    get planetVertexShader() {
-        return `
-            uniform float u_time;
-            uniform float u_pulse;
-            uniform vec3 u_handPos;
-            varying vec3 vNormal;
-            varying vec3 vPosition;
-            
-            // Simplex noise function
-            vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-            vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-            vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
-            vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-            
-            float snoise(vec3 v) {
-                const vec2 C = vec2(1.0/6.0, 1.0/3.0);
-                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-                vec3 i  = floor(v + dot(v, C.yyy));
-                vec3 x0 = v - i + dot(i, C.xxx);
-                vec3 g = step(x0.yzx, x0.xyz);
-                vec3 l = 1.0 - g;
-                vec3 i1 = min(g.xyz, l.zxy);
-                vec3 i2 = max(g.xyz, l.zxy);
-                vec3 x1 = x0 - i1 + C.xxx;
-                vec3 x2 = x0 - i2 + C.yyy;
-                vec3 x3 = x0 - D.yyy;
-                i = mod289(i);
-                vec4 p = permute(permute(permute(
-                    i.z + vec4(0.0, i1.z, i2.z, 1.0))
-                    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-                    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-                float n_ = 0.142857142857;
-                vec3 ns = n_ * D.wyz - D.xzx;
-                vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-                vec4 x_ = floor(j * ns.z);
-                vec4 y_ = floor(j - 7.0 * x_);
-                vec4 x = x_ *ns.x + ns.yyyy;
-                vec4 y = y_ *ns.x + ns.yyyy;
-                vec4 h = 1.0 - abs(x) - abs(y);
-                vec4 b0 = vec4(x.xy, y.xy);
-                vec4 b1 = vec4(x.zw, y.zw);
-                vec4 s0 = floor(b0)*2.0 + 1.0;
-                vec4 s1 = floor(b1)*2.0 + 1.0;
-                vec4 sh = -step(h, vec4(0.0));
-                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
-                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
-                vec3 p0 = vec3(a0.xy, h.x);
-                vec3 p1 = vec3(a0.zw, h.y);
-                vec3 p2 = vec3(a1.xy, h.z);
-                vec3 p3 = vec3(a1.zw, h.w);
-                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-                p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-                m = m * m;
-                return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
-            }
-            
-            void main() {
-                vNormal = normal;
-                vec3 pos = position;
-                
-                // Base noise deformation
-                float noise = snoise(pos * 2.0 + u_time * 0.3) * 0.15;
-                pos += normal * noise;
-                
-                // Pulsation
-                float pulse = sin(u_time * 2.0) * 0.05 * u_pulse;
-                pos *= (1.0 + pulse);
-                
-                // Hand influence - morph toward hand position
-                if (length(u_handPos) > 0.0) {
-                    vec3 toHand = normalize(u_handPos - pos);
-                    float influence = max(0.0, 1.0 - length(pos - u_handPos) * 0.5);
-                    pos += toHand * influence * 0.3;
-                }
-                
-                vPosition = pos;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-            }
-        `;
-    }
-    
-    get planetFragmentShader() {
-        return `
-            uniform vec3 u_color;
-            uniform float u_time;
-            uniform float u_intensity;
-            varying vec3 vNormal;
-            varying vec3 vPosition;
+    // The shaders of the sun (Desktop space) live in sun.js.
 
-            void main() {
-                vec3 viewDir = normalize(cameraPosition - vPosition);
-                float fresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 3.0);
-
-                vec3 color = u_color * (1.0 + fresnel * 0.5);
-                float shimmer = sin(vPosition.x * 10.0 + u_time * 2.0) * 0.1 + 0.9;
-                color *= shimmer * u_intensity;
-                
-                gl_FragColor = vec4(color, 0.9);
-            }
-        `;
-    }
-    
     // DNA Helix Vertex Shader for Project Space
     get dnaHelixVertexShader() {
         return `
@@ -805,79 +704,13 @@ class MultiverseApp {
         const spaceGroup = new THREE.Group();
         spaceGroup.position.copy(this.spaces.desktop.position);
         
-        // Light Planet with shader
-        const planetGeometry = new THREE.IcosahedronGeometry(1.5, 4);
-        const planetMaterial = new THREE.ShaderMaterial({
-            vertexShader: this.planetVertexShader,
-            fragmentShader: this.planetFragmentShader,
-            uniforms: {
-                u_time: { value: 0 },
-                u_pulse: { value: 1.0 },
-                u_color: { value: new THREE.Color(0xffaa44) },
-                u_handPos: { value: new THREE.Vector3(0, 0, 0) },
-                u_intensity: { value: 1.0 }
-            },
-            transparent: true,
-        });
-        
-        const planet = new THREE.Mesh(planetGeometry, planetMaterial);
-        planet.userData = { type: 'planet', title: 'Light Planet' };
-        spaceGroup.add(planet);
-        this.spaces.desktop.objects.push(planet);
-        this.spaces.desktop.planet = planet;
-        
-        // Glow effect
-        const glowGeometry = new THREE.IcosahedronGeometry(2.0, 2);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff8844,
-            transparent: true,
-            opacity: 0.2,
-            side: THREE.BackSide
-        });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        spaceGroup.add(glow);
-        
-        // Orbiting particles
-        const particleCount = 500;
-        const particlePositions = new Float32Array(particleCount * 3);
-        
-        for (let i = 0; i < particleCount; i++) {
-            const radius = 2.5 + Math.random() * 2;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos(2 * Math.random() - 1);
-            
-            particlePositions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-            particlePositions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-            particlePositions[i * 3 + 2] = radius * Math.cos(phi);
-        }
-        
-        const particleGeometry = new THREE.BufferGeometry();
-        particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-        
-        const particleMaterial = new THREE.PointsMaterial({
-            color: 0xffcc66,
-            size: 0.05,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending
-        });
-        
-        const particles = new THREE.Points(particleGeometry, particleMaterial);
-        spaceGroup.add(particles);
-        this.spaces.desktop.objects.push(particles);
-        
-        // Saturn-like rings
-        const ringGeometry = new THREE.RingGeometry(2.2, 3.5, 64);
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0x886644,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.DoubleSide
-        });
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.rotation.x = Math.PI / 2 + 0.3;
-        spaceGroup.add(ring);
-        
+        // The sun itself lives in sun.js: round star with granulation and spots, corona,
+        // prominences, banded dust ring and soft dust. All parts share one u_time uniform,
+        // which animate() sets through planet.material.uniforms.u_time as before.
+        const sun = window.VibeSun.buildSun(THREE);
+        for (const part of sun.parts) spaceGroup.add(part);
+        this.spaces.desktop.objects.push(sun.planet, sun.particles);
+        this.spaces.desktop.planet = sun.planet;
         // Central marker
         const markerGeometry = new THREE.RingGeometry(3, 3.5, 32);
         const markerMaterial = new THREE.MeshBasicMaterial({
