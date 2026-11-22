@@ -3130,100 +3130,17 @@ class MultiverseApp {
             return; // Shuttle click handled
         }
 
-        // Check Factory click (visible from any space) — navigate into SWE Design
-        if (this.spaces.swedesign?.group && this.currentSpace !== 'swedesign') {
-            const factoryObjects = this.spaces.swedesign.group.children.filter(
-                c => c.isMesh
-            );
-            const factoryHit = raycaster.intersectObjects(factoryObjects);
-            if (factoryHit.length > 0) {
-                this.navigateToSpace('swedesign');
-                return;
-            }
+        // A click on a space object (factory, dashboard, boat, farm, studio, rose, aquarium,
+        // brain) opens that space. The nearest one on the sight line wins (space-pick.js);
+        // an idea bubble that is nearer keeps its own click.
+        const bubblesInFront = this.currentSpace === 'ideas'
+            ? this.spaces.ideas.objects.filter(obj => obj.userData && obj.userData.type === 'bubble')
+            : [];
+        const clickedSpace = window.VibeSpacePick.pickSpace(raycaster, this.spaces, this.currentSpace, bubblesInFront);
+        if (clickedSpace) {
+            this.navigateToSpace(clickedSpace);
+            return;
         }
-
-        // Check Dashboard chalkboard click — navigate into Dashboard
-        if (this.spaces.clawport?.group && this.currentSpace !== 'clawport') {
-            const boardObjects = this.spaces.clawport.group.children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const boardHit = raycaster.intersectObjects(boardObjects);
-            if (boardHit.length > 0) {
-                this.navigateToSpace('clawport');
-                return;
-            }
-        }
-
-        // Check Roarboot boat click (visible from any space) — navigate into Roarboot
-        if (this.spaces.roarboot?.group && this.currentSpace !== 'roarboot') {
-            const boatObjects = this.spaces.roarboot.group.children.filter(
-                c => c.isMesh
-            );
-            const boatHit = raycaster.intersectObjects(boatObjects);
-            if (boatHit.length > 0) {
-                this.navigateToSpace('roarboot');
-                return;
-            }
-        }
-
-        // Check Agent Farm click — navigate into Agent Farm
-        if (this.spaces.agentfarm?.group && this.currentSpace !== 'agentfarm') {
-            const farmObjects = this.spaces.agentfarm.group.children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const farmHit = raycaster.intersectObjects(farmObjects);
-            if (farmHit.length > 0) {
-                this.navigateToSpace('agentfarm');
-                return;
-            }
-        }
-
-        // Check Video Studio click — navigate to video space
-        if (this.spaces.video?.group && this.currentSpace !== 'video') {
-            const videoObjects = this.spaces.video.group.children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const videoHit = raycaster.intersectObjects(videoObjects);
-            if (videoHit.length > 0) {
-                this.navigateToSpace('video');
-                return;
-            }
-        }
-
-        // Check Flowzen (Blaue Rose) click — navigate into Flowzen space
-        if (this.spaces.flowzen?.group && this.currentSpace !== 'flowzen') {
-            const roseHit = raycaster.intersectObjects(this.spaces.flowzen.group.children, true);
-            if (roseHit.length > 0) {
-                console.log('[Multiverse] Rose clicked! Navigating to flowzen');
-                this.navigateToSpace('flowzen');
-                return;
-            }
-        }
-
-        // Check MiroFish click — navigate into MiroFish
-        if (this.spaces.mirofish?.objects[0] && this.currentSpace !== 'mirofish') {
-            const mfObjects = this.spaces.mirofish.objects[0].children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const mfHit = raycaster.intersectObjects(mfObjects);
-            if (mfHit.length > 0) {
-                this.navigateToSpace('mirofish');
-                return;
-            }
-        }
-
-        // Check Brain click — navigate into The Brain
-        if (this.spaces.thebrain?.group && this.currentSpace !== 'thebrain') {
-            const brainObjects = this.spaces.thebrain.group.children.flatMap(
-                c => c.isGroup ? c.children.filter(m => m.isMesh) : (c.isMesh ? [c] : [])
-            );
-            const brainHit = raycaster.intersectObjects(brainObjects);
-            if (brainHit.length > 0) {
-                this.navigateToSpace('thebrain');
-                return;
-            }
-        }
-
         // Check based on current space
         if (this.currentSpace === 'ideas') {
             // Check Ideas Space bubbles
