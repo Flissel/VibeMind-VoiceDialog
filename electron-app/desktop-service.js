@@ -14,6 +14,9 @@ const path = require('node:path');
 const { spawn: spawnProcess } = require('node:child_process');
 
 const PORT = 8007;
+// The health router is mounted under /api/health and its own route is /health; /api/health alone
+// answers 404 on a running service (measured 2026-11-22), which would start a second instance.
+const HEALTH_PATH = '/api/health/health';
 const RETRY_AFTER_MS = 2 * 60 * 1000; // a start that did not come up is tried again after this
 
 /** How to start the service, or null when its place or the interpreter is unknown or missing. */
@@ -34,7 +37,7 @@ function launchSpec(env = process.env, exists = fs.existsSync) {
 
 async function probeHealth() {
   try {
-    const response = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(2000) });
+    const response = await fetch(`http://127.0.0.1:${PORT}${HEALTH_PATH}`, { signal: AbortSignal.timeout(2000) });
     return response.ok;
   } catch (_) {
     return false;
@@ -77,4 +80,4 @@ function createDesktopService({ spec = launchSpec, probe = probeHealth, spawn = 
   };
 }
 
-module.exports = { PORT, launchSpec, createDesktopService };
+module.exports = { PORT, HEALTH_PATH, launchSpec, createDesktopService };

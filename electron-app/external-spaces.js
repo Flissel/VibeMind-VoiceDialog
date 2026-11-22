@@ -112,6 +112,7 @@ class ExternalSpaceManager {
     this._accessCookies = dependencies.accessCookies
       || { 'learning-huelle': require('./learning-access').learningAccessCookie };
     this._ready = new Map();  // id -> promise that settles once the first load was started
+    this._issued = new Map(); // id -> access cookie set for this space (main process only)
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -131,7 +132,13 @@ class ExternalSpaceManager {
 
   _targets(space) {
     if (space.file) return [{ kind: 'file', path: space.file }];
-    return space.url ? [{ kind: 'url', url: space.url, expectTitle: space.expectTitle }] : [];
+    if (!space.url) return [];
+    const target = { kind: 'url', url: space.url, expectTitle: space.expectTitle };
+    // The check before loading runs in the main process, outside the view's session: without
+    // the access cookie it would see the refusal (403) that the signed-in page never gets.
+    const cookie = this._issued.get(space.id);
+    if (cookie) target.headers = { Cookie: `${cookie.name}=${cookie.value}` };
+    return [target];
   }
 
   _create(id) {
@@ -187,6 +194,7 @@ class ExternalSpaceManager {
         return;
       }
       await view.webContents.session.cookies.set(cookie);
+      this._issued.set(space.id, cookie);
       this._log.log(`[ExternalSpaces] ${space.label}: Zugang ausgestellt`);
     } catch (error) {
       this._log.log(`[ExternalSpaces] ${space.label}: Zugang nicht gesetzt (${error && error.name})`);

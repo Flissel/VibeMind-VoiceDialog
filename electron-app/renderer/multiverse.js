@@ -3203,8 +3203,9 @@ class MultiverseApp {
         if (this.isNavigating || this._insideDesktopDashboard) return;
 
         // Request Automation_ui backend start (fallback if auto-start didn't work)
-        if (window.vibemind?.send) {
-            window.vibemind.send({ type: 'start_automation_ui' });
+        // (the bridge has no `send`; with that name this request was never sent)
+        if (window.vibemind?.sendToPython) {
+            window.vibemind.sendToPython({ type: 'start_automation_ui' });
         }
 
         const planet = this.spaces.desktop?.planet;

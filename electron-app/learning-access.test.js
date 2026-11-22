@@ -67,6 +67,31 @@ test('the learning entry asks for the access cookie and gets it before the page 
     await manager.ready('learning');
 
     assert.deepEqual(order, ['cookie:huelle_zugang', 'load:learning']);
+
+    // The check before loading runs outside the view's session. Seen in the app on 2026-11-22:
+    // cookie set, check without it, card "HTTP 403". The check must carry the same cookie.
+    const [target] = manager._targets(manager.spaces.get('learning'));
+    assert.deepEqual(target.headers, { Cookie: 'huelle_zugang=x' });
+    const { checkOverlayTarget } = require('./overlay-status');
+    const seen = [];
+    const result = await checkOverlayTarget(target, {
+        fetchImpl: async (url, options) => {
+            seen.push(options.headers);
+            return { ok: Boolean(options.headers && options.headers.Cookie), status: 403, body: { cancel: async () => {} } };
+        },
+    });
+    assert.deepEqual(seen, [{ Cookie: 'huelle_zugang=x' }]);
+    assert.equal(result.ok, true);
+});
+
+test('a space without an access cookie is checked without extra headers', () => {
+    const { ExternalSpaceManager } = require('./external-spaces');
+    const manager = new ExternalSpaceManager(null, {
+        BrowserView: class {}, shell: {}, logger: { log() {} },
+        env: { SALES_UI_URL: 'https://sales.example.test/', LEARNING_UI_URL: 'https://lernen.example.test/lernen/' },
+    });
+    assert.equal('headers' in manager._targets(manager.spaces.get('sales'))[0], false);
+    assert.equal('headers' in manager._targets(manager.spaces.get('learning'))[0], false, 'nothing issued yet');
 });
 
 test('a failing cookie store still loads the page (it then shows its own refusal)', async () => {

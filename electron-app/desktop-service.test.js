@@ -73,5 +73,16 @@ test('the main process answers the message the desktop space already sends', () 
     const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
     assert.match(main, /message && message\.type === 'start_automation_ui'/);
     assert.match(main, /desktopService\.ensureRunning\(\)/);
-    assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8'), /type: 'start_automation_ui'/);
+    // Seen in the app on 2026-11-22: the space called `window.vibemind.send`, which the bridge
+    // does not have, so the request was never sent. It must use a function the preload exposes.
+    const space = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const call = /window\.vibemind\.(\w+)\(\{ type: 'start_automation_ui' \}\)/.exec(space);
+    assert.ok(call, 'the desktop space sends start_automation_ui');
+    const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+    assert.match(preload, new RegExp(`${call[1]}: \\(message\\) => ipcRenderer\\.send\\('to-python', message\\)`));
+});
+
+test('health is asked where the running service answers it', () => {
+    // /api/health alone is 404 on a healthy service; asking there would start a second instance.
+    assert.equal(require('./desktop-service').HEALTH_PATH, '/api/health/health');
 });

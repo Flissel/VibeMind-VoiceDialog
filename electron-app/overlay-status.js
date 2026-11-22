@@ -69,7 +69,10 @@ async function checkOverlayTarget(target, deps = {}) {
   const timeoutMs = target.timeoutMs || DEFAULT_TIMEOUT_MS;
   let response;
   try {
-    response = await fetchImpl(target.url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' });
+    // target.headers: what the page itself will send (an access cookie), so the check sees what the page will see
+    const options = { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' };
+    if (target.headers) options.headers = target.headers;
+    response = await fetchImpl(target.url, options);
   } catch (err) {
     if (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
       return { ok: false, reason: `keine Antwort in ${timeoutMs} ms`, target: target.url };
