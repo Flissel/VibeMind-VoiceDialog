@@ -39,6 +39,7 @@
     <script defer src="format-renderer.js"></script>
     <script defer src="shuttle_manager.js"></script>
     <script defer src="multiverse.js"></script>
+    <script defer src="bubble-labels.js"></script>
     <script defer src="rich_content_renderer.js"></script>
     <script defer src="lib/research-markdown.js"></script>
     <script defer src="universe_canvas.js"></script>
@@ -929,6 +930,7 @@
                             radius: 0.6 + Math.random() * 0.3
                         };
                         window.multiverseApp.addBubble(bubbleData);
+                        if (window.bubbleLabelLayer) window.bubbleLabelLayer.markNew(b.id);
                         console.log('[UI] Added new bubble:', b.title, 'id:', b.id);
                     }
                     break;
@@ -1247,8 +1249,25 @@
                     if (message.node && message.node.node_type === 'bubble' && window.multiverseApp) {
                         window.multiverseApp.addBubbleTo3D(message.node);
                     }
+                    // Live row from the ideas table (Supabase Realtime): a new top-level idea is a
+                    // new bubble of the overview. It is marked for 30 s so it can be found.
+                    if (window.multiverseApp && window.BubbleLabels && window.BubbleLabels.isLiveTopLevelIdea(message)) {
+                        window.multiverseApp.addBubble(window.BubbleLabels.bubbleDataFromIdea(message.node));
+                        if (window.bubbleLabelLayer) window.bubbleLabelLayer.markNew(message.node.id);
+                        break;
+                    }
                     if (window.spaceCanvas) {
                         window.spaceCanvas.onNodeAdded(message.node);
+                    }
+                    break;
+
+                case 'node_removed':
+                    // Sent by Supabase Realtime for deleted rows. An ideas row is a bubble of the
+                    // overview; anything else is a node inside a bubble.
+                    if (message.table === 'ideas') {
+                        if (window.multiverseApp) window.multiverseApp.removeBubble(message.node_id);
+                    } else if (window.spaceCanvas) {
+                        window.spaceCanvas.onNodeDeleted(message.node_id);
                     }
                     break;
 

@@ -9,7 +9,11 @@
  * Feature flag: USE_SUPABASE_REALTIME=true (default: false)
  */
 
-const { getSupabaseClient } = require('./supabase-client');
+// Loaded on first use: the mapping below is also read by tests and tools that
+// have no need for the Supabase SDK.
+function getSupabaseClient() {
+  return require('./supabase-client').getSupabaseClient();
+}
 
 const REALTIME_COLOR = '\x1b[36m'; // Cyan
 const RST = '\x1b[0m';
@@ -112,6 +116,16 @@ const SUBSCRIPTIONS = [
     transform: (row) => ({ task_id: row.id, status: row.status, result: row.result }) },
 ];
 
+/**
+ * The IPC message for one row change. `table` tells the renderer where the row
+ * came from: `ideas` and `canvas_nodes` both map to node_added / node_removed,
+ * but only an ideas row is a bubble of the overview.
+ */
+function buildRealtimeMessage(sub, row) {
+  const data = sub.transform ? sub.transform(row) : row;
+  return { ...data, type: sub.messageType, source: 'supabase', table: sub.table };
+}
+
 /** Set of IDs we've already seen (dedup with Python backend) */
 const _seenIds = new Set();
 const MAX_SEEN = 1000;
@@ -159,8 +173,7 @@ function initRealtimeSubscriptions(mainWindow) {
           }
 
           // Transform and send to renderer
-          const data = sub.transform ? sub.transform(row) : row;
-          const message = { type: sub.messageType, source: 'supabase', ...data };
+          const message = buildRealtimeMessage(sub, row);
 
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('python-message', message);
@@ -204,4 +217,9 @@ function destroyRealtimeSubscriptions(channels) {
   console.log(`${REALTIME_COLOR}[Supabase-RT]${RST} All subscriptions removed`);
 }
 
-module.exports = { initRealtimeSubscriptions, destroyRealtimeSubscriptions };
+module.exports = {
+  initRealtimeSubscriptions,
+  destroyRealtimeSubscriptions,
+  buildRealtimeMessage,
+  SUBSCRIPTIONS,
+};
