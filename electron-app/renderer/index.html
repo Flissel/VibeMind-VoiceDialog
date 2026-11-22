@@ -44,6 +44,7 @@
     <script defer src="scene-refine.js"></script>
     <script defer src="multiverse.js"></script>
     <script defer src="bubble-labels.js"></script>
+    <script defer src="task-navigate.js"></script>
     <script defer src="rich_content_renderer.js"></script>
     <script defer src="lib/research-markdown.js"></script>
     <script defer src="universe_canvas.js"></script>
@@ -1263,6 +1264,11 @@
                     if (window.spaceCanvas) {
                         window.spaceCanvas.onNodeAdded(message.node);
                     }
+                    break;
+
+                case 'task_navigate':
+                    // The Brain started a task in another space (task-navigation.js): follow it, or show a note.
+                    if (window.VibeTaskNav) window.VibeTaskNav.handle(message);
                     break;
 
                 case 'node_removed':

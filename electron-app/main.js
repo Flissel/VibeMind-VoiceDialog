@@ -80,6 +80,7 @@ const OpenFangManager = require('./openfang-manager');
 // Supabase Realtime Subscriptions (live DB -> UI updates)
 const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
 const { initBrainEventBridge } = require('./brain-event-bridge');
+const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -2994,6 +2995,10 @@ app.whenReady().then(async () => {
         // Phase 11.G — Brain Space-Event Bridge (SSE -> renderer IPC)
         initBrainEventBridge(mainWindow);
     });
+    await startupPolicy.runExternalStartup('Task navigation', async () => {
+        // Follows the Brain's plan steps and tells the renderer which space a task belongs to
+        initTaskNavigation(mainWindow);
+    });
     await startupPolicy.runExternalStartup('AgentFarm manager', async () => {
         agentfarmManager = new AgentFarmManager(mainWindow);
     });
@@ -3177,6 +3182,7 @@ app.on('will-quit', () => {
     if (videoManager) videoManager.destroy();
     if (lauraEmbedHost) lauraEmbedHost.dispose();
     destroyRealtimeSubscriptions(realtimeChannels);
+    closeTaskNavigation();
 
     globalShortcut.unregisterAll();
 });
