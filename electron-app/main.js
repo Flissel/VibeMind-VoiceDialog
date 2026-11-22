@@ -3060,6 +3060,14 @@ app.whenReady().then(async () => {
         console.warn('[Main] Laura-Renderer fehlt – Video-Overlay zeigt Statuskarte:', err.message);
     }
     try {
+        // A Laura service on another machine is forwarded to a local port first: the Laura page
+        // only talks to this machine (its CSP), and everything below reads LAURA_URL.
+        const lauraForward = await require('./laura-local-forward').forwardRemoteLaura(process.env);
+        if (lauraForward) console.log('[Main] Laura service forwarded to', lauraForward.url);
+    } catch (err) {
+        console.error('[Main] Laura-Weiterleitung nicht moeglich:', err.message);
+    }
+    try {
         lauraEmbedHost = createLauraEmbedHost({
             app,
             dialog,
