@@ -19,6 +19,23 @@ const PORT = 8007;
 const HEALTH_PATH = '/api/health/health';
 const RETRY_AFTER_MS = 2 * 60 * 1000; // a start that did not come up is tried again after this
 
+// What the operating system gives every process. The service gets this and nothing else from
+// the app: the app has loaded its own .env (keys, and settings such as LOG_FILE that the service
+// reads too and that made it crash at start, measured 2026-11-22). The launcher starts the
+// service without those values; so does the app.
+const SYSTEM_ENV = new Set([
+  'systemroot', 'systemdrive', 'windir', 'path', 'pathext', 'comspec', 'temp', 'tmp',
+  'userprofile', 'username', 'userdomain', 'homedrive', 'homepath', 'appdata', 'localappdata',
+  'programdata', 'programfiles', 'programfiles(x86)', 'programw6432', 'commonprogramfiles',
+  'commonprogramfiles(x86)', 'commonprogramw6432', 'public', 'os', 'computername',
+  'number_of_processors', 'processor_architecture', 'processor_identifier',
+  'home', 'lang', 'lc_all', 'tz',
+]);
+
+function systemEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => SYSTEM_ENV.has(name.toLowerCase())));
+}
+
 /** How to start the service, or null when its place or the interpreter is unknown or missing. */
 function launchSpec(env = process.env, exists = fs.existsSync) {
   const dir = typeof env.DESKTOP_AUTOMATION_DIR === 'string' ? env.DESKTOP_AUTOMATION_DIR.trim() : '';
@@ -30,7 +47,7 @@ function launchSpec(env = process.env, exists = fs.existsSync) {
     command: python,
     args: ['server.py'],
     cwd: dir,
-    env: { ...env, PORT: String(PORT), HOST: '127.0.0.1' },
+    env: { ...systemEnv(env), PORT: String(PORT), HOST: '127.0.0.1' },
     log: path.join(logRoot, 'backend.log'),
   };
 }

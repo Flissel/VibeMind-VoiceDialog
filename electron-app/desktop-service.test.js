@@ -19,6 +19,16 @@ test('the service is started the way the launcher starts it, bound to this machi
     assert.equal(spec.log, path.join('C:\\L', 'VibeMind', 'logs', 'automation_ui', 'backend.log'));
 });
 
+test('the service gets the system environment only, not what the app loaded from its .env', () => {
+    // Seen in the app on 2026-11-22: LOG_FILE from the app's .env reached the service and it crashed at start.
+    const spec = launchSpec({
+        ...ENV, Path: 'C:\\Windows', SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\U', TEMP: 'C:\\T',
+        LOG_FILE: 'vibemind.log', OPENFANG_API_KEY: 'geheim', VIBEMIND_ENV_FILE: 'C:\\repo\\.env', ELECTRON_RUN_AS_NODE: '1',
+    }, all);
+
+    assert.deepEqual(Object.keys(spec.env).sort(), ['HOST', 'LOCALAPPDATA', 'PORT', 'Path', 'SystemRoot', 'TEMP', 'USERPROFILE']);
+});
+
 test('nothing is started when the place or the interpreter is unknown or missing', () => {
     assert.equal(launchSpec({}, all), null);
     assert.equal(launchSpec({ ...ENV, VIBEMIND_PYTHON: '' }, all), null);
