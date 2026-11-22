@@ -126,9 +126,39 @@ function buildRealtimeMessage(sub, row) {
   return { ...data, type: sub.messageType, source: 'supabase', table: sub.table };
 }
 
-/** Set of IDs we've already seen (dedup with Python backend) */
+/**
+ * The row a change is about. On DELETE Realtime sends an empty object as `new`
+ * and the old row (just its key) as `old`; reading `new` first lost the id, so
+ * a removed bubble never left the screen.
+ */
+function rowForEvent(payload) {
+  if (!payload) return {};
+  const row = payload.eventType === 'DELETE' ? payload.old : (payload.new || payload.old);
+  return row || {};
+}
+
+/** Ids of rows whose INSERT was already forwarded. */
 const _seenIds = new Set();
 const MAX_SEEN = 1000;
+
+/**
+ * True when the same INSERT arrives a second time. Only inserts are filtered:
+ * every UPDATE and DELETE of a known row is a new fact and must go through
+ * (the old filter dropped each later change of a row it had seen once).
+ * A DELETE forgets the id, because undoing a delete re-inserts the same row.
+ */
+function isRepeatedInsert(seen, eventType, rowId) {
+  if (!rowId) return false;
+  if (eventType === 'DELETE') { seen.delete(rowId); return false; }
+  if (eventType !== 'INSERT') return false;
+  if (seen.has(rowId)) return true;
+  seen.add(rowId);
+  if (seen.size > MAX_SEEN) {
+    const oldest = [...seen].slice(0, 200);
+    for (const id of oldest) seen.delete(id);
+  }
+  return false;
+}
 
 /**
  * Initialize Realtime subscriptions.
@@ -158,19 +188,8 @@ function initRealtimeSubscriptions(mainWindow) {
         'postgres_changes',
         { event: sub.event, schema: 'public', table: sub.table },
         (payload) => {
-          const row = payload.new || payload.old || {};
-          const rowId = row.id || '';
-
-          // Dedup: skip if Python backend already sent this via IPC
-          if (rowId && _seenIds.has(rowId)) return;
-          if (rowId) {
-            _seenIds.add(rowId);
-            if (_seenIds.size > MAX_SEEN) {
-              // Trim oldest entries
-              const arr = [..._seenIds];
-              for (let i = 0; i < 200; i++) _seenIds.delete(arr[i]);
-            }
-          }
+          const row = rowForEvent(payload);
+          if (isRepeatedInsert(_seenIds, payload.eventType, row.id || '')) return;
 
           // Transform and send to renderer
           const message = buildRealtimeMessage(sub, row);
@@ -221,5 +240,7 @@ module.exports = {
   initRealtimeSubscriptions,
   destroyRealtimeSubscriptions,
   buildRealtimeMessage,
+  rowForEvent,
+  isRepeatedInsert,
   SUBSCRIPTIONS,
 };
