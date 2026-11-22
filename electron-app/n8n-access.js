@@ -55,4 +55,43 @@ function frameHeaderUrls(env = process.env) {
   return [...urls];
 }
 
-module.exports = { LOCAL_URL, n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls };
+/** "name=value" pairs from the Set-Cookie headers of the sign-in answer. */
+function cookiePairs(setCookieHeaders) {
+  const pairs = [];
+  for (const raw of setCookieHeaders || []) {
+    const first = String(raw).split(';')[0].trim();
+    if (first.includes('=') && first.split('=')[0]) pairs.push(first);
+  }
+  return pairs;
+}
+
+/**
+ * The Cookie header for a request to n8n: what the request already carries, plus the
+ * session cookies, each name once (the session value wins).
+ *
+ * Why not the browser's cookie store: the editor sits in a frame of another site, so the
+ * cookie must be `SameSite=None`, which browsers only accept as `Secure`, and a Secure
+ * cookie cannot be stored for a plain-http address on another machine. Adding the header
+ * in the main process works for every address and keeps the value out of the page.
+ */
+function mergeCookieHeader(existing, pairs) {
+  const merged = new Map();
+  for (const part of String(existing || '').split(';')) {
+    const text = part.trim();
+    if (text.includes('=')) merged.set(text.split('=')[0], text);
+  }
+  for (const pair of pairs) merged.set(pair.split('=')[0], pair);
+  return [...merged.values()].join('; ');
+}
+
+/** Requests that get the session cookie: n8n itself, http and websocket. */
+function sessionCookieUrls(env = process.env) {
+  const base = new URL(n8nBaseUrl(env));
+  const ws = base.protocol === 'https:' ? 'wss:' : 'ws:';
+  return [`${base.origin}/*`, `${ws}//${base.host}/*`];
+}
+
+module.exports = {
+  LOCAL_URL, n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls,
+  cookiePairs, mergeCookieHeader, sessionCookieUrls,
+};

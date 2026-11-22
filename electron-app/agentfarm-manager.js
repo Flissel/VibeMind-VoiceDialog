@@ -12,7 +12,9 @@ const getElectronSession = () => require('electron').session;
 const path = require('path');
 const fs = require('fs');
 const { loadOverlay, loadStatus } = require('./overlay-status');
-const { n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls } = require('./n8n-access');
+const {
+  n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls, cookiePairs, mergeCookieHeader, sessionCookieUrls,
+} = require('./n8n-access');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
@@ -184,6 +186,21 @@ class AgentFarmManager {
         if (res.statusCode === 200) {
           // Extract set-cookie header and inject into Electron session
           const cookies = res.headers['set-cookie'];
+          // The session cookie also travels as a request header, added here in the main process
+          // (see mergeCookieHeader for why the cookie store alone is not enough for a remote n8n).
+          const pairs = cookiePairs(cookies);
+          if (pairs.length && this.agentfarmView) {
+            this.agentfarmView.webContents.session.webRequest.onBeforeSendHeaders(
+              { urls: sessionCookieUrls(process.env) },
+              (details, callback) => {
+                const headers = { ...details.requestHeaders };
+                const key = Object.keys(headers).find((name) => name.toLowerCase() === 'cookie') || 'Cookie';
+                headers[key] = mergeCookieHeader(headers[key], pairs);
+                callback({ requestHeaders: headers });
+              },
+            );
+            _afLog(`n8n session cookie wird an ${n8nUrl} mitgegeben (${pairs.length})`);
+          }
           if (cookies && this.agentfarmView) {
             // Set cookie on BOTH the BrowserView session AND the default session,
             // because the embedded n8n <iframe> may use a different partition.

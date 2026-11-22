@@ -37,6 +37,20 @@ test('the frame may show n8n wherever it runs', () => {
         ['http://localhost:15678/*', 'http://localhost:4200/*', 'http://n8n.example.test:15678/*']);
 });
 
+test('the session cookie is taken from the sign-in answer and merged into a request', () => {
+    const { cookiePairs, mergeCookieHeader, sessionCookieUrls } = require('./n8n-access');
+    const pairs = cookiePairs(['n8n-auth=abc.def; Path=/; HttpOnly; SameSite=Lax', 'kaputt', '=ohneName']);
+
+    assert.deepEqual(pairs, ['n8n-auth=abc.def']);
+    assert.equal(mergeCookieHeader(undefined, pairs), 'n8n-auth=abc.def');
+    assert.equal(mergeCookieHeader('lang=de; n8n-auth=alt', pairs), 'lang=de; n8n-auth=abc.def', 'each name once, the session wins');
+    assert.deepEqual(cookiePairs(undefined), []);
+    assert.deepEqual(sessionCookieUrls({ N8N_API_URL: 'http://n8n.example.test:15678' }),
+        ['http://n8n.example.test:15678/*', 'ws://n8n.example.test:15678/*']);
+    assert.deepEqual(sessionCookieUrls({ N8N_API_URL: 'https://n8n.example.test' }),
+        ['https://n8n.example.test/*', 'wss://n8n.example.test/*']);
+});
+
 test('manager, preload, main process and the Agent Farm page use the one address', () => {
     const read = (...parts) => fs.readFileSync(path.join(__dirname, ...parts), 'utf8');
     const manager = read('agentfarm-manager.js');
