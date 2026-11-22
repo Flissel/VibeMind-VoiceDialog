@@ -52,6 +52,25 @@ test('polish turns hulls into halos and base rings into round rings, on the same
     assert.equal(tilted.material.type, 'MeshBasicMaterial', 'other rings are left alone');
 });
 
+test('a polished base ring is drawn wider but is only clickable where the old ring was', () => {
+    const group = new THREE.Group();
+    const ring = baseRing(); // old ring: radius 2.5 to 3
+    group.add(ring);
+    kit.polishObject(THREE, group, null);
+    group.updateMatrixWorld(true);
+
+    const hitsAt = (radius) => {
+        const raycaster = new THREE.Raycaster(new THREE.Vector3(radius, 5, 0), new THREE.Vector3(0, -1, 0));
+        return raycaster.intersectObject(ring).length;
+    };
+
+    assert.ok(ring.geometry.parameters.outerRadius > 3.5, 'drawn wider');
+    assert.equal(hitsAt(2.75), 1, 'inside the old ring');
+    assert.equal(hitsAt(3.4), 0, 'the new soft skirt outside');
+    assert.equal(hitsAt(2.3), 0, 'the new soft skirt inside');
+    assert.equal(hitsAt(1.0), 0, 'the hole');
+});
+
 test('polish is safe to run twice', () => {
     const group = new THREE.Group();
     group.add(hull(), baseRing(), points());

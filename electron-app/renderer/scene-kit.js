@@ -119,6 +119,22 @@
         });
     }
 
+    /**
+     * The drawn ring is wider than the old one (soft skirt), but rings are click targets.
+     * Hits outside the old ring are dropped, so nothing becomes clickable that was not before.
+     */
+    function keepClickArea(THREE, ring, innerRadius, outerRadius) {
+        const local = new THREE.Vector3();
+        ring.raycast = function (raycaster, intersects) {
+            const start = intersects.length;
+            THREE.Mesh.prototype.raycast.call(this, raycaster, intersects);
+            for (let i = intersects.length - 1; i >= start; i--) {
+                const r = this.worldToLocal(local.copy(intersects[i].point)).length();
+                if (r < innerRadius || r > outerRadius) intersects.splice(i, 1);
+            }
+        };
+    }
+
     /** A hull is a big inside-out, see-through sphere drawn in one flat colour. */
     function isGlowHull(THREE, obj) {
         const m = obj.material;
@@ -160,6 +176,7 @@
                 const old = obj.material;
                 obj.geometry.dispose();
                 obj.geometry = new THREE.RingGeometry(inner, outer, 128, 1);
+                keepClickArea(THREE, obj, p.innerRadius, p.outerRadius);
                 obj.material = ringMaterial(THREE, old.color.getHex(), Math.min(1, old.opacity * 2.6), inner, outer, done.rings * 1.7);
                 old.dispose();
                 done.rings++;
