@@ -32,6 +32,7 @@ const EXTERNAL_SPACES = Object.freeze([
   {
     id: 'learning', label: 'Lernen', icon: '\u{1F393}', color: 0x9ccc65, position: [8, 0, 26],
     urlEnv: 'LEARNING_UI_URL',
+    access: 'learning-huelle', // the page wants an access cookie; the app issues it (learning-access.js)
     agent: { name: 'Lernen', slug: 'learning', role: 'Kurse und Aufgaben' },
   },
   {
@@ -99,6 +100,10 @@ class ExternalSpaceManager {
     this._env = dependencies.env || process.env;
     this._overlayDeps = dependencies.overlayDeps || {};
     this._log = dependencies.logger || console;
+    // access kind -> (spaceUrl, env) => cookie for session.cookies.set, or null
+    this._accessCookies = dependencies.accessCookies
+      || { 'learning-huelle': require('./learning-access').learningAccessCookie };
+    this._ready = new Map();  // id -> promise that settles once the first load was started
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -147,8 +152,32 @@ class ExternalSpaceManager {
       }
     });
     this.views.set(id, { view, result: null });
-    this._load(id);
+    if (space.access && space.url) {
+      this._ready.set(id, this._signIn(space, view).then(() => { this._load(id); }));
+    } else {
+      this._load(id); // nothing to wait for
+    }
     return view;
+  }
+
+  /** Resolves once the first load of this space was started (after its sign-in, if it has one). */
+  ready(id) { return this._ready.get(id) || Promise.resolve(); }
+
+  /** Sets the access cookie of a space that wants one. Never throws: without it the page shows its own refusal. */
+  async _signIn(space, view) {
+    const make = space.access && this._accessCookies[space.access];
+    if (!make || !space.url) return;
+    try {
+      const cookie = make(space.url, this._env);
+      if (!cookie) {
+        this._log.log(`[ExternalSpaces] ${space.label}: kein Zugang ausgestellt (Schluessel oder https fehlt)`);
+        return;
+      }
+      await view.webContents.session.cookies.set(cookie);
+      this._log.log(`[ExternalSpaces] ${space.label}: Zugang ausgestellt`);
+    } catch (error) {
+      this._log.log(`[ExternalSpaces] ${space.label}: Zugang nicht gesetzt (${error && error.name})`);
+    }
   }
 
   show(id) {
