@@ -2349,6 +2349,11 @@ class MultiverseApp {
             }
         }
 
+        // External spaces (external-spaces.js): one overlay manager, shown on arrival, hidden on leave
+        if (this.spaces[this.currentSpace]?.external && targetSpace !== this.currentSpace) {
+            if (window.vibemind && window.vibemind.hideExternalSpaces) window.vibemind.hideExternalSpaces();
+        }
+
         // Hide MiroFish BrowserView when leaving mirofish space
         if (this.currentSpace === 'mirofish' && targetSpace !== 'mirofish') {
             if (window.vibemind && window.vibemind.hideMiroFish) {
@@ -2449,6 +2454,10 @@ class MultiverseApp {
                 window.vibemind.showVideo();
                 console.log('[Multiverse] Showing Video Studio');
             }
+        }
+
+        if (this.spaces[targetSpace]?.external) {
+            if (window.vibemind && window.vibemind.showExternalSpace) window.vibemind.showExternalSpace(targetSpace);
         }
 
         // Show MiroFish BrowserView when entering mirofish space

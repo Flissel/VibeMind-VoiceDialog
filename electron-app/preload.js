@@ -342,6 +342,11 @@ contextBridge.exposeInMainWorld('vibemind', {
     hideMiroFish: () => ipcRenderer.send('hide-mirofish'),
     isMiroFishVisible: () => ipcRenderer.invoke('is-mirofish-visible'),
 
+    // External spaces (OpenFang, Sales, Marketing, Lernen, Events): one overlay manager for all
+    getExternalSpaces: () => ipcRenderer.invoke('get-external-spaces'),
+    showExternalSpace: (id) => ipcRenderer.send('show-external-space', id),
+    hideExternalSpaces: () => ipcRenderer.send('hide-external-spaces'),
+
     // Flowzen Diary (Blue Rose Journal) BrowserView Control
     showFlowzen: () => ipcRenderer.send('show-flowzen'),
     hideFlowzen: () => ipcRenderer.send('hide-flowzen'),

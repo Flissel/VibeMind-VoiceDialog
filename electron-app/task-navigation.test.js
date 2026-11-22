@@ -18,7 +18,9 @@ test('registry spaces map to the keys of the app scene', () => {
 
 test('every app key in the map exists in the scene', () => {
     const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const external = require('./external-spaces').EXTERNAL_SPACES.map((s) => s.id); // added at runtime
     for (const key of new Set(Object.values(SPACE_TO_APP).filter(Boolean))) {
+        if (external.includes(key)) continue;
         assert.match(scene, new RegExp(`\\b${key}: \\{`), `scene has no space "${key}"`);
     }
 });

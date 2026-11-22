@@ -29,8 +29,8 @@ const SPACE_TO_APP = Object.freeze({
   schedule: null,
   research: null,
   minibook: null,
-  learning: null,
-  'event-management': null,
+  learning: 'learning',          // external spaces, see external-spaces.js
+  'event-management': 'events',
 });
 
 function appKeyForSpace(space) {

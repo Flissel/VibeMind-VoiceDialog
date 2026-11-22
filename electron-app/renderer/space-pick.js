@@ -48,6 +48,15 @@
                 bestDistance = hits[0].distance;
             }
         }
+        // External spaces are added at runtime (external-spaces.js); their gate is the click target.
+        for (const [key, space] of Object.entries(spaces)) {
+            if (!space || !space.external || key === currentSpace || !space.group) continue;
+            const hits = raycaster.intersectObjects(directMeshes(space.group), false);
+            if (hits.length && hits[0].distance < bestDistance) {
+                best = key;
+                bestDistance = hits[0].distance;
+            }
+        }
         if (best && inFront.length) {
             const nearer = raycaster.intersectObjects(inFront, false);
             if (nearer.length && nearer[0].distance < bestDistance) return null;
