@@ -155,7 +155,7 @@ let agentfarmManager = null;
 
 // MiroFish manager
 let mirofishManager = null;
-// Spaces that are simply another web UI (OpenFang, Sales, Marketing, Lernen, Events)
+// Spaces that are simply another web UI (Sales, Marketing, Lernen, Events)
 let externalSpaces = null;
 
 // Flowzen Diary (Blue Rose Journal) manager

@@ -10,19 +10,15 @@
  * into this repository. Without an address the entry shows the card
  * "kein Ziel konfiguriert".
  *
- * Keys stay in the main process: a space may name an environment variable whose value
+ * Keys stay in the main process: a space may name an environment variable (earerEnv) whose value
  * is added as `Authorization: Bearer …` to requests to that space's own address, and
  * only there. The page never sees the value.
  */
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 
 const EXTERNAL_SPACES = Object.freeze([
-  {
-    id: 'openfang', label: 'OpenFang', icon: '\u{1F9BE}', color: 0xa78bfa, position: [4, 0, -16],
-    urlEnv: 'OPENFANG_UI_URL', defaultUrl: 'http://127.0.0.1:4200/', expectTitle: /OpenFang/i,
-    bearerEnv: 'OPENFANG_API_KEY',
-    agent: { name: 'OpenFang', slug: 'openfang', role: 'Agenten-Leitstand' },
-  },
+  // OpenFang has no entry here: its dashboard is a tab of the Agent Farm and needs no key
+  // on this machine (GET /api/auth/check -> mode "none").
   {
     id: 'sales', label: 'Sales', icon: '\u{1F91D}', color: 0x4fc3f7, position: [26, 0, 2],
     urlEnv: 'SALES_UI_URL',

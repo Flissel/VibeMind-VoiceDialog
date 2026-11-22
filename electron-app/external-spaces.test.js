@@ -11,8 +11,9 @@ const { sceneEntry, buildGate } = require('./renderer/external-spaces');
 const { pickSpace } = require('./renderer/space-pick');
 const { appKeyForSpace } = require('./task-navigation');
 
-test('the five external spaces are listed once, each with its own place', () => {
-    assert.deepEqual(EXTERNAL_SPACES.map((s) => s.id), ['openfang', 'sales', 'marketing', 'learning', 'events']);
+test('the external spaces are listed once, each with its own place', () => {
+    // OpenFang is not among them: it lives in the Agent Farm.
+    assert.deepEqual(EXTERNAL_SPACES.map((s) => s.id), ['sales', 'marketing', 'learning', 'events']);
     const places = new Set(EXTERNAL_SPACES.map((s) => s.position.join(',')));
     assert.equal(places.size, EXTERNAL_SPACES.length);
 });
@@ -22,7 +23,6 @@ test('addresses come from the environment; private hosts are not written into th
     assert.doesNotMatch(source, /ts\.net|100\.\d+\.\d+\.\d+/);
 
     const none = resolveSpaces({});
-    assert.equal(none.find((s) => s.id === 'openfang').url, 'http://127.0.0.1:4200/');
     assert.equal(none.find((s) => s.id === 'marketing').url, 'http://127.0.0.1:5510/mockup/');
     for (const id of ['sales', 'learning', 'events']) assert.equal(none.find((s) => s.id === id).url, '', id);
 
@@ -32,17 +32,18 @@ test('addresses come from the environment; private hosts are not written into th
 });
 
 test('the renderer learns neither addresses nor key names', () => {
-    const list = describeForRenderer({ SALES_UI_URL: 'https://sales.example.test/', OPENFANG_API_KEY: 'geheim-123' });
+    const list = describeForRenderer({ SALES_UI_URL: 'https://sales.example.test/' });
     const text = JSON.stringify(list);
 
-    assert.doesNotMatch(text, /example\.test|geheim-123|OPENFANG_API_KEY|urlEnv|bearerEnv/);
+    assert.doesNotMatch(text, /example\.test|urlEnv|bearerEnv|defaultUrl/);
     assert.equal(list.find((s) => s.id === 'sales').configured, true);
     assert.equal(list.find((s) => s.id === 'learning').configured, false);
 });
 
-test('the OpenFang key is attached to OpenFang only, and never overrides the page', () => {
+test('a key is attached to the address of its own space only, and never overrides the page', () => {
     const env = { OPENFANG_API_KEY: ' geheim-123 ' };
-    const [openfang, sales] = resolveSpaces({ ...env, SALES_UI_URL: 'https://sales.example.test/' });
+    const openfang = { id: 'probe', label: 'Probe', bearerEnv: 'OPENFANG_API_KEY', url: 'http://127.0.0.1:4200/' };
+    const sales = resolveSpaces({ SALES_UI_URL: 'https://sales.example.test/' }).find((s) => s.id === 'sales');
 
     const auth = authFor(openfang, env);
     assert.equal(auth.header, 'Bearer geheim-123');
@@ -87,6 +88,7 @@ test('the manager shows one space at a time, each in its own session, and sends 
         BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} },
         env: { OPENFANG_API_KEY: 'geheim-123', SALES_UI_URL: 'https://sales.example.test/' },
     });
+    manager.spaces.set('openfang', { id: 'openfang', label: 'Probe mit Schluessel', bearerEnv: 'OPENFANG_API_KEY', url: 'http://127.0.0.1:4200/' });
     manager._load = (id) => { loaded.push(id); manager.views.get(id).result = { ok: true }; };
 
     assert.equal(manager.show('gibt-es-nicht'), false);
@@ -98,7 +100,7 @@ test('the manager shows one space at a time, each in its own session, and sends 
     assert.deepEqual(electron.made.map((v) => v.options.webPreferences.partition), ['persist:space-openfang', 'persist:space-sales']);
     assert.equal(electron.window.view, electron.made[0]);
     assert.deepEqual(electron.made[0].bounds, { x: 0, y: 75, width: 1400, height: 825 });
-    assert.equal(electron.made[0].hooks.length, 1, 'OpenFang requests get the key');
+    assert.equal(electron.made[0].hooks.length, 1, 'requests of the space with a key get it');
     assert.equal(electron.made[1].hooks.length, 0, 'Sales requests do not');
     let sent;
     electron.made[0].hooks[0].handler({ requestHeaders: {} }, (result) => { sent = result; });
@@ -124,19 +126,19 @@ test('a space that showed a status card is checked again when it is opened next'
 });
 
 test('the gate of an external space is its click target and carries what the scene reads', () => {
-    const space = describeForRenderer({})[0];
+    const space = describeForRenderer({}).find((s) => s.id === 'marketing');
     const entry = sceneEntry(THREE, space);
     const gate = buildGate(THREE, space, null);
     entry.group = gate.group;
     gate.group.updateMatrixWorld(true);
 
     assert.equal(entry.external, true);
-    assert.equal(entry.name, 'OpenFang');
+    assert.equal(entry.name, 'Marketing');
     assert.deepEqual(entry.position.toArray(), space.position);
     const from = new THREE.Vector3(space.position[0], space.position[1] + 1.7, space.position[2] + 12);
     const ray = new THREE.Raycaster(from, new THREE.Vector3(0, 0, -1));
-    assert.equal(pickSpace(ray, { openfang: entry }, 'ideas'), 'openfang');
-    assert.equal(pickSpace(ray, { openfang: entry }, 'openfang'), null);
+    assert.equal(pickSpace(ray, { marketing: entry }, 'ideas'), 'marketing');
+    assert.equal(pickSpace(ray, { marketing: entry }, 'marketing'), null);
 });
 
 test('tasks of Lernen and Event-Management now have a place to go', () => {
