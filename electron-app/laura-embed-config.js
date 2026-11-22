@@ -38,11 +38,16 @@ function resolveLauraRendererPath({ dirname, resourcesPath, existsSync }) {
 }
 
 function readLauraServiceInfo(env) {
-  const token = env.LAURA_TOKEN;
-  if (typeof token !== 'string' || token.trim() === '') return null;
+  const token = typeof env.LAURA_TOKEN === 'string' && env.LAURA_TOKEN.trim() !== '' ? env.LAURA_TOKEN : '';
+  const explicitUrl = typeof env.LAURA_URL === 'string' ? env.LAURA_URL.trim() : '';
+  // Fails closed without a token, as before. One deliberate exception: the operator names the
+  // service (LAURA_URL) AND states that it runs without a token (LAURA_ALLOW_NO_TOKEN=1). The
+  // API only checks X-Laura-Token when it was started with LAURA_TOKEN.
+  const tokenless = explicitUrl !== '' && env.LAURA_ALLOW_NO_TOKEN === '1';
+  if (!token && !tokenless) return null;
 
   return {
-    baseUrl: env.LAURA_URL || `http://127.0.0.1:${env.LAURA_PORT || '8765'}`,
+    baseUrl: explicitUrl || `http://127.0.0.1:${env.LAURA_PORT || '8765'}`,
     token,
   };
 }

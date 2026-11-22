@@ -583,12 +583,16 @@ export function WorkflowBuilder() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [authTick, setAuthTick] = useState(0)
 
-  const n8nBaseUrl = 'http://localhost:15678'
+  // n8n may run on another machine; the main process knows where (N8N_API_URL).
+  const [n8nBaseUrl, setN8nBaseUrl] = useState('http://localhost:15678')
 
   useState(() => { status.refresh(); refresh() })
 
   useEffect(() => {
     const af = (window as any).vibemindAgentFarm
+    if (af && typeof af.getN8nUrl === 'function') {
+      af.getN8nUrl().then((url: string) => { if (url) setN8nBaseUrl(url) }).catch(() => {})
+    }
     if (af && typeof af.onN8nAuthReady === 'function') {
       af.onN8nAuthReady(() => setAuthTick((t) => t + 1))
     }

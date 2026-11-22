@@ -34,10 +34,11 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ||
  * start. In that case the `ws` package is handed in as transport. `ws` is only
  * loaded when it is needed, which keeps this module cheap for preload consumers.
  */
-function buildRealtimeOptions({
-  nativeWebSocket = globalThis.WebSocket,
-  loadWs = () => require('ws'),
-} = {}) {
+function buildRealtimeOptions(deps = {}) {
+  // `'nativeWebSocket' in deps`, not a default value: a caller that passes `undefined` means
+  // "this runtime has none" (the test did, and passed only on a Node without WebSocket).
+  const nativeWebSocket = 'nativeWebSocket' in deps ? deps.nativeWebSocket : globalThis.WebSocket;
+  const loadWs = deps.loadWs || (() => require('ws'));
   const options = { params: { eventsPerSecond: 10 } };
   if (typeof nativeWebSocket !== 'function') options.transport = loadWs();
   return options;

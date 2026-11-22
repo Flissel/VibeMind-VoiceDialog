@@ -12,6 +12,7 @@ const getElectronSession = () => require('electron').session;
 const path = require('path');
 const fs = require('fs');
 const { loadOverlay, loadStatus } = require('./overlay-status');
+const { n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls } = require('./n8n-access');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
@@ -101,7 +102,7 @@ class AgentFarmManager {
     //  - OpenFang (:4200) sends X-Frame-Options: DENY (Rust server)
     // Rowboat (:3100) needs no stripping (Next.js sends no such headers).
     this.agentfarmView.webContents.session.webRequest.onHeadersReceived(
-      { urls: ['http://localhost:15678/*', 'http://localhost:4200/*'] },
+      { urls: frameHeaderUrls(process.env) }, // n8n may run elsewhere (N8N_API_URL)
       (details, callback) => {
         const headers = { ...details.responseHeaders };
         // Remove headers that block iframe embedding (case-insensitive keys)
@@ -159,13 +160,16 @@ class AgentFarmManager {
    * Retries up to 6 times (n8n may still be booting).
    */
   _loginToN8n(attempt = 1) {
-    const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
-    const http = require('http');
+    const n8nUrl = n8nBaseUrl(process.env);
+    const login = n8nLogin(process.env);
+    if (!login) {
+      // A remote n8n and no account in the environment: nothing to sign in with.
+      _afLog(`n8n at ${n8nUrl}: kein Zugang hinterlegt (N8N_UI_EMAIL, N8N_UI_PASSWORD) - keine automatische Anmeldung`);
+      return;
+    }
     const url = new URL(`${n8nUrl}/rest/login`);
-    const body = JSON.stringify({
-      emailOrLdapLoginId: 'admin@vibemind.local',
-      password: 'Vibemind1',
-    });
+    const http = require(url.protocol === 'https:' ? 'https' : 'http');
+    const body = JSON.stringify({ emailOrLdapLoginId: login.email, password: login.password });
 
     const req = http.request({
       hostname: url.hostname,
@@ -223,8 +227,13 @@ class AgentFarmManager {
             }
           }, 300);
         } else {
-          _afLog(`n8n login returned status ${res.statusCode}, attempt ${attempt}/6`);
-          if (attempt < 6) setTimeout(() => this._loginToN8n(attempt + 1), 5000);
+          if (!shouldRetryLogin(res.statusCode)) {
+            // Refused: repeating it only makes n8n lock the account out.
+            _afLog(`n8n login refused (status ${res.statusCode}, account from ${login.source}) - kein weiterer Versuch`);
+          } else {
+            _afLog(`n8n login returned status ${res.statusCode}, attempt ${attempt}/6`);
+            if (attempt < 6) setTimeout(() => this._loginToN8n(attempt + 1), 5000);
+          }
         }
       });
     });

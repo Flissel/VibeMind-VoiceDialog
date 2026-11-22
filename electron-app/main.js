@@ -2145,6 +2145,8 @@ function setupIpcHandlers() {
         }
     });
 
+    ipcMain.handle('agentfarm:n8n-url', () => require('./n8n-access').n8nBaseUrl(process.env));
+
     ipcMain.handle('agentfarm:n8n-status', async () => {
         try {
             return await sendToPythonAndWait({ type: 'n8n_status' }, 'n8n_status_result');

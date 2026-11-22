@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
   openN8nEditor: (workflowId) =>
     ipcRenderer.invoke('clawport:open-n8n-editor', { workflowId }),
 
+  // Where n8n runs (N8N_API_URL); the editor frame loads from there
+  getN8nUrl: () =>
+    ipcRenderer.invoke('agentfarm:n8n-url'),
+
   n8nStatus: () =>
     ipcRenderer.invoke('agentfarm:n8n-status'),
 

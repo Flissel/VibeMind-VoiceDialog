@@ -113,6 +113,15 @@ test('service info fails closed without a non-empty Laura token', () => {
   assert.equal(readLauraServiceInfo({ LAURA_TOKEN: '   ' }), null);
 });
 
+test('a named service without a token is only used when the operator says so', () => {
+  const url = 'http://laura.example.test:8765';
+  assert.equal(readLauraServiceInfo({ LAURA_URL: url }), null, 'an address alone is not enough');
+  assert.equal(readLauraServiceInfo({ LAURA_ALLOW_NO_TOKEN: '1' }), null, 'the switch alone is not enough');
+  assert.equal(readLauraServiceInfo({ LAURA_URL: url, LAURA_ALLOW_NO_TOKEN: 'true' }), null, 'only the exact value 1');
+  assert.deepEqual(readLauraServiceInfo({ LAURA_URL: url, LAURA_ALLOW_NO_TOKEN: '1' }), { baseUrl: url, token: '' });
+  assert.deepEqual(readLauraServiceInfo({ LAURA_URL: url, LAURA_TOKEN: 'secret' }), { baseUrl: url, token: 'secret' });
+});
+
 test('service info uses the explicit Laura URL when authenticated', () => {
   assert.deepEqual(
     readLauraServiceInfo({ LAURA_URL: 'http://localhost:9000', LAURA_TOKEN: 'secret' }),
