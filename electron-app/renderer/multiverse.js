@@ -252,6 +252,16 @@ class MultiverseApp {
         this.createEnvironment();
         this.createConnectionPaths();
 
+        // Look of the scene (scene-kit.js, scene-refine.js): soft halos, round base rings and
+        // soft particles everywhere, then the detail pass over the single objects. Both only
+        // replace shapes and surfaces; places, references and click targets stay as built above.
+        try {
+            if (window.VibeSceneRefine) window.VibeSceneRefine.refine(this);
+            if (window.VibeSceneKit) window.VibeSceneKit.polish(this);
+        } catch (err) {
+            console.warn('[Multiverse] scene polish failed, keeping the plain look:', err);
+        }
+
         // Initialize ShuttleManager for requirement pipeline visualization
         if (typeof ShuttleManager !== 'undefined') {
             this.shuttleManager = new ShuttleManager(this.scene, this.spaces);
@@ -2852,6 +2862,7 @@ class MultiverseApp {
         
         const delta = this.clock.getDelta();
         const elapsed = this.clock.getElapsedTime();
+        if (window.VibeSceneKit) window.VibeSceneKit.time.value = elapsed;
         
         // Update controls
         if (this.controls) {
