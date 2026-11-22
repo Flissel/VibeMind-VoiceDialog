@@ -1093,7 +1093,16 @@ function readREProjectDetail(projectDir) {
 
 function setupIpcHandlers() {
     // Forward messages from renderer to Python
+    const desktopService = require('./desktop-service').createDesktopService();
     ipcMain.on('to-python', (event, message) => {
+        // The Desktop space asks for its service when it is opened; the backend has no
+        // receiver for this, so the main process starts the service itself.
+        if (message && message.type === 'start_automation_ui') {
+            desktopService.ensureRunning().then((answer) => {
+                if (!event.sender.isDestroyed()) event.sender.send('python-message', { type: 'automation_ui_status', ...answer });
+            });
+            return;
+        }
         sendToPython(message);
     });
 
