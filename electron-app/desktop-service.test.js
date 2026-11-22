@@ -92,6 +92,29 @@ test('the main process answers the message the desktop space already sends', () 
     assert.match(preload, new RegExp(`${call[1]}: \\(message\\) => ipcRenderer\\.send\\('to-python', message\\)`));
 });
 
+test('camera moves into and out of a space do not depend on animation frames alone', async () => {
+    // Seen in the app on 2026-11-22: with the window covered there are no animation frames, the
+    // move into the desktop space never ended and the dashboard was never created.
+    const space = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    assert.doesNotMatch(space, /requestAnimationFrame\(zoom(In|Out)\)/);
+    assert.equal((space.match(/this\._cameraStep\(zoom(In|Out)\)/g) || []).length, 8);
+
+    // The step itself: runs once, by timer when no frame comes, by frame when one does.
+    const body = /_cameraStep\(step\) \{([\s\S]*?)\n    \}\n/.exec(space.replace(/\r\n/g, '\n'))[1];
+    const make = (requestAnimationFrame) => new Function('requestAnimationFrame', 'cancelAnimationFrame', 'setTimeout', 'clearTimeout',
+        `return function (step) {${body}};`)(requestAnimationFrame, () => {}, setTimeout, clearTimeout);
+
+    let ran = 0;
+    make(() => 0)(() => { ran += 1; });                      // a covered window: the frame never comes
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(ran, 1);
+
+    ran = 0;
+    make((run) => { setImmediate(run); return 1; })(() => { ran += 1; }); // a visible window: frame first
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(ran, 1, 'the timer must not run the step a second time');
+});
+
 test('health is asked where the running service answers it', () => {
     // /api/health alone is 404 on a healthy service; asking there would start a second instance.
     assert.equal(require('./desktop-service').HEALTH_PATH, '/api/health/health');

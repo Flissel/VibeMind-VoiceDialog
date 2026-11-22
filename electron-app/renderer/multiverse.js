@@ -1824,7 +1824,7 @@ class MultiverseApp {
             this.controls.target.lerpVectors(startLookAt, rosePos, eased);
 
             if (progress < 1) {
-                requestAnimationFrame(zoomIn);
+                this._cameraStep(zoomIn);
             } else {
                 this.isNavigating = false;
                 this.currentSpace = 'flowzen';
@@ -1851,7 +1851,7 @@ class MultiverseApp {
                 console.log('[Multiverse] Entered Blaue Rose (inside glass dome)');
             }
         };
-        requestAnimationFrame(zoomIn);
+        this._cameraStep(zoomIn);
     }
 
     /**
@@ -1889,7 +1889,7 @@ class MultiverseApp {
                 this.controls.target.lerpVectors(startLookAt, targetLookAt, eased);
 
                 if (progress < 1) {
-                    requestAnimationFrame(zoomOut);
+                    this._cameraStep(zoomOut);
                 } else {
                     this.isNavigating = false;
                     this.currentSpace = this._flowzenCamSave.space || 'ideas';
@@ -1898,7 +1898,7 @@ class MultiverseApp {
                     console.log('[Multiverse] Exited Blaue Rose');
                 }
             };
-            requestAnimationFrame(zoomOut);
+            this._cameraStep(zoomOut);
         } else {
             this._insideFlowzenRose = false;
         }
@@ -3242,15 +3242,34 @@ class MultiverseApp {
             this.controls.target.lerpVectors(startLookAt, sunPos, eased);
 
             if (progress < 1) {
-                requestAnimationFrame(zoomIn);
+                this._cameraStep(zoomIn);
             } else {
                 this.isNavigating = false;
                 this._showDesktopDashboard();
             }
         };
-        requestAnimationFrame(zoomIn);
+        this._cameraStep(zoomIn);
     }
 
+    /**
+     * Next step of a camera move. A hidden or covered window gets no animation frames, so a move
+     * driven by requestAnimationFrame alone never ends there: the desktop dashboard was not
+     * created and `isNavigating` stayed set (measured 2026-11-22). A timer takes over then.
+     */
+    _cameraStep(step) {
+        let done = false;
+        let frame = 0;
+        let timer = 0;
+        const run = () => {
+            if (done) return;
+            done = true;
+            cancelAnimationFrame(frame);
+            clearTimeout(timer);
+            step();
+        };
+        frame = requestAnimationFrame(run);
+        timer = setTimeout(run, 100);
+    }
     /**
      * Create and show the fullscreen desktop dashboard overlay.
      */
@@ -3737,13 +3756,13 @@ class MultiverseApp {
                 this.controls.target.lerpVectors(startLookAt, targetLookAt, eased);
 
                 if (progress < 1) {
-                    requestAnimationFrame(zoomOut);
+                    this._cameraStep(zoomOut);
                 } else {
                     this.isNavigating = false;
                     this._insideDesktopDashboard = false;
                 }
             };
-            requestAnimationFrame(zoomOut);
+            this._cameraStep(zoomOut);
         } else {
             this._insideDesktopDashboard = false;
         }
