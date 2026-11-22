@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aufträge</title>
+<style>
+  :root { color-scheme: dark; --bg: #0d1117; --card: #161b22; --line: #2a313c; --text: #e6edf3; --dim: #9aa4b2; --ok: #7ee787; --warn: #f2cc60; --bad: #ff7b72; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; color: var(--dim); }
+  button { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  button:disabled { opacity: .5; cursor: default; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-height: 140px; }
+  h2 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+  .ok .dot { background: var(--ok); } .leer .dot { background: var(--dim); } .aus .dot { background: var(--warn); } .fehler .dot { background: var(--bad); }
+  .text { color: var(--dim); margin: 0 0 10px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  li small { display: block; color: var(--dim); }
+  #stand { color: var(--dim); font-size: 13px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Aufträge</h1>
+      <p>Termine, Recherche und Minibook an einem Ort. Neue Aufträge geben Sie im Chat.</p>
+    </div>
+    <button id="neu" type="button">Aktualisieren</button>
+  </header>
+  <div class="grid" id="bereiche"></div>
+  <div id="stand"></div>
+</main>
+<script>
+  const bereiche = document.getElementById('bereiche');
+  const stand = document.getElementById('stand');
+  const knopf = document.getElementById('neu');
+
+  function element(name, klasse, text) {
+    const e = document.createElement(name);
+    if (klasse) e.className = klasse;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function zeigen(ansicht) {
+    bereiche.replaceChildren(...ansicht.sections.map((bereich) => {
+      const karte = element('section', bereich.state);
+      const kopf = element('h2');
+      kopf.append(element('span', 'dot'), document.createTextNode(bereich.title));
+      karte.append(kopf, element('p', 'text', bereich.text));
+      if (bereich.items.length) {
+        const liste = element('ul');
+        for (const punkt of bereich.items) {
+          const zeile = element('li', '', punkt.title);
+          if (punkt.detail) zeile.append(element('small', '', punkt.detail));
+          liste.append(zeile);
+        }
+        karte.append(liste);
+      }
+      return karte;
+    }));
+  }
+
+  async function laden() {
+    knopf.disabled = true;
+    stand.textContent = 'Wird gelesen …';
+    try {
+      zeigen(await window.auftraege.lesen());
+      stand.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE');
+    } catch (_) {
+      stand.textContent = 'Das Gehirn ist gerade nicht erreichbar.';
+    }
+    knopf.disabled = false;
+  }
+
+  knopf.addEventListener('click', laden);
+  laden();
+</script>
+</body>
+</html>

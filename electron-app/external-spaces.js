@@ -14,6 +14,7 @@
  * is added as `Authorization: Bearer …` to requests to that space's own address, and
  * only there. The page never sees the value.
  */
+const path = require('node:path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 
 const EXTERNAL_SPACES = Object.freeze([
@@ -40,6 +41,12 @@ const EXTERNAL_SPACES = Object.freeze([
     urlEnv: 'EVENT_UI_URL', expectTitle: /Events/i,
     agent: { name: 'Events', slug: 'events', role: 'Veranstaltungen' },
   },
+  {
+    // Schedule, Research and Minibook have no page of their own; this local page shows all three.
+    id: 'orders', label: 'Aufträge', icon: '\u{1F4CB}', color: 0xb39ddb, position: [-8, 0, 26],
+    localPage: 'auftraege/index.html', preload: 'auftraege-preload.js',
+    agent: { name: 'Aufträge', slug: 'orders', role: 'Termine, Recherche, Minibook' },
+  },
 ]);
 
 function cleanUrl(value) {
@@ -57,14 +64,15 @@ function cleanUrl(value) {
 function resolveSpaces(env = process.env) {
   return EXTERNAL_SPACES.map((space) => ({
     ...space,
-    url: cleanUrl(env[space.urlEnv]) || cleanUrl(space.defaultUrl),
+    url: space.urlEnv ? cleanUrl(env[space.urlEnv]) || cleanUrl(space.defaultUrl) : '',
+    file: space.localPage ? path.join(__dirname, space.localPage) : '', // a page shipped with the app
   }));
 }
 
 /** What the renderer needs to draw the entry; no addresses, no key names. */
 function describeForRenderer(env = process.env) {
-  return resolveSpaces(env).map(({ id, label, icon, color, position, agent, url }) => ({
-    id, label, icon, color, position, agent, configured: Boolean(url),
+  return resolveSpaces(env).map(({ id, label, icon, color, position, agent, url, file }) => ({
+    id, label, icon, color, position, agent, configured: Boolean(url || file),
   }));
 }
 
@@ -117,21 +125,26 @@ class ExternalSpaceManager {
     const space = this.spaces.get(id);
     const entry = this.views.get(id);
     entry.result = null;
-    const targets = space.url ? [{ kind: 'url', url: space.url, expectTitle: space.expectTitle }] : [];
-    return loadOverlay(entry.view.webContents, { space: space.label, targets },
+    return loadOverlay(entry.view.webContents, { space: space.label, targets: this._targets(space) },
       { ...this._overlayDeps, onResult: (result) => { entry.result = result; } });
+  }
+
+  _targets(space) {
+    if (space.file) return [{ kind: 'file', path: space.file }];
+    return space.url ? [{ kind: 'url', url: space.url, expectTitle: space.expectTitle }] : [];
   }
 
   _create(id) {
     const space = this.spaces.get(id);
-    const view = new this.BrowserView({
-      webPreferences: {
-        partition: `persist:space-${id}`, // each space keeps its own sign-in
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
+    const webPreferences = {
+      partition: `persist:space-${id}`, // each space keeps its own sign-in
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    };
+    // Only a page shipped with the app gets a bridge; a remote page never does.
+    if (space.file && space.preload) webPreferences.preload = path.join(__dirname, space.preload);
+    const view = new this.BrowserView({ webPreferences });
     const auth = authFor(space, this._env);
     if (auth) {
       view.webContents.session.webRequest.onBeforeSendHeaders({ urls: auth.urls }, (details, callback) => {

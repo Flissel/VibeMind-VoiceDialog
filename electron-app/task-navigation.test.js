@@ -11,7 +11,8 @@ test('registry spaces map to the keys of the app scene', () => {
     assert.equal(appKeyForSpace('rowboat'), 'roarboot');
     assert.equal(appKeyForSpace('bubbles'), 'ideas');
     assert.equal(appKeyForSpace(' Video '), 'video');
-    assert.equal(appKeyForSpace('schedule'), null, 'no place in the app yet');
+    assert.equal(appKeyForSpace('schedule'), 'orders', 'shown on the page Auftraege');
+    assert.equal(appKeyForSpace('n8n'), null, 'no place in the app yet');
     assert.equal(appKeyForSpace('gibt-es-nicht'), null);
     assert.equal(appKeyForSpace(null), null);
 });
@@ -49,7 +50,7 @@ test('one navigation per plan: the first step with a place in the app decides', 
 
     navigator.handle('plan_started', { plan_id: 'p1' });
     navigator.handle('hop_started', { space: null, capability: 'chitchat' });          // general step
-    navigator.handle('hop_started', { space: 'schedule', capability: 'schedule_create' }); // no place yet
+    navigator.handle('hop_started', { space: 'n8n', capability: 'n8n_list' });             // no place yet
     navigator.handle('hop_started', { space: 'coding', capability: 'code_generate', description: 'App bauen' });
     navigator.handle('hop_started', { space: 'video', capability: 'video_status' });   // same plan: no second jump
     navigator.handle('hop_completed', { space: 'video' });

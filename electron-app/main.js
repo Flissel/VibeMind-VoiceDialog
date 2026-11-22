@@ -2054,6 +2054,9 @@ function setupIpcHandlers() {
 
     ipcMain.handle('get-external-spaces', () => describeForRenderer(process.env));
 
+    // The local page "Auftraege" reads Schedule, Research and Minibook through the brain.
+    ipcMain.handle('orders:read', () => require('./orders-data').readOrders());
+
     ipcMain.on('show-external-space', (_event, id) => {
         if (!externalSpaces || !externalSpaces.has(id)) return;
         // Mutual exclusion: hide all other BrowserViews

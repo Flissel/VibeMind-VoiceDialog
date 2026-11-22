@@ -26,9 +26,9 @@ const SPACE_TO_APP = Object.freeze({
   video: 'video',
   flowzen: 'flowzen',
   mirofish: 'mirofish',
-  schedule: null,
-  research: null,
-  minibook: null,
+  schedule: 'orders',            // no page of their own: the local page "Auftraege"
+  research: 'orders',
+  minibook: 'orders',
   learning: 'learning',          // external spaces, see external-spaces.js
   'event-management': 'events',
 });

@@ -13,7 +13,7 @@ const { appKeyForSpace } = require('./task-navigation');
 
 test('the external spaces are listed once, each with its own place', () => {
     // OpenFang is not among them: it lives in the Agent Farm.
-    assert.deepEqual(EXTERNAL_SPACES.map((s) => s.id), ['sales', 'marketing', 'learning', 'events']);
+    assert.deepEqual(EXTERNAL_SPACES.map((s) => s.id), ['sales', 'marketing', 'learning', 'events', 'orders']);
     const places = new Set(EXTERNAL_SPACES.map((s) => s.position.join(',')));
     assert.equal(places.size, EXTERNAL_SPACES.length);
 });
