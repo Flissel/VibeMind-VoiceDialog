@@ -61,14 +61,41 @@ async function probeHealth() {
   }
 }
 
+function envValue(env, name) {
+  const key = Object.keys(env).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key ? env[key] : '';
+}
+
+/**
+ * The service outlives the app. A direct child would inherit the app's open sockets, among them
+ * the DevTools port: it kept that port after the app had ended, and the next start of the app came
+ * up without it (measured 2026-11-22). So the service is started through the shell's own
+ * "start a program" (Start-Process without redirection), which hands no handles down. cmd then
+ * opens the log file itself. Paths travel as environment values, not inside the command text.
+ */
+function detachedCommand(spec) {
+  const root = envValue(spec.env, 'SystemRoot') || 'C:\\Windows';
+  const script = "Start-Process -FilePath $env:ComSpec -ArgumentList ('/d /c \"\"' + $env:VM_SERVICE_COMMAND"
+    + " + '\" ' + $env:VM_SERVICE_ARGS + ' >> \"' + $env:VM_SERVICE_LOG + '\" 2>&1\"')"
+    + ' -WorkingDirectory $env:VM_SERVICE_CWD -WindowStyle Hidden';
+  return {
+    command: path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    args: ['-NoProfile', '-NonInteractive', '-Command', script],
+    env: {
+      ...spec.env,
+      VM_SERVICE_COMMAND: spec.command,
+      VM_SERVICE_ARGS: spec.args.join(' '),
+      VM_SERVICE_LOG: spec.log,
+      VM_SERVICE_CWD: spec.cwd,
+    },
+  };
+}
+
 function spawnDetached(spec) {
   fs.mkdirSync(path.dirname(spec.log), { recursive: true });
-  const out = fs.openSync(spec.log, 'a');
-  const child = spawnProcess(spec.command, spec.args, {
-    cwd: spec.cwd, env: spec.env, detached: true, windowsHide: true, stdio: ['ignore', out, out],
-  });
-  child.unref(); // the service outlives the app, as it does when the launcher starts it
-  fs.closeSync(out);
+  const how = detachedCommand(spec);
+  const child = spawnProcess(how.command, how.args, { env: how.env, windowsHide: true, stdio: 'ignore' });
+  child.unref();
   return child;
 }
 
@@ -87,7 +114,7 @@ function createDesktopService({ spec = launchSpec, probe = probeHealth, spawn = 
       try {
         const child = spawn(how);
         startedAt = now();
-        logger.log(`[DesktopService] gestartet (PID ${child && child.pid})`);
+        logger.log(`[DesktopService] Start angestossen (Starter-PID ${child && child.pid})`);
         return { state: 'gestartet' };
       } catch (error) {
         logger.log(`[DesktopService] Start gescheitert (${error && error.name})`);
@@ -97,4 +124,4 @@ function createDesktopService({ spec = launchSpec, probe = probeHealth, spawn = 
   };
 }
 
-module.exports = { PORT, HEALTH_PATH, launchSpec, createDesktopService };
+module.exports = { PORT, HEALTH_PATH, launchSpec, detachedCommand, createDesktopService };

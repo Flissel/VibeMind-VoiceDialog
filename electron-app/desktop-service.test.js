@@ -29,6 +29,24 @@ test('the service gets the system environment only, not what the app loaded from
     assert.deepEqual(Object.keys(spec.env).sort(), ['HOST', 'LOCALAPPDATA', 'PORT', 'Path', 'SystemRoot', 'TEMP', 'USERPROFILE']);
 });
 
+test('the service is not a direct child: it must not inherit the sockets of the app', () => {
+    // Seen on 2026-11-22: the service kept the DevTools port of the app after the app had ended.
+    const { detachedCommand } = require('./desktop-service');
+    const spec = launchSpec({ ...ENV, SystemRoot: 'C:\\Windows', ComSpec: 'C:\\Windows\\System32\\cmd.exe' }, all);
+    const how = detachedCommand(spec);
+
+    assert.equal(how.command, path.join('C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'));
+    const script = how.args[how.args.length - 1];
+    assert.match(script, /^Start-Process -FilePath \$env:ComSpec /);
+    assert.doesNotMatch(script, /-Redirect|-NoNewWindow|-Wait/, 'these make Start-Process hand handles down');
+    assert.doesNotMatch(script, /repo|python\.exe|backend\.log/, 'paths are not part of the command text');
+    assert.equal(how.env.VM_SERVICE_COMMAND, ENV.VIBEMIND_PYTHON);
+    assert.equal(how.env.VM_SERVICE_ARGS, 'server.py');
+    assert.equal(how.env.VM_SERVICE_CWD, ENV.DESKTOP_AUTOMATION_DIR);
+    assert.equal(how.env.VM_SERVICE_LOG, spec.log);
+    assert.equal(how.env.HOST, '127.0.0.1');
+});
+
 test('nothing is started when the place or the interpreter is unknown or missing', () => {
     assert.equal(launchSpec({}, all), null);
     assert.equal(launchSpec({ ...ENV, VIBEMIND_PYTHON: '' }, all), null);
