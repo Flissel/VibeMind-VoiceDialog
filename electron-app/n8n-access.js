@@ -16,7 +16,10 @@ const LOCAL_URL = 'http://localhost:15678';
 const LOCAL_OWNER = Object.freeze({ email: 'admin@vibemind.local', password: 'Vibemind1' });
 
 function n8nBaseUrl(env = process.env) {
-  const raw = typeof env.N8N_API_URL === 'string' ? env.N8N_API_URL.trim() : '';
+  // N8N_UI_URL wins: the main process sets it to a local forward when n8n runs on another
+  // machine over plain http (see forwardTarget). N8N_API_URL stays what the backend uses.
+  const ui = typeof env.N8N_UI_URL === 'string' ? env.N8N_UI_URL.trim() : '';
+  const raw = ui || (typeof env.N8N_API_URL === 'string' ? env.N8N_API_URL.trim() : '');
   try {
     const url = new URL(raw || LOCAL_URL);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return LOCAL_URL;
@@ -53,6 +56,26 @@ function frameHeaderUrls(env = process.env) {
   const urls = new Set(['http://localhost:15678/*', 'http://localhost:4200/*']);
   urls.add(`${n8nBaseUrl(env)}/*`);
   return [...urls];
+}
+
+/**
+ * Where to forward a local port to, or null when n8n is local or uses TLS.
+ *
+ * n8n refuses to work in a browser over plain http from another machine ("configured to use a
+ * secure cookie"), and the browser will not store its session cookie there either. Reached
+ * through a local forward as http://localhost:PORT both are satisfied: localhost counts as a
+ * secure context. Nothing on the n8n machine has to change.
+ */
+function forwardTarget(env = process.env) {
+  const raw = typeof env.N8N_API_URL === 'string' ? env.N8N_API_URL.trim() : '';
+  let url;
+  try {
+    url = new URL(raw);
+  } catch (_) {
+    return null;
+  }
+  if (url.protocol !== 'http:' || isLocal(url.origin)) return null;
+  return { host: url.hostname, port: Number(url.port || 80) };
 }
 
 /** "name=value" pairs from the Set-Cookie headers of the sign-in answer. */
@@ -92,6 +115,6 @@ function sessionCookieUrls(env = process.env) {
 }
 
 module.exports = {
-  LOCAL_URL, n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls,
+  LOCAL_URL, n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
   cookiePairs, mergeCookieHeader, sessionCookieUrls,
 };

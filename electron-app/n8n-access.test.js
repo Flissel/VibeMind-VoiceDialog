@@ -13,6 +13,22 @@ test('the n8n address comes from N8N_API_URL and falls back to the local one', (
     assert.equal(n8nBaseUrl({ N8N_API_URL: 'file:///etc/passwd' }), 'http://localhost:15678');
 });
 
+test('a remote n8n over plain http is forwarded and then addressed as localhost', () => {
+    const { forwardTarget } = require('./n8n-access');
+
+    assert.deepEqual(forwardTarget({ N8N_API_URL: 'http://n8n.example.test:15678' }), { host: 'n8n.example.test', port: 15678 });
+    assert.equal(forwardTarget({ N8N_API_URL: 'http://localhost:15678' }), null);
+    assert.equal(forwardTarget({ N8N_API_URL: 'https://n8n.example.test' }), null, 'TLS needs no forward');
+    assert.equal(forwardTarget({}), null);
+    // After the forward the main process sets N8N_UI_URL; the UI then talks to localhost,
+    // and the built-in "local" rules apply to the address, but the account still comes from the environment.
+    const env = { N8N_API_URL: 'http://n8n.example.test:15678', N8N_UI_URL: 'http://localhost:15678', N8N_UI_EMAIL: 'ich@example.test', N8N_UI_PASSWORD: 'pw' };
+    assert.equal(n8nBaseUrl(env), 'http://localhost:15678');
+    assert.equal(n8nLogin(env).source, 'environment');
+    const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+    assert.ok(main.indexOf("forwardTarget(process.env)") < main.indexOf('agentfarmManager = new AgentFarmManager('), 'forward before the manager is built');
+});
+
 test('sign-in data come from the environment', () => {
     const login = n8nLogin({ N8N_API_URL: 'http://n8n.example.test:15678', N8N_UI_EMAIL: ' ich@example.test ', N8N_UI_PASSWORD: 'pw' });
 

@@ -3035,6 +3035,18 @@ app.whenReady().then(async () => {
         initTaskNavigation(mainWindow);
     });
     await startupPolicy.runExternalStartup('AgentFarm manager', async () => {
+        // n8n on another machine over plain http is reached through a local forward, so the
+        // editor frame sees http://localhost (n8n and the browser both insist on a secure context).
+        try {
+            const n8nTarget = require('./n8n-access').forwardTarget(process.env);
+            if (n8nTarget) {
+                const n8nForward = await require('./laura-local-forward').startForward(n8nTarget, { preferredPort: 15678 });
+                process.env.N8N_UI_URL = `http://localhost:${n8nForward.port}`;
+                console.log('[Main] n8n forwarded to', process.env.N8N_UI_URL);
+            }
+        } catch (err) {
+            console.error('[Main] n8n-Weiterleitung nicht moeglich:', err.message);
+        }
         agentfarmManager = new AgentFarmManager(mainWindow);
     });
     await startupPolicy.runExternalStartup('MiroFish manager', async () => {
