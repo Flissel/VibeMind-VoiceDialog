@@ -216,7 +216,17 @@
         // Collect roots for hub-wiring below + sidToNodeData for click-handler
         const rootSids = [];
         const sidToNodeData = new Map();   // sanitized-id → original node dict
-        for (const n of nodes) {
+        // Declared in the order of the columns: the layout keeps the order in which the nodes come.
+        // "Ohne Gruppe" and its cards last; declared where the data had them, an old card without
+        // a group came before the headings and its column stood first (Lauf 13).
+        const looseSet = new Set(loose);
+        const ordered = nodes.filter((n) => !looseSet.has(String(n.id)))
+            .concat(loose.map((id) => nodes.find((n) => String(n.id) === id)));
+        for (const n of ordered) {
+            if (loose.length && String(n.id) === loose[0]) {
+                lines.push(`    ${LOOSE_SID}["Ohne Gruppe"]`);
+                lines.push(`    class ${LOOSE_SID} groupHead`);
+            }
             const sid = _sanitizeId(n.id);
             sidToNodeData.set(sid, n);
             const rawTitle = (n.content && (n.content.title || n.content.text)) || n.title || String(n.id);
@@ -253,8 +263,6 @@
 
         for (const [from, to] of groupLinks) lines.push(`    ${_sanitizeId(from)} ~~~ ${_sanitizeId(to)}`);
         if (loose.length) {
-            lines.push(`    ${LOOSE_SID}["Ohne Gruppe"]`);
-            lines.push(`    class ${LOOSE_SID} groupHead`);
             rootSids.push(LOOSE_SID);   // the last column
             let above = LOOSE_SID;
             for (const id of loose) { lines.push(`    ${above} ~~~ ${_sanitizeId(id)}`); above = _sanitizeId(id); }

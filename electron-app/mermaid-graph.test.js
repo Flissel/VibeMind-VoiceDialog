@@ -70,3 +70,17 @@ test('without a heading nothing changes: x/y alone make no group', () => {
     const { graph } = load().build(plain, []);
     assert.doesNotMatch(graph, /~~~|class \S+ groupHead/);
 });
+
+// Lauf 13: "Ohne Gruppe" stood first on the left. The card without a group came first in the data (an
+// old card, the headings are made later); the layout keeps the order in which the nodes are declared.
+test('"Ohne Gruppe" is declared after every other column, even when its card comes first in the data', () => {
+    const data = [nodes[5]].concat(nodes.slice(0, 5));   // Karte 9 (no group) first: an old card before the headings
+    const { graph } = load().build(data, []);
+    const lines = graph.split('\n').map((l) => l.trim());
+    const at = (start) => lines.findIndex((l) => l.startsWith(start));
+    assert.ok(at('OHNE_GRUPPE["') > at('n_0000abcd_0002["'), 'after the last heading');
+    assert.ok(at('OHNE_GRUPPE["') > at('n_0000abcd_0021["'), 'after the cards of the groups');
+    assert.ok(at('n_0000abcd_0099["') > at('OHNE_GRUPPE["'), 'its card below it');
+    const hub = lines.filter((l) => l.startsWith('HUB -->'));
+    assert.equal(hub[hub.length - 1], 'HUB --> OHNE_GRUPPE');
+});
