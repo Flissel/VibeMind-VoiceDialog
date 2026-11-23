@@ -3,14 +3,15 @@
 Gemessen 2026-11-23 waehrend eines Neustarts des Gehirns: Die Verbindung brach ab
 ("[WinError 64] Der angegebene Netzwerkname ist nicht mehr verfuegbar"), die Bruecke fiel
 auf den alten Weg durch, und der antwortete "Ich habe dich nicht ganz verstanden". Jetzt
-kommt ein ruhiger Hinweis, solange keine Verbindung besteht; ein Timeout faellt weiter durch.
+kommt ein ruhiger Hinweis, solange keine Verbindung besteht. Auch ein Timeout antwortet
+ehrlich: Das Gehirn kann gehandelt haben, also kein "geaendert habe ich nichts".
 """
 import asyncio
 
 import aiohttp
 
 from swarm.routing import brain_multihop_bridge as bridge_module
-from swarm.routing.brain_multihop_bridge import BrainMultihopBridge, UNREACHABLE_TEXT
+from swarm.routing.brain_multihop_bridge import BrainMultihopBridge, TIMEOUT_TEXT, UNREACHABLE_TEXT
 
 
 class _Refusing:
@@ -58,7 +59,13 @@ def test_the_next_sentence_in_the_backoff_gets_the_same_answer(monkeypatch):
     assert bridge._down == "" and bridge._available
 
 
-def test_a_timeout_still_falls_through(monkeypatch):
-    bridge, (result,) = _ask(monkeypatch, asyncio.TimeoutError())
-    assert result is None
+def test_a_timeout_says_so_without_promising_nothing_changed(monkeypatch):
+    bridge, (first, second) = _ask(monkeypatch, asyncio.TimeoutError(), sentences=2)
     assert bridge._down == "timeout"
+    assert first is not None, "no fall-through to the old path"
+    assert first.response_hint == TIMEOUT_TEXT
+    assert first.event_type == "brain.multihop.hint" and not first.error
+    assert "geändert habe ich nichts" not in TIMEOUT_TEXT, "the Brain may have acted"
+    assert "sieh bitte nach" in TIMEOUT_TEXT
+    # the next sentence in the backoff is not sent at all: for it nothing changed
+    assert second.response_hint == UNREACHABLE_TEXT

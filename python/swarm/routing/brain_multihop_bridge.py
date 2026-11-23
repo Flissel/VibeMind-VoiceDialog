@@ -22,8 +22,8 @@ Activation: env `VOICE_BRAIN_MULTIHOP=true`. Default off.
 
 Graceful degradation:
 - Brain down       → mark unavailable, 30s backoff; the sentence gets "nicht erreichbar" (a hint)
-- Brain timeout    → mark unavailable, 30s backoff, fall through
-- Timeout >6s      → fall through
+- Brain timeout    → mark unavailable, 30s backoff; the sentence gets "nicht rechtzeitig" (a hint)
+- In the backoff   → the sentence is not sent; it gets "nicht erreichbar" (a hint)
 - HTTP non-2xx     → fall through
 - `ok: false`      → fall through (no cap matched, planner returned no plan)
 - empty final_text → try executed-hop summary, else fall through
@@ -48,6 +48,8 @@ EVENT_FAILED = "brain.multihop.failed"
 EVENT_QUESTION = "brain.multihop.question"
 UNREACHABLE_TEXT = ("Das Gehirn ist gerade nicht erreichbar. Versuch es in ein, zwei Minuten noch einmal; "
                     "geändert habe ich nichts.")
+# The request went out but no answer came in time: the Brain may have acted, so no promise.
+TIMEOUT_TEXT = "Das Gehirn hat nicht rechtzeitig geantwortet. Ob sich etwas geändert hat, weiß ich nicht – sieh bitte nach."
 EVENT_HINT = "brain.multihop.hint"  # a hint of the Brain ("keine Spalten"): information, not a failure
 
 # A sentence a person typed into a chat field of the app (electron-app/chat-input.js sets
@@ -134,8 +136,8 @@ class BrainMultihopBridge:
         self._brain_url = brain_url.rstrip("/")
         self._backoff = backoff_seconds
         self._available = True
-        # Why the Brain is off: "unreachable" (no connection) or "timeout". Only "unreachable"
-        # answers the sentence itself; a timeout may be a slow miss and falls through as before.
+        # Why the Brain is off: "unreachable" (no connection) or "timeout". Either way the
+        # sentence is answered here; the old path did not know it ("nicht ganz verstanden").
         self._down = ""
 
     # ------------------------------------------------------------------
@@ -158,7 +160,8 @@ class BrainMultihopBridge:
         Never raises.
         """
         if not self._available:
-            return self._unreachable() if self._down == "unreachable" else None
+            # in the backoff the sentence is never sent: nothing changed
+            return self._unreachable(UNREACHABLE_TEXT)
 
         text = (intent_text or "").strip()
         if not text:
@@ -171,7 +174,9 @@ class BrainMultihopBridge:
         if data is None:
             # No connection: the old path did not know the sentence either and answered
             # "nicht verstanden" (measured 2026-11-23 during a restart of the Brain).
-            return self._unreachable() if not self._available and self._down == "unreachable" else None
+            if not self._available:
+                return self._unreachable(TIMEOUT_TEXT if self._down == "timeout" else UNREACHABLE_TEXT)
+            return None
 
         ok = bool(data.get("ok"))
         final_text = (data.get("final_text") or "").strip()
@@ -256,14 +261,14 @@ class BrainMultihopBridge:
         )
 
     @staticmethod
-    def _unreachable() -> OrchestrationResult:
-        """The Brain cannot be reached: said plainly, calmly (a hint, not a failure). The request
-        never reached it, so nothing was changed. No plan id: no plan of the Brain ran."""
+    def _unreachable(text: str) -> OrchestrationResult:
+        """No answer of the Brain (no connection, or none in time): said plainly, calmly (a hint,
+        not a failure). No plan id: the app knows of no plan of the Brain for it."""
         return OrchestrationResult(
             job_id="brain-multihop:unreachable",
             event_type=EVENT_HINT,
             stream="brain",
-            response_hint=UNREACHABLE_TEXT,
+            response_hint=text,
             is_conversational=False,
             tool_result=None,
         )
