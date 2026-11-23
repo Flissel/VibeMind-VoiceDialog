@@ -9,7 +9,7 @@ test('inside a bubble the context names the bubble and its cards', () => {
     const context = buildContext({
         bubble: { id: 7, title: 'Marketing' },
         nodes: [
-            { id: 'n1', content: { title: 'Zielgruppe' } },
+            { id: 'n1', content: { title: 'Zielgruppe' }, metadata: { bewertung: { wert: 80 } } },
             { id: 'n2', title: 'Kanäle', content_json: { type: 'table' } },
             { id: 'n3', content: { text: 'nur Text' }, format_schema: { type: 'action_list' } },
             null,
@@ -17,16 +17,20 @@ test('inside a bubble the context names the bubble and its cards', () => {
         ],
         bubbles: [{ id: 'b1', title: 'nicht gefragt' }],
         newId: 'u-1',
+        selection: ['n2', 'gibt-es-nicht'],
+        lastId: 'n3',
     });
 
     assert.deepEqual(context, {
         space: 'ideas',
         bubble: { id: '7', title: 'Marketing' },
         cards: [
-            { id: 'n1', title: 'Zielgruppe', format: 'note' },
-            { id: 'n2', title: 'Kanäle', format: 'table' },
-            { id: 'n3', title: 'nur Text', format: 'action_list' },
+            { id: 'n1', title: 'Zielgruppe', format: 'note', score: 80 },
+            { id: 'n2', title: 'Kanäle', format: 'table', score: null },
+            { id: 'n3', title: 'nur Text', format: 'action_list', score: null },
         ],
+        selection: ['n2'],
+        last_id: 'n3',
         new_id: 'u-1',
     });
 });
@@ -40,7 +44,11 @@ test('in the overview the context names the bubbles instead', () => {
 test('the context is capped', () => {
     const nodes = Array.from({ length: MAX_CARDS + 20 }, (_, i) => ({ id: i, title: 'K' + i }));
 
-    assert.equal(buildContext({ bubble: { id: 1, title: 'B' }, nodes }).cards.length, MAX_CARDS);
+    const context = buildContext({ bubble: { id: 1, title: 'B' }, nodes });
+    assert.equal(MAX_CARDS, 100);
+    assert.equal(context.cards.length, MAX_CARDS);
+    assert.equal(context.cards_total, MAX_CARDS + 20, 'a cut list says how many cards there are');
+    assert.equal(buildContext({ bubble: { id: 1, title: 'B' }, nodes: nodes.slice(0, 3) }).cards_total, undefined);
 });
 
 test('noteText finds the note in a sentence that plainly asks to hold one', () => {
@@ -48,7 +56,12 @@ test('noteText finds the note in a sentence that plainly asks to hold one', () =
     assert.equal(noteText('halte fest, dass der Termin am Montag ist'), 'dass der Termin am Montag ist');
     assert.equal(noteText('Merke dir Preisliste prüfen'), 'Preisliste prüfen');
     assert.equal(noteText('schreib auf: Milch'), 'Milch');
+    assert.equal(noteText('Notiz: Budget klären'), 'Budget klären');
+    assert.equal(noteText('halt fest: Raum buchen'), 'Raum buchen');
     assert.equal(noteText('Formatiere die Zielgruppe als Tabelle'), null);
+    assert.equal(noteText('Was habe ich mir notiert?'), null, 'a question makes no card');
+    assert.equal(noteText('Merke ich mir das richtig?'), null);
+    assert.equal(noteText('Kannst du notiere sagen?'), null, 'only at the start of the sentence');
     assert.equal(noteText('notiere'), null);
     assert.equal(noteText(undefined), null);
 });
@@ -84,6 +97,12 @@ test('a rejected card leaves with its reason; a working card stays until it is c
     assert.equal(store.list().length, 1, 'only a pending card expires');
     store.confirm('u-2');
     assert.deepEqual(store.list(), []);
+
+    store.pending('u-5', 'Doppelt');
+    store.working('u-6', 'Tabelle');
+    store.settle('u-5');
+    store.settle('u-6');
+    assert.deepEqual(store.list(), [], 'a report of the database ends both states');
 
     store.pending('u-3', 'bleibt');
     store.working('u-4', 'Gliederung');

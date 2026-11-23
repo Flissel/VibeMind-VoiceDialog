@@ -19,7 +19,7 @@
 (function (root) {
     'use strict';
 
-    const MAX_CARDS = 50;
+    const MAX_CARDS = 100;      // the tools of the Ideas space work on up to 100 cards per bubble
     const SETTLE_MS = 15000;    // a pending card without an answer from the canvas goes after this
 
     /** Title of a canvas row as the canvas shows it. */
@@ -38,13 +38,24 @@
      * The context sent along with a sentence. Kept in one place: its form is agreed with
      * the Ideas space and may still change.
      */
-    function buildContext({ bubble, nodes, bubbles, newId } = {}) {
+    function cardScore(node) {
+        const value = node && node.metadata && node.metadata.bewertung ? Number(node.metadata.bewertung.wert) : NaN;
+        return Number.isFinite(value) ? value : null;
+    }
+
+    function buildContext({ bubble, nodes, bubbles, newId, selection, lastId } = {}) {
         const context = { space: 'ideas', bubble: null };
         if (bubble && bubble.id != null) {
             context.bubble = { id: String(bubble.id), title: String(bubble.title || '') };
-            context.cards = (Array.isArray(nodes) ? nodes : []).slice(0, MAX_CARDS)
-                .filter((node) => node && node.id != null)
-                .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node) }));
+            const all = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
+            context.cards = all.slice(0, MAX_CARDS)
+                .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node), score: cardScore(node) }));
+            // Without the total a name looks unique that is not, once the list is cut.
+            if (all.length > MAX_CARDS) context.cards_total = all.length;
+            const known = new Set(all.map((node) => String(node.id)));
+            // Marked cards in the order of marking ("verbinde die beiden"), and the card last made or changed ("mach das zur Tabelle").
+            context.selection = (Array.isArray(selection) ? selection : []).map(String).filter((id) => known.has(id));
+            if (lastId != null && known.has(String(lastId))) context.last_id = String(lastId);
         } else {
             context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
                 .filter((item) => item && item.id != null)
@@ -54,7 +65,9 @@
         return context;
     }
 
-    const NOTE = /^\s*(?:notiere?|notiz|halte?\s+fest|festhalten|merke?(?:\s+dir)?|schreibe?\s+auf)\b\s*[:,\-]?\s*(.+)$/i;
+    // Only a plain opening at the start of the sentence makes a card at once; anything else would turn
+    // questions into wrong cards. The list is the choice of the Ideas space; keep it in this one place.
+    const NOTE = /^\s*(?:notiz\s*:|notiere\b|halte?\s+fest\b|schreibe?\s+auf\b|merke?\s+dir\b)\s*[:,\-]?\s*(.+)$/i;
 
     /** The text of a note when the sentence plainly asks to hold one, otherwise null. */
     function noteText(sentence) {
@@ -104,6 +117,8 @@
                 }
                 return list();
             },
+            /** The database reported this card: whatever was noted or worked on for it is over. */
+            settle(id) { cards.delete(String(id)); return list(); },
             /** A pending card that never got an answer from the canvas goes; a working one stays. */
             expire(id) {
                 const card = cards.get(id);
@@ -124,6 +139,9 @@
         if (!view) return null;
         const store = createCardStore();
         let nodes = [];          // rows of the open bubble as the canvas last loaded them
+        let lastId = null;       // the card last made or changed
+        let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
+        let planRuns = false;
         let busy = false;
 
         const el = (tag, className, text) => {
@@ -198,7 +216,33 @@
         /** Context for a sentence typed anywhere in the Ideas space (also used by the console below the overview). */
         function contextNow(newId) {
             const inside = !view.classList.contains('hidden');
-            return buildContext({ bubble: inside ? openBubble() : null, nodes, bubbles: overviewBubbles(), newId });
+            const canvas = root.spaceCanvas;
+            // The canvas marks one card at a time; marking several in order is not there yet.
+            const selection = canvas && canvas.selectedNode != null ? [canvas.selectedNode] : [];
+            return buildContext({ bubble: inside ? openBubble() : null, nodes, bubbles: overviewBubbles(), newId, selection, lastId });
+        }
+
+        function showState() {
+            headState.textContent = waiting || planRuns ? 'arbeitet \u2026' : '';
+        }
+
+        function titleOf(id) {
+            const node = nodes.find((item) => item && String(item.id) === String(id));
+            return node ? cardTitle(node) : (openBubble() || {}).title || '';
+        }
+
+        /** What the answer says was stored: { op, id, pending_id, row }, and the cards a model still works on. */
+        function applyAnswer(response, newId, note) {
+            for (const change of Array.isArray(response.changes) ? response.changes : []) {
+                if (!change || change.id == null) continue;
+                // An equal title in the bubble returns the card that is there: then id differs from pending_id.
+                if (change.pending_id) store.settle(change.pending_id);
+                store.settle(change.id);
+                if (change.op === 'create' || change.op === 'update') lastId = String(change.id);
+            }
+            if (!response.working) return;
+            const targets = Array.isArray(response.targets) && response.targets.length ? response.targets : (newId ? [newId] : []);
+            for (const id of targets) store.working(String(id), String(id) === newId ? note : titleOf(id));
         }
 
         async function submit(text) {
@@ -208,6 +252,8 @@
             say(text, 'user');
             const note = noteText(text);
             const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
+            waiting = !newId;
+            showState();
             if (newId) {
                 store.pending(newId, note);
                 renderCards();
@@ -218,16 +264,15 @@
                 const failed = !response || response.success === false;
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
                 if (failed && newId) store.reject(newId, message);
-                for (const change of (response && Array.isArray(response.changes)) ? response.changes : []) {
-                    if (change && change.id != null) store.confirm(String(change.id)); // the stored row is there
-                }
-                if (response && response.working && newId && !failed) store.working(newId, note);
+                if (!failed) applyAnswer(response, newId, note);
                 say(message, failed ? 'error' : 'agent');
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
                 say('Fehler: ' + error.message, 'error');
             } finally {
                 busy = false;
+                waiting = false;
+                showState();
                 delete panel.dataset.busy;
                 renderCards();
             }
@@ -251,15 +296,26 @@
             const node = event.detail && event.detail.node;
             if (!node) return;
             nodes = nodes.concat([node]);
+            // The card is shown as soon as the database reports it; the text of the answer comes seconds later.
+            if (node.id != null) { store.settle(node.id); lastId = String(node.id); }
             store.matchLoaded([node]);
+            renderCards();
+        });
+        // A report of the database for a card ends the work on it.
+        root.addEventListener('vibemind:canvas-node-updated', (event) => {
+            const id = event.detail && event.detail.id;
+            if (id == null) return;
+            store.settle(id);
+            lastId = String(id);
             renderCards();
         });
         // A plan of the Brain that runs in this space: the chat says so.
         root.addEventListener('vibemind:task-status', (event) => {
             const status = event.detail || {};
             if (status.space !== 'ideas') return;
-            headState.textContent = status.state === 'running' ? 'arbeitet …' : '';
-            if (status.state !== 'running') { store.endWork(); renderCards(); }
+            planRuns = status.state === 'running';
+            showState();
+            if (!planRuns) { store.endWork(); renderCards(); }
         });
 
         // While a bubble is open this chat is the one place to type; the console below the scene rests.
@@ -268,7 +324,7 @@
             doc.body.classList.toggle('ideas-chat-open', inside);
             const titleEl = doc.getElementById('space-title');
             headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
-            if (!inside) nodes = [];
+            if (!inside) { nodes = []; lastId = null; }
             renderCards();
         };
         new root.MutationObserver(sync).observe(view, { attributes: true, attributeFilter: ['class'] });

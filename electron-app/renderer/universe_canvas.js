@@ -1469,6 +1469,7 @@ class UniverseCanvas {
     }
 
     onNodeUpdated(nodeId, updates) {
+        window.dispatchEvent(new CustomEvent('vibemind:canvas-node-updated', { detail: { id: nodeId } }));
         if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         // Use findNodeById for cross-system ID compatibility
         const node = this.findNodeById(nodeId);
