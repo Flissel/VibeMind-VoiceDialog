@@ -343,7 +343,7 @@ test('/stand vorschlag is calm and offers its sentences as buttons; abgebrochen 
 
 test('/stand: the main process reads only, checks the id and lets only known fields through', () => {
     const { standOf, ORDER_STANDS } = require('./task-navigation');
-    assert.deepEqual([...ORDER_STANDS], ['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'wartet', 'fehler', 'unbekannt']);
+    assert.deepEqual([...ORDER_STANDS], ['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'uebernommen', 'ungeprueft', 'wartet', 'fehler', 'unbekannt']);
     assert.equal(standOf({ stand: 'irgendwas' }), null);
     assert.deepEqual(standOf({ stand: 'fehler', meldung: "ConnectionError: HTTPConnectionPool(host='dienst-a')", ok: false, geheim: 'x' }),
         { stand: 'fehler', meldung: 'Der Dienst ist gerade nicht erreichbar.', ok: false, dauer_s: null, hinweis: false, saetze: [] });
@@ -454,4 +454,32 @@ test('no end for 3 minutes: the same line says "noch in Arbeit", then its end re
     assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '● noch in Arbeit, Nr. 0000abcd — das Ergebnis erscheint, sobald es da ist.']);
     w.advance(5000); await tick();
     assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '✕ Das Modell hat nicht geantwortet.']);
+});
+
+// cc/ideen-paket-3: zwei neue Staende an /stand; ein unbekannter mit Satz endet ruhig.
+test('/stand uebernommen ends with ✓ and the message, no buttons; ungeprueft calm with ℹ; unknown with a sentence ends calmly', async () => {
+    const { standOf } = require('./task-navigation');
+    // as the Brain answers (auftrag_id, stand, meldung, ok, hinweis), passed through the main process
+    const brain = (body) => standOf({ auftrag_id: ORDER, ...body });
+
+    const taken = await acceptedWithStand([brain({ stand: 'uebernommen', meldung: 'Der Vorschlag steht jetzt in Karte 1.', ok: true, dauer_s: 3 })]);
+    taken.w.advance(5000); await tick();
+    assert.equal(taken.w.line(), '✓ Ideas: fertig in 3,0 s — Der Vorschlag steht jetzt in Karte 1.');
+    assert.deepEqual(taken.w.chatLog(), ['Was hältst du von Karte 1?', '✓ fertig in 3 s — Der Vorschlag steht jetzt in Karte 1.']);
+
+    const unchecked = await acceptedWithStand([brain({ stand: 'ungeprueft', meldung: 'Der Auftrag kam zurück, das Ergebnis ließ sich nicht prüfen.', ok: false, hinweis: true })]);
+    unchecked.w.advance(5000); await tick();
+    assert.equal(unchecked.w.line(), 'ℹ Ideas: Der Auftrag kam zurück, das Ergebnis ließ sich nicht prüfen.');
+    assert.ok(!unchecked.w.statuses.includes('failed') && !unchecked.w.statuses.includes('done'), 'neither ✕ nor ✓');
+
+    const strange = await acceptedWithStand([brain({ stand: 'neu_im_gehirn', meldung: 'Das Gehirn sagt etwas Neues.', ok: true })]);
+    strange.w.advance(5000); await tick();
+    assert.equal(strange.w.line(), 'ℹ Ideas: Das Gehirn sagt etwas Neues.', 'not until "Keine Rückmeldung"');
+
+    // unknown without a sentence: the main process passes nothing, the order stays open
+    assert.equal(brain({ stand: 'neu_im_gehirn' }), null);
+    const quiet = await acceptedWithStand([brain({ stand: 'neu_im_gehirn' })]);
+    quiet.w.advance(5000); await tick();
+    assert.equal(quiet.w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+    assert.equal(brain({ stand: 'Böse<script>', meldung: 'x' }), null, 'only plain state names pass');
 });

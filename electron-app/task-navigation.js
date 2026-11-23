@@ -335,7 +335,7 @@ function createTaskNavigator(send) {
 }
 
 /** The states of an order the Brain names at GET /api/agent-auftraege/{id}/stand. */
-const ORDER_STANDS = Object.freeze(['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'wartet', 'fehler', 'unbekannt']);
+const ORDER_STANDS = Object.freeze(['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'uebernommen', 'ungeprueft', 'wartet', 'fehler', 'unbekannt']);
 /** An order id as the Brain gives it; anything else is never put into a path. */
 const ORDER_ID = /^[A-Za-z0-9-]{4,64}$/;
 
@@ -345,7 +345,10 @@ const ORDER_ID = /^[A-Za-z0-9-]{4,64}$/;
  */
 function standOf(body) {
   if (!body || typeof body !== 'object') return null;
-  const stand = ORDER_STANDS.includes(body.stand) ? body.stand : null;
+  // A state the app does not know yet still passes when the Brain says something about it: the
+  // renderer then shows that sentence and ends. Without a sentence it says nothing to the app.
+  const named = typeof body.stand === 'string' && /^[a-z_]{1,32}$/.test(body.stand) ? body.stand : null;
+  const stand = named && (ORDER_STANDS.includes(named) || text(body.meldung)) ? named : null;
   if (!stand) return null;
   const seconds = Number(body.dauer_s);
   const saetze = Array.isArray(body.saetze)

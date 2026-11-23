@@ -117,11 +117,13 @@
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
     const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
     const ACCEPTED_MAX_MS = 20 * 60 * 1000;      // an accepted order whose result never shows: the line goes
-    const ACCEPTED_STALE_MS = 3 * 60 * 1000;
-    const STAND_MS = 5000;
-    const STAND_UNKNOWN_MS = 5 * 60 * 1000;      // /stand says "unbekannt" this long: no answer will come                       // an accepted order: how often the Brain is asked how it stands
+    const ACCEPTED_STALE_MS = 3 * 60 * 1000;     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
+    const STAND_MS = 5000;                       // an accepted order: how often the Brain is asked how it stands
+    const STAND_UNKNOWN_MS = 5 * 60 * 1000;      // /stand says "unbekannt" this long: no answer will come
     /** States of /stand that end the accepted line; laeuft, wartet and unbekannt keep it. */
-    const STAND_ENDS = Object.freeze(['fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'fehler']);     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
+    const STAND_ENDS = Object.freeze(['fertig', 'uebernommen', 'vorschlag', 'abgebrochen', 'verworfen', 'ungeprueft', 'fehler']);
+    /** States that keep an order open; any other state with a sentence of the Brain ends it calmly. */
+    const STAND_OPEN = Object.freeze(['laeuft', 'wartet', 'unbekannt']);
 
     /** The number of an order as the Brain's receipt names it: the first 8 characters of its id. */
     function orderNumber(orders) {
@@ -523,7 +525,10 @@
             // The Brain does not know the order (e.g. it refused it): after STAND_UNKNOWN_MS it is
             // said plainly instead of "arbeitet …" for twenty minutes.
             const silent = Boolean(stand) && stand.stand === 'unbekannt' && clock() - since >= STAND_UNKNOWN_MS;
-            if (!silent && (!stand || !STAND_ENDS.includes(stand.stand))) return false;
+            // a state the app does not know, but with a sentence of the Brain: that sentence, calmly, and the end
+            const strange = Boolean(stand) && !STAND_ENDS.includes(stand.stand) && !STAND_OPEN.includes(stand.stand)
+                && typeof stand.meldung === 'string' && stand.meldung.trim() !== '';
+            if (!silent && !strange && (!stand || !STAND_ENDS.includes(stand.stand))) return false;
             openOrders.delete(id);
             const mine = Boolean(current) && current.state === 'accepted' && firstOrder() === id;
             if (mine) stopAccepted();
@@ -537,13 +542,17 @@
                 const nr = orderNumber([id]);
                 ended = { ...base, state: 'note', note: 'hinweis', elapsed_s: null,
                     result: 'Keine Rückmeldung zum Auftrag' + (nr ? ' Nr. ' + nr : '') + '.', error: '' };
-            } else if (stand.stand === 'fertig') {
-                ended = { ...base, state: 'done', result: said || 'Ergebnis an der Karte', error: '' };
+            } else if (stand.stand === 'fertig' || stand.stand === 'uebernommen') {
+                // uebernommen: the proposal is written now; no sentences to choose any more
+                ended = { ...base, state: 'done', result: said || (stand.stand === 'uebernommen' ? 'Der Vorschlag ist übernommen.' : 'Ergebnis an der Karte'), error: '',
+                    saetze: stand.stand === 'uebernommen' ? [] : saetze };
             } else if (stand.stand === 'fehler') {
                 ended = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
             } else {
-                // A proposal, a stopped order or a result the Brain's check threw away: calm, an info sign, never red.
+                // A proposal, a stopped order, a result the Brain's check threw away or could not check
+                // (ungeprueft), or a state not known yet: calm, an info sign, never red.
                 const fallback = stand.stand === 'vorschlag' ? 'Ein Vorschlag liegt vor.'
+                    : stand.stand === 'ungeprueft' ? 'Der Auftrag kam zurück; sein Ergebnis ließ sich nicht prüfen.'
                     : stand.stand === 'verworfen' ? 'Das Ergebnis wurde verworfen; an der Karte hat sich nichts geändert.' : 'Der Auftrag wurde abgebrochen.';
                 ended = { ...base, state: 'note', note: 'hinweis', result: said || fallback, error: '' };
             }
@@ -704,7 +713,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, STAND_OPEN, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
