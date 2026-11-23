@@ -746,6 +746,8 @@ class UniverseCanvas {
         el.className = 'canvas-node';
         el.dataset.nodeId = data.id;
         el.dataset.nodeType = data.type || 'note';
+        // A heading card of grouping by theme (metadata.gruppen_kopf): drawn as the head of its column.
+        if (data.metadata && data.metadata.gruppen_kopf === true) el.classList.add('canvas-node--kopf');
         
         // Position nodes relative to canvas center
         const x = (data.position?.x || 100) + this.canvasCenter;

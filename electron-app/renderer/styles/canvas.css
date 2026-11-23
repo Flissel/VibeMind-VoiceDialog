@@ -534,3 +534,20 @@
 .canvas-node[data-node-type="research"] .research-toggle {
     margin-top: 6px; font-size: 11px; cursor: pointer;
 }
+
+/* Grouping by theme: the heading card above a column reads as its head, not as a note. */
+.canvas-node.canvas-node--kopf {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    border-bottom: 3px solid rgba(120, 170, 255, 0.7);
+    border-radius: 0;
+}
+.canvas-node.canvas-node--kopf .node-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+.canvas-node.canvas-node--kopf .node-type-icon,
+.canvas-node.canvas-node--kopf .node-content {
+    display: none;
+}

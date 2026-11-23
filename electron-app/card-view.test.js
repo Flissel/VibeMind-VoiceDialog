@@ -546,3 +546,44 @@ test('eine Dokument-Karte heisst nach ihrer Art und sagt, aus wie vielen Karten 
     assert.equal(cv.cardShort({ ...doc, metadata: { art: 'white_paper', quellen: ['a'] } }).art, 'White Paper');
     assert.equal(cv.cardShort({ ...doc, metadata: { art: 'zusammenfassung' } }).quelle, null);
 });
+
+// Gruppieren nach Thema legt Ueberschrift-Karten an (metadata.gruppen_kopf), je eine ueber ihrer Spalte.
+test('Gruppieren: die Ueberschrift-Karte steht als Kopf ueber den Karten ihrer Spalte, nicht als Karte', () => {
+    const karte = (id, title, x, y, kopf = false) => ({ id, title, content: kopf ? '' : 'Text ' + title, node_type: 'note',
+        position: { x, y }, metadata: kopf ? { gruppen_kopf: true } : {} });
+    const knoten = [
+        karte('00000000-0000-4000-8000-0000000000b1', 'Technik', 0, 0, true),
+        karte('00000000-0000-4000-8000-0000000000b2', 'Geld', 240, 0, true),
+        karte('00000000-0000-4000-8000-000000000a02', 'Karte 2', 0, 280),
+        karte('00000000-0000-4000-8000-000000000a01', 'Karte 1', 0, 140),
+        karte('00000000-0000-4000-8000-000000000a03', 'Karte 3', 240, 140),
+        karte('00000000-0000-4000-8000-000000000a04', 'Karte 4', 900, 900),
+    ];
+    const gruppen = cv.grouped(knoten.map(cv.rowOf));
+    assert.deepEqual(gruppen.map((g) => [g.head ? g.head.title : null, g.cards.map((c) => c.title)]),
+        [['Technik', ['Karte 1', 'Karte 2']], ['Geld', ['Karte 3']], [null, ['Karte 4']]]);
+    assert.deepEqual(cv.grouped([karte('00000000-0000-4000-8000-000000000a05', 'Karte 5', 0, 0)].map(cv.rowOf)).length, 1, 'ohne Ueberschriften wie bisher');
+
+    const fake = (tag) => {
+        const node = { tag, children: [], className: '', textContent: '', value: '', hidden: false, dataset: {}, style: { setProperty() {} },
+            append(...c) { node.children.push(...c); }, replaceChildren(...c) { node.children = c; },
+            setAttribute() {}, addEventListener() {}, remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [] };
+        return node;
+    };
+    const madeBy = (cls) => (n) => n.className === cls;
+    const made = [];
+    const doc = { createElement: (t) => { const n = fake(t); made.push(n); return n; }, addEventListener() {}, removeEventListener() {}, defaultView: null };
+    const board = cv.board(doc, {});
+    board.update(knoten, []);
+    const grid = made.find(madeBy('kv-grid'));
+    const reihe = grid.children.map((n) => n.className === 'kv-gruppe' ? '# ' + n.children[0].textContent
+        : n.className.startsWith('kv-gruppe') ? '# ' + n.textContent : n.children[1].textContent);
+    assert.deepEqual(reihe, ['# Technik', 'Karte 1', 'Karte 2', '# Geld', 'Karte 3', '# Ohne Gruppe', 'Karte 4']);
+    assert.equal(board.state.count, 6, 'rows of the board; the line counts only cards');
+    const zahl = made.find((n) => /^\d+ Karten$/.test(n.textContent) && n.className !== 'kv-gruppe-zahl');
+    assert.equal(zahl.textContent, '4 Karten', 'Ueberschriften zaehlen nicht als Karten');
+    const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'card-view.css'), 'utf8');
+    assert.match(css, /\.kv-gruppe \{\s*grid-column: 1 \/ -1;/);
+    const canvas = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
+    assert.match(canvas, /if \(data\.metadata && data\.metadata\.gruppen_kopf === true\) el\.classList\.add\('canvas-node--kopf'\);/);
+});

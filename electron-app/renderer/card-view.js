@@ -82,7 +82,36 @@
             previous_content_json: isMap(previous) ? previous : null,
             format_schema: node.format_schema || null,
             metadata: isMap(node.metadata) ? node.metadata : {},
+            // where the card lies on the canvas: grouping puts a group under its heading card (same x)
+            x: Number.isFinite(Number(node.x ?? (isMap(node.position) ? node.position.x : NaN))) ? Number(node.x ?? node.position.x) : null,
+            y: Number.isFinite(Number(node.y ?? (isMap(node.position) ? node.position.y : NaN))) ? Number(node.y ?? node.position.y) : null,
         };
+    }
+
+    /** A heading card that grouping by theme laid above a column (metadata.gruppen_kopf). */
+    function isGroupHead(row) {
+        return isMap(row) && isMap(row.metadata) && row.metadata.gruppen_kopf === true;
+    }
+
+    /**
+     * The cards in the order of their groups: each heading, then the cards of its column (same x,
+     * top to bottom), then the cards in no group. Without headings the order stays as it is.
+     * Returns [{ head, cards }]; head is null for the cards in no group.
+     */
+    function grouped(rows) {
+        const heads = rows.filter(isGroupHead).filter((h) => h.x !== null)
+            .sort((a, b) => a.x - b.x);
+        if (!heads.length) return [{ head: null, cards: rows.filter((r) => !isGroupHead(r)) }];
+        const taken = new Set();
+        const groups = heads.map((head) => {
+            const cards = rows.filter((r) => !isGroupHead(r) && r.x === head.x && (r.y === null || head.y === null || r.y > head.y))
+                .sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+            cards.forEach((c) => taken.add(c.id));
+            return { head, cards };
+        });
+        const rest = rows.filter((r) => !isGroupHead(r) && !taken.has(r.id));
+        if (rest.length) groups.push({ head: null, cards: rest });
+        return groups;
     }
 
     /** Das Format der Karte, wie gespeichert: content_json.type, sonst die Konstante des Schemas. */
@@ -668,15 +697,32 @@
             return card;
         }
 
+        /** A heading of a group across the whole row of the grid: the column head of grouping by theme. */
+        function headEl(head, count) {
+            const bar = el('div', 'kv-gruppe');
+            bar.dataset.cardId = head.id || '';
+            bar.append(el('h2', 'kv-gruppe-titel', cardTitle(head)), el('span', 'kv-gruppe-zahl', count === 1 ? '1 Karte' : `${count} Karten`));
+            return bar;
+        }
+
         function renderGrid() {
             const query = search.value;
-            const shown = rows.filter((row) => matches(cardTitle(row), query));
-            grid.replaceChildren(...shown.map(cardEl));
+            const shown = rows.filter((row) => !isGroupHead(row) && matches(cardTitle(row), query));
+            const parts = [];
+            // grouped by theme and no search: the headings stand over their cards
+            const groups = query.trim() ? [{ head: null, cards: shown }] : grouped(rows);
+            for (const group of groups) {
+                if (group.head) parts.push(headEl(group.head, group.cards.length));
+                else if (groups.length > 1) parts.push(el('div', 'kv-gruppe kv-gruppe-ohne', 'Ohne Gruppe'));
+                parts.push(...group.cards.map(cardEl));
+            }
+            grid.replaceChildren(...parts);
+            const total = rows.filter((row) => !isGroupHead(row)).length;   // headings are no cards
             countEl.textContent = query.trim()
-                ? `${shown.length} von ${rows.length} Karten`
-                : (rows.length === 1 ? '1 Karte' : `${rows.length} Karten`);
+                ? `${shown.length} von ${total} Karten`
+                : (total === 1 ? '1 Karte' : `${total} Karten`);
             none.hidden = shown.length > 0;
-            none.textContent = rows.length === 0
+            none.textContent = total === 0
                 ? 'Noch keine Notizen in dieser Bubble. Tippe rechts im Chat, um die erste festzuhalten.'
                 : (query.trim() ? `Keine Karte mit „${query.trim()}“ im Titel` : '');
         }
@@ -940,6 +986,6 @@
     return {
         FORMAT_NAMES, CARD_LINES, CARD_LINE_CHARS, SIZES,
         rowOf, cardFormat, plain, cardTitle, cardSource, cardShort, cardRead, cardLinks, cardSources, linkMentions,
-        renderMarkdown, escapeHtml, safeUrl, headingOf, searchKey, matches, board,
+        renderMarkdown, escapeHtml, safeUrl, headingOf, searchKey, matches, board, isGroupHead, grouped,
     };
 });
