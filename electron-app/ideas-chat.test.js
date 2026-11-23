@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildContext, noteText, cardTitle, createCardStore, createHistory, MAX_CARDS, HISTORY_MAX } = require('./renderer/ideas-chat');
+const { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
 
 test('inside a bubble the context names the bubble and its cards', () => {
     const context = buildContext({
@@ -154,4 +154,37 @@ test('each bubble has its own chat history', () => {
     for (let i = 0; i < HISTORY_MAX + 5; i++) history.add('b3', { text: String(i), kind: 'user' });
     assert.equal(history.get('b3').length, HISTORY_MAX);
     assert.equal(history.get('b3')[0].text, '5', 'the oldest lines go first');
+});
+
+test('the reasons of a bubble: newest first, cards by title, a deleted card is named as gone', () => {
+    const nodes = [{ id: 'n1', content: { title: 'Zielgruppe' } }, { id: 'n2', title: 'Kanäle' }];
+    const row = { id: 'b1', metadata: { bewertungen: [
+        { id: 'r1', text: 'Zielgruppe ist klar', karten: ['n1'], wert: 80, erstellt_am: '2026-11-23T07:00:00Z' },
+        { id: 'r2', text: ' Kanäle fehlen noch ', karten: ['n2', 'weg'], erstellt_am: '2026-11-23T08:00:00Z' },
+        { id: 'r3', text: '   ' },
+        null,
+    ] } };
+
+    assert.deepEqual(reasonsFor(row, nodes), [
+        { id: 'r2', text: 'Kanäle fehlen noch', wert: null, erstellt_am: '2026-11-23T08:00:00Z',
+            karten: [{ id: 'n2', title: 'Kanäle' }, { id: 'weg', gone: true }] },
+        { id: 'r1', text: 'Zielgruppe ist klar', wert: 80, erstellt_am: '2026-11-23T07:00:00Z',
+            karten: [{ id: 'n1', title: 'Zielgruppe' }] },
+    ]);
+    assert.deepEqual(reasonsFor(null, nodes), []);
+    assert.deepEqual(reasonsFor({ id: 'b1', metadata: {} }, nodes), []);
+
+    const many = { metadata: { bewertungen: Array.from({ length: MAX_REASONS + 10 }, (_, i) => ({ id: i, text: 't' + i })) } };
+    assert.equal(reasonsFor(many, []).length, MAX_REASONS);
+});
+
+test('a changed bubble row reaches the chat with its metadata', () => {
+    const { SUBSCRIPTIONS, buildRealtimeMessage } = require('./supabase-realtime');
+    const sub = SUBSCRIPTIONS.find((s) => s.table === 'ideas' && s.event === 'UPDATE');
+    const message = buildRealtimeMessage(sub, { id: 'b1', title: 'Marketing', metadata: { bewertungen: [{ id: 'r1', text: 'x' }] } });
+
+    assert.equal(message.table, 'ideas');
+    assert.equal(message.node.metadata.bewertungen[0].id, 'r1');
+    const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+    assert.match(html, /message\.table === 'ideas'\) \{\s*if \(window\.VibeIdeasChat && window\.VibeIdeasChat\.bubbleRow\)/);
 });

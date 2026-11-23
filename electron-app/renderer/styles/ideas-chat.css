@@ -181,3 +181,70 @@ body.ideas-chat-open #game-console {
 body.ideas-chat-open .zoom-controls {
     right: 360px;
 }
+
+/* Reasons given for ratings of the open bubble. */
+.ideas-reasons {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 40%;
+    overflow-y: auto;
+}
+
+.ideas-reasons[hidden] {
+    display: none;
+}
+
+.ideas-reasons-head {
+    padding: 8px 14px;
+    cursor: pointer;
+    color: #9cc4ff;
+    font-size: 12px;
+    user-select: none;
+}
+
+.ideas-reasons-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 14px 10px;
+}
+
+.ideas-reason {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(30, 34, 54, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    line-height: 1.4;
+}
+
+.ideas-reason-score {
+    float: right;
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: rgba(var(--space-accent-rgb), 0.25);
+    font-size: 12px;
+}
+
+.ideas-reason-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ideas-reason-card {
+    padding: 1px 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.4);
+    background: transparent;
+    color: #cfe0ff;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ideas-reason-gone {
+    font-size: 12px;
+    color: rgba(200, 215, 240, 0.5);
+    font-style: italic;
+}

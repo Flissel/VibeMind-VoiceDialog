@@ -133,6 +133,33 @@
         };
     }
 
+    const MAX_REASONS = 50;
+
+    /**
+     * The reasons given for ratings in a bubble, newest first: from the bubble row
+     * (ideas.metadata.bewertungen[], each { id, text, karten: [card id], wert?, erstellt_am }).
+     * Every card id becomes { id, title } or, when the card is gone, { id, gone: true }.
+     */
+    function reasonsFor(row, nodes) {
+        const entries = row && row.metadata && Array.isArray(row.metadata.bewertungen) ? row.metadata.bewertungen : [];
+        const titles = new Map((Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null)
+            .map((node) => [String(node.id), cardTitle(node)]));
+        return entries
+            .filter((entry) => entry && typeof entry.text === 'string' && entry.text.trim())
+            .map((entry, index) => ({
+                id: String(entry.id != null ? entry.id : index),
+                text: entry.text.trim(),
+                wert: Number.isFinite(Number(entry.wert)) && entry.wert !== null && entry.wert !== '' ? Number(entry.wert) : null,
+                erstellt_am: typeof entry.erstellt_am === 'string' ? entry.erstellt_am : '',
+                karten: (Array.isArray(entry.karten) ? entry.karten : []).map((id) => {
+                    const key = String(id);
+                    return titles.has(key) ? { id: key, title: titles.get(key) } : { id: key, gone: true };
+                }),
+            }))
+            .sort((a, b) => (a.erstellt_am < b.erstellt_am ? 1 : a.erstellt_am > b.erstellt_am ? -1 : 0))
+            .slice(0, MAX_REASONS);
+    }
+
     const HISTORY_MAX = 200;
 
     /**
@@ -187,7 +214,67 @@
         const send = el('button', 'ideas-chat-send', '▶');
         send.type = 'submit';
         row.append(input, send);
-        panel.append(head, log, row);
+        // Reasons given for ratings of the open bubble: a list of their own, not on the cards.
+        const reasons = el('details', 'ideas-reasons');
+        reasons.id = 'ideas-reasons';
+        reasons.hidden = true;
+        const reasonsHead = el('summary', 'ideas-reasons-head', 'Begründungen');
+        const reasonsList = el('div', 'ideas-reasons-list');
+        reasons.append(reasonsHead, reasonsList);
+        panel.append(head, reasons, log, row);
+
+        const rows = new Map();  // bubble id -> its row as last reported (ideas table)
+
+        /** Goes to a card and marks it, where the canvas can do that (not while it draws one diagram). */
+        function showCard(id) {
+            const canvas = root.spaceCanvas;
+            if (!canvas || canvas._mermaidMode || !canvas.nodes || !canvas.findNodeById) return false;
+            const found = canvas.findNodeById(id);
+            if (!found || !found.element) return false;
+            canvas.selectNode(found.data.id);
+            if (found.element.scrollIntoView) found.element.scrollIntoView({ block: 'center', inline: 'center' });
+            return true;
+        }
+
+        function renderReasons() {
+            const bubble = view.classList.contains('hidden') ? null : openBubble();
+            const row = bubble ? rows.get(String(bubble.id)) || overviewRow(bubble.id) : null;
+            const list = reasonsFor(row, nodes);
+            reasons.hidden = list.length === 0;
+            reasonsHead.textContent = `Begründungen (${list.length})`;
+            reasonsList.replaceChildren(...list.map((reason) => {
+                const item = el('div', 'ideas-reason');
+                item.dataset.reasonId = reason.id;
+                if (reason.wert != null) item.append(el('span', 'ideas-reason-score', String(reason.wert)));
+                item.append(el('span', 'ideas-reason-text', reason.text));
+                const links = el('div', 'ideas-reason-cards');
+                for (const card of reason.karten) {
+                    if (card.gone) { links.append(el('span', 'ideas-reason-gone', 'Karte gelöscht')); continue; }
+                    const link = el('button', 'ideas-reason-card', card.title || card.id);
+                    link.type = 'button';
+                    link.dataset.cardId = card.id;
+                    link.addEventListener('click', () => { link.dataset.jump = String(showCard(card.id)); });
+                    links.append(link);
+                }
+                if (reason.karten.length) item.append(links);
+                return item;
+            }));
+        }
+
+        function overviewRow(id) {
+            const app = root.multiverseApp;
+            const objects = (app && app.spaces && app.spaces.ideas && app.spaces.ideas.objects) || [];
+            const found = objects.find((o) => o.userData && o.userData.type === 'bubble'
+                && (String(o.userData.db_id) === String(id) || String(o.userData.id) === String(id)));
+            return found ? found.userData.data : null;
+        }
+
+        /** The row of a bubble as the database (or an answer) reports it. A row without metadata tells nothing new. */
+        function bubbleRow(row) {
+            if (!row || row.id == null || !row.metadata || typeof row.metadata !== 'object') return;
+            rows.set(String(row.id), row);
+            renderReasons();
+        }
 
         const stack = el('div');
         stack.id = 'ideas-pending';
@@ -279,6 +366,8 @@
                 if (change.pending_id) store.settle(change.pending_id);
                 store.settle(change.id);
                 if (change.op === 'create' || change.op === 'update') lastId = String(change.id);
+                // A new reason comes as an update of the bubble row.
+                if (change.op === 'update' && change.row && change.row.metadata) bubbleRow(change.row);
             }
             if (!response.working) return;
             const targets = Array.isArray(response.targets) && response.targets.length ? response.targets : (newId ? [newId] : []);
@@ -332,6 +421,7 @@
             nodes = (event.detail && Array.isArray(event.detail.nodes)) ? event.detail.nodes : [];
             store.matchLoaded(nodes);
             showHistory(); // the bubble is known for certain once its rows are loaded
+            renderReasons();
             renderCards();
         });
         root.addEventListener('vibemind:canvas-node-added', (event) => {
@@ -368,6 +458,7 @@
             headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
             if (!inside) { nodes = []; lastId = null; }
             showHistory();
+            renderReasons();
             renderCards();
         };
         new root.MutationObserver(sync).observe(view, { attributes: true, attributeFilter: ['class'] });
@@ -375,10 +466,10 @@
         if (titleEl) new root.MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
         sync();
 
-        return { submit, contextNow, store };
+        return { submit, contextNow, store, bubbleRow };
     }
 
-    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, MAX_CARDS, HISTORY_MAX };
+    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

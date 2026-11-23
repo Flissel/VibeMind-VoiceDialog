@@ -32,7 +32,8 @@ const SUBSCRIPTIONS = [
   { table: 'ideas', event: 'INSERT', messageType: 'node_added',
     transform: (row) => ({ node: { id: row.id, title: row.title, description: row.description, type: 'idea', score: row.score, status: row.status, parent_id: row.parent_id } }) },
   { table: 'ideas', event: 'UPDATE', messageType: 'node_updated',
-    transform: (row) => ({ node: { id: row.id, title: row.title, description: row.description, score: row.score, status: row.status } }) },
+    // metadata: the reasons given for ratings live in the bubble row (renderer/ideas-chat.js)
+    transform: (row) => ({ node: { id: row.id, title: row.title, description: row.description, score: row.score, status: row.status, metadata: row.metadata || null } }) },
   { table: 'ideas', event: 'DELETE', messageType: 'node_removed',
     transform: (old) => ({ node_id: old.id }) },
 

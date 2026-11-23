@@ -1285,6 +1285,11 @@
                     break;
 
                 case 'node_updated':
+                    // A changed bubble row (ideas table) carries the reasons given for its ratings.
+                    if (message.table === 'ideas') {
+                        if (window.VibeIdeasChat && window.VibeIdeasChat.bubbleRow) window.VibeIdeasChat.bubbleRow(message.node);
+                        break;
+                    }
                     if (window.spaceCanvas) {
                         window.spaceCanvas.onNodeUpdated(message.node_id, message.updates);
                     }
