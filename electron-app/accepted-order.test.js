@@ -52,6 +52,7 @@ function world() {
             addEventListener() {},
         },
         localStorage: { getItem: () => null, setItem() {} },
+        Date: { now: () => now },                    // the clock of the stand-in timers
         crypto: { randomUUID: () => '00000000-0000-4000-8000-0000000000ff' },
         MutationObserver: class { observe() {} },
         multiverseApp: { currentSpace: 'ideas', spaces: { ideas: {} }, isNavigating: false, isInsideBubble: true, getBubbleById: () => null },
@@ -105,7 +106,8 @@ test('accepted order in the plan: "arbeitet … (Auftrag angenommen)", never fai
     const done = cards('Ergebnis der Recherche, lang und ausfuehrlich');
     done[0].updated_at = '2026-11-23T10:07:00Z';
     w.loaded(done);
-    assert.equal(w.line(), '✓ Ideas: fertig in 0,8 s — Ergebnis an der Karte „Karte 1“');
+    // the duration is the work on the order (2 min), not the 0,8 s the plan took to accept it
+    assert.equal(w.line(), '✓ Ideas: fertig in 2 min — Ergebnis an der Karte „Karte 1“');
     assert.equal(w.statuses[w.statuses.length - 1], 'done');
     assert.match(w.chatLog().join('\n'), /✓ fertig — Ergebnis an der Karte „Karte 1“/);
     assert.equal(w.chatState(), '');
@@ -140,7 +142,7 @@ test('accepted answer to a chat sentence (no plan events): chat and line say "ar
     assert.deepEqual(marks().map((c) => [c.dataset.cardId, c.dataset.cardState]), [[CARD_1, 'working']], 'the card says "arbeitet"');
     const changed = cards('Ergebnis');
     w.loaded(changed);
-    assert.equal(w.line(), '✓ Ideas: fertig — Ergebnis an der Karte „Karte 1“');
+    assert.equal(w.line(), '✓ Ideas: fertig in 0,0 s — Ergebnis an der Karte „Karte 1“');
     assert.equal(marks().length, 0, 'the mark goes with the result');
 });
 
@@ -237,4 +239,28 @@ test('a hint or a question back is never "✕ fehlgeschlagen": calm, with ℹ or
     assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked\);/);
     const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'titlebar.css'), 'utf8');
     assert.match(css, /\.task-status\[data-state="note"\] \{/);
+});
+
+test('the end of the plan that took the order is the acceptance: no "fertig", no duration, until the result', async () => {
+    const w = world();
+    // the answer to the sentence comes first, the end of its plan a moment later
+    w.answerWith({ success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen', orders: [ORDER] });
+    const navigator = createTaskNavigator((message) => w.handle(message));
+    navigator.handle('plan_started', { plan_id: 'p7', hops: [{}], space: 'ideas' });
+    await w.send('Was hältst du von Karte 1?');
+    navigator.handle('hop_completed', { space: 'ideas', ok: true, result_preview: "'eingereiht'" });   // no mark in the hop
+    navigator.handle('plan_completed', { plan_id: 'p7', ok: true, elapsed_s: 2.0 });
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+    assert.doesNotMatch(w.line(), /fertig|2,0 s/);
+    // the receipt only at the end of the plan: accepted, without duration
+    const sent = [];
+    const nav = createTaskNavigator((m) => sent.push(m));
+    nav.handle('plan_started', { plan_id: 'p8', hops: [{}], space: 'ideas' });
+    nav.handle('hop_completed', { space: 'ideas', ok: true });
+    const end = nav.handle('plan_completed', { plan_id: 'p8', ok: true, pending: true, status: 'angenommen', elapsed_s: 2.0 });
+    assert.equal(end.state, 'accepted');
+    assert.equal(end.elapsed_s, null);
+    w.advance(7 * 60 * 1000);
+    w.loaded(cards('Ergebnis'));
+    assert.equal(w.line(), '✓ Ideas: fertig in 7 min — Ergebnis an der Karte „Karte 1“');
 });

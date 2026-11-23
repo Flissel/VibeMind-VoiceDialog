@@ -271,9 +271,14 @@ function createTaskNavigator(send) {
         const seconds = Number(payload.elapsed_s);
         const elapsed = { elapsed_s: Number.isFinite(seconds) ? seconds : null };
         // The plan is over, the order it gave is not: a model still works on it. Not failed, not done.
+        // The receipt may also come only with the end of the plan ({ pending: true, status: 'angenommen' }).
+        if (!accepted && acceptedOf(payload)) {
+          accepted = { space: last.space, registry_space: last.registry_space, step: last.step, targets: targetsOf(payload) };
+        }
         if (accepted && !failedStep) {
           last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
-          return status('accepted', { ...elapsed, targets: accepted.targets });
+          // No duration: the time it took to accept the order is not the time of its result.
+          return status('accepted', { elapsed_s: null, targets: accepted.targets });
         }
         // A hint or a question back ends the plan calmly: neither ✓ nor ✕.
         const calm = noteOf(payload);

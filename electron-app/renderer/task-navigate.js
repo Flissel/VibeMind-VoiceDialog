@@ -49,8 +49,15 @@
     }
 
     function seconds(value) {
-        return typeof value === 'number' && Number.isFinite(value)
-            ? value.toFixed(1).replace('.', ',') + ' s' : '';
+        if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+        // A model works for minutes: "7 min" reads better than "421,3 s".
+        if (value >= 90) return Math.round(value / 60) + ' min';
+        return value.toFixed(1).replace('.', ',') + ' s';
+    }
+
+    /** Milliseconds now; the window's clock when it has one (tests set it). */
+    function clock() {
+        return root.Date && typeof root.Date.now === 'function' ? root.Date.now() : Date.now();
     }
 
     /**
@@ -336,7 +343,8 @@
             if (detail.accepted) {
                 answer = '';
                 refusal = '';
-                if (!current || current.waiting || current.state === 'accepted' || finished(current)) {
+                // Also while the plan of this sentence still runs: its end is then only the acceptance.
+                if (!current || current.waiting || current.state === 'accepted' || current.state === 'running' || finished(current)) {
                     current = { state: 'accepted', space: detail.space || (current && current.space) || 'ideas',
                         step: '', done: 0, total: 0, targets: Array.isArray(detail.targets) ? detail.targets.map(String) : [],
                         orders: Array.isArray(detail.orders) ? detail.orders.map(String) : [],
@@ -396,7 +404,7 @@
             const nodes = canvas && Array.isArray(canvas.lastNodes) ? canvas.lastNodes : [];
             const bubbleId = (canvas && canvas.bubbleId) || null;
             if (!watch) {
-                watch = { before: nodes.length ? snapshot(nodes) : null, bubbleId,
+                watch = { before: nodes.length ? snapshot(nodes) : null, bubbleId, since: clock(),
                     // An assessment writes to the bubble (a new reason), not to a card.
                     reasons: lastRow && bubbleId && String(lastRow.id) === String(bubbleId) ? reasonCount(lastRow) : null };
             }
@@ -423,10 +431,14 @@
 
         /** The result is there: the line says so, the chat ends its "arbeitet". */
         function finishAccepted(title, where = 'card') {
+            // The duration is the work on the order, from its acceptance to its result; the time
+            // the plan took to accept it says nothing (it showed "fertig in 2,0 s").
+            const since = watch && watch.since;
             stopAccepted();
             const result = where === 'bubble' ? 'Einschätzung an der Bubble'
                 : title ? `Ergebnis an der Karte „${shorten(title)}“` : 'Ergebnis an der Karte';
-            current = { ...current, state: 'done', accepted: false, stale: false, result, error: '' };
+            const elapsed = typeof since === 'number' ? Math.max(0, (clock() - since) / 1000) : null;
+            current = { ...current, state: 'done', accepted: false, stale: false, result, error: '', elapsed_s: elapsed };
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
             root.clearTimeout(keepTimer);
             keepTimer = root.setTimeout(clear, KEEP_MS);
@@ -466,9 +478,17 @@
         });
 
         function handleStatus(message) {
+            if (message && message.plan_id) lastPlanId = message.plan_id;
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
-            if (message.plan_id) lastPlanId = message.plan_id;
+            // The plan that took an order ends with "done": that is the acceptance, not the result.
+            // The line keeps saying "arbeitet" until the result is there; no "fertig", no duration.
+            if ((message.state === 'done' || message.state === 'running') && current && current.state === 'accepted'
+                && (!current.plan_id || !message.plan_id || current.plan_id === message.plan_id)) {
+                message = { ...message, state: 'accepted', result: '', elapsed_s: null,
+                    targets: current.targets, orders: current.orders, plan_id: current.plan_id || message.plan_id,
+                    stale: current.stale };
+            }
             // The status of the main process does not know the order numbers; the answer to the sentence did.
             if ((message.state === 'accepted' || message.accepted) && !Array.isArray(message.orders)
                 && current && Array.isArray(current.orders) && current.orders.length) {
