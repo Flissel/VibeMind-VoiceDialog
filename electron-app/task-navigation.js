@@ -335,7 +335,7 @@ function createTaskNavigator(send) {
 }
 
 /** The states of an order the Brain names at GET /api/agent-auftraege/{id}/stand. */
-const ORDER_STANDS = Object.freeze(['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'wartet', 'fehler', 'unbekannt']);
+const ORDER_STANDS = Object.freeze(['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'wartet', 'fehler', 'unbekannt']);
 /** An order id as the Brain gives it; anything else is never put into a path. */
 const ORDER_ID = /^[A-Za-z0-9-]{4,64}$/;
 

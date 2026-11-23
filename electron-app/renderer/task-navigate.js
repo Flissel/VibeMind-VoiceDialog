@@ -121,7 +121,7 @@
     const STAND_MS = 5000;
     const STAND_UNKNOWN_MS = 5 * 60 * 1000;      // /stand says "unbekannt" this long: no answer will come                       // an accepted order: how often the Brain is asked how it stands
     /** States of /stand that end the accepted line; laeuft, wartet and unbekannt keep it. */
-    const STAND_ENDS = Object.freeze(['fertig', 'vorschlag', 'abgebrochen', 'fehler']);     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
+    const STAND_ENDS = Object.freeze(['fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'fehler']);     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
 
     /** The number of an order as the Brain's receipt names it: the first 8 characters of its id. */
     function orderNumber(orders) {
@@ -542,8 +542,9 @@
             } else if (stand.stand === 'fehler') {
                 ended = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
             } else {
-                // A proposal or a stopped order: calm, an info sign, never red.
-                const fallback = stand.stand === 'vorschlag' ? 'Ein Vorschlag liegt vor.' : 'Der Auftrag wurde abgebrochen.';
+                // A proposal, a stopped order or a result the Brain's check threw away: calm, an info sign, never red.
+                const fallback = stand.stand === 'vorschlag' ? 'Ein Vorschlag liegt vor.'
+                    : stand.stand === 'verworfen' ? 'Das Ergebnis wurde verworfen; an der Karte hat sich nichts geändert.' : 'Der Auftrag wurde abgebrochen.';
                 ended = { ...base, state: 'note', note: 'hinweis', result: said || fallback, error: '' };
             }
             // The chat says it at the sentence that gave the order, whatever runs now.

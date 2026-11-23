@@ -326,6 +326,14 @@ test('/stand vorschlag is calm and offers its sentences as buttons; abgebrochen 
     stopped.w.advance(5000); await tick();
     assert.equal(stopped.w.line(), 'ℹ Ideas: Der Auftrag wurde abgebrochen.');
 
+    // paket-563f4393: the check of the Brain threw the result away (Lauf 5: the summary in the wrong form)
+    const thrown = await acceptedWithStand([{ stand: 'verworfen', meldung: 'Der Agent hat nicht in der vereinbarten Form geantwortet; es wurde nichts geändert.' }]);
+    thrown.w.advance(5000); await tick();
+    assert.equal(thrown.w.line(), 'ℹ Ideas: Der Agent hat nicht in der vereinbarten Form geantwortet; es wurde nichts geändert.');
+    const bare = await acceptedWithStand([{ stand: 'verworfen' }]);
+    bare.w.advance(5000); await tick();
+    assert.equal(bare.w.line(), 'ℹ Ideas: Das Ergebnis wurde verworfen; an der Karte hat sich nichts geändert.');
+
     const failed = await acceptedWithStand([{ stand: 'fehler', meldung: 'Das White Paper ließ sich nicht schreiben.' }]);
     failed.w.advance(5000); await tick();
     assert.equal(failed.w.line(), '✕ Ideas: fehlgeschlagen — Das White Paper ließ sich nicht schreiben.');
@@ -333,7 +341,7 @@ test('/stand vorschlag is calm and offers its sentences as buttons; abgebrochen 
 
 test('/stand: the main process reads only, checks the id and lets only known fields through', () => {
     const { standOf, ORDER_STANDS } = require('./task-navigation');
-    assert.deepEqual([...ORDER_STANDS], ['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'wartet', 'fehler', 'unbekannt']);
+    assert.deepEqual([...ORDER_STANDS], ['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'verworfen', 'wartet', 'fehler', 'unbekannt']);
     assert.equal(standOf({ stand: 'irgendwas' }), null);
     assert.deepEqual(standOf({ stand: 'fehler', meldung: "ConnectionError: HTTPConnectionPool(host='dienst-a')", ok: false, geheim: 'x' }),
         { stand: 'fehler', meldung: 'Der Dienst ist gerade nicht erreichbar.', ok: false, dauer_s: null, hinweis: false, saetze: [] });
