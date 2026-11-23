@@ -597,7 +597,9 @@
             inFlight += 1;
             panel.dataset.busy = 'true';
             const asked = bubbleKey();
-            root.dispatchEvent(new root.CustomEvent('vibemind:sentence-sent'));
+            // One trace per sentence, back on every event of its run (task-navigate.js tells overlapping sentences apart by it).
+            const trace = root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
+            root.dispatchEvent(new root.CustomEvent('vibemind:sentence-sent', { detail: { trace_id: trace } }));
             const ask = say(text, 'user', asked);
             const note = noteText(text);
             const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
@@ -609,7 +611,8 @@
                 root.setTimeout(() => { store.expire(newId); renderCards(); }, SETTLE_MS);
             }
             try {
-                const response = await root.vibemind.sendChatMessage(text, contextNow(newId), typed === true);
+                const shown = contextNow(newId);
+                const response = await root.vibemind.sendChatMessage(text, trace ? { ...(shown || {}), trace_id: trace } : shown, typed === true);
                 // The Brain took the order, a model works on it; the result comes later at the card.
                 const accepted = isAccepted(response);
                 // Not understood or asked back (question, rueckfrage, verstanden: false): a calm question,
@@ -625,7 +628,7 @@
                 const message = (response && (response.message || response.final_text)) || (failed ? 'Keine Antwort' : asks ? 'Wie meinst du das?' : 'OK');
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
-                    text: (response && response.message) || '', success: !failed, space: 'ideas', note: asks ? 'rueckfrage' : hint || proposes ? 'hinweis' : '',
+                    trace_id: trace, text: (response && response.message) || '', success: !failed, space: 'ideas', note: asks ? 'rueckfrage' : hint || proposes ? 'hinweis' : '',
                     ...(accepted ? { accepted: true, space: 'ideas', targets, orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
                 } }));
                 if (failed && newId) store.reject(newId, message);
@@ -649,7 +652,7 @@
                 if (newId) store.reject(newId, error.message);
                 if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] sentence failed', { error: String(error && error.message) });
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
-                    text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: 'ideas' } }));
+                    trace_id: trace, text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: 'ideas' } }));
                 say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked, null, ask);
             } finally {
                 inFlight = Math.max(0, inFlight - 1);

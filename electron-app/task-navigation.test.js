@@ -242,10 +242,10 @@ test('a new sentence and a new plan clear what an earlier task ended with', () =
     const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
 
-    assert.match(page, /addEventListener\('vibemind:sentence-sent', \(\) => \{[^}]*fresh\(\);/);
+    assert.match(page, /addEventListener\('vibemind:sentence-sent', \(event\) => \{[^}]*fresh\(\);/);
     assert.match(page, /message\.state === 'reset'\) \{ fresh\(\); return 'reset'; \}/);
-    assert.match(scene, /CustomEvent\('vibemind:sentence-sent'\)/);
-    assert.match(chat, /CustomEvent\('vibemind:sentence-sent'\)/);
+    assert.match(scene, /CustomEvent\('vibemind:sentence-sent', \{ detail: \{ trace_id: trace \} \}\)/);
+    assert.match(chat, /CustomEvent\('vibemind:sentence-sent', \{ detail: \{ trace_id: trace \} \}\)/);
 });
 
 test('a finished task shows the answer to the sentence, not the raw result of its last step', () => {
@@ -403,4 +403,20 @@ test('readOrderStand asks GET /api/agent-auftraege/{id}/stand and never sends a 
         server.close();
     }
     assert.equal(await readOrderStand('0000abcd', { port: 1 }), null, 'no Brain: null, no throw');
+});
+
+test('the trace of the sentence goes on in every message of its run, also on a later plan of the same run', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+    const TRACE = '00000000-0000-4000-8000-0000000000aa';
+    navigator.handle('plan_started', { plan_id: 'p8', hops: [{}], space: 'ideas', intent: 'Was fehlt noch?', trace_id: TRACE });
+    navigator.handle('hop_started', { space: 'ideas', capability: 'idea_judge', description: 'Einschätzen', trace_id: TRACE });
+    navigator.handle('plan_completed', { plan_id: 'p8', ok: true, elapsed_s: 1.2, trace_id: TRACE });
+    assert.ok(sent.length >= 3);
+    assert.ok(sent.every((m) => m.trace_id === TRACE), 'reset, navigation and every status carry it');
+
+    navigator.handle('plan_started', { plan_id: 'p9', hops: [{}], space: 'ideas', intent: 'ohne' });
+    assert.equal(sent.at(-1).trace_id, undefined, 'a plan without a trace carries none of the one before');
+    navigator.handle('plan_started', { plan_id: 'p10', hops: [{}], trace_id: '../x y' });
+    assert.equal(sent.at(-1).trace_id, undefined, 'only a plain id passes');
 });

@@ -627,3 +627,28 @@ test('the jump is the same from every place to type: a sentence in an open bubbl
     quiet.window.multiverseApp.navigateToSpace = () => { throw new Error('no jump'); };
     assert.equal(quiet.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' }), 'note');
 });
+
+test('an event is told to its sentence by the trace, not by its plan: overlapping sentences without counting on order', async () => {
+    const w = world();
+    let n = 0;
+    w.window.crypto.randomUUID = () => '00000000-0000-4000-8000-0000000000' + String(++n).padStart(2, '0');
+    const contexts = [];
+    w.window.vibemind.orderStand = async () => ({ stand: 'laeuft' });
+    w.window.vibemind.sendChatMessage = async (text, context) => {
+        contexts.push(context);
+        return { success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen', orders: [ORDER] };
+    };
+    const TRACE_1 = '00000000-0000-4000-8000-000000000001';
+    w.handle({ type: 'task_status', state: 'running', space: 'ideas', plan_id: 'p1', trace_id: TRACE_1, step: 'Einschätzen', done: 0, total: 1 });
+    await w.send('Was hältst du von Karte 1?');
+    assert.equal(contexts[0].trace_id, TRACE_1, 'the sentence carries its trace to the Brain');
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+
+    // measured 2026-11-23: the end of the order's run came under the plan_id of a later sentence
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p2', trace_id: TRACE_1, step: 'Einschätzen', done: 1, total: 1, result: 'erledigt' });
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'its own trace: still the acceptance, no "fertig"');
+
+    // a run of another sentence ends: its own news, not folded into the acceptance
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p1', trace_id: '00000000-0000-4000-8000-000000000099', step: 'Notiz ändern', done: 1, total: 1, result: 'erledigt' });
+    assert.match(w.line(), /^✓ Ideas: fertig/);
+});

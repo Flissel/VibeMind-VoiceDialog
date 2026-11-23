@@ -114,7 +114,8 @@ test('one visible field per tab: the Ideas chat rests outside Ideas, the console
     const scene = read('renderer/multiverse.js');
     assert.match(scene, /this\.isNavigating = true;[\s\S]{0,400}this\._leaveOpenBubble\(targetSpace\);/);
     assert.match(scene, /_leaveOpenBubble\(targetSpace\) \{\s*if \(targetSpace === 'ideas'\) return false;[\s\S]{0,700}nav\.exitSpace\(\)/);
-    assert.match(scene, /const context = answers \? answers\.contextFor\(this\.currentSpace, ideas\) : ideas;/);
+    assert.match(scene, /const shownContext = answers \? answers\.contextFor\(this\.currentSpace, ideas\) : ideas;/);
+    assert.match(scene, /const context = trace \? \{ \.\.\.\(shownContext \|\| \{\}\), trace_id: trace \} : shownContext;/);
 });
 
 test('two sentences at once, answers in swapped order: each answer stands under its own sentence', async () => {

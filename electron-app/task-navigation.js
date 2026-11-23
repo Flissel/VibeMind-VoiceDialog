@@ -183,6 +183,13 @@ function targetsOf(payload) {
  *
  * @param {(message: object) => void} send
  */
+/** A trace id as the app sends it with a sentence (renderer: crypto.randomUUID); anything else is dropped. */
+const TRACE_ID = /^[A-Za-z0-9_.:-]{1,80}$/;
+function traceOf(payload) {
+  const value = payload && payload.trace_id;
+  return typeof value === 'string' && TRACE_ID.test(value) ? value : '';
+}
+
 function createTaskNavigator(send) {
   let planId = '';
   let total = 0;
@@ -192,6 +199,10 @@ function createTaskNavigator(send) {
   let accepted = null; // { space, registry_space, step, targets } the step whose order a model still works on
   let failedStep = false;
   let note = null; // { kind: 'rueckfrage' | 'hinweis', text } a step that asked back or gave a hint
+  // The sentence a plan answers: the Brain gives every event of a run the trace_id the app sent with
+  // its sentence. It goes on in every message, so overlapping sentences are told apart without order.
+  let trace = '';
+  const emit = (message) => send(trace ? { ...message, trace_id: trace } : message);
 
   const status = (state, extra = {}) => {
     const message = {
@@ -212,6 +223,7 @@ function createTaskNavigator(send) {
       stage_total: last ? last.stage_total : null,
       stage_label: last ? last.stage_label : '',
       result_ref: last ? last.result_ref : '',
+      ...(trace ? { trace_id: trace } : {}),
       ...extra,
     };
     send(message);
@@ -228,6 +240,9 @@ function createTaskNavigator(send) {
       if (kind === 'plan_started') ignoring = ownPlan(payload.plan_id);
       const id = typeof payload.plan_id === 'string' && payload.plan_id ? payload.plan_id : null;
       if (id ? ownPlan(id) : ignoring) return null;
+      const traced = traceOf(payload);
+      if (traced) trace = traced;
+      else if (kind === 'plan_started') trace = '';
       if (kind === 'plan_started') {
         planId = typeof payload.plan_id === 'string' ? payload.plan_id : '';
         total = Array.isArray(payload.hops) ? payload.hops.length : 0;
@@ -239,14 +254,14 @@ function createTaskNavigator(send) {
         note = null;
         // A new plan: what the plan before ended with is no longer the news.
         const reset = { type: 'task_status', state: 'reset', plan_id: planId };
-        send(reset);
+        emit(reset);
         // The Brain names the space of a plan with its start. Then the app follows at once and does
         // not wait for the first step, which can come seconds later.
         const start = appKeyForSpace(payload.space);
         if (start) {
           last = { space: start, registry_space: payload.space, step: '', result: '', error: '', result_ref: '', ...stageOf(payload) };
           visited.add(start);
-          send({ type: 'task_navigate', space: start, registry_space: payload.space, capability: '', description: text(payload.intent) });
+          emit({ type: 'task_navigate', space: start, registry_space: payload.space, capability: '', description: text(payload.intent) });
           status('running');
         }
         return null;
@@ -265,7 +280,7 @@ function createTaskNavigator(send) {
             capability: payload.capability || '',
             description: payload.description || '',
           };
-          send(navigation);
+          emit(navigation);
         }
         status('running');
         return navigation;
@@ -445,5 +460,5 @@ function closeTaskNavigation() {
 
 module.exports = {
   plainError, standOf, readOrderStand, ORDER_STANDS,
-  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
+  traceOf, SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };

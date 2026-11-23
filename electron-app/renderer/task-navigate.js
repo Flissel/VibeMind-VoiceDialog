@@ -219,6 +219,7 @@
         let answer = '';         // the answer to the sentence last sent, once it is there
         let refusal = '';        // ... or the Brain's sentence on why it did not work
         let awaiting = false;    // a sentence of the app was sent and its answer is not there yet
+        let sentTrace = '';      // the trace of the last sentence sent; the Brain puts it on the events of its run
         let answerTimer = null;  // ... how long a finished plan waits for that answer
         let watch = null;        // an accepted order: { before, bubbleId } the cards as they were when it was taken
         let acceptedTimer = null;
@@ -337,7 +338,9 @@
         function fresh() {
             if (finished(current)) clear();
         }
-        root.addEventListener('vibemind:sentence-sent', () => {
+        root.addEventListener('vibemind:sentence-sent', (event) => {
+            const sent = event && event.detail && typeof event.detail.trace_id === 'string' ? event.detail.trace_id : '';
+            if (sent) sentTrace = sent;
             // The key or click that sent the sentence is no sign that the user works here: they asked
             // for the task and want to see it. Counting it as such kept every typed sentence from
             // jumping (the Enter came 0 s before the plan; only sends without a key event jumped).
@@ -377,7 +380,9 @@
                         step: '', done: 0, total: 0, targets: Array.isArray(detail.targets) ? detail.targets.map(String) : [],
                         orders: Array.isArray(detail.orders) ? detail.orders.map(String) : [],
                         // the plan that took the order: its "done" is the acceptance, not the result
-                        plan_id: (current && current.plan_id) || lastPlanId };
+                        plan_id: (current && current.plan_id) || lastPlanId,
+                        // the sentence that gave the order: its events are told by it, not by their plan
+                        trace_id: (typeof detail.trace_id === 'string' && detail.trace_id) || sentTrace || '' };
                     root.clearTimeout(keepTimer);
                     startAccepted();
                     root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
@@ -653,6 +658,17 @@
             if (count > watch.reasons) finishAccepted('', 'bubble');
         });
 
+        /**
+         * Does a status belong to the sentence of the line? By the trace of the sentence when both
+         * carry one (the Brain puts it on every event of the run, whatever plan it runs in); without,
+         * by the plan as before. Measured 2026-11-23: an acceptance came under the plan_id of a later
+         * sentence; the trace tells them apart without counting on the order.
+         */
+        function sameSentence(line, message) {
+            if (line.trace_id && message.trace_id) return line.trace_id === message.trace_id;
+            return !line.plan_id || !message.plan_id || line.plan_id === message.plan_id;
+        }
+
         function handleStatus(message) {
             if (message && message.plan_id) lastPlanId = message.plan_id;
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
@@ -660,9 +676,10 @@
             // The plan that took an order ends with "done": that is the acceptance, not the result.
             // The line keeps saying "arbeitet" until the result is there; no "fertig", no duration.
             if ((message.state === 'done' || message.state === 'running') && current && current.state === 'accepted'
-                && message.berichtigt !== true && (!current.plan_id || !message.plan_id || current.plan_id === message.plan_id)) {
+                && message.berichtigt !== true && sameSentence(current, message)) {
                 message = { ...message, state: 'accepted', result: '', elapsed_s: null,
                     targets: current.targets, orders: current.orders, plan_id: current.plan_id || message.plan_id,
+                    trace_id: current.trace_id || message.trace_id || '',
                     stale: current.stale };
             }
             // The status of the main process does not know the order numbers; the answer to the sentence did.

@@ -2656,7 +2656,10 @@ class MultiverseApp {
 
         // Show user message
         const ask = this.addGcMessage(text, 'user');
-        window.dispatchEvent(new CustomEvent('vibemind:sentence-sent'));
+        // One trace per sentence: the Brain puts it on every event of its run and on its answer, so
+        // the status line knows which sentence an event belongs to, also when sentences overlap.
+        const trace = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : '';
+        window.dispatchEvent(new CustomEvent('vibemind:sentence-sent', { detail: { trace_id: trace } }));
 
         // Show spinner, hide send button
         document.getElementById('gc-spinner').classList.remove('hidden');
@@ -2668,14 +2671,15 @@ class MultiverseApp {
             const answers = window.VibeSentenceAnswer;
             const ideas = this.currentSpace === 'ideas' && window.VibeIdeasChat && window.VibeIdeasChat.contextNow
                 ? window.VibeIdeasChat.contextNow() : undefined;
-            const context = answers ? answers.contextFor(this.currentSpace, ideas) : ideas;
+            const shownContext = answers ? answers.contextFor(this.currentSpace, ideas) : ideas;
+            const context = trace ? { ...(shownContext || {}), trace_id: trace } : shownContext;
             const response = await window.vibemind.sendChatMessage(text, context, typed === true);
             const shown = answers ? answers.view(response)
                 : { kind: response?.success === false ? 'fehler' : 'antwort', text: response?.message || 'Keine Antwort.' };
             // The Brain took an order a model works on: the status line says "arbeitet" until it is finished.
             const accepted = !!response && response.ok !== false && (response.pending === true || response.status === 'angenommen');
             window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
-                text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
+                trace_id: trace, text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
                 space: context && context.space ? context.space : this.currentSpace,
                 ...(accepted ? { accepted: true, space: this.currentSpace,
                     targets: Array.isArray(response.targets) ? response.targets.map(String) : [],
@@ -2689,7 +2693,7 @@ class MultiverseApp {
             if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });
             // The status line must not wait 60 s on "arbeitet …" for an answer that will not come.
             window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
-                text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: this.currentSpace } }));
+                trace_id: trace, text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: this.currentSpace } }));
             this.addGcMessage('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', ask);
         } finally {
             if (ask.__pair) ask.__pair.__waiting = false;

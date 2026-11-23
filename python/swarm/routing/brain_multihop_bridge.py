@@ -34,6 +34,7 @@ Graceful degradation:
 from __future__ import annotations
 
 import asyncio
+import re
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -108,6 +109,24 @@ def typed_request(
             headers[HEADER_TYPED] = eingabe_zeichen(key, sentence, zeit)
             context["eingabe"] = TYPED
     return (context or None), headers
+
+
+TRACE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+
+
+def trace_of(
+    ui_context: Optional[Dict[str, Any]],
+) -> "tuple[str, Optional[Dict[str, Any]]]":
+    """The trace id of the sentence (set by the app per sentence) and the context without it.
+
+    Only a plain id passes; anything else is dropped. The caller's context is not changed in place.
+    """
+    if not isinstance(ui_context, dict) or "trace_id" not in ui_context:
+        return "", ui_context
+    context = dict(ui_context)
+    value = context.pop("trace_id")
+    trace = value if isinstance(value, str) and TRACE_ID.match(value) else ""
+    return trace, (context or None)
 
 
 class BrainMultihopBridge:
@@ -312,6 +331,11 @@ class BrainMultihopBridge:
         checked here: it stays only with its signature in the header (typed_request).
         """
         body: Dict[str, Any] = {"intent": intent_text}
+        # The trace of the sentence goes beside intent, not in the context: the Brain puts it on
+        # every event of the run and on its answer (task-navigation.js passes it on to the app).
+        trace, ui_context = trace_of(ui_context)
+        if trace:
+            body["trace_id"] = trace
         # A typed sentence carries its signature in the header (typed_request); never logged.
         context, headers = typed_request(intent_text, ui_context)
         if context:

@@ -250,3 +250,25 @@ def test_a_plan_that_ran_is_reported_as_before():
 
     assert result.event_type == "brain.multihop"
     assert result.response_hint == "done"
+
+
+TRACE = "00000000-0000-4000-8000-0000000000aa"
+
+
+def test_the_trace_of_the_sentence_goes_beside_intent_not_in_the_context(monkeypatch):
+    # The Brain puts body.trace_id on every event of the run and on its answer (paket e72ab12b).
+    url, body = _post(monkeypatch, "Was fehlt noch?", {"space": "ideas", "trace_id": TRACE})
+
+    assert body == {"intent": "Was fehlt noch?", "trace_id": TRACE, "context": {"space": "ideas"}}
+
+
+def test_a_trace_alone_leaves_no_empty_context_and_a_bad_one_is_dropped(monkeypatch):
+    _, alone = _post(monkeypatch, "Was fehlt noch?", {"trace_id": TRACE})
+    assert alone == {"intent": "Was fehlt noch?", "trace_id": TRACE}
+
+    _, bad = _post(monkeypatch, "Was fehlt noch?", {"space": "ideas", "trace_id": "../x y"})
+    assert bad == {"intent": "Was fehlt noch?", "context": {"space": "ideas"}}
+
+    context = {"space": "ideas", "trace_id": TRACE}
+    _post(monkeypatch, "Was fehlt noch?", context)
+    assert context == {"space": "ideas", "trace_id": TRACE}, "the context of the caller is not changed"
