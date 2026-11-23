@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { SPACE_TO_APP, appKeyForSpace, parseSse, createTaskNavigator } = require('./task-navigation');
-const { decide, BUSY_MS } = require('./renderer/task-navigate');
+const { SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator } = require('./task-navigation');
+const { decide, describe, labelFor, BUSY_MS } = require('./renderer/task-navigate');
 
 test('registry spaces map to the keys of the app scene', () => {
     assert.equal(appKeyForSpace('coding'), 'projects');
@@ -44,27 +44,121 @@ test('parseSse survives a broken event', () => {
     assert.equal(events[0].payload.space, 'ideas');
 });
 
-test('one navigation per plan: the first step with a place in the app decides', () => {
+test('one navigation per plan and space: a plan is followed into each space once', () => {
     const sent = [];
     const navigator = createTaskNavigator((m) => sent.push(m));
+    const jumps = () => sent.filter((m) => m.type === 'task_navigate');
 
     navigator.handle('plan_started', { plan_id: 'p1' });
     navigator.handle('hop_started', { space: null, capability: 'chitchat' });          // general step
     navigator.handle('hop_started', { space: 'n8n', capability: 'n8n_list' });             // no place yet
+    assert.equal(sent.length, 0);
     navigator.handle('hop_started', { space: 'coding', capability: 'code_generate', description: 'App bauen' });
-    navigator.handle('hop_started', { space: 'video', capability: 'video_status' });   // same plan: no second jump
+    navigator.handle('hop_started', { space: 'coding', capability: 'code_status' });   // same space: no second jump
+    navigator.handle('hop_started', { space: 'video', capability: 'video_status' });   // the plan moves on
+    navigator.handle('hop_started', { space: 'coding', capability: 'code_status' });   // and back: not followed again
     navigator.handle('hop_completed', { space: 'video' });
 
-    assert.equal(sent.length, 1);
-    assert.deepEqual(sent[0], {
+    assert.deepEqual(jumps().map((m) => m.space), ['projects', 'video']);
+    assert.deepEqual(jumps()[0], {
         type: 'task_navigate', space: 'projects', registry_space: 'coding',
         capability: 'code_generate', description: 'App bauen',
     });
 
     navigator.handle('plan_started', { plan_id: 'p2' });
     navigator.handle('hop_started', { space: 'video', capability: 'video_status' });
-    assert.equal(sent.length, 2);
-    assert.equal(sent[1].space, 'video');
+    assert.deepEqual(jumps().map((m) => m.space), ['projects', 'video', 'video']);
+});
+
+test('Sales and software design have a place in the app', () => {
+    assert.equal(appKeyForSpace('sales'), 'sales');
+    assert.equal(appKeyForSpace('swe-design'), 'swedesign');
+});
+
+test('a plan reports where it stands and how it ended', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+    const states = () => sent.filter((m) => m.type === 'task_status');
+
+    navigator.handle('plan_started', { plan_id: 'p7', hops: [{}, {}] });
+    navigator.handle('hop_started', { space: 'sales', capability: 'sales_draft', description: 'Angebot entwerfen' });
+    assert.deepEqual(states()[0], {
+        type: 'task_status', state: 'running', plan_id: 'p7', space: 'sales', registry_space: 'sales',
+        step: 'Angebot entwerfen', done: 0, total: 2, result: '', error: '',
+    });
+
+    navigator.handle('hop_completed', {
+        space: 'sales', description: 'Angebot entwerfen', ok: true,
+        result_preview: "{'ok': True, 'message': 'Entwurf A-17 angelegt'}",
+    });
+    assert.equal(states()[1].done, 1);
+    assert.equal(states()[1].result, 'Entwurf A-17 angelegt');
+    assert.equal(states()[1].step_ok, true);
+
+    navigator.handle('hop_completed', { space: null, ok: true, result_preview: "'Zusammenfassung'" }); // general step
+    navigator.handle('plan_completed', { plan_id: 'p7', ok: true, elapsed_s: 6.4 });
+    const end = states().at(-1);
+    assert.equal(end.state, 'done');
+    assert.equal(end.space, 'sales', 'the last step with a place in the app');
+    assert.equal(end.result, 'Entwurf A-17 angelegt');
+    assert.equal(end.elapsed_s, 6.4);
+    assert.equal(end.done, 2);
+});
+
+test('a failed step and a failed plan are reported as failed, with the reason', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+
+    navigator.handle('plan_started', { plan_id: 'p8', hops: [{}] });
+    navigator.handle('hop_started', { space: 'desktop', description: 'Chrome öffnen' });
+    navigator.handle('hop_completed', { space: 'desktop', ok: false, error: 'Dienst nicht erreichbar', result_preview: 'None' });
+    navigator.handle('plan_completed', { plan_id: 'p8', ok: false, elapsed_s: 1.2 });
+
+    const end = sent.at(-1);
+    assert.equal(end.state, 'failed');
+    assert.equal(end.error, 'Dienst nicht erreichbar');
+    assert.equal(end.result, '');
+});
+
+test('a plan without a place in the app reports nothing', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+
+    navigator.handle('plan_started', { plan_id: 'p9' });
+    navigator.handle('hop_started', { space: null });
+    navigator.handle('hop_completed', { space: null, ok: true });
+    navigator.handle('plan_completed', { plan_id: 'p9', ok: true });
+
+    assert.equal(sent.length, 0);
+});
+
+test('resultText makes a short line out of a Python repr', () => {
+    assert.equal(resultText("{'success': True, 'message': 'Bubble \"Marketing\" erstellt'}"), 'Bubble "Marketing" erstellt');
+    assert.equal(resultText("'nur ein Satz'"), 'nur ein Satz');
+    assert.equal(resultText('None'), '');
+    assert.equal(resultText(undefined), '');
+    assert.equal(resultText('x'.repeat(600)).length, 240);
+});
+
+test('the status line names space, step and result', () => {
+    const running = describe({ state: 'running', step: 'Angebot entwerfen', done: 0, total: 2 }, 'Sales', false);
+    assert.equal(running.text, '● Sales: Angebot entwerfen (1/2)');
+    assert.equal(running.state, 'running');
+
+    const away = describe({ state: 'running', step: 'Angebot entwerfen', done: 1, total: 2 }, 'Sales', true);
+    assert.equal(away.text, '● Sales: Angebot entwerfen (2/2) →', 'the arrow says: click to go there');
+
+    const done = describe({ state: 'done', done: 2, total: 2, result: 'Entwurf A-17 angelegt', elapsed_s: 6.4 }, 'Sales', false);
+    assert.equal(done.text, '✓ Sales: fertig in 6,4 s — Entwurf A-17 angelegt');
+
+    const failed = describe({ state: 'failed', error: 'Dienst nicht erreichbar' }, 'Desktop', false);
+    assert.equal(failed.text, '✕ Desktop: fehlgeschlagen — Dienst nicht erreichbar');
+});
+
+test('external spaces take their name from the scene', () => {
+    assert.equal(labelFor('swedesign', {}), 'SWE Design');
+    assert.equal(labelFor('sales', { sales: { name: 'Sales' } }), 'Sales');
+    assert.equal(labelFor('unbekannt', {}), 'unbekannt');
 });
 
 test('the renderer follows a task, but not while the user is busy', () => {
@@ -86,5 +180,23 @@ test('main process and page are wired to task navigation', () => {
     assert.match(main, /initTaskNavigation\(mainWindow\)/);
     assert.ok(html.indexOf('src="task-navigate.js"') > -1);
     assert.match(html, /case 'task_navigate':/);
+    assert.match(html, /case 'task_status':/);
     assert.match(html, /window\.VibeTaskNav\.handle\(message\)/);
+});
+
+test('every arrival moves the tabs, and a change of space does not wait for animation frames', () => {
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const navigator = fs.readFileSync(path.join(__dirname, 'renderer', 'space-navigator.js'), 'utf8');
+
+    const arrive = scene.slice(scene.indexOf('_arriveAtSpace(targetSpace, space) {'), scene.indexOf('animateCameraTo(targetPosition'));
+    assert.match(arrive, /spaceNavigator\.syncSpace\(targetSpace\)/);
+    assert.match(arrive, /vibemind:space-arrived/);
+
+    const move = scene.slice(scene.indexOf('animateCameraTo(targetPosition'), scene.indexOf('initGameConsole() {'));
+    assert.match(move, /this\._cameraStep\(updateCamera\)/);
+    assert.doesNotMatch(move, /requestAnimationFrame\(updateCamera\)/);
+
+    assert.match(navigator, /syncSpace: syncSpace/);
+    const sync = navigator.slice(navigator.indexOf('function syncSpace'), navigator.indexOf('function updateAgentDisplay'));
+    assert.doesNotMatch(sync, /hideFlowzen\(|showFlowzen\(/, 'syncSpace runs after the page of the space was shown and must not hide it');
 });

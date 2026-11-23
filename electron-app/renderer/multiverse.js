@@ -2230,9 +2230,10 @@ class MultiverseApp {
         return this.spaces[spaceId] || null;
     }
 
+    /** Starts the move to a space. Returns false when nothing was started (already there, or a move is running). */
     navigateToSpace(targetSpace) {
         if (this.isNavigating || targetSpace === this.currentSpace) {
-            return;
+            return false;
         }
 
         console.log('[Multiverse] Navigating to:', targetSpace);
@@ -2277,7 +2278,7 @@ class MultiverseApp {
         if (!space) {
             console.error('[Multiverse] Unknown space:', targetSpace);
             this.isNavigating = false;
-            return;
+            return false;
         }
 
         // Hide dashboard if we're leaving projects space
@@ -2384,6 +2385,7 @@ class MultiverseApp {
         this.animateCameraTo(targetPos, space.position, () => {
             this._arriveAtSpace(targetSpace, space);
         });
+        return true;
     }
 
     // Single source of truth for "we arrived at targetSpace": set state and
@@ -2486,6 +2488,13 @@ class MultiverseApp {
         if (window.vibemind) {
             window.vibemind.navigateToSpace(targetSpace);
         }
+
+        // Tabs and the indicator follow every arrival, whatever started the move (a tab, a click
+        // in the scene, the arrow keys or a task). Before, only a click on a tab moved them.
+        if (window.spaceNavigator && window.spaceNavigator.syncSpace) {
+            window.spaceNavigator.syncSpace(targetSpace);
+        }
+        window.dispatchEvent(new CustomEvent('vibemind:space-arrived', { detail: { space: targetSpace } }));
     }
 
     animateCameraTo(targetPosition, lookAtPosition, onComplete) {
@@ -2507,12 +2516,14 @@ class MultiverseApp {
             this.controls.target.lerpVectors(startLookAt, lookAtPosition, eased);
             
             if (progress < 1) {
-                requestAnimationFrame(updateCamera);
+                // _cameraStep: a covered window gets no animation frames. With requestAnimationFrame
+                // alone every change of space waited for the 3 s failsafe there (measured 2026-11-23).
+                this._cameraStep(updateCamera);
             } else if (onComplete) {
                 onComplete();
             }
         };
-        
+
         updateCamera();
     }
 

@@ -47,9 +47,36 @@
     makeTabHandler('tab-video', 'video', false);
 
     async function switchSpace(spaceId) {
-        if (spaceId === window.currentSpace) return;
+        var app = window.multiverseApp;
+        // The scene knows where the user is; window.currentSpace can lag behind it.
+        if (spaceId === (app ? app.currentSpace : window.currentSpace)) {
+            syncSpace(spaceId);
+            return;
+        }
 
         console.log('[Space] Switching to:', spaceId);
+
+        // Navigate via MultiverseApp (visual navigation with camera animation)
+        if (app) {
+            // A move is already running: nothing starts, so the tabs must not claim the new space.
+            if (app.navigateToSpace(spaceId) === false) return;
+        }
+        syncSpace(spaceId);
+
+        // Also notify backend
+        try {
+            await window.vibemind.navigateToSpace(spaceId);
+        } catch(e) {
+            console.error('[Space] Navigation failed:', e);
+        }
+    }
+
+    /**
+     * Tabs, indicator, agent badge and panels for the space on screen. Called when a move to a
+     * space starts and again when it arrives (multiverse.js _arriveAtSpace), so they are right
+     * whatever started the move.
+     */
+    function syncSpace(spaceId) {
         window.currentSpace = spaceId;
 
         // Update UI tabs
@@ -61,18 +88,6 @@
         document.querySelectorAll('.nav-space-btn').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.space === spaceId);
         });
-
-        // Navigate via MultiverseApp (visual navigation with camera animation)
-        if (window.multiverseApp) {
-            window.multiverseApp.navigateToSpace(spaceId);
-        }
-
-        // Also notify backend
-        try {
-            await window.vibemind.navigateToSpace(spaceId);
-        } catch(e) {
-            console.error('[Space] Navigation failed:', e);
-        }
 
         // Update Space Indicator (top right)
         var spaceIndicator = document.getElementById('space-indicator');
@@ -93,7 +108,9 @@
             'video':      { icon: '\uD83C\uDFAC', name: 'Video Studio' },
         };
 
-        var info = spaceInfo[spaceId];
+        var mvSpaceInfo = window.multiverseApp ? window.multiverseApp.getSpaceInfo(spaceId) : null;
+        // The external spaces (Sales, Marketing, ...) are not in the list above; the scene knows them.
+        var info = spaceInfo[spaceId] || (mvSpaceInfo ? { icon: mvSpaceInfo.icon, name: mvSpaceInfo.name } : null);
         if (info) {
             if (spaceIcon) spaceIcon.textContent = info.icon;
             if (spaceName) spaceName.textContent = info.name;
@@ -102,7 +119,6 @@
         if (spaceIndicator) spaceIndicator.classList.remove('hidden');
 
         // Update agent display based on space
-        var mvSpaceInfo = window.multiverseApp ? window.multiverseApp.getSpaceInfo(spaceId) : null;
         if (mvSpaceInfo && mvSpaceInfo.agent) {
             updateAgentDisplay(mvSpaceInfo.agent.slug);
         }
@@ -115,23 +131,8 @@
         } else if (spaceId === 'ideas') {
             if (projectInfo) projectInfo.classList.add('hidden');
         }
-
-        // Show/hide Flowzen diary BrowserView
-        if (spaceId === 'flowzen') {
-            if (window.vibemind && window.vibemind.showFlowzen) {
-                window.vibemind.showFlowzen();
-            }
-        } else {
-            if (window.vibemind && window.vibemind.hideFlowzen) {
-                window.vibemind.hideFlowzen();
-            }
-        }
-
-        // Also hide old DOM panel if it exists
-        var fzPanel = document.getElementById('flowzen-panel');
-        if (fzPanel) {
-            fzPanel.classList.add('hidden');
-        }
+        // The pages of the spaces (Flowzen diary included) are shown and hidden by multiverse.js
+        // on arrival and on leaving; doing it here as well would hide the page just shown.
     }
 
     function updateAgentDisplay(agentName) {
@@ -149,6 +150,7 @@
     // Public API
     window.spaceNavigator = {
         switchSpace: switchSpace,
+        syncSpace: syncSpace,
         updateAgentDisplay: updateAgentDisplay
     };
 })();

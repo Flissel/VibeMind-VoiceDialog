@@ -5,8 +5,8 @@
  * The Brain publishes plan progress as Server-Sent Events on /api/multihop/stream.
  * Each `hop_started` carries `space` (the id from config/space_agent_registry.yml,
  * set by brain/the_brain/core/step_space.py). This module listens, maps that id to the
- * key of the app's 3D scene and sends one `task_navigate` message per plan: the app
- * should follow the task once, not jump back and forth with every step.
+ * key of the app's 3D scene and sends `task_navigate` (once per plan and space) and
+ * `task_status` (where the plan stands, and its result), see createTaskNavigator.
  *
  * Whether to really switch (the user may be busy) is decided in the renderer.
  */
@@ -31,6 +31,14 @@ const SPACE_TO_APP = Object.freeze({
   minibook: 'orders',
   learning: 'learning',          // external spaces, see external-spaces.js
   'event-management': 'events',
+  sales: 'sales',
+  marketing: 'marketing',
+  // Software design (with requirements engineering) has no entry in the registry yet; these
+  // are the ids it may get. An id the Brain never sends costs nothing.
+  'swe-design': 'swedesign',
+  swe_design: 'swedesign',
+  swedesign: 'swedesign',
+  'software-design': 'swedesign',
 });
 
 function appKeyForSpace(space) {
@@ -62,31 +70,109 @@ function parseSse(buffer) {
   return { events, rest };
 }
 
+const RESULT_MAX = 240;
+
 /**
- * Turns plan events into at most one navigation per plan.
+ * A short readable text from `result_preview` (a Python repr, cut at 500 characters).
+ * A `message`/`result`/`summary` entry inside is preferred over the raw repr.
+ */
+function resultText(preview) {
+  if (typeof preview !== 'string') return '';
+  let text = preview.trim();
+  if (!text || text === 'None') return '';
+  const inner = /['"](?:message|result|summary|text)['"]:\s*(['"])((?:\\.|(?!\1).)*)\1/.exec(text);
+  if (inner && inner[2].trim()) text = inner[2].replace(/\\n/g, ' ').replace(/\\(['"\\])/g, '$1');
+  else text = text.replace(/^(['"])([\s\S]*)\1$/, '$2');
+  text = text.replace(/\s+/g, ' ').trim();
+  return text.length > RESULT_MAX ? text.slice(0, RESULT_MAX - 1) + '\u2026' : text;
+}
+
+/**
+ * Turns plan events into messages for the renderer:
+ *
+ *   task_navigate  once per plan and space, at the first step that starts there. A plan that
+ *                  moves on to another space (design, then coding) is followed; a space already
+ *                  visited in this plan is not jumped to again, so nothing flips back and forth.
+ *   task_status    where the plan stands: { state: 'running' | 'done' | 'failed', space, step,
+ *                  done, total, result, error, elapsed_s, plan_id }. `space` is the app key of
+ *                  the last step with a place in the app ('' when the plan has none).
+ *
  * @param {(message: object) => void} send
  */
 function createTaskNavigator(send) {
-  let navigated = false;
+  let planId = '';
+  let total = 0;
+  let done = 0;
+  let visited = new Set();
+  let last = null; // { space, registry_space, step, result, error }
+
+  const status = (state, extra = {}) => {
+    const message = {
+      type: 'task_status',
+      state,
+      plan_id: planId,
+      space: last ? last.space : '',
+      registry_space: last ? last.registry_space : '',
+      step: last ? last.step : '',
+      done,
+      total,
+      result: last ? last.result : '',
+      error: last ? last.error : '',
+      ...extra,
+    };
+    send(message);
+    return message;
+  };
+
   return {
     handle(kind, payload) {
+      if (!payload) payload = {};
       if (kind === 'plan_started') {
-        navigated = false;
+        planId = typeof payload.plan_id === 'string' ? payload.plan_id : '';
+        total = Array.isArray(payload.hops) ? payload.hops.length : 0;
+        done = 0;
+        visited = new Set();
+        last = null;
         return null;
       }
-      if (kind !== 'hop_started' || navigated || !payload) return null;
-      const space = appKeyForSpace(payload.space);
-      if (!space) return null; // a general step, or a space without a place in the app: try the next step
-      navigated = true;
-      const message = {
-        type: 'task_navigate',
-        space,
-        registry_space: payload.space,
-        capability: payload.capability || '',
-        description: payload.description || '',
-      };
-      send(message);
-      return message;
+      if (kind === 'hop_started') {
+        const space = appKeyForSpace(payload.space);
+        if (!space) return null; // a general step, or a space without a place in the app
+        last = { space, registry_space: payload.space, step: payload.description || payload.capability || '', result: '', error: '' };
+        let navigation = null;
+        if (!visited.has(space)) {
+          visited.add(space);
+          navigation = {
+            type: 'task_navigate',
+            space,
+            registry_space: payload.space,
+            capability: payload.capability || '',
+            description: payload.description || '',
+          };
+          send(navigation);
+        }
+        status('running');
+        return navigation;
+      }
+      if (kind === 'hop_completed') {
+        done += 1;
+        const space = appKeyForSpace(payload.space);
+        if (!space) return null;
+        last = {
+          space,
+          registry_space: payload.space,
+          step: payload.description || payload.capability || '',
+          result: payload.ok === false ? '' : resultText(payload.result_preview),
+          error: payload.ok === false ? String(payload.error || 'fehlgeschlagen').slice(0, RESULT_MAX) : '',
+        };
+        return status('running', { step_ok: payload.ok !== false });
+      }
+      if (kind === 'plan_completed') {
+        if (!last) return null; // nothing of this plan had a place in the app
+        const seconds = Number(payload.elapsed_s);
+        return status(payload.ok === false ? 'failed' : 'done', { elapsed_s: Number.isFinite(seconds) ? seconds : null });
+      }
+      return null;
     },
   };
 }
@@ -101,7 +187,11 @@ function initTaskNavigation(mainWindow, options = {}) {
   const log = options.logger || console;
   const navigator = createTaskNavigator((message) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('python-message', message);
-    log.log(`[Task-Nav] ${message.registry_space} -> ${message.space} (${message.capability})`);
+    if (message.type === 'task_navigate') {
+      log.log(`[Task-Nav] ${message.registry_space} -> ${message.space} (${message.capability})`);
+    } else if (message.state !== 'running') {
+      log.log(`[Task-Nav] Plan ${message.state} in ${message.space}`);
+    }
   });
   _closed = false;
 
@@ -142,5 +232,5 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
-  SPACE_TO_APP, appKeyForSpace, parseSse, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
+  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };

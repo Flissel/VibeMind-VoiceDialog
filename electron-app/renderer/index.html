@@ -1268,7 +1268,8 @@
                     break;
 
                 case 'task_navigate':
-                    // The Brain started a task in another space (task-navigation.js): follow it, or show a note.
+                case 'task_status':
+                    // The Brain works on a task (task-navigation.js): follow it into its space and show where it stands.
                     if (window.VibeTaskNav) window.VibeTaskNav.handle(message);
                     break;
 
