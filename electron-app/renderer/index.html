@@ -1224,6 +1224,7 @@
                                     window.spaceCanvas = new UniverseCanvas('space-canvas');
                                 }
                                 if (message.content) {
+                                    window.spaceCanvas.setBubble(message.bubble_id);
                                     window.spaceCanvas.loadNodes(message.content, message.edges || []);
                                 }
 
@@ -1241,13 +1242,15 @@
                                 window.spaceCanvas = new UniverseCanvas('space-canvas');
                             }
                             if (message.content) {
-                                window.spaceCanvas.loadNodes(message.content, message.edges || []);
+                                window.spaceCanvas.setBubble(message.bubble_id);
+                                    window.spaceCanvas.loadNodes(message.content, message.edges || []);
                             }
                         }
                     } else {
                         // Already in space view, just load nodes
                         if (window.spaceCanvas && message.content) {
-                            window.spaceCanvas.loadNodes(message.content, message.edges || []);
+                            window.spaceCanvas.setBubble(message.bubble_id);
+                                    window.spaceCanvas.loadNodes(message.content, message.edges || []);
                         }
                     }
                     break;

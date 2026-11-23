@@ -124,6 +124,19 @@ test('input after the send still keeps the app where the user works', () => {
     assert.equal(s.app.currentSpace, 'roarboot');
 });
 
+test('a jump of a plan still waiting for a camera move is dropped once the person acts', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const b = brain(s, 'bubbles', 'bubble_list');
+    typedSentence(s);
+    s.app.isNavigating = true;      // a camera move runs: the jump waits
+    b.started();
+    assert.equal(s.app.currentSpace, 'roarboot');
+    s.pressEnter();                 // the person does something else meanwhile
+    s.app.isNavigating = false;
+    for (let i = 0; i < 40; i++) s.advance(300); // every retry runs out
+    assert.equal(s.app.currentSpace, 'roarboot', 'the plan does not pull the person away afterwards');
+});
+
 test('a Desktop sentence jumps to the Desktop space and opens its screen view', () => {
     const s = scene({ currentSpace: 'roarboot' });
     const b = brain(s, 'desktop', 'desktop_open_app');

@@ -113,7 +113,13 @@
         let answer = '';         // the answer to the sentence last sent, once it is there
         let refusal = '';        // ... or the Brain's sentence on why it did not work
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
-            root.addEventListener(type, () => { lastInputAt = Date.now(); }, { capture: true, passive: true });
+            root.addEventListener(type, () => {
+                lastInputAt = Date.now();
+                // A navigation by the Brain counts once per plan, and only until the person acts:
+                // a jump still waiting for a camera move is dropped.
+                pending = null;
+                followed = '';
+            }, { capture: true, passive: true });
         }
 
         function go(space) {

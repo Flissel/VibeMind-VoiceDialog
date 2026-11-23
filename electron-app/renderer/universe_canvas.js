@@ -244,8 +244,36 @@ class UniverseCanvas {
         this.container.appendChild(toolbar);
     }
 
+    /**
+     * The bubble whose cards this canvas shows: its database id, or null when it is not known.
+     * refresh() and the 5-s poll load exactly this bubble, so it must be set on every entry and
+     * cleared on every exit. A left-over id kept loading the cards of an old bubble into the one
+     * opened later (bubble "Bubble A", measured 2026-11-23: 1 node every 5 s while in roarboot).
+     */
+    setBubble(bubbleId) {
+        this.bubbleId = UniverseCanvas.dbIdOf(bubbleId);
+        if (!this.bubbleId) this._stopMermaidPoll();
+    }
+
+    /** Leaving the bubble: nothing may be loaded for it any more. */
+    leaveBubble() {
+        this.bubbleId = null;
+        this._stopMermaidPoll();
+        if (this._mermaidRefreshTimer) { clearTimeout(this._mermaidRefreshTimer); this._mermaidRefreshTimer = null; }
+    }
+
+    /** The database id of a bubble given by any of its ids (local number, db id), or null. */
+    static dbIdOf(bubbleId) {
+        if (bubbleId === null || bubbleId === undefined || bubbleId === '') return null;
+        const found = window.multiverseApp && window.multiverseApp.getBubbleById ? window.multiverseApp.getBubbleById(bubbleId) : null;
+        const dbId = found && found.userData ? found.userData.db_id : null;
+        if (dbId) return String(dbId);
+        const text = String(bubbleId);
+        return /^[0-9a-f]{8}$|^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text) ? text : null;
+    }
+
     loadBubble(bubbleId) {
-        this.bubbleId = bubbleId;
+        this.setBubble(bubbleId);
         this.clear();
         console.log('[UniverseCanvas] Loading bubble:', bubbleId);
         // Backend will send nodes via entered_bubble message
@@ -1769,10 +1797,14 @@ class UniverseCanvas {
         // arrive via Realtime; this is the explicit-refresh fallback for
         // voice tools / manual triggers.)
         if (!this.bubbleId) return;
+        // No bubble open: nothing to load (a timer left over must not fill the canvas in the background).
+        const view = document.getElementById('space-view');
+        if (view && view.classList.contains('hidden')) { this._stopMermaidPoll(); return; }
+        const asked = this.bubbleId;
         const { base: SUPA, headers: HDR } = _supabaseRestConfig();
         try {
             const [nRes, eRes] = await Promise.all([
-                fetch(`${SUPA}/canvas_nodes?linked_idea_id=eq.${encodeURIComponent(this.bubbleId)}&select=*`, { headers: HDR }),
+                fetch(`${SUPA}/canvas_nodes?linked_idea_id=eq.${encodeURIComponent(asked)}&select=*`, { headers: HDR }),
                 fetch(`${SUPA}/canvas_edges?select=*`, { headers: HDR }),
             ]);
             if (!nRes.ok) {
@@ -1780,6 +1812,8 @@ class UniverseCanvas {
                 return;
             }
             const rows = await nRes.json();
+            // Another bubble was opened (or none) while the answer was on its way: it is not for this view.
+            if (this.bubbleId !== asked) return;
             const allEdges = eRes.ok ? await eRes.json() : [];
             const nodeIds = new Set(rows.map(r => r.id));
             const nodes = rows.map(r => ({

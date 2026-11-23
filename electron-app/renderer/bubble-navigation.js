@@ -113,6 +113,8 @@
                     if (!window.spaceCanvas) {
                         window.spaceCanvas = new UniverseCanvas('space-canvas');
                     }
+                    // The canvas loads (and polls) exactly this bubble from now on.
+                    window.spaceCanvas.setBubble(bubbleId);
 
                     // Load pending content if Python sent it during animation
                     if (window.pendingBubbleContent) {
@@ -141,6 +143,7 @@
                 if (!window.spaceCanvas) {
                     window.spaceCanvas = new UniverseCanvas('space-canvas');
                 }
+                window.spaceCanvas.setBubble(bubbleId);
 
                 // Load pending content if available
                 if (window.pendingBubbleContent) {
@@ -178,8 +181,9 @@
             var overlay = document.getElementById('transition-overlay');
             if (overlay) overlay.classList.add('active');
 
-            // Clear canvas
+            // Clear canvas; nothing is loaded for the bubble left behind
             if (window.spaceCanvas) {
+                window.spaceCanvas.leaveBubble();
                 window.spaceCanvas.clear();
             }
 

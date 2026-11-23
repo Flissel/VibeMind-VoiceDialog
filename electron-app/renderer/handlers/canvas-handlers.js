@@ -71,6 +71,7 @@
                         window.spaceCanvas = new UniverseCanvas('space-canvas');
                     }
                     if (msg.content) {
+                        window.spaceCanvas.setBubble(msg.bubble_id);
                         window.spaceCanvas.loadNodes(msg.content, msg.edges || []);
                     }
 
@@ -87,12 +88,14 @@
                     window.spaceCanvas = new UniverseCanvas('space-canvas');
                 }
                 if (msg.content) {
-                    window.spaceCanvas.loadNodes(msg.content, msg.edges || []);
+                    window.spaceCanvas.setBubble(msg.bubble_id);
+                        window.spaceCanvas.loadNodes(msg.content, msg.edges || []);
                 }
             }
         } else {
             if (window.spaceCanvas && msg.content) {
-                window.spaceCanvas.loadNodes(msg.content, msg.edges || []);
+                window.spaceCanvas.setBubble(msg.bubble_id);
+                        window.spaceCanvas.loadNodes(msg.content, msg.edges || []);
             }
         }
     };

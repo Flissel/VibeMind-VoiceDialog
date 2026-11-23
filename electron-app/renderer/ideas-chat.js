@@ -439,11 +439,9 @@
         function reloadCards() {
             const canvas = root.spaceCanvas;
             if (view.classList.contains('hidden') || !canvas || typeof canvas.refresh !== 'function') return;
-            if (!canvas.bubbleId) {
-                const bubble = openBubble();
-                if (!bubble || !bubble.id) return; // without the database id there is nothing to ask for
-                canvas.bubbleId = bubble.id;
-            }
+            // The canvas knows its bubble from the entry (setBubble). The chat never sets it: an id
+            // set here outlived the bubble and the 5-s poll kept loading that bubble later.
+            if (!canvas.bubbleId) return;
             Promise.resolve(canvas.refresh()).catch((error) => {
                 if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] reload of cards failed', { error: String(error) });
             });
