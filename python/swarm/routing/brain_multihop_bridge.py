@@ -22,7 +22,9 @@ Activation: env `VOICE_BRAIN_MULTIHOP=true`. Default off.
 
 Graceful degradation:
 - Brain down       → mark unavailable, 30s backoff; the sentence gets "nicht erreichbar" (a hint)
-- Brain timeout    → mark unavailable, 30s backoff; the sentence gets "nicht rechtzeitig" (a hint)
+- No connection within CONNECT_TIMEOUT_S → like Brain down
+- Answer too slow  → the sentence gets "nicht rechtzeitig" (a hint); no backoff, the next
+                     sentence goes to the Brain again (it works serially: 16 s, 33 s happen)
 - In the backoff   → the sentence is not sent; it gets "nicht erreichbar" (a hint)
 - HTTP non-2xx     → fall through
 - `ok: false`      → fall through (no cap matched, planner returned no plan)
@@ -49,6 +51,10 @@ EVENT_QUESTION = "brain.multihop.question"
 UNREACHABLE_TEXT = ("Das Gehirn ist gerade nicht erreichbar. Versuch es in ein, zwei Minuten noch einmal; "
                     "geändert habe ich nichts.")
 # The request went out but no answer came in time: the Brain may have acted, so no promise.
+# The Brain must take the connection within this time; a slow answer is no reason to stop sending.
+CONNECT_TIMEOUT_S = 5.0
+# What _post_multihop returns when the Brain took the request but gave no answer in time.
+_TIMED_OUT = object()
 TIMEOUT_TEXT = "Das Gehirn hat nicht rechtzeitig geantwortet. Ob sich etwas geändert hat, weiß ich nicht – sieh bitte nach."
 EVENT_HINT = "brain.multihop.hint"  # a hint of the Brain ("keine Spalten"): information, not a failure
 
@@ -136,8 +142,8 @@ class BrainMultihopBridge:
         self._brain_url = brain_url.rstrip("/")
         self._backoff = backoff_seconds
         self._available = True
-        # Why the Brain is off: "unreachable" (no connection) or "timeout". Either way the
-        # sentence is answered here; the old path did not know it ("nicht ganz verstanden").
+        # Why the Brain is off: "unreachable" (no connection). Only that starts the backoff; the
+        # sentence is answered here, the old path did not know it ("nicht ganz verstanden").
         self._down = ""
 
     # ------------------------------------------------------------------
@@ -171,11 +177,13 @@ class BrainMultihopBridge:
             data = await self._post_multihop(text, ui_context)
         else:
             data = await self._post_multihop(text)
+        if data is _TIMED_OUT:
+            return self._unreachable(TIMEOUT_TEXT)
         if data is None:
             # No connection: the old path did not know the sentence either and answered
             # "nicht verstanden" (measured 2026-11-23 during a restart of the Brain).
             if not self._available:
-                return self._unreachable(TIMEOUT_TEXT if self._down == "timeout" else UNREACHABLE_TEXT)
+                return self._unreachable(UNREACHABLE_TEXT)
             return None
 
         ok = bool(data.get("ok"))
@@ -309,7 +317,8 @@ class BrainMultihopBridge:
         if context:
             body["context"] = context
         try:
-            timeout = aiohttp.ClientTimeout(total=self._request_timeout)
+            timeout = aiohttp.ClientTimeout(total=self._request_timeout,
+                                            sock_connect=min(CONNECT_TIMEOUT_S, self._request_timeout))
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     f"{self._brain_url}/api/multihop/execute",
@@ -322,31 +331,36 @@ class BrainMultihopBridge:
                         )
                         return None
                     return await resp.json()
-        except (asyncio.TimeoutError, aiohttp.ClientError) as e:
-            # Connection refused, DNS fail, OR timeout — Brain is effectively
-            # unavailable. On Windows, a refused-connect to a non-listening
-            # port surfaces as TimeoutError (aiohttp keeps retrying the
-            # connect for the full request_timeout), so both need the same
-            # backoff treatment — otherwise every voice utterance would burn
-            # the full 6s waiting for a Brain that won't answer.
-            # Same 30s backoff pattern as BrainOpenFangBridge.
-            self._available = False
-            self._down = "timeout" if isinstance(e, asyncio.TimeoutError) else "unreachable"
-            try:
-                asyncio.get_event_loop().call_later(self._backoff, self._re_enable)
-            except RuntimeError:
-                # No running loop (rare; e.g. called outside async ctx).
-                # Mark unavailable; next event-loop tick may recover.
-                pass
-            kind = "timeout" if isinstance(e, asyncio.TimeoutError) else f"unreachable ({e})"
-            logger.warning(
-                f"[MultihopBridge] brain {kind} after {self._request_timeout}s, "
-                f"disabled {self._backoff}s"
-            )
-            return None
+        except asyncio.TimeoutError as e:
+            if not isinstance(e, aiohttp.ServerTimeoutError):
+                # The Brain took the request but did not answer within the limit. It works
+                # serially and may still be busy: no backoff, the next sentence is sent again.
+                logger.warning(f"[MultihopBridge] brain answered not within {self._request_timeout}s")
+                return _TIMED_OUT
+            return self._mark_unreachable(e)
+        except aiohttp.ClientError as e:
+            return self._mark_unreachable(e)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"[MultihopBridge] unexpected error: {e}")
             return None
+
+    def _mark_unreachable(self, e: BaseException) -> None:
+        """No connection to the Brain: stop sending for the backoff (see the module doc)."""
+        # Refused, DNS fail, a dropped connection, or no connection within CONNECT_TIMEOUT_S
+        # (on Windows a refused connect can hang until a timeout; sock_connect bounds it).
+        # Same 30s backoff pattern as BrainOpenFangBridge.
+        self._available = False
+        self._down = "unreachable"
+        try:
+            asyncio.get_event_loop().call_later(self._backoff, self._re_enable)
+        except RuntimeError:
+            # No running loop (rare; e.g. called outside async ctx).
+            # Mark unavailable; next event-loop tick may recover.
+            pass
+        logger.warning(
+            f"[MultihopBridge] brain unreachable ({e}), disabled {self._backoff}s"
+        )
+        return None
 
     # ------------------------------------------------------------------
     # Helpers
