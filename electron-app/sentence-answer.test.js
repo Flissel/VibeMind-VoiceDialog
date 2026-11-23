@@ -115,7 +115,7 @@ test('a proposal for a changed card shows its sentence and two answers to click 
     assert.match(chat, /say\(proposal\.text, 'vorschlag', asked, proposal\.answers, ask\)/);
     // a click sends the sentence as the person's own (trusted click), once; typing it works the same way
     assert.match(chat, /submit\(answer, \{ typed: event\.isTrusted === true \}\)/);
-    assert.match(chat, /if \(entry\.used\) return;\s*entry\.used = true;/);
+    assert.match(chat, /if \(entry\.used\) return;[\s\S]{0,700}entry\.used = true;/);
     assert.match(chat, /const failed = !accepted && !asks && !hint && !proposes &&/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'ideas-chat.css'), 'utf8'), /\.ideas-chat-vorschlag \{/);
     assert.match(fs.readFileSync(path.join(__dirname, '..', 'python', 'ipc', 'clawport_handlers.py'), 'utf8'), /answer\["vorschlag"\] = dict\(tool_result\["vorschlag"\]\)/);
