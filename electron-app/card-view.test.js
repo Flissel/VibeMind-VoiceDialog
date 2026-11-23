@@ -406,6 +406,29 @@ test('das Raster sagt in einer leeren Bubble "Noch keine Notizen"', () => {
     assert.equal(none.hidden, true);
 });
 
+test('Zoom der Karten: ohne gespeicherte Groesse die mittlere Stufe, Grenzen fuer die Leiste der Bubble', () => {
+    const fake = (tag) => {
+        const node = { tag, children: [], className: '', textContent: '', value: '', hidden: false, disabled: false, dataset: {}, style: { setProperty() {} },
+            append(...c) { node.children.push(...c); }, replaceChildren(...c) { node.children = c; },
+            setAttribute() {}, addEventListener() {}, remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [] };
+        return node;
+    };
+    const stored = {};
+    const store = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; } };
+    const doc = { createElement: fake, addEventListener() {}, removeEventListener() {}, defaultView: { localStorage: store } };
+    const board = cv.board(doc, {});
+    board.update([PRO_CONTRA], []);
+    assert.deepEqual(board.state, { count: 1, shown: 1, query: '', smaller: true, bigger: true }, 'nicht die kleinste Stufe');
+    assert.equal(board.zoom(1), true);
+    assert.equal(board.zoom(1), true);
+    assert.equal(board.zoom(1), false, 'groesste Stufe');
+    assert.equal(board.state.bigger, false);
+    assert.equal(stored['vibemind.karten.groesse'], '4');
+    board.setQuery('nichts davon');
+    assert.equal(board.state.shown, 0);
+    assert.equal(cv.board(doc, {}).state.bigger, false, 'die gespeicherte Groesse gilt beim naechsten Oeffnen');
+});
+
 test('kein technischer Hinweis ("loadNodes: 98 nodes, 82 edges") auf dem Bildschirm', () => {
     const source = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
     assert.doesNotMatch(source, /cy-debug-banner/);

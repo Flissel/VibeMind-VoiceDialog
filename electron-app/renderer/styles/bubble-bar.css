@@ -1,0 +1,125 @@
+/* The fixed bar of every open bubble (bubble-bar.js): a row of its own below the header, so it
+   covers nothing. The controls each view used to bring along are hidden inside a bubble; the bar
+   works them. */
+
+#bubble-bar {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    background: rgba(14, 16, 28, 0.97);
+    border-bottom: 1px solid rgba(var(--space-accent-rgb, 167, 139, 250), 0.2);
+    font: 12px system-ui, "Segoe UI", sans-serif;
+    color: #e6eeff;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 190;
+}
+
+#bubble-bar .bb-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+#bubble-bar .bb-spacer {
+    flex: 1;
+}
+
+#bubble-bar .bb-search {
+    width: 200px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(var(--space-accent-rgb, 167, 139, 250), 0.3);
+    background: rgba(8, 10, 18, 0.9);
+    color: #f0f4ff;
+    font: inherit;
+    outline: none;
+}
+
+#bubble-bar .bb-search:focus {
+    border-color: rgba(var(--space-accent-rgb, 167, 139, 250), 0.7);
+}
+
+#bubble-bar .bb-count {
+    min-width: 64px;
+    color: rgba(230, 238, 255, 0.6);
+    white-space: nowrap;
+}
+
+#bubble-bar .bb-btn {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid rgba(var(--space-accent-rgb, 167, 139, 250), 0.35);
+    border-radius: 8px;
+    background: rgba(var(--space-accent-rgb, 167, 139, 250), 0.12);
+    color: #e6eeff;
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#bubble-bar .bb-btn.bb-icon {
+    width: 28px;
+    padding: 0;
+    font-size: 15px;
+}
+
+#bubble-bar .bb-btn:hover:not(:disabled) {
+    background: rgba(var(--space-accent-rgb, 167, 139, 250), 0.28);
+}
+
+#bubble-bar .bb-btn[aria-pressed="true"] {
+    background: rgba(var(--space-accent-rgb, 167, 139, 250), 0.32);
+    border-color: rgba(var(--space-accent-rgb, 167, 139, 250), 0.7);
+}
+
+/* switched off, not gone: the title says why */
+#bubble-bar .bb-btn:disabled,
+#bubble-bar .bb-search:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+#bubble-bar .bb-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(100, 100, 120, 0.6);
+}
+
+#bubble-bar .bb-dot[data-state="an"] { background: #44ff88; box-shadow: 0 0 8px #44ff88; }
+#bubble-bar .bb-dot[data-state="verbindet"] { background: #ffaa44; }
+#bubble-bar .bb-dot[data-state="fehler"] { background: #ff5566; }
+
+/* the bar takes a row: canvas and chat start below it */
+#space-view.with-bar #space-canvas {
+    height: calc(100% - 84px);
+}
+
+#space-view.with-bar #ideas-chat {
+    top: 84px;
+}
+
+/* inside a bubble the bar works these; their old places stay for the overview */
+#space-view.with-bar .kv-bar,
+#space-view.with-bar .kv-back,
+#space-view.with-bar .mermaid-zoom-controls,
+#space-view.with-bar .canvas-toolbar,
+#space-view.with-bar .zoom-controls,
+#space-view.with-bar #summaries-toggle,
+#space-view.with-bar #whitepaper-toggle,
+body.bubble-open #eval-toggle,
+body.bubble-open #voice-panel {
+    display: none !important;
+}
+
+/* the space name of the multiverse sits on the header row; the bubble's title says enough */
+body.bubble-open #space-indicator {
+    display: none;
+}

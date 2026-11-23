@@ -534,7 +534,9 @@
         let titles = new Map();
         let signature = '';
         let openId = null;
-        let size = Number(remember(doc, 'vibemind.karten.groesse'));
+        // nichts gespeichert: die Standardgroesse (Number(null) waere 0, die kleinste Stufe)
+        const stored = remember(doc, 'vibemind.karten.groesse');
+        let size = stored === null || stored === '' ? NaN : Number(stored);
         if (!Number.isInteger(size) || size < 0 || size >= SIZES.length) size = DEFAULT_SIZE;
 
         const applySize = () => {
@@ -771,8 +773,17 @@
             e.stopPropagation();
         });
         search.addEventListener('input', renderGrid);
-        smaller.addEventListener('click', () => { if (size > 0) { size -= 1; applySize(); remember(doc, 'vibemind.karten.groesse', size); } });
-        bigger.addEventListener('click', () => { if (size < SIZES.length - 1) { size += 1; applySize(); remember(doc, 'vibemind.karten.groesse', size); } });
+        // step -1 kleiner, +1 groesser; die feste Leiste der Bubble (bubble-bar.js) ruft das auch
+        const zoom = (step) => {
+            const next = Math.max(0, Math.min(SIZES.length - 1, size + (step < 0 ? -1 : 1)));
+            if (next === size) return false;
+            size = next;
+            applySize();
+            remember(doc, 'vibemind.karten.groesse', size);
+            return true;
+        };
+        smaller.addEventListener('click', () => zoom(-1));
+        bigger.addEventListener('click', () => zoom(1));
         graph.addEventListener('click', () => options.onGraph());
         // Wheel und Ziehen gehoeren dem Raster, nicht dem Canvas darunter.
         rootEl.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
@@ -799,6 +810,13 @@
             close,
             get openId() { return openId; },
             get count() { return rows.length; },
+            get query() { return search.value; },
+            /** Was die feste Leiste der Bubble zeigt: Anzahl, Treffer der Suche, Zoomgrenzen. */
+            get state() {
+                const shown = rows.filter((row) => matches(cardTitle(row), search.value)).length;
+                return { count: rows.length, shown, query: search.value, smaller: size > 0, bigger: size < SIZES.length - 1 };
+            },
+            zoom,
             setQuery(text) { search.value = text; renderGrid(); },
             destroy() { doc.removeEventListener('keydown', onKey, true); rootEl.remove(); },
         };

@@ -565,6 +565,8 @@
             renderReasons();
             renderCards();
         });
+        // The row of the open bubble from the database (UniverseCanvas._loadBubbleRow): its reasons.
+        root.addEventListener('vibemind:bubble-row', (event) => bubbleRow(event.detail && event.detail.row));
         root.addEventListener('vibemind:canvas-node-added', (event) => {
             const node = event.detail && event.detail.node;
             if (!node) return;
@@ -626,7 +628,8 @@
         if (titleEl) new root.MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
         sync();
 
-        return { submit, contextNow, store, bubbleRow };
+        // fold / folded: the button "Chat" of the fixed bar of the bubble (bubble-bar.js)
+        return { submit, contextNow, store, bubbleRow, fold: setFolded, folded: () => view.classList.contains('chat-folded') };
     }
 
     const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };

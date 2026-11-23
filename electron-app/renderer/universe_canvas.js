@@ -256,6 +256,7 @@ class UniverseCanvas {
         // another bubble: an open card and a search of the last one do not carry over
         if (this._board && before !== this.bubbleId) { this._board.close(); this._board.setQuery(''); }
         if (!this.bubbleId) this._stopMermaidPoll();
+        else if (before !== this.bubbleId) this._loadBubbleRow();   // its reasons, at once (the poll repeats it)
         // a bubble was named but its database id is not known: say so, never a silent null
         this._bubbleUnknown(!this.bubbleId && bubbleId !== null && bubbleId !== undefined && bubbleId !== '');
     }
@@ -431,6 +432,70 @@ class UniverseCanvas {
     showCard(id) {
         if (!this._board || this._view() !== 'karten' || this._board.element.parentNode !== this.container) return false;
         return this._board.open(String(id));
+    }
+
+    // ---- for the fixed bar of the open bubble (bubble-bar.js) ----
+
+    /** 'karten' or 'graph', whatever is drawn now. */
+    currentView() { return this._view(); }
+
+    /** The cards board, when it is what the canvas shows. */
+    _shownBoard() {
+        return this._board && this._view() === 'karten' && this._board.element.parentNode === this.container ? this._board : null;
+    }
+
+    /** Count, search and zoom limits of the cards; null when the diagram is shown. */
+    cardsState() {
+        const board = this._shownBoard();
+        return board ? board.state : null;
+    }
+
+    /** Filter the cards by title; false when no cards are shown (diagram). */
+    searchCards(text) {
+        const board = this._shownBoard();
+        if (!board) return false;
+        board.setQuery(String(text || ''));
+        return true;
+    }
+
+    /** step -1 smaller, +1 bigger: the cards, or the diagram (its own zoom buttons, hidden under the bar). */
+    zoomBy(step) {
+        const board = this._shownBoard();
+        if (board) return board.zoom(step);
+        const host = this.container;
+        const mermaid = host && host.querySelector ? host.querySelector('.mermaid-zoom-controls') : null;
+        if (mermaid) {
+            const buttons = mermaid.querySelectorAll('button');
+            const button = buttons[step < 0 ? 1 : 0];   // '+', '−', '⟲'
+            if (button) { button.click(); return true; }
+            return false;
+        }
+        if (typeof this.zoom === 'function' && this.nodesContainer) { this.zoom(step < 0 ? 0.8 : 1.2); return true; }
+        return false;
+    }
+
+    /**
+     * The row of the open bubble (ideas.id, metadata) from the database. The bubbles of the
+     * overview carry no metadata, so the reasons of a bubble (metadata.bewertungen) never showed:
+     * measured 2026-11-23, two reasons in the database, "0" in the app. Announced as
+     * vibemind:bubble-row for the chat (ideas-chat.js).
+     */
+    async _loadBubbleRow() {
+        const asked = this.bubbleId;
+        if (!asked || typeof fetch !== 'function') return null;
+        const { base: SUPA, headers: HDR } = _supabaseRestConfig();
+        try {
+            const res = await fetch(`${SUPA}/ideas?id=eq.${encodeURIComponent(asked)}&select=id,metadata`, { headers: HDR });
+            if (!res.ok) { console.warn('[UniverseCanvas] bubble row fetch', res.status); return null; }
+            const rows = await res.json();
+            const row = Array.isArray(rows) ? rows[0] : null;
+            if (!row || this.bubbleId !== asked) return null;   // another bubble opened meanwhile
+            window.dispatchEvent(new CustomEvent('vibemind:bubble-row', { detail: { row, bubbleId: asked } }));
+            return row;
+        } catch (err) {
+            console.warn('[UniverseCanvas] bubble row fetch failed (non-fatal):', err);
+            return null;
+        }
     }
 
     _loadNodesFallback(nodes, edges) {
@@ -1912,6 +1977,7 @@ class UniverseCanvas {
                 .map(e => ({ id: e.id, from_node_id: e.from_node_id, to_node_id: e.to_node_id, type: e.edge_type }));
             console.log(`[UniverseCanvas] refresh in-place: ${nodes.length} nodes, ${edges.length} edges (no re-enter)`);
             this.loadNodes(nodes, edges);
+            this._loadBubbleRow();   // a new reason is a change of the bubble row, not of a card
         } catch (err) {
             console.warn('[UniverseCanvas] refresh failed (non-fatal):', err);
         }

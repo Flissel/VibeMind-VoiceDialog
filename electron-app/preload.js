@@ -29,6 +29,17 @@ const SEND_BUTTONS = { 'gc-send-btn': 'gc-input' };
 const SEND_WINDOW_MS = 2000;
 let lastSend = null; // { at, text }
 
+/**
+ * Buttons of the fixed bar of a bubble (renderer/bubble-bar.js) that send one fixed sentence to
+ * the Brain, as if typed. The sentence is fixed here, in the isolated world: a script of the page
+ * could change a button's text or data, but not what a trusted click on it counts as.
+ * The exact wording is agreed with the Ideas side of the Brain.
+ */
+const SENTENCE_BUTTONS = Object.freeze({
+    'bubble-summary-btn': 'Fasse diese Bubble zusammen',
+    'bubble-whitepaper-btn': 'Erstelle ein White Paper aus dieser Bubble',
+});
+
 function noteSend(field) {
     const input = field && typeof document !== 'undefined' ? document.getElementById(field) : null;
     lastSend = input ? { at: Date.now(), text: String(input.value || '').trim() } : null;
@@ -45,6 +56,7 @@ try {
         const button = event.target.closest('button');
         if (!button) return;
         if (SEND_BUTTONS[button.id]) { noteSend(SEND_BUTTONS[button.id]); return; }
+        if (SENTENCE_BUTTONS[button.id] && !button.disabled) { lastSend = { at: Date.now(), text: SENTENCE_BUTTONS[button.id] }; return; }
         const form = button.closest('form.ideas-chat-row');
         if (form && button.type === 'submit') noteSend('ideas-chat-input');
     }, true);
@@ -102,6 +114,8 @@ contextBridge.exposeInMainWorld('vibemind', {
     // or click it saw on the chat field and the text that stood there (sentByPerson).
     sendChatMessage: (text, context, typed) =>
         ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && sentByPerson(text) }),
+    // The sentences of the buttons Zusammenfassung and White Paper of a bubble (see SENTENCE_BUTTONS).
+    bubbleSentences: { summary: SENTENCE_BUTTONS['bubble-summary-btn'], whitepaper: SENTENCE_BUTTONS['bubble-whitepaper-btn'] },
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {

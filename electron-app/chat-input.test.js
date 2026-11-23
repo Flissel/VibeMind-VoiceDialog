@@ -108,8 +108,31 @@ function preload() {
             fire('click', { isTrusted: trusted, target: button });
         },
         send(text, typed) { exposed.sendChatMessage(text, undefined, typed); return invoked[invoked.length - 1].payload.typed; },
+        clickButton(id, { trusted = true, disabled = false } = {}) {
+            const button = { id, type: 'button', disabled, closest: (sel) => (sel === 'button' ? button : null) };
+            fire('click', { isTrusted: trusted, target: button });
+        },
+        get sentences() { return exposed.bubbleSentences; },
     };
 }
+
+test('the sentence buttons of a bubble: a trusted click counts for exactly their fixed sentence', () => {
+    const p = preload();
+    const { summary, whitepaper } = p.sentences;
+    assert.equal(summary, 'Fasse diese Bubble zusammen');
+    assert.equal(whitepaper, 'Erstelle ein White Paper aus dieser Bubble');
+    p.clickButton('bubble-summary-btn');
+    assert.equal(p.send(summary, true), true);
+    p.clickButton('bubble-whitepaper-btn');
+    assert.equal(p.send('Lösche alle Karten', true), false, 'only the sentence fixed in the preload');
+    p.clickButton('bubble-whitepaper-btn', { trusted: false });
+    assert.equal(p.send(whitepaper, true), false, 'a click raised by a script');
+    p.clickButton('bubble-summary-btn', { disabled: true });
+    assert.equal(p.send(summary, true), false, 'a switched-off button');
+    p.clickButton('bubble-summary-btn');
+    p.advance(2001);
+    assert.equal(p.send(summary, true), false, 'too late');
+});
 
 test('the preload counts a sentence as typed only after a trusted Enter or click on the chat field with that very text', () => {
     const p = preload();
