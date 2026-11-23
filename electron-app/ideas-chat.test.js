@@ -247,5 +247,32 @@ test('the chat reads the open bubble through the database id only', () => {
 
     assert.match(open, /id: bubbleDbId\(candidates, lookup\),/);
     assert.doesNotMatch(open, /id: root\.__currentBubbleId|\|\| root\.__currentBubbleId \|\|/, 'the local number is only used to look the bubble up');
-    assert.match(chat, /context\.bubble = \{ id: isUuid\(bubble\.id\) \? String\(bubble\.id\) : null, title:/);
+    assert.match(chat, /context\.bubble = \{ id: isDbId\(bubble\.id\) \? String\(bubble\.id\) : null, title:/);
+});
+
+test('database ids come in three forms and are passed on unchanged', () => {
+    // Counted in the stock on 2026-11-23: 9 of 15 bubbles carry 8 hex characters, 6 a UUID;
+    // connections carry 32 hex characters.
+    const short = 'db424a20';
+    const long = '0123456789abcdef0123456789abcdef';
+
+    for (const id of [short, long, B1]) {
+        assert.deepEqual(buildContext({ bubble: { id, title: 'X' }, nodes: [] }).bubble, { id, title: 'X' }, id);
+    }
+    const scene = { userData: { id: 3, db_id: short, title: 'Sheerlay' } };
+    assert.equal(bubbleDbId([null, null, null, 1], (value) => (value === 1 ? scene : null)), short, 'looked up through the local number');
+    assert.equal(bubbleDbId([short, B1], () => null), short, 'the first database id wins, whatever its form');
+
+    for (const wrong of ['1', 'Sheerlay', 'db424a2', 'db424a20x', 'zz424a20', '']) {
+        assert.equal(buildContext({ bubble: { id: wrong, title: 'X' }, nodes: [] }).bubble.id, null, wrong);
+    }
+
+    const context = buildContext({ bubble: null, bubbles: [{ id: short, title: 'A' }, { id: B1, title: 'B' }, { id: 2, title: 'nur Ordnungszahl' }] });
+    assert.deepEqual(context.bubbles.map((b) => b.id), [short, B1]);
+
+    // cards and the marked card are not judged by form at all: whatever id the canvas row has goes through
+    const cards = buildContext({ bubble: { id: short, title: 'X' }, nodes: [{ id: short, title: 'K1' }, { id: long, title: 'K2' }, { id: B2, title: 'K3' }], selection: [long], lastId: short });
+    assert.deepEqual(cards.cards.map((c) => c.id), [short, long, B2]);
+    assert.deepEqual(cards.selection, [long]);
+    assert.equal(cards.last_id, short);
 });

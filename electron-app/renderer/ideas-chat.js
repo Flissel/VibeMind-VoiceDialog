@@ -38,23 +38,27 @@
      * The context sent along with a sentence. Kept in one place: its form is agreed with
      * the Ideas space and may still change.
      */
-    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const isUuid = (value) => typeof value === 'string' && UUID.test(value);
+    // Ids of the database come in three forms: 8 hex characters (most bubbles), 32 hex characters
+    // (connections) and a UUID (newer rows, cards noted by the app). They are passed on unchanged.
+    // The form only tells them from what is no database id at all: the local number of the
+    // Python part ("1"), a title, an index.
+    const DB_ID = /^[0-9a-f]{8}$|^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isDbId = (value) => typeof value === 'string' && DB_ID.test(value);
 
     /**
-     * The database id (a UUID) of the open bubble, or null.
-     * `candidates`: what the app holds about the bubble, in order of trust. A candidate that is a
-     * UUID is the id. Any other (the local number of the Python part, a title, an index) is only
+     * The database id of the open bubble, unchanged, or null.
+     * `candidates`: what the app holds about the bubble, in order of trust. A candidate in the
+     * form of a database id is the id. Any other (the local number of the Python part, a title, an index) is only
      * used to look the bubble up (`lookup` returns the scene object) and to read its db_id.
      */
     function bubbleDbId(candidates, lookup) {
         const known = (Array.isArray(candidates) ? candidates : []).filter((value) => value != null && value !== '');
-        const direct = known.find(isUuid);
+        const direct = known.find(isDbId);
         if (direct) return direct;
         for (const value of known) {
             const found = typeof lookup === 'function' ? lookup(value) : null;
             const data = (found && found.userData) || {};
-            const id = [data.db_id, data.id, data.data && data.data.id].find(isUuid);
+            const id = [data.db_id, data.id, data.data && data.data.id].find(isDbId);
             if (id) return id;
         }
         return null;
@@ -71,7 +75,7 @@
             // The id is the database id of the bubble or null, never anything else: a wrong id made
             // every tool fail (the local number "1" was sent, measured 2026-11-23). With null and
             // the title the Brain can find the bubble or ask back.
-            context.bubble = { id: isUuid(bubble.id) ? String(bubble.id) : null, title: String(bubble.title || '') };
+            context.bubble = { id: isDbId(bubble.id) ? String(bubble.id) : null, title: String(bubble.title || '') };
             const all = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
             context.cards = all.slice(0, MAX_CARDS)
                 .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node), score: cardScore(node) }));
@@ -84,7 +88,7 @@
         } else {
             context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
                 // only bubbles whose database id is known: an index or a title is no id
-                .filter((item) => item && isUuid(String(item.id)))
+                .filter((item) => item && isDbId(String(item.id)))
                 .map((item) => ({ id: String(item.id), title: String(item.title || '') }));
         }
         if (newId) context.new_id = newId;
