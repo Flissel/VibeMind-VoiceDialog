@@ -149,3 +149,54 @@ test('the bubble chat asks for its "?" when it builds its input row', () => {
     const source = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
     assert.match(source, /VibeStartExamples\.attachChat\(doc, \{ row, input, send, log \}\)/);
 });
+
+// Lauf 13: the bubble chat had no "?". index.html loaded ideas-chat.js before start-examples.js; the chat
+// built its row while VibeStartExamples was not there and left the button out. Both scripts in the order
+// of index.html, in a stand-in window: the row of the chat has its "?".
+test('in the order of index.html the bubble chat gets its "?"', () => {
+    const vm = require('node:vm');
+    const html = read('renderer/index.html');
+    const order = [...html.matchAll(/<script defer src="([^"]+)"><\/script>/g)].map((m) => m[1])
+        .filter((src) => src === 'start-examples.js' || src === 'ideas-chat.js');
+    assert.deepEqual(order, ['start-examples.js', 'ideas-chat.js']);
+
+    const byId = new Map();
+    function element(tag) {
+        const classes = new Set();
+        const el = { tag, id: '', children: [], hidden: false, textContent: '', title: '', value: '', dataset: {}, style: {}, attrs: {},
+            classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c),
+                toggle: (c, on) => { if (on === undefined ? !classes.has(c) : on) classes.add(c); else classes.delete(c); } },
+            set className(v) { for (const c of String(v).split(' ').filter(Boolean)) classes.add(c); },
+            get className() { return [...classes].join(' '); },
+            append(...c) { for (const x of c) el.appendChild(x); },
+            appendChild(c) { c.parentNode = el; el.children.push(c); if (c.id) byId.set(c.id, c); return c; },
+            replaceChildren(...c) { el.children = []; el.append(...c); },
+            insertBefore(c, ref) { c.parentNode = el; const i = el.children.indexOf(ref); el.children.splice(i < 0 ? el.children.length : i, 0, c); if (c.id) byId.set(c.id, c); },
+            querySelector: (sel) => el.children.find((c) => sel.startsWith('.') && c.classList.contains(sel.slice(1))) || null,
+            addEventListener() {}, setAttribute(k, v) { el.attrs[k] = v; }, focus() {} };
+        return el;
+    }
+    const add = (id) => { const el = element('div'); el.id = id; byId.set(id, el); return el; };
+    add('space-view'); add('space-title'); add('gc-messages');
+    const anchor = add('titlebar-space'); anchor.parentNode = { insertBefore() {} };
+    const sendBtn = add('gc-send-btn'); sendBtn.parentNode = element('div'); sendBtn.parentNode.children.push(sendBtn);
+    const window = {
+        document: { readyState: 'interactive', body: element('body'), getElementById: (id) => byId.get(id) || null,
+            createElement: (tag) => element(tag), querySelectorAll: () => [], addEventListener() {} },
+        localStorage: { getItem: () => null, setItem() {} },
+        crypto: { randomUUID: () => '00000000-0000-4000-8000-0000000000ff' },
+        MutationObserver: class { observe() {} },
+        multiverseApp: { currentSpace: 'ideas', spaces: { ideas: {} }, isInsideBubble: true },
+        addEventListener() {}, dispatchEvent() { return true },
+        CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+        setTimeout() { return 0; }, clearTimeout() {},
+    };
+    // in the page `self` is the window; a script there has no module
+    const context = { window, self: window, document: window.document, globalThis: window, module: undefined };
+    for (const src of order) vm.runInNewContext(read(path.join('renderer', src)), context);
+    const input = byId.get('ideas-chat-input');
+    assert.ok(input, 'the chat built its row');
+    const row = input.parentNode;
+    assert.ok(row.children.some((c) => c.id === 'ideas-chat-help'), 'the "?" is in the row');
+    assert.equal(row.children.filter((c) => c.id === 'ideas-chat-help').length, 1, 'once');
+});

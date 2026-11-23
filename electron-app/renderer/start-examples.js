@@ -101,6 +101,13 @@
                 help.addEventListener('click', () => show(doc, box, !box.classList.contains(SHOWN)));
                 send.parentNode.insertBefore(help, send);
             }
+            // A bubble chat built before this script (another order of the scripts): its "?" now.
+            const chatInput = doc.getElementById('ideas-chat-input');
+            if (chatInput && chatInput.parentNode) {
+                const row = chatInput.parentNode;
+                attachChat(doc, { row, input: chatInput, send: row.querySelector ? row.querySelector('.ideas-chat-send') : null,
+                    log: doc.getElementById('ideas-chat-log') });
+            }
             win.addEventListener('vibemind:space-arrived', (event) => {
                 render(doc, box, event && event.detail ? event.detail.space : 'ideas');
             });
@@ -115,6 +122,7 @@
      */
     function attachChat(doc, { row, input, send, log }) {
         if (!row || !input || !send || !log) return null;
+        if (doc.getElementById && doc.getElementById('ideas-chat-help')) return null;   // there already
         const box = doc.createElement('div');
         box.className = 'gc-start ideas-chat-start';
         const help = doc.createElement('button');
