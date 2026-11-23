@@ -15,6 +15,22 @@ function _dmLog(...a) { process.stdout.write(`${_DM_C}[DashboardManager] ${a.joi
 // gebaute Stand im Coding_engine-Submodul. Ohne beides: Statuskarte. Die fruehere
 // Vorgabe :5173 entfaellt - dort laeuft inzwischen der Rowboat-Vite-Server.
 
+/** CODING_UI_URL when it is a valid http(s) address, else '' (the tab stays as before). */
+function codingUiUrl(env = process.env) {
+  const text = typeof env.CODING_UI_URL === 'string' ? env.CODING_UI_URL.trim() : '';
+  if (!text) return '';
+  try {
+    const url = new URL(text);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+/** What the status card of the Project Space tells the person to do. */
+const CODING_HINT = 'Die Seite kommt künftig vom Dienst der Coding-Sitzung. Läuft er, seine Adresse als '
+  + 'CODING_UI_URL in die .env eintragen und die App neu starten.';
+
 class DashboardManager {
   constructor(mainWindow, dependencies = {}) {
     const { BrowserView } = resolveElectronParts(dependencies, ['BrowserView']);
@@ -29,6 +45,10 @@ class DashboardManager {
     // Dashboard source: DASHBOARD_DEV_URL (explizit) sonst gebauter Stand im Submodul;
     // ohne beides zeigt createView() die Statuskarte.
     this.dashboardUrl = this._env.DASHBOARD_DEV_URL || '';
+    // The page of the Coding service (its own service, not running all the time yet). When
+    // CODING_UI_URL holds a valid http(s) address, the tab shows that page first; without it
+    // everything stays as before (like SALES_UI_URL for the Sales space).
+    this.codingUrl = codingUiUrl(this._env);
     this.dashboardPath = dependencies.dashboardPath || path.join(__dirname, '..', 'python', 'spaces',
       'coding', 'Coding_engine', 'web-app', 'front', 'dist', 'index.html');
 
@@ -54,10 +74,11 @@ class DashboardManager {
   _startOverlay() {
     this.overlayResult = null;
     const targets = [];
+    if (this.codingUrl) targets.push({ kind: 'url', url: this.codingUrl });
     if (this.dashboardUrl) targets.push({ kind: 'url', url: this.dashboardUrl, expectTitle: /DaveLovable/i });
     targets.push({ kind: 'file', path: this.dashboardPath });
     _dmLog('Pruefe und lade:', targets.map((t) => t.url || t.path).join(' | '));
-    this.overlayReady = loadOverlay(this.dashboardView.webContents, { space: 'Dashboard (Coding Engine)', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
+    this.overlayReady = loadOverlay(this.dashboardView.webContents, { space: 'Dashboard (Coding Engine)', targets, hint: CODING_HINT }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
     return this.overlayReady;
   }
 
@@ -207,3 +228,5 @@ class DashboardManager {
 }
 
 module.exports = DashboardManager;
+module.exports.codingUiUrl = codingUiUrl;
+module.exports.CODING_HINT = CODING_HINT;

@@ -546,3 +546,34 @@ test('Rowboat: Neuaufbau beim Verbinden behaelt eine frische gemerkte URL', asyn
   assert.equal(h.views.length, 2);
   assert.equal(r.consumePendingUrl(), 'rowboat://open?path=f');
 });
+
+// ---- status cards in plain German (tour of all views, 2026-11-23) ----
+
+test('Dashboard: the card says in German what is missing and what to do, no error code in sight', async () => {
+  const h = harness();
+  const d = new DashboardManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: {}, dashboardPath: 'C:\nirgends\index.html', overlayDeps: { existsSync: () => false, logger: quiet } });
+  d.show();
+  await d.overlayReady;
+  const html = card(h.views[0].loads[0]);
+  const headline = /<h1 data-status-card="1">([^<]*)<\/h1>/.exec(html)[1];
+  const todo = /<p data-status-todo="1">([^<]*)<\/p>/.exec(html)[1];
+  assert.equal(headline, 'Die Seite von Dashboard (Coding Engine) ist auf diesem Rechner nicht gebaut.');
+  assert.match(todo, /CODING_UI_URL/);
+  assert.match(html, /<details><summary>Technische Angaben<\/summary>/, 'the technical reason only folded');
+});
+
+test('Dashboard: CODING_UI_URL is tried first; without it the targets stay as before', async () => {
+  const { codingUiUrl } = DashboardManager;
+  assert.equal(codingUiUrl({}), '');
+  assert.equal(codingUiUrl({ CODING_UI_URL: ' http://127.0.0.1:8163 ' }), 'http://127.0.0.1:8163/');
+  assert.equal(codingUiUrl({ CODING_UI_URL: 'file:///C:/x.html' }), '');
+  assert.equal(codingUiUrl({ CODING_UI_URL: 'kein-url' }), '');
+  const coding = await startServer(titled('Coding'));
+  try {
+    const h = harness();
+    const d = new DashboardManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: { CODING_UI_URL: coding.url }, dashboardPath: 'C:\nirgends\index.html', overlayDeps: { existsSync: () => false, logger: quiet } });
+    d.show();
+    await d.overlayReady;
+    assert.deepEqual(h.views[0].loads[0], ['url', new URL(coding.url).href], 'the page of the Coding service');
+  } finally { await stop(coding.server); }
+});

@@ -146,3 +146,37 @@ test('onResult wird vor dem Laden mit dem Ergebnis aufgerufen', async () => {
     { logger: quiet, onResult: (r) => order.push(`result:${r.ok}`) });
   assert.deepEqual(order, ['result:false', 'load']);
 });
+
+test('card texts: one German sentence per cause and what to do, never a code', () => {
+  const { cardText } = require('./overlay-status');
+  const cases = [
+    ['nicht erreichbar (ECONNREFUSED)', 'Der Dienst von X läuft nicht.'],
+    ['keine Antwort in 2000 ms', 'Der Dienst von X läuft nicht.'],
+    ['Datei fehlt', 'Die Seite von X ist auf diesem Rechner nicht gebaut.'],
+    ['HTTP 502', 'Der Dienst von X läuft, meldet aber einen Fehler.'],
+    ['fremde App (Titel „Y“)', 'Unter der Adresse von X antwortet eine andere Anwendung.'],
+    ['ungueltige URL', 'Für X ist keine gültige Adresse eingetragen.'],
+    ['kein Ziel konfiguriert', 'Für X ist keine gültige Adresse eingetragen.'],
+    ['entfernt', 'X ist auf Wunsch abgeschaltet.'],
+    ['nicht erreichbar (ECONNREFUSED); Datei fehlt', 'Der Dienst von X läuft nicht.'],
+  ];
+  for (const [reason, headline] of cases) {
+    const text = cardText({ space: 'X', reason });
+    assert.equal(text.headline, headline, reason);
+    assert.doesNotMatch(text.headline + ' ' + text.todo, /ECONNREFUSED|HTTP|\d{3}|ms\b/, reason);
+  }
+  assert.equal(cardText({ space: 'X', reason: 'nicht erreichbar (ECONNREFUSED)', hint: 'Start über Y.' }).todo, 'Start über Y.');
+  assert.equal(cardText({ space: 'X', reason: 'entfernt' }).todo, '', 'switched off on purpose: nothing to do');
+});
+
+test('the spaces measured on the tour say how their service is started', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const swe = fs.readFileSync(path.join(__dirname, 'swe-design-manager.js'), 'utf8');
+  assert.match(swe, /targets: \[\{ kind: 'url', url: this\.stageUrl \}\], hint: SWE_HINT \}/);
+  const external = require('./external-spaces');
+  const list = external.EXTERNAL_SPACES || external.SPACES || [];
+  const marketing = list.find((s) => s.id === 'marketing');
+  assert.ok(marketing && /Marketing-Dienst/.test(marketing.hint));
+  assert.match(fs.readFileSync(path.join(__dirname, 'external-spaces.js'), 'utf8'), /hint: space\.hint \}/);
+});

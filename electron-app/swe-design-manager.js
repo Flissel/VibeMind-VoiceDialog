@@ -16,6 +16,9 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const SPACE_NAME = 'SWE Design';
+/** What the status card says when the stage view does not answer (the app does not start it). */
+const SWE_HINT = 'Die Ansicht kommt vom SWE-Design-Dienst, der außerhalb der App läuft. '
+  + 'Sobald er gestartet ist, den Reiter erneut öffnen.';
 const MAX_REASON_STDERR = 160;
 
 // ANSI colors for SWE Design space logs
@@ -303,7 +306,7 @@ class SweDesignManager {
   async _loadStageView() {
     const result = await loadOverlay(
       this.view.webContents,
-      { space: SPACE_NAME, targets: [{ kind: 'url', url: this.stageUrl }] },
+      { space: SPACE_NAME, targets: [{ kind: 'url', url: this.stageUrl }], hint: SWE_HINT },
       this._overlayDeps,
     );
     this._cardShown = !result.ok;

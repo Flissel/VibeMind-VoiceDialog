@@ -32,6 +32,7 @@ const EXTERNAL_SPACES = Object.freeze([
   {
     id: 'marketing', label: 'Marketing', icon: '\u{1F4E3}', color: 0xff7eb6, position: [24, 0, 20],
     urlEnv: 'MARKETING_UI_URL', defaultUrl: 'http://127.0.0.1:5510/mockup/', expectTitle: /Marketing/i,
+    hint: 'Die Seite kommt vom Marketing-Dienst, der außerhalb der App läuft. Sobald er gestartet ist, den Reiter erneut öffnen.',
     agent: { name: 'Marketing', slug: 'marketing', role: 'Kampagnen und Inhalte' },
   },
   {
@@ -168,7 +169,7 @@ class ExternalSpaceManager {
     const space = this.spaces.get(id);
     const entry = this.views.get(id);
     entry.result = null;
-    return loadOverlay(entry.view.webContents, { space: space.label, targets: this._targets(space) },
+    return loadOverlay(entry.view.webContents, { space: space.label, targets: this._targets(space), hint: space.hint },
       { ...this._overlayDeps, onResult: (result) => { entry.result = result; } });
   }
 
