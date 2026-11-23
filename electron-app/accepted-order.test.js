@@ -543,3 +543,29 @@ test('an order without a number still ends by the changed card', () => {
     w.loaded(done);
     assert.match(w.line(), /^✓ Ideas: fertig/);
 });
+
+// Lauf 8: order taken, then a change after the acceptance, /stand "vorschlag", then "Vorschlag verwerfen".
+// The answer to "verwerfen" comes without any plan event (window log: chat_response without plan_id).
+test('"Vorschlag verwerfen" answered without a plan: the line does not stay on "arbeitet"', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'laeuft' }, { stand: 'vorschlag', meldung: 'Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.',
+        hinweis: true, saetze: ['Vorschlag zeigen', 'Vorschlag trotzdem übernehmen', 'Vorschlag verwerfen'] }]);
+    w.advance(5000); await tick();
+    const status = (fields) => w.handle({ type: 'task_status', space: 'ideas', registry_space: 'ideas', result: '…', error: '', ...fields });
+    w.answerWith({ type: 'chat_response', success: true, message: '„Karte 1“ ergänzt.', event_type: 'brain.multihop', plan_id: 'ideen_B' });
+    const change = w.send('Ergänze bei Karte 1: eine offene Frage');
+    status({ state: 'reset', plan_id: 'ideen_B' });
+    status({ state: 'running', plan_id: 'ideen_B', step: 'Notiz ändern', done: 0, total: 1 });
+    status({ state: 'done', plan_id: 'ideen_B', step: 'Notiz ändern', done: 1, total: 1, result: 'erledigt', elapsed_s: 1.7 });
+    await change;
+    w.advance(5000); await tick();
+    w.advance(5000); await tick();
+    assert.equal(w.line(), 'ℹ Ideas: Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.');
+    w.answerWith({ type: 'chat_response', success: true, message: 'Der Vorschlag ist verworfen; an der Notiz ist nichts geändert.',
+        event_type: 'brain.multihop', request_id: 'r-25' });
+    await w.send('Vorschlag verwerfen');
+    w.advance(3000); await tick();
+    assert.doesNotMatch(w.line(), /arbeitet/);
+    assert.doesNotMatch(w.chatState(), /arbeitet/);
+    w.advance(60000); await tick();
+    assert.doesNotMatch(w.line(), /arbeitet/);
+});
