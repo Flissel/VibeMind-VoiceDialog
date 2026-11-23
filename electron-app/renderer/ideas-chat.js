@@ -125,6 +125,11 @@
                 if (card && card.state === 'pending') cards.delete(id);
                 return list();
             },
+            /** The plan failed: every card that was only noted in advance goes. */
+            failAll() {
+                for (const card of list()) if (card.state === 'pending') cards.delete(card.id);
+                return list();
+            },
             /** The model has finished (or failed): nothing is worked on any more. */
             endWork() {
                 for (const card of list()) if (card.state === 'working') cards.delete(card.id);
@@ -396,6 +401,8 @@
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: { text: (response && response.message) || '', success: !failed } }));
                 if (failed && newId) store.reject(newId, message);
+                // A question back stored nothing: the card noted in advance goes as well.
+                if (response && response.question && newId) store.settle(newId);
                 if (!failed) applyAnswer(response, newId, note);
                 say(message, failed ? 'error' : 'agent', asked);
             } catch (error) {
@@ -449,6 +456,9 @@
             if (status.space !== 'ideas') return;
             planRuns = status.state === 'running';
             showState();
+            // The plan failed: nothing of it was stored. The cards noted in advance go, even when the
+            // answer to the sentence is late or says something else; the chat names the reason.
+            if (status.state === 'failed') store.failAll();
             if (!planRuns) { store.endWork(); renderCards(); }
         });
 

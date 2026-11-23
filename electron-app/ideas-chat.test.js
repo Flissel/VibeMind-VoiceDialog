@@ -204,3 +204,17 @@ test('entering and leaving a bubble do not wait for animation frames', () => {
     assert.equal((moves.match(/this\._cameraStep\(updateCamera\)/g) || []).length, 2, 'entry and exit');
     assert.doesNotMatch(moves, /requestAnimationFrame\(updateCamera\)/, 'a covered window gets no frames: the view would never open');
 });
+
+test('a failed plan and a question back take the card noted in advance away', () => {
+    const store = createCardStore();
+    store.pending('u-1', 'API Design');
+    store.working('u-2', 'Gliederung');
+
+    assert.deepEqual(store.failAll().map((c) => c.id), ['u-2'], 'only what was noted in advance; work of a model ends separately');
+
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(chat, /if \(failed && newId\) store\.reject\(newId, message\);/, 'a refused tool: the card goes, the chat names the reason');
+    assert.match(chat, /if \(response && response\.question && newId\) store\.settle\(newId\);/);
+    assert.match(chat, /if \(status\.state === 'failed'\) store\.failAll\(\);/);
+    assert.match(chat, /say\(message, failed \? 'error' : 'agent', asked\);/);
+});
