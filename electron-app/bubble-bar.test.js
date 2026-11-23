@@ -295,3 +295,9 @@ test('the old result windows are gone: nobody sends idea_summarized or white_pap
         assert.ok(!sources.includes(gone), gone);
     }
 });
+
+test('the bar does not jump: "Bewerten" keeps its width with or without a count', () => {
+    const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'bubble-bar.css'), 'utf8');
+    // measured in Chromium at 12px: "Bewerten" 71 px, "Bewerten · 47" 94 px, "Bewerten · 999" 100 px
+    assert.match(css, /#bubble-bar #bubble-eval-btn \{\s*min-width: 104px;\s*font-variant-numeric: tabular-nums;/);
+});

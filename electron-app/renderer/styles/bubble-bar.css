@@ -123,3 +123,10 @@ body.bubble-open #voice-panel {
 body.bubble-open #space-indicator {
     display: none;
 }
+
+/* "Bewerten" and "Bewerten · 47" take the same room: the bar does not jump when a bubble has
+   ratings (measured: White Paper moved 22 px between an empty and a full bubble). Up to three digits. */
+#bubble-bar #bubble-eval-btn {
+    min-width: 104px;
+    font-variant-numeric: tabular-nums;
+}
