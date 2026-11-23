@@ -316,7 +316,12 @@
                 return;
             }
             if (!current || !current.space) {
+                // Ended: the hidden element keeps no old text (Lauf 10: "● arbeitet …" stayed in it).
                 el.hidden = true;
+                el.textContent = '';
+                el.title = '';
+                el.dataset.state = '';
+                el.dataset.space = '';
                 markTab('', '');
                 return;
             }

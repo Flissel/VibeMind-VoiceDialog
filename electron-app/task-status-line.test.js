@@ -248,3 +248,14 @@ test('a sentence that never gets an answer loses the waiting line after a minute
     s.advance(1);
     assert.equal(s.visible(), false);
 });
+
+// Lauf 10: after the end the line was hidden, but the hidden #task-status still said "● arbeitet …".
+test('at the end the hidden line keeps no old text', () => {
+    const s = scene();
+    s.emit('vibemind:sentence-sent');
+    assert.equal(s.text(), '\u25CF arbeitet \u2026');
+    s.emit('vibemind:sentence-answered', { text: 'Hallo.', success: true });
+    s.advance(s.GRACE);
+    assert.equal(s.visible(), false);
+    assert.equal(s.text(), '');
+});
