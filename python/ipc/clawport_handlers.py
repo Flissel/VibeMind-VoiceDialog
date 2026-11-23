@@ -256,6 +256,10 @@ class ClawPortHandlers:
                 answer["targets"] = [str(t) for t in tool_result.get("targets") or [] if str(t).strip()]
                 # The orders the Brain took: the app ends its "arbeitet" line by them.
                 answer["orders"] = [str(o) for o in tool_result.get("orders") or [] if str(o).strip()]
+            # A proposal for a changed card: the chat shows it with "Vorschlag zeigen" / "verwerfen".
+            if isinstance(tool_result, dict) and isinstance(tool_result.get("vorschlag"), dict):
+                answer["success"] = True
+                answer["vorschlag"] = dict(tool_result["vorschlag"])
             self.send_message(answer)
         except Exception as e:
             # The raw error goes to the log; the chat gets a German sentence.

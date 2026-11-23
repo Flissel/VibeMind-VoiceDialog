@@ -391,7 +391,25 @@
         let shownKey = null;     // the bubble whose history is in the log
 
         function line(entry) {
-            return el('div', 'ideas-chat-msg ideas-chat-' + entry.kind, entry.text);
+            const msg = el('div', 'ideas-chat-msg ideas-chat-' + entry.kind, entry.text);
+            if (!Array.isArray(entry.answers) || !entry.answers.length) return msg;
+            // A proposal: its two answers as sentences. A click sends the sentence as if typed;
+            // typing it works the same. Once one is sent, both rest.
+            const choices = el('div', 'ideas-chat-answers');
+            for (const answer of entry.answers) {
+                const button = el('button', 'ideas-chat-answer', answer);
+                button.type = 'button';
+                button.disabled = entry.used === true;
+                button.addEventListener('click', (event) => {
+                    if (entry.used || busy) return;
+                    entry.used = true;
+                    for (const other of choices.children) other.disabled = true;
+                    submit(answer, { typed: event.isTrusted === true });
+                });
+                choices.append(button);
+            }
+            msg.append(choices);
+            return msg;
         }
 
         function bubbleKey() {
@@ -400,10 +418,11 @@
         }
 
         /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
-        function say(text, kind, key = bubbleKey()) {
-            history.add(key, { text, kind });
+        function say(text, kind, key = bubbleKey(), answers = null) {
+            const entry = answers ? { text, kind, answers } : { text, kind };
+            history.add(key, entry);
             if (key !== shownKey) return;
-            log.appendChild(line({ text, kind }));
+            log.appendChild(line(entry));
             log.scrollTop = log.scrollHeight;
         }
 
@@ -533,19 +552,25 @@
                 const asks = !accepted && !!response && (response.question === true || response.rueckfrage === true || response.verstanden === false);
                 // A hint ("keine Spalten") is information for the user, not a failure.
                 const hint = !accepted && !asks && !!response && response.hinweis === true;
-                const failed = !accepted && !asks && !hint && (!response || response.success === false || response.ok === false);
+                // A proposal for a changed card: the sentence and its two answers, never a failure.
+                const answers = root.VibeSentenceAnswer;
+                const proposal = !accepted && !asks && answers ? answers.view(response) : null;
+                const proposes = !!proposal && proposal.kind === 'vorschlag';
+                const failed = !accepted && !asks && !hint && !proposes && (!response || response.success === false || response.ok === false);
                 const message = (response && (response.message || response.final_text)) || (failed ? 'Keine Antwort' : asks ? 'Wie meinst du das?' : 'OK');
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
-                    text: (response && response.message) || '', success: !failed, note: asks ? 'rueckfrage' : hint ? 'hinweis' : '',
+                    text: (response && response.message) || '', success: !failed, note: asks ? 'rueckfrage' : hint || proposes ? 'hinweis' : '',
                     ...(accepted ? { accepted: true, space: 'ideas', targets, orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
                 } }));
                 if (failed && newId) store.reject(newId, message);
                 // A question back stored nothing: the card noted in advance goes as well.
-                if ((asks || hint) && newId) store.settle(newId);
+                if ((asks || hint || proposes) && newId) store.settle(newId);
                 if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
-                if (accepted) {
+                if (proposes) {
+                    say(proposal.text, 'vorschlag', asked, proposal.answers);
+                } else if (accepted) {
                     acceptedKey = asked;
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
                     say(ACCEPTED_LINE + said, 'agent', asked);

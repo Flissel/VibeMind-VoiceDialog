@@ -95,3 +95,28 @@ test('a step without a usable answer (ok: false) ends the plan without ✓, and 
     nav3.handle('hop_completed', { space: 'ideas', ok: true, result_preview: "'Notiz angelegt'" });
     assert.equal(nav3.handle('plan_completed', { ok: true }).state, 'done', 'a plan whose steps all answered keeps its ✓');
 });
+
+test('a proposal for a changed card shows its sentence and two answers to click or type', () => {
+    const { proposalOf, PROPOSAL_ANSWERS } = require('./renderer/sentence-answer');
+    assert.deepEqual(PROPOSAL_ANSWERS, ['Vorschlag zeigen', 'Vorschlag verwerfen']);
+    const shown = view({ success: true, message: 'Ich schlage eine neue Fassung vor.',
+        vorschlag: { karte: '00000000-0000-4000-8000-00000000000a', titel: 'Karte 1' } });
+    assert.deepEqual(shown, { kind: 'vorschlag', text: 'Ich schlage eine neue Fassung vor.',
+        answers: ['Vorschlag zeigen', 'Vorschlag verwerfen'], karte: '00000000-0000-4000-8000-00000000000a', titel: 'Karte 1' });
+    assert.equal(view({ vorschlag: { titel: 'Karte 1' } }).text, 'Vorschlag für „Karte 1“.', 'without a sentence it names the card');
+    assert.equal(view({ vorschlag: true }).text, 'Ein Vorschlag liegt bereit.');
+    assert.equal(view({ success: false, vorschlag: true, message: 'Vorschlag da.' }).kind, 'vorschlag', 'never a red failure');
+    assert.equal(view({ rueckfrage: true, vorschlag: true }).kind, 'rueckfrage', 'a question back stays a question');
+    assert.equal(proposalOf({ vorschlag: 'ja' }), null);
+    assert.equal(proposalOf({ vorschlag: [] }), null);
+    assert.deepEqual(proposalOf({ vorschlag: { karte: 7, titel: ' ' } }), {});
+
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(chat, /say\(proposal\.text, 'vorschlag', asked, proposal\.answers\)/);
+    // a click sends the sentence as the person's own (trusted click), once; typing it works the same way
+    assert.match(chat, /submit\(answer, \{ typed: event\.isTrusted === true \}\)/);
+    assert.match(chat, /if \(entry\.used \|\| busy\) return;\s*entry\.used = true;/);
+    assert.match(chat, /const failed = !accepted && !asks && !hint && !proposes &&/);
+    assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'ideas-chat.css'), 'utf8'), /\.ideas-chat-vorschlag \{/);
+    assert.match(fs.readFileSync(path.join(__dirname, '..', 'python', 'ipc', 'clawport_handlers.py'), 'utf8'), /answer\["vorschlag"\] = dict\(tool_result\["vorschlag"\]\)/);
+});

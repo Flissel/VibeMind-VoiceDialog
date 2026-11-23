@@ -310,3 +310,37 @@ body.ideas-chat-open #space-view.chat-folded ~ .zoom-controls,
 body.ideas-chat-open:has(#space-view.chat-folded) .zoom-controls {
     right: 64px;
 }
+
+/* a proposal for a changed card: the sentence and two answers the person clicks or types */
+.ideas-chat-vorschlag {
+    align-self: flex-start;
+    background: rgba(40, 44, 66, 0.9);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.45);
+}
+
+.ideas-chat-answers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ideas-chat-answer {
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.55);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ideas-chat-answer:hover:not(:disabled) {
+    background: rgba(var(--space-accent-rgb), 0.2);
+}
+
+.ideas-chat-answer:disabled {
+    opacity: 0.45;
+    cursor: default;
+}

@@ -172,6 +172,8 @@ class BrainMultihopBridge:
         # from the space on screen in final_text. Its raw original (`fehler`) is never passed on.
         question = bool(data.get("rueckfrage")) or data.get("verstanden") is False
         hint = not question and data.get("hinweis") is True
+        # A proposal for a changed card (`vorschlag`): the app shows it with two answers.
+        proposal = None if question else self._proposal(data)
 
         # ok=false has two meanings. CapabilityRouter found nothing, or the planner
         # gave up: nothing to say, quiet fall-through (introspection.py:2392). But the
@@ -179,7 +181,7 @@ class BrainMultihopBridge:
         # when it asks back (rueckfrage=true); then final_text is its sentence for the
         # user. Dropping that sentence made the old path answer "I did not understand
         # you" while the tool had plainly said what was wrong.
-        if not ok and not (final_text and (question or hint or executed)):
+        if not ok and not (final_text and (question or hint or proposal is not None or executed)):
             return None
 
         # MH-5 (Phase 0): feed the REAL per-hop truth-verdict back as a
@@ -223,7 +225,7 @@ class BrainMultihopBridge:
         # `error` stays empty on purpose: the orchestrator falls through to the old path
         # on a result with `error`, and the Brain's own sentence would be lost again.
         # The outcome travels in the event type (see clawport_handlers).
-        if ok or accepted:
+        if ok or accepted or proposal is not None:
             event_type = EVENT_DONE
         elif question:
             event_type = EVENT_QUESTION
@@ -232,15 +234,34 @@ class BrainMultihopBridge:
         else:
             event_type = EVENT_FAILED
 
+        tool_result = {"pending": True, "status": "angenommen", "targets": targets,
+                       "orders": self._orders(data, executed)} if accepted else None
+        if proposal is not None:
+            tool_result = {**(tool_result or {}), "vorschlag": proposal}
         return OrchestrationResult(
             job_id=job_id,
             event_type=event_type,
             stream="brain",
             response_hint=final_text,
             is_conversational=False,
-            tool_result={"pending": True, "status": "angenommen", "targets": targets,
-                         "orders": self._orders(data, executed)} if accepted else None,
+            tool_result=tool_result,
         )
+
+    @staticmethod
+    def _proposal(data: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        """The proposal in an answer of the Brain: {} for `vorschlag: true`, else only the card
+        id (`karte`) and its title (`titel`); None without a proposal. Nothing else passes."""
+        found = data.get("vorschlag")
+        if found is True:
+            return {}
+        if not isinstance(found, dict):
+            return None
+        proposal: Dict[str, str] = {}
+        for key in ("karte", "titel"):
+            value = found.get(key)
+            if isinstance(value, str) and value.strip():
+                proposal[key] = value.strip()[:200]
+        return proposal
 
     # ------------------------------------------------------------------
     # Brain communication

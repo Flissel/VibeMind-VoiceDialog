@@ -318,7 +318,7 @@ test('a failed plan and a question back take the card noted in advance away', ()
 
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
     assert.match(chat, /if \(failed && newId\) store\.reject\(newId, message\);/, 'a refused tool: the card goes, the chat names the reason');
-    assert.match(chat, /if \(\(asks \|\| hint\) && newId\) store\.settle\(newId\);/);
+    assert.match(chat, /if \(\(asks \|\| hint \|\| proposes\) && newId\) store\.settle\(newId\);/, 'a proposal stored nothing either');
     // a question back (question, rueckfrage or verstanden: false) is calm, never a failure
     assert.match(chat, /const asks = !accepted && !!response && \(response\.question === true \|\| response\.rueckfrage === true \|\| response\.verstanden === false\);/);
     assert.match(chat, /const failed = !accepted && !asks && !hint &&/);

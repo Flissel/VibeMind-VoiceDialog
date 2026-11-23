@@ -216,6 +216,28 @@ def test_a_hint_reaches_the_user_as_a_hint_not_a_failure():
     assert result.response_hint.startswith("Die Tabelle hat keine Spalten")
 
 
+def test_a_proposal_reaches_the_app_with_only_card_and_title():
+    result = _execute({
+        "ok": True, "plan_id": "p7", "executed": {}, "state": {},
+        "final_text": "Ich schlage eine neue Fassung von Karte 1 vor.",
+        "vorschlag": {"karte": "00000000-0000-4000-8000-00000000000a", "titel": "Karte 1",
+                      "text": "der ganze Vorschlag", "fehler": "roh"},
+    })
+
+    assert result.event_type == "brain.multihop"
+    assert result.tool_result == {"vorschlag": {"karte": "00000000-0000-4000-8000-00000000000a", "titel": "Karte 1"}}
+
+    # also when the Brain says ok false: a proposal is its verdict, not a failure
+    bare = _execute({"ok": False, "vorschlag": True, "executed": {}, "final_text": "Ein Vorschlag liegt bereit."})
+    assert bare.event_type == "brain.multihop"
+    assert bare.tool_result == {"vorschlag": {}}
+
+    # a question back stays a question; a broken field is no proposal
+    asks = _execute({"ok": False, "rueckfrage": True, "vorschlag": True, "final_text": "Welche Karte?"})
+    assert asks.event_type == "brain.multihop.question" and asks.tool_result is None
+    assert _execute({"ok": True, "vorschlag": "ja", "executed": {}, "final_text": "x"}).tool_result is None
+
+
 def test_nothing_found_still_falls_through():
     assert _execute({"ok": False, "error": "planner returned no plan"}) is None
     assert _execute({"ok": False, "final_text": "", "executed": {}}) is None
