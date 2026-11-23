@@ -198,6 +198,7 @@ test('every arrival moves the tabs, and a change of space does not wait for anim
     assert.doesNotMatch(move, /requestAnimationFrame\(updateCamera\)/);
 
     assert.match(navigator, /syncSpace: syncSpace/);
+    assert.match(navigator, /if \(app && app\.isNavigating\) \{\s*wanted = spaceId;/, 'a click during a move is kept, not dropped');
     const sync = navigator.slice(navigator.indexOf('function syncSpace'), navigator.indexOf('function updateAgentDisplay'));
     assert.doesNotMatch(sync, /hideFlowzen\(|showFlowzen\(/, 'syncSpace runs after the page of the space was shown and must not hide it');
 });

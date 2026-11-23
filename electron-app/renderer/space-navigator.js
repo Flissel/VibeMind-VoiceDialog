@@ -46,8 +46,36 @@
     makeTabHandler('tab-mirofish', 'mirofish', false);
     makeTabHandler('tab-video', 'video', false);
 
+    // The space asked for while a camera move was running. The scene starts one move at a time;
+    // without this a click during a move was lost (measured 2026-11-23: of five switches 0.4 s
+    // apart every second one did not arrive). The last wish wins and is carried out on arrival.
+    var wanted = null;
+
+    var wantedTimer = null;
+
+    // Looks every 100 ms whether the running move has ended (not every move ends with an arrival
+    // event: the zoom into the Desktop screen view does not). Gives up after 6 s.
+    function followWanted(triesLeft) {
+        clearTimeout(wantedTimer);
+        wantedTimer = setTimeout(function() {
+            var app = window.multiverseApp;
+            if (!wanted) return;
+            if (app && app.isNavigating && triesLeft > 0) { followWanted(triesLeft - 1); return; }
+            var next = wanted;
+            wanted = null;
+            if (app && app.isNavigating) { syncSpace(app.currentSpace); return; } // still stuck: tabs back to the truth
+            switchSpace(next);
+        }, 100);
+    }
+
     async function switchSpace(spaceId) {
         var app = window.multiverseApp;
+        if (app && app.isNavigating) {
+            wanted = spaceId;
+            syncSpace(spaceId);   // the tab answers at once; the scene follows after the running move
+            followWanted(60);
+            return;
+        }
         // The scene knows where the user is; window.currentSpace can lag behind it.
         if (spaceId === (app ? app.currentSpace : window.currentSpace)) {
             syncSpace(spaceId);
@@ -58,7 +86,7 @@
 
         // Navigate via MultiverseApp (visual navigation with camera animation)
         if (app) {
-            // A move is already running: nothing starts, so the tabs must not claim the new space.
+            // Nothing started (unknown space): the tabs must not claim the new space.
             if (app.navigateToSpace(spaceId) === false) return;
         }
         syncSpace(spaceId);
