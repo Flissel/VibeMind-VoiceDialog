@@ -203,8 +203,9 @@
                     <span class="gc-agent-icon" id="gc-agent-icon">💭</span>
                     <span class="gc-agent-name" id="gc-agent-name">Rachel</span>
                 </span>
-                <input type="text" id="gc-input" class="gc-input"
-                       placeholder="Type a command..." autocomplete="off" spellcheck="false" />
+                <!-- several lines: Enter sends, Shift+Enter starts a new line, pasted lines stay -->
+                <textarea id="gc-input" class="gc-input" rows="1"
+                       placeholder="Type a command..." autocomplete="off" spellcheck="false"></textarea>
                 <button id="gc-send-btn" class="gc-send-btn" title="Send (Enter)">▶</button>
                 <div id="gc-spinner" class="gc-spinner hidden"></div>
             </div>

@@ -9,6 +9,14 @@
  * - IPC integration with Python backend
  */
 
+/** A text field as high as its lines, at most FIELD_MAX_PX; then it scrolls. */
+const FIELD_MAX_PX = 120;
+function fitLines(field) {
+    if (!field || !field.style) return;
+    field.style.height = 'auto';
+    field.style.height = Math.min(field.scrollHeight || 0, FIELD_MAX_PX) + 'px';
+}
+
 class MultiverseApp {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -2589,7 +2597,8 @@ class MultiverseApp {
 
         // Toggle with 'c' key (for chat) — only when not typing in an input
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'c' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+            const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement && document.activeElement.tagName);
+            if (e.key === 'c' && !e.ctrlKey && !e.metaKey && !typing) {
                 e.preventDefault();
                 this.toggleGameConsole();
                 return;
@@ -2600,9 +2609,13 @@ class MultiverseApp {
             }
         });
 
-        // Enter sends
+        // The field grows with its lines (up to a few, then it scrolls); it is a textarea so that the
+        // lines of a sentence reach the Brain (an input dropped them, also when pasted).
+        input.addEventListener('input', () => fitLines(input));
+
+        // Enter sends, Shift+Enter starts a new line
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                 e.preventDefault();
                 // isTrusted: a key pressed by the person, not one raised by a script
                 this.sendGameConsoleMessage({ typed: e.isTrusted === true });
@@ -2651,6 +2664,7 @@ class MultiverseApp {
         if (!text) return;
 
         input.value = '';
+        fitLines(input);
         this.gcInFlight = (this.gcInFlight || 0) + 1;
         this.gcBusy = true;
 

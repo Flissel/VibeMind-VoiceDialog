@@ -44,6 +44,7 @@
 
 .gc-msg.gc-user {
     align-self: flex-end;
+    white-space: pre-wrap;   /* the lines of a sentence as written */
     background: rgba(var(--space-accent-rgb), 0.18);
     border: 1px solid rgba(var(--space-accent-rgb), 0.30);
     color: var(--vm-text-primary, #f0e8ff);
@@ -130,6 +131,11 @@
 /* Text input */
 .gc-input {
     flex: 1;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.4;
+    max-height: 120px;
+    padding: 0;
     background: transparent;
     border: none;
     outline: none;

@@ -289,6 +289,8 @@
         };
     }
 
+    const FIELD_MAX_PX = 120;   // the input grows with its lines up to this, then it scrolls
+
     function install() {
         const doc = root.document;
         const view = doc.getElementById('space-view');
@@ -334,9 +336,10 @@
         const log = el('div', 'ideas-chat-log');
         log.id = 'ideas-chat-log';
         const row = el('form', 'ideas-chat-row');
-        const input = el('input', 'ideas-chat-input');
+        // a textarea: the lines of a sentence reach the Brain (an input dropped them, also when pasted)
+        const input = el('textarea', 'ideas-chat-input');
         input.id = 'ideas-chat-input';
-        input.type = 'text';
+        input.rows = 1;
         input.autocomplete = 'off';
         input.placeholder = 'Notiz festhalten, formatieren, ordnen …';
         const send = el('button', 'ideas-chat-send', '▶');
@@ -665,15 +668,32 @@
             }
         }
 
-        row.addEventListener('submit', (event) => {
-            event.preventDefault();
+        /** The field as high as its lines, at most FIELD_MAX_PX; then it scrolls. */
+        const fit = () => {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight || 0, FIELD_MAX_PX) + 'px';
+        };
+        const sendField = (trusted) => {
             const text = input.value.trim();
             input.value = '';
-            // isTrusted: the browser itself raised the submit (Enter or click by the person), not a script.
-            submit(text, { typed: event.isTrusted === true });
+            fit();
+            submit(text, { typed: trusted });
+        };
+        row.addEventListener('submit', (event) => {
+            event.preventDefault();
+            // isTrusted: the browser itself raised the submit (a click by the person), not a script.
+            sendField(event.isTrusted === true);
         });
-        // Keys typed here must not reach the shortcuts of the scene.
-        input.addEventListener('keydown', (event) => event.stopPropagation());
+        input.addEventListener('input', fit);
+        input.addEventListener('keydown', (event) => {
+            // Keys typed here must not reach the shortcuts of the scene.
+            event.stopPropagation();
+            // Enter sends, Shift+Enter starts a new line (a textarea does not submit its form by itself)
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                sendField(event.isTrusted === true);
+            }
+        });
 
         root.addEventListener('vibemind:canvas-loaded', (event) => {
             nodes = (event.detail && Array.isArray(event.detail.nodes)) ? event.detail.nodes : [];

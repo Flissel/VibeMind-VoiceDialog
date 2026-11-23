@@ -128,11 +128,13 @@ test('a proposal for a changed card shows its sentence and two answers to click 
  * sendGameConsoleMessage of multiverse.js as it is, in a stand-in window: what goes to the Brain
  * with a sentence typed in the console of a tab.
  */
-async function consoleSends(space, ideasContext) {
+async function consoleSends(space, ideasContext, texts = ['Satz eins', 'Satz zwei']) {
     const start = scene.indexOf('    async sendGameConsoleMessage(');
     const end = scene.indexOf('\n    addGcMessage(', start);
     const method = scene.slice(start, end).replace(/\n\s*\/\*\*[\s\S]*?\*\/\s*$/, '');
-    const el = () => ({ value: '', classList: { add() {}, remove() {} } });
+    const el = () => ({ value: '', style: {}, scrollHeight: 20, classList: { add() {}, remove() {} } });
+    // the helper of the field at the top of multiverse.js (fitLines), as the page has it
+    const helper = /const FIELD_MAX_PX[\s\S]*?\n\}\n/.exec(scene)[0];
     const ids = { 'gc-input': el(), 'gc-spinner': el(), 'gc-send-btn': el() };
     const sent = [];
     const events = [];
@@ -148,15 +150,27 @@ async function consoleSends(space, ideasContext) {
         window, document: { getElementById: (id) => ids[id] },
         CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
     });
-    vm.runInContext('class Scene {\n' + method + '\n    addGcMessage() { return {}; }\n}\nthis.Scene = Scene;', context);
+    vm.runInContext(helper + 'class Scene {\n' + method + '\n    addGcMessage() { return {}; }\n}\nthis.Scene = Scene;', context);
     const app = new context.Scene();
     app.currentSpace = space;
-    for (const text of ['Satz eins', 'Satz zwei']) {
+    for (const text of texts) {
         ids['gc-input'].value = text;
         await app.sendGameConsoleMessage({ typed: true });
     }
-    return { sent, events };
+    return { sent, events, field: ids['gc-input'] };
 }
+
+// Lauf 14: a sentence with line breaks arrived in one line. The field was an input, which drops them.
+test('the console sends the lines of a sentence as written; the field is a textarea, Enter sends, Shift+Enter not', async () => {
+    const { sent, field } = await consoleSends('ideas', undefined, ['Halte fest: Karte 1\nerste Zeile\nzweite Zeile']);
+    assert.equal(sent[0].text, 'Halte fest: Karte 1\nerste Zeile\nzweite Zeile');
+    assert.equal(field.value, '', 'the field is empty after sending');
+    assert.match(html, /<textarea id="gc-input" class="gc-input" rows="1"/);
+    assert.doesNotMatch(html, /<input[^>]*id="gc-input"/);
+    assert.match(scene, /if \(e\.key === 'Enter' && !e\.shiftKey && !e\.isComposing\) \{/);
+    // typing a "c" into the field must not fold the console away
+    assert.match(scene, /\['INPUT', 'TEXTAREA'\]\.includes\(document\.activeElement/);
+});
 
 test('the console sends the space on screen with each sentence, and each sentence its own trace', async () => {
     for (const space of ['orders', 'video', 'sales', 'desktop']) {

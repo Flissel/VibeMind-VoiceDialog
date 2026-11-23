@@ -62,6 +62,7 @@
 
 .ideas-chat-user {
     align-self: flex-end;
+    white-space: pre-wrap;   /* the lines of a sentence as written */
     background: rgba(var(--space-accent-rgb), 0.2);
     border: 1px solid rgba(var(--space-accent-rgb), 0.35);
 }
@@ -106,6 +107,10 @@
 .ideas-chat-input {
     flex: 1;
     min-width: 0;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.4;
+    max-height: 120px;
     padding: 8px 12px;
     border-radius: 16px;
     border: 1px solid rgba(var(--space-accent-rgb), 0.3);
