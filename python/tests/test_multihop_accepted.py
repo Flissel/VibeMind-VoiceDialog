@@ -79,9 +79,12 @@ def test_the_chat_answer_says_pending_not_failed(monkeypatch):
     handlers = ClawPortHandlers.__new__(ClawPortHandlers)
     sent = []
     handlers.send_message = sent.append
-    asyncio.run(handlers.handle_chat_text_input({"type": "chat_text_input", "text": "recherchiere zu Karte 1"}))
+    asyncio.run(handlers.handle_chat_text_input({"type": "chat_text_input", "text": "recherchiere zu Karte 1",
+                                                 "request_id": "r1"}))
+    # plan_id: the plan this sentence started; request_id: the app finds the sentence it answers
     assert sent == [{"type": "chat_response", "success": True, "message": "Die Recherche laeuft.",
-                     "event_type": "brain.multihop", "pending": True, "status": "angenommen", "targets": [CARD], "orders": []}]
+                     "event_type": "brain.multihop", "plan_id": "p1", "pending": True, "status": "angenommen",
+                     "targets": [CARD], "orders": [], "request_id": "r1"}]
 
 
 ORDER = "00000000-0000-4000-8000-0000000000aa"

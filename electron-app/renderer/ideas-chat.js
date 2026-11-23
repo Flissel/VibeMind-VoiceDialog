@@ -260,6 +260,21 @@
                 byBubble.set(key, list);
             },
             get(key) { return (byBubble.get(key) || []).slice(); },
+            /**
+             * An answer belongs under the sentence that asked for it, after the answers it already has,
+             * also when it comes late (two sentences at once: the later answer came first). Without its
+             * sentence (cut from the history) it goes at the end.
+             */
+            addAnswer(key, ask, entry) {
+                const list = byBubble.get(key) || [];
+                let at = ask ? list.indexOf(ask) : -1;
+                if (at < 0) { this.add(key, entry); return; }
+                at += 1;
+                while (at < list.length && list[at].answerTo === ask) at += 1;
+                list.splice(at, 0, { ...entry, answerTo: ask });
+                if (list.length > HISTORY_MAX) list.splice(0, list.length - HISTORY_MAX);
+                byBubble.set(key, list);
+            },
         };
     }
 
@@ -273,7 +288,7 @@
         let lastId = null;       // the card last made or changed
         let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
         let planRuns = false;
-        let busy = false;
+        let inFlight = 0;        // sentences sent and not answered yet; several may run at once
         let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
         let staleKey = null;     // ... and the one whose "noch in Arbeit" the chat has already said
 
@@ -401,7 +416,7 @@
                 button.type = 'button';
                 button.disabled = entry.used === true;
                 button.addEventListener('click', (event) => {
-                    if (entry.used || busy) return;
+                    if (entry.used) return;
                     entry.used = true;
                     for (const other of choices.children) other.disabled = true;
                     submit(answer, { typed: event.isTrusted === true });
@@ -418,12 +433,16 @@
         }
 
         /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
-        function say(text, kind, key = bubbleKey(), answers = null) {
+        /** Write a line; with `ask` (the entry of the sentence) the line is that sentence's answer. */
+        function say(text, kind, key = bubbleKey(), answers = null, ask = null) {
             const entry = answers ? { text, kind, answers } : { text, kind };
-            history.add(key, entry);
-            if (key !== shownKey) return;
-            log.appendChild(line(entry));
+            if (ask) history.addAnswer(key, ask, entry);
+            else history.add(key, entry);
+            if (key !== shownKey) return entry;
+            if (ask) log.replaceChildren(...history.get(key).map(line));
+            else log.appendChild(line(entry));
             log.scrollTop = log.scrollHeight;
+            return entry;
         }
 
         function showHistory() {
@@ -445,6 +464,12 @@
                 return item;
             }));
             hint.hidden = !(nodes.length === 0 && cards.length === 0 && !view.classList.contains('hidden'));
+        }
+
+        /** The key of the space on screen (multiverse.js currentSpace), or '' before the scene is there. */
+        function visibleSpace() {
+            const app = root.multiverseApp;
+            return app && typeof app.currentSpace === 'string' ? app.currentSpace : '';
         }
 
         function openBubble() {
@@ -476,6 +501,9 @@
 
         /** Context for a sentence typed anywhere in the Ideas space (also used by the console below the overview). */
         function contextNow(newId) {
+            // The space on screen, as the scene keeps it: outside Ideas only that space, never bubble or cards.
+            const shown = visibleSpace();
+            if (shown && shown !== 'ideas') return { space: shown };
             const inside = !view.classList.contains('hidden');
             const canvas = root.spaceCanvas;
             // The canvas marks one card at a time; marking several in order is not there yet.
@@ -528,15 +556,15 @@
          * (a trusted submit); a call from code, a repeat or a follow-up leaves it false.
          */
         async function submit(text, { typed = false } = {}) {
-            if (!text || busy) return;
-            busy = true;
+            if (!text) return;
+            inFlight += 1;
             panel.dataset.busy = 'true';
             const asked = bubbleKey();
             root.dispatchEvent(new root.CustomEvent('vibemind:sentence-sent'));
-            say(text, 'user', asked);
+            const ask = say(text, 'user', asked);
             const note = noteText(text);
             const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
-            waiting = !newId;
+            waiting = waiting || !newId;
             showState();
             if (newId) {
                 store.pending(newId, note);
@@ -569,23 +597,23 @@
                 if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
                 if (proposes) {
-                    say(proposal.text, 'vorschlag', asked, proposal.answers);
+                    say(proposal.text, 'vorschlag', asked, proposal.answers, ask);
                 } else if (accepted) {
                     acceptedKey = asked;
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
-                    say(ACCEPTED_LINE + said, 'agent', asked);
+                    say(ACCEPTED_LINE + said, 'agent', asked, null, ask);
                 } else {
-                    say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked);
+                    say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked, null, ask);
                 }
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
                 if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] sentence failed', { error: String(error && error.message) });
-                say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked);
+                say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked, null, ask);
             } finally {
-                busy = false;
-                waiting = false;
+                inFlight = Math.max(0, inFlight - 1);
+                if (!inFlight) waiting = false;
                 showState();
-                delete panel.dataset.busy;
+                if (!inFlight) delete panel.dataset.busy;
                 renderCards();
             }
         }
@@ -663,7 +691,9 @@
 
         // While a bubble is open this chat is the one place to type; the console below the scene rests.
         const sync = () => {
-            const inside = !view.classList.contains('hidden');
+            // Open only with the bubble view on screen in the Ideas space; elsewhere the console is the field.
+            const shown = visibleSpace();
+            const inside = !view.classList.contains('hidden') && (!shown || shown === 'ideas');
             doc.body.classList.toggle('ideas-chat-open', inside);
             const titleEl = doc.getElementById('space-title');
             headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
@@ -675,6 +705,7 @@
         new root.MutationObserver(sync).observe(view, { attributes: true, attributeFilter: ['class'] });
         const titleEl = doc.getElementById('space-title');
         if (titleEl) new root.MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
+        root.addEventListener('vibemind:space-arrived', sync);
         sync();
 
         // fold / folded: the button "Chat" of the fixed bar of the bubble (bubble-bar.js)

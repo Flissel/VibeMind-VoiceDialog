@@ -458,8 +458,12 @@ function startPythonBackend() {
                 }
                 
                 // Check for pending ClawPort response handlers
-                if (message.type && pendingPythonResponses.has(message.type)) {
-                    const handler = pendingPythonResponses.get(message.type);
+                // An answer that names its request goes to that request only (two sentences at once
+                // got each other's answers: one waiter per type, the later replaced the earlier).
+                const waiterKey = message.type && message.request_id != null
+                    ? responseKey(message.type, message.request_id) : message.type;
+                if (waiterKey && pendingPythonResponses.has(waiterKey)) {
+                    const handler = pendingPythonResponses.get(waiterKey);
                     handler(message);
                 }
 
@@ -694,16 +698,30 @@ function sendToPython(message) {
  * Send message to Python and wait for a response with matching type.
  * Used by ClawPort dashboard IPC handlers that need return values.
  */
-function sendToPythonAndWait(message, responseType, timeoutMs = 10000) {
+/** The waiter of one request: its answer type and the id Python echoes (request_id). */
+function responseKey(responseType, requestId) {
+    return `${responseType}#${requestId}`;
+}
+
+let nextRequestId = 0;
+
+function sendToPythonAndWait(message, responseType, timeoutMs = 10000, { perRequest = false } = {}) {
     return new Promise((resolve, reject) => {
+        // perRequest: every call waits for its own answer, also when several run at once.
+        let key = responseType;
+        if (perRequest) {
+            nextRequestId += 1;
+            message = { ...message, request_id: `r${Date.now().toString(36)}-${nextRequestId}` };
+            key = responseKey(responseType, message.request_id);
+        }
         const timeout = setTimeout(() => {
-            pendingPythonResponses.delete(responseType);
+            pendingPythonResponses.delete(key);
             reject(new Error(`Timeout waiting for ${responseType}`));
         }, timeoutMs);
 
-        pendingPythonResponses.set(responseType, (response) => {
+        pendingPythonResponses.set(key, (response) => {
             clearTimeout(timeout);
-            pendingPythonResponses.delete(responseType);
+            pendingPythonResponses.delete(key);
             resolve(response);
         });
 
@@ -2598,7 +2616,7 @@ function setupIpcHandlers() {
         try {
             // The chat of the Dashboard tab: its sentences name that space, like every chat field of the app.
             // Only the space, never the mark of the person: this page has no proof of a send by them.
-            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', 30000);
+            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', 30000, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] clawport: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };
@@ -2612,7 +2630,7 @@ function setupIpcHandlers() {
             // Only here is the mark "typed by the person" set, with the proof of this main process
             // (chat-input.js); the Brain runs Desktop tasks only with it.
             const message = chatMessage(text, context, typed);
-            return await sendToPythonAndWait(message, 'chat_response', 30000);
+            return await sendToPythonAndWait(message, 'chat_response', 30000, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] renderer: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };

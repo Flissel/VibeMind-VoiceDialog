@@ -236,7 +236,7 @@ test('a hint or a question back is never "✕ fehlgeschlagen": calm, with ℹ or
     await h.send('Mach Karte 1 zur Tabelle');
     assert.doesNotMatch(h.chatLog().join('\n'), /fehlgeschlagen|Keine Antwort/);
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
-    assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked\);/);
+    assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked, null, ask\);/);
     const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'titlebar.css'), 'utf8');
     assert.match(css, /\.task-status\[data-state="note"\] \{/);
 });

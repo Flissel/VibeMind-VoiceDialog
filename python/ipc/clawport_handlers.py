@@ -165,9 +165,17 @@ class ClawPortHandlers:
         If a VibeCoder session is active, routes follow-up messages to it.
         Otherwise routes through the normal intent orchestrator.
         """
+        # The app waits for the answer of this one sentence: the id travels back unchanged.
+        request_id = message.get("request_id")
+
+        def reply(answer: dict) -> None:
+            if isinstance(request_id, str) and request_id:
+                answer = {**answer, "request_id": request_id}
+            self.send_message(answer)
+
         text = message.get("text", "").strip()
         if not text:
-            self.send_message({
+            reply({
                 "type": "chat_response",
                 "success": False,
                 "message": "Empty input",
@@ -183,7 +191,7 @@ class ClawPortHandlers:
                 mgr = get_workflow_chat_manager()
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, mgr.send_message, vibecoder_sid, text)
-                self.send_message({
+                reply({
                     "type": "chat_response",
                     "success": True,
                     "message": result.get("response", result.get("message", "OK")),
@@ -204,7 +212,7 @@ class ClawPortHandlers:
             from swarm.orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
             if not orchestrator:
-                self.send_message({
+                reply({
                     "type": "chat_response",
                     "success": False,
                     "message": "Orchestrator not available",
@@ -242,6 +250,10 @@ class ClawPortHandlers:
                 "message": response_msg,
                 "event_type": event_type,
             }
+            # The plan of the Brain this sentence started: the status line ends by it.
+            job_id = getattr(result, "job_id", None) if result else None
+            if isinstance(event_type, str) and event_type.startswith("brain.multihop") and isinstance(job_id, str)                     and job_id and not job_id.startswith("brain-multihop"):
+                answer["plan_id"] = job_id
             if event_type == "brain.multihop.question":
                 answer["question"] = True
             # A hint of the Brain: shown calmly as information, never as a failure.
@@ -260,11 +272,11 @@ class ClawPortHandlers:
             if isinstance(tool_result, dict) and isinstance(tool_result.get("vorschlag"), dict):
                 answer["success"] = True
                 answer["vorschlag"] = dict(tool_result["vorschlag"])
-            self.send_message(answer)
+            reply(answer)
         except Exception as e:
             # The raw error goes to the log; the chat gets a German sentence.
             debug_log(f"Chat input error: {e}")
-            self.send_message({
+            reply({
                 "type": "chat_response",
                 "success": False,
                 "message": "Das hat nicht geklappt. Bitte noch einmal versuchen.",

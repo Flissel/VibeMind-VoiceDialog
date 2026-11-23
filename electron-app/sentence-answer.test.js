@@ -63,7 +63,7 @@ test('not understood is a calm question back; an error shows the German sentence
     assert.equal(view(null).kind, 'fehler');
     assert.deepEqual(view({ success: true, message: 'Notiz angelegt.' }), { kind: 'antwort', text: 'Notiz angelegt.' });
 
-    assert.match(scene, /shown\.kind === 'fehler' \? 'error' : shown\.kind === 'rueckfrage' \|\| shown\.kind === 'hinweis' \? shown\.kind : 'agent'/);
+    assert.match(scene, /shown\.kind === 'fehler' \? 'error'\s*: shown\.kind === 'rueckfrage' \|\| shown\.kind === 'hinweis' \? shown\.kind/);
     assert.deepEqual(view({ success: true, hinweis: true, message: 'Die Tabelle hat keine Spalten.' }), { kind: 'hinweis', text: 'Die Tabelle hat keine Spalten.' });
     assert.doesNotMatch(scene, /`Error: \$\{err\.message\}`/, 'no raw error in the console');
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'game-console.css'), 'utf8'), /\.gc-msg\.gc-rueckfrage \{/);
@@ -112,10 +112,10 @@ test('a proposal for a changed card shows its sentence and two answers to click 
     assert.deepEqual(proposalOf({ vorschlag: { karte: 7, titel: ' ' } }), {});
 
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
-    assert.match(chat, /say\(proposal\.text, 'vorschlag', asked, proposal\.answers\)/);
+    assert.match(chat, /say\(proposal\.text, 'vorschlag', asked, proposal\.answers, ask\)/);
     // a click sends the sentence as the person's own (trusted click), once; typing it works the same way
     assert.match(chat, /submit\(answer, \{ typed: event\.isTrusted === true \}\)/);
-    assert.match(chat, /if \(entry\.used \|\| busy\) return;\s*entry\.used = true;/);
+    assert.match(chat, /if \(entry\.used\) return;\s*entry\.used = true;/);
     assert.match(chat, /const failed = !accepted && !asks && !hint && !proposes &&/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'ideas-chat.css'), 'utf8'), /\.ideas-chat-vorschlag \{/);
     assert.match(fs.readFileSync(path.join(__dirname, '..', 'python', 'ipc', 'clawport_handlers.py'), 'utf8'), /answer\["vorschlag"\] = dict\(tool_result\["vorschlag"\]\)/);
