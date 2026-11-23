@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildContext, noteText, cardTitle, createCardStore, MAX_CARDS } = require('./renderer/ideas-chat');
+const { buildContext, noteText, cardTitle, createCardStore, createHistory, MAX_CARDS, HISTORY_MAX } = require('./renderer/ideas-chat');
 
 test('inside a bubble the context names the bubble and its cards', () => {
     const context = buildContext({
@@ -135,4 +135,23 @@ test('the chat uses the existing way and is wired into the page', () => {
     assert.doesNotMatch(chat, /fetch\(|WebSocket|XMLHttpRequest|EventSource/, 'no channel of its own');
     assert.match(canvas, /vibemind:canvas-loaded/);
     assert.match(canvas, /vibemind:canvas-node-added/);
+});
+
+test('each bubble has its own chat history', () => {
+    const history = createHistory();
+
+    history.add('b1', { text: 'Notiere: A', kind: 'user' });
+    history.add('b2', { text: 'Notiere: B', kind: 'user' });
+    history.add('b1', { text: 'festgehalten', kind: 'agent' });
+
+    assert.deepEqual(history.get('b1').map((e) => e.text), ['Notiere: A', 'festgehalten']);
+    assert.deepEqual(history.get('b2').map((e) => e.text), ['Notiere: B']);
+    assert.deepEqual(history.get('gibt-es-nicht'), []);
+
+    history.get('b1').push({ text: 'von aussen', kind: 'user' });
+    assert.equal(history.get('b1').length, 2, 'the list handed out is a copy');
+
+    for (let i = 0; i < HISTORY_MAX + 5; i++) history.add('b3', { text: String(i), kind: 'user' });
+    assert.equal(history.get('b3').length, HISTORY_MAX);
+    assert.equal(history.get('b3')[0].text, '5', 'the oldest lines go first');
 });

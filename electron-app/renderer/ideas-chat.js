@@ -133,6 +133,25 @@
         };
     }
 
+    const HISTORY_MAX = 200;
+
+    /**
+     * The chat history, one per bubble (key = id of the bubble). Kept in memory: it is gone when
+     * the app restarts. Where it should be stored is not decided yet.
+     */
+    function createHistory() {
+        const byBubble = new Map();
+        return {
+            add(key, entry) {
+                const list = byBubble.get(key) || [];
+                list.push(entry);
+                if (list.length > HISTORY_MAX) list.splice(0, list.length - HISTORY_MAX);
+                byBubble.set(key, list);
+            },
+            get(key) { return (byBubble.get(key) || []).slice(); },
+        };
+    }
+
     function install() {
         const doc = root.document;
         const view = doc.getElementById('space-view');
@@ -178,11 +197,32 @@
         view.append(stack, hint, panel);
         view.classList.add('with-chat');
 
-        function say(text, kind) {
-            const line = el('div', 'ideas-chat-msg ideas-chat-' + kind, text);
-            log.appendChild(line);
+        const history = createHistory();
+        let shownKey = null;     // the bubble whose history is in the log
+
+        function line(entry) {
+            return el('div', 'ideas-chat-msg ideas-chat-' + entry.kind, entry.text);
+        }
+
+        function bubbleKey() {
+            const bubble = view.classList.contains('hidden') ? null : openBubble();
+            return bubble ? String(bubble.id) : '';
+        }
+
+        /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
+        function say(text, kind, key = bubbleKey()) {
+            history.add(key, { text, kind });
+            if (key !== shownKey) return;
+            log.appendChild(line({ text, kind }));
             log.scrollTop = log.scrollHeight;
-            return line;
+        }
+
+        function showHistory() {
+            const key = bubbleKey();
+            if (key === shownKey) return;
+            shownKey = key;
+            log.replaceChildren(...history.get(key).map(line));
+            log.scrollTop = log.scrollHeight;
         }
 
         function renderCards() {
@@ -249,7 +289,8 @@
             if (!text || busy) return;
             busy = true;
             panel.dataset.busy = 'true';
-            say(text, 'user');
+            const asked = bubbleKey();
+            say(text, 'user', asked);
             const note = noteText(text);
             const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
             waiting = !newId;
@@ -265,10 +306,10 @@
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
                 if (failed && newId) store.reject(newId, message);
                 if (!failed) applyAnswer(response, newId, note);
-                say(message, failed ? 'error' : 'agent');
+                say(message, failed ? 'error' : 'agent', asked);
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
-                say('Fehler: ' + error.message, 'error');
+                say('Fehler: ' + error.message, 'error', asked);
             } finally {
                 busy = false;
                 waiting = false;
@@ -290,6 +331,7 @@
         root.addEventListener('vibemind:canvas-loaded', (event) => {
             nodes = (event.detail && Array.isArray(event.detail.nodes)) ? event.detail.nodes : [];
             store.matchLoaded(nodes);
+            showHistory(); // the bubble is known for certain once its rows are loaded
             renderCards();
         });
         root.addEventListener('vibemind:canvas-node-added', (event) => {
@@ -325,6 +367,7 @@
             const titleEl = doc.getElementById('space-title');
             headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
             if (!inside) { nodes = []; lastId = null; }
+            showHistory();
             renderCards();
         };
         new root.MutationObserver(sync).observe(view, { attributes: true, attributeFilter: ['class'] });
@@ -335,7 +378,7 @@
         return { submit, contextNow, store };
     }
 
-    const api = { buildContext, noteText, cardTitle, createCardStore, MAX_CARDS };
+    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, MAX_CARDS, HISTORY_MAX };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
