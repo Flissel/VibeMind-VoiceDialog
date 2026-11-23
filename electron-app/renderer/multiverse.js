@@ -2578,11 +2578,11 @@ class MultiverseApp {
         // Sentences with their answers, kept as pairs; nothing fades (an answer read later must still be there).
         this.GC_MAX_PAIRS = 8;
 
-        // Show console immediately and shift voice panel up
+        // Show console immediately; the voice panel stands above it, however tall its pair list grows
         const gcEl = document.getElementById('game-console');
         if (gcEl) gcEl.classList.remove('hidden');
-        const voicePanel = document.getElementById('voice-panel');
-        if (voicePanel) voicePanel.style.bottom = '90px';
+        if (gcEl && typeof ResizeObserver === 'function') new ResizeObserver(() => this._placeVoicePanel()).observe(gcEl);
+        this._placeVoicePanel();
 
         const input = document.getElementById('gc-input');
         const sendBtn = document.getElementById('gc-send-btn');
@@ -2617,17 +2617,26 @@ class MultiverseApp {
         console.log('[Multiverse] Game console initialized (press ` to toggle)');
     }
 
+    /**
+     * The voice panel stands just above the console. A fixed 90 px held only the input row: with
+     * pairs in the list the console grew over the panel and covered it (measured 2026-11-23).
+     */
+    _placeVoicePanel() {
+        const voicePanel = document.getElementById('voice-panel');
+        if (!voicePanel) return;
+        const gcEl = document.getElementById('game-console');
+        const height = gcEl && this.gcVisible ? gcEl.offsetHeight : 0;
+        // 16 px: the console's own distance from the bottom; 8 px of air between the two
+        voicePanel.style.bottom = height > 0 ? `${16 + height + 8}px` : '20px';
+        voicePanel.style.transition = 'bottom 0.25s ease';
+    }
+
     toggleGameConsole() {
         const el = document.getElementById('game-console');
         this.gcVisible = !this.gcVisible;
         el.classList.toggle('hidden', !this.gcVisible);
 
-        // Shift voice panel to avoid overlap
-        const voicePanel = document.getElementById('voice-panel');
-        if (voicePanel) {
-            voicePanel.style.bottom = this.gcVisible ? '90px' : '20px';
-            voicePanel.style.transition = 'bottom 0.25s ease';
-        }
+        this._placeVoicePanel();
 
         if (this.gcVisible) {
             document.getElementById('gc-input').focus();

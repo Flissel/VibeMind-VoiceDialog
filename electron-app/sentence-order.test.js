@@ -237,3 +237,25 @@ test('another tab while a bubble is open: the app no longer thinks itself inside
     assert.equal(app.isInsideBubble, false, 'the move to Rowboat is running, so the exit animation never cleared the flag');
     assert.equal(overlay.classList.contains('active'), false);
 });
+
+test('the voice panel stands above the console, however many pairs its list holds', () => {
+    const scene = read('renderer/multiverse.js');
+    const start = scene.indexOf('\n    _placeVoicePanel(');
+    const method = scene.slice(start, scene.indexOf('\n    }\n', start) + 7);
+    const panel = { style: {} };
+    const consoleEl = { offsetHeight: 60 };
+    const sandbox = { document: { getElementById: (id) => ({ 'voice-panel': panel, 'game-console': consoleEl })[id] || null } };
+    vm.runInNewContext(`class Scene {${method}} this.Scene = Scene;`, sandbox);
+    const app = new sandbox.Scene();
+    app.gcVisible = true;
+    app._placeVoicePanel();
+    assert.equal(panel.style.bottom, '84px', 'only the input row: just above it');
+    consoleEl.offsetHeight = 60 + 160;   // the pair list at its full height
+    app._placeVoicePanel();
+    assert.equal(panel.style.bottom, '244px', 'the list grew: the panel moves up with it, nothing covers it');
+    app.gcVisible = false;
+    app._placeVoicePanel();
+    assert.equal(panel.style.bottom, '20px', 'console closed: back to its own place');
+    assert.match(scene, /new ResizeObserver\(\(\) => this\._placeVoicePanel\(\)\)\.observe\(gcEl\)/, 'each new pair moves it again');
+    assert.doesNotMatch(scene, /voicePanel\.style\.bottom = '90px'/);
+});
