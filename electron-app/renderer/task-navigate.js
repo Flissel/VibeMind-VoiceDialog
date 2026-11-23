@@ -20,10 +20,18 @@
     const RETRY_LIMIT = 24;     // ... for six seconds at most
     const KEEP_MS = 30000;      // a finished task stays visible this long
 
+    /**
+     * Spaces a plan never jumps to. They work in the background; their result is shown in the
+     * status line all the same, and their tab still opens them by hand. Desktop: the eyes of the
+     * Brain, not a place to look at (2026-11-23).
+     */
+    const NO_JUMP = Object.freeze(['desktop']);
+
     /** What to do with a task that belongs to `space`. */
     function decide({ space, currentSpace, knownSpaces, lastInputAt, now, insideBubble }) {
         if (!space || !knownSpaces.includes(space)) return 'ignore';
         if (space === currentSpace) return 'ignore';
+        if (NO_JUMP.includes(space)) return 'stay';
         if (insideBubble) return 'note';                      // do not pull the user out of an open bubble
         if (now - lastInputAt < BUSY_MS) return 'note';
         return 'navigate';
@@ -68,7 +76,8 @@
             const why = message.error ? ` — ${message.error}` : '';
             return { state, text: `✕ ${label}: fehlgeschlagen${why}${arrow}`, title: message.error || '' };
         }
-        const result = message.result ? ` — ${message.result}` : '';
+        // Raw data of a tool ("{'_meta': …}") is never shown; then the line just says "fertig".
+        const result = message.result && !isRaw(message.result) ? ` — ${message.result}` : '';
         return {
             state,
             text: `✓ ${label}: fertig${took ? ' in ' + took : ''}${result}${arrow}`,
@@ -79,12 +88,18 @@
     const LINE_MAX = 240;
     const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
     const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
+    const ANSWER_WAIT_MS = 5000;                 // plan done before the answer came: wait this long for it
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
 
     /** One line of at most 240 characters out of any text. */
     function shorten(text) {
         const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
         return line.length > LINE_MAX ? line.slice(0, LINE_MAX - 1) + '…' : line;
+    }
+
+    /** Data of a tool rather than a sentence for a person: a dict, list or call, or its meta field. */
+    function isRaw(text) {
+        return typeof text === 'string' && (/^\s*[[{(<]/.test(text) || /['"]_meta['"]/.test(text));
     }
 
     const finished = (message) => Boolean(message) && (message.state === 'done' || message.state === 'failed');
@@ -100,7 +115,8 @@
     function shows(message, onScreen) {
         if (!message || !message.space) return 'none';
         if (!finished(message)) return 'line';
-        return message.space === onScreen ? 'line' : 'dot';
+        // A space without jump is never on screen by itself: its result stands wherever the user is.
+        return message.space === onScreen || NO_JUMP.includes(message.space) ? 'line' : 'dot';
     }
 
     function install() {
@@ -112,6 +128,8 @@
         let followed = '';       // the space the app is jumping to because of a task
         let answer = '';         // the answer to the sentence last sent, once it is there
         let refusal = '';        // ... or the Brain's sentence on why it did not work
+        let awaiting = false;    // a sentence of the app was sent and its answer is not there yet
+        let answerTimer = null;  // ... how long a finished plan waits for that answer
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => {
                 lastInputAt = Date.now();
@@ -185,7 +203,22 @@
                 return;
             }
             const app = root.multiverseApp;
-            const onScreen = app ? app.currentSpace : current.space;
+            // While the app is on its way into the space of the task, that space counts as on
+            // screen: a result arriving during the camera move was hidden until the arrival
+            // (line empty for 0.5 to 0.7 s, measured 2026-11-23).
+            const arriving = followed !== '' && followed === current.space;
+            const onScreen = arriving || !app ? current.space : app.currentSpace;
+            // The plan is done but the answer to the sentence is not there yet: its last step only
+            // has raw data of a tool. The neutral line stays until the sentence for the person comes.
+            if (current.state === 'done' && awaiting && !answer) {
+                el.textContent = WAITING_TEXT;
+                el.title = '';
+                el.dataset.state = 'running';
+                el.dataset.space = current.space;
+                el.hidden = false;
+                markTab(current.space, 'running');
+                return;
+            }
             const line = describe(current, labelFor(current.space, app && app.spaces), onScreen !== current.space);
             el.textContent = line.text;
             el.title = line.title;
@@ -213,6 +246,8 @@
             lastInputAt = 0;
             answer = '';
             refusal = '';
+            awaiting = true;
+            root.clearTimeout(answerTimer);
             fresh();
             // The first thing to see after a sentence, before the Brain has said anything: a neutral
             // line. The first event of the plan replaces it; an answer without a plan removes it.
@@ -229,6 +264,8 @@
         // Answer and end of the plan arrive in either order.
         root.addEventListener('vibemind:sentence-answered', (event) => {
             const detail = (event && event.detail) || {};
+            awaiting = false;
+            root.clearTimeout(answerTimer);
             answer = detail.success === false ? '' : shorten(detail.text);
             // A tool refused or failed: the Brain's sentence says why, in words for the user.
             refusal = detail.success === false ? shorten(detail.text) : '';
@@ -240,9 +277,9 @@
                 root.clearTimeout(keepTimer);
                 keepTimer = root.setTimeout(() => { if (current && current.waiting) clear(); }, ANSWER_GRACE_MS);
             }
-            if (answer && current && current.state === 'done') {
-                current.result = answer;
-                render();
+            if (current && current.state === 'done') {
+                if (answer) current.result = answer;
+                render(); // also ends the neutral line a finished plan kept while waiting for this answer
             }
             if (refusal && current && current.state === 'failed') {
                 current.error = refusal;
@@ -259,6 +296,11 @@
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
             if (message.state === 'done' || message.state === 'failed') keepTimer = root.setTimeout(clear, KEEP_MS);
+            // A finished plan waits a little for the answer to the sentence; then it shows "fertig" without it.
+            if (message.state === 'done' && awaiting && !answer) {
+                root.clearTimeout(answerTimer);
+                answerTimer = root.setTimeout(() => { awaiting = false; render(); }, ANSWER_WAIT_MS);
+            }
             // A finished task of an external space may name a path of its page ("/seite/7"): the page goes there.
             const app = root.multiverseApp;
             const external = app && app.spaces && app.spaces[message.space] && app.spaces[message.space].external;
@@ -281,7 +323,7 @@
                 now: Date.now(),
                 insideBubble: Boolean(app.isInsideBubble),
             });
-            // 'note' needs nothing here: the status that follows says where the task runs.
+            // 'note' and 'stay' need nothing here: the status that follows says where the task runs.
             if (action === 'navigate') {
                 followed = message.space;
                 jump(message.space);
@@ -308,7 +350,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS, WAITING_TEXT, ANSWER_GRACE_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

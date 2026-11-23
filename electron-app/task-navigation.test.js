@@ -252,7 +252,8 @@ test('a finished task shows the answer to the sentence, not the raw result of it
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
 
     assert.match(page, /if \(message\.state === 'done' && answer\) message = \{ \.\.\.message, result: answer \};/, 'the answer came first');
-    assert.match(page, /if \(answer && current && current\.state === 'done'\) \{\s*current\.result = answer;/, 'the end of the plan came first');
+    assert.match(page, /if \(current && current\.state === 'done'\) \{\s*if \(answer\) current\.result = answer;/, 'the end of the plan came first');
+    // the order of events itself is played through in task-status-line.test.js
     assert.match(scene, /CustomEvent\('vibemind:sentence-answered'/);
     assert.match(chat, /CustomEvent\('vibemind:sentence-answered'/);
 

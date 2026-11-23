@@ -137,17 +137,77 @@ test('a jump of a plan still waiting for a camera move is dropped once the perso
     assert.equal(s.app.currentSpace, 'roarboot', 'the plan does not pull the person away afterwards');
 });
 
-test('a Desktop sentence jumps to the Desktop space and opens its screen view', () => {
+test('a Desktop sentence does not jump; its result stands in the line wherever the user is', () => {
+    // 2026-11-23: the Desktop space works in the background as the eyes of the Brain.
     const s = scene({ currentSpace: 'roarboot' });
     const b = brain(s, 'desktop', 'desktop_open_app');
     typedSentence(s);
     b.started();
-    assert.equal(s.app.currentSpace, 'desktop', 'the jump comes with plan_started once space is set');
-    assert.equal(s.app.dashboardOpened, 1);
     b.hopStarted(); b.hopCompleted(); b.completed();
     s.emit('vibemind:sentence-answered', { text: 'Der Rechner ist offen.', success: true });
+    for (let i = 0; i < 40; i++) s.advance(300); // every retry and wait runs out
+    assert.equal(s.app.currentSpace, 'roarboot', 'no jump into the Desktop space');
+    assert.equal(s.app.dashboardOpened, 0);
     assert.equal(s.visible(), true);
-    assert.match(s.text(), /^✓ Desktop: fertig in 1,3 s — Der Rechner ist offen\.$/);
+    assert.match(s.text(), /^✓ Desktop: fertig in 1,3 s — Der Rechner ist offen\. →$/);
+});
+
+test('an Ideas sentence still jumps (the list of spaces without jump names only desktop)', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const b = brain(s, 'ideas', 'idea_list');
+    typedSentence(s);
+    b.started();
+    assert.equal(s.app.currentSpace, 'ideas');
+});
+
+test('raw data of a tool is never shown: the neutral line stays until the sentence comes', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const navigator = createTaskNavigator((message) => s.handle(message));
+    typedSentence(s);
+    navigator.handle('plan_started', { plan_id: 'p1', hops: [{}], space: 'desktop', intent: 'x' });
+    navigator.handle('hop_started', { space: 'desktop', capability: 'desktop_open_app' });
+    const seen = [s.text()];
+    navigator.handle('hop_completed', { space: 'desktop', ok: true, result_preview: "{'_meta': {'progressToken': 3}, 'content': [{'type': 'text'}]}" });
+    seen.push(s.text());
+    navigator.handle('plan_completed', { plan_id: 'p1', ok: true, elapsed_s: 2.1 });
+    seen.push(s.text());
+    assert.equal(s.visible(), true, 'never empty in between');
+    assert.equal(s.text(), '● arbeitet …');
+    s.advance(600);
+    s.emit('vibemind:sentence-answered', { text: 'Der Rechner ist offen.', success: true });
+    seen.push(s.text());
+    for (const text of seen) assert.doesNotMatch(text, /_meta|\{'/, text);
+    assert.match(s.text(), /— Der Rechner ist offen\./);
+});
+
+test('without an answer the finished line comes after a short wait, still without raw data', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const navigator = createTaskNavigator((message) => s.handle(message));
+    typedSentence(s);
+    navigator.handle('plan_started', { plan_id: 'p1', hops: [{}], space: 'desktop', intent: 'x' });
+    navigator.handle('hop_completed', { space: 'desktop', ok: true, result_preview: "{'_meta': {}}" });
+    navigator.handle('plan_completed', { plan_id: 'p1', ok: true, elapsed_s: 2.1 });
+    assert.equal(s.text(), '● arbeitet …');
+    s.advance(5000);
+    assert.equal(s.visible(), true);
+    assert.equal(s.text(), '✓ Desktop: fertig in 2,1 s →');
+});
+
+test('a result that arrives during the camera move into its space is shown at once', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const b = brain(s, 'bubbles', 'bubble_list');
+    // the move does not end at once here: the switch waits for it
+    s.app.isNavigating = true;
+    typedSentence(s);
+    s.emit('vibemind:sentence-answered', { text: ANSWER, success: true });
+    b.started(); b.hopStarted(); b.hopCompleted(); b.completed();
+    assert.equal(s.app.currentSpace, 'roarboot', 'still on the way');
+    assert.equal(s.visible(), true, 'the line is not hidden while the app is on its way');
+    assert.match(s.text(), /fertig in 1,3 s — 15 Bubbles/);
+    s.app.isNavigating = false;
+    s.advance(300);
+    assert.equal(s.app.currentSpace, 'ideas');
+    assert.equal(s.visible(), true);
 });
 
 test('an answer that comes before the events of the plan does not make the line vanish and come back', () => {
