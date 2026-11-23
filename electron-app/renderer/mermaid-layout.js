@@ -114,6 +114,8 @@
         });
     }
 
+    const LOOSE_SID = 'OHNE_GRUPPE';   // no card has it: card ids become n_…
+
     function _buildGraph(nodes, edges) {
         // Phase 11.U.I rev4 — TD (top-down) instead of LR.
         // With LR + many disjoint clusters, Mermaid stacks them in vertical
@@ -128,8 +130,9 @@
             '    classDef formattedNode fill:#1e293b,stroke:#10b981,stroke-width:3px,color:#fff,font-size:14px,radius:8px',
             '    classDef formattedRoot fill:#312e81,stroke:#10b981,stroke-width:3px,color:#fff,font-size:16px,radius:10px',
             '    classDef hubNode fill:transparent,stroke:transparent,color:transparent',
-            // the heading of a group: stands over its column
-            '    classDef groupHead fill:#3b2f0b,stroke:#f59e0b,stroke-width:2px,color:#fde68a,font-size:15px,font-weight:bold',
+            // the heading of a group: stands over its column. No card frame, larger, underlined: in the
+            // top row next to cards it looked like one of them (Lauf 11).
+            '    classDef groupHead fill:transparent,stroke:transparent,color:#fde68a,font-size:19px,font-weight:bold,text-decoration:underline',
         ];
         const nodeIdSet = new Set(nodes.map(n => String(n.id)));
 
@@ -164,6 +167,13 @@
             }
         }
 
+        // Cards in no group (no column, nothing points to them): their own last column "Ohne Gruppe"
+        // with a heading. In the top row beside the headings they looked like headings (Lauf 11).
+        const loose = groups.length ? nodes.filter((n) => !headIds.has(String(n.id)) && !incoming.get(String(n.id)))
+            .sort((a, b) => ((_coord(a, 'y') ?? 0) - (_coord(b, 'y') ?? 0)) || ((_coord(a, 'x') ?? 0) - (_coord(b, 'x') ?? 0)))
+            .map((n) => String(n.id)) : [];
+        for (const id of loose) incoming.set(id, (incoming.get(id) || 0) + 1);
+
         // Cluster: each root + its direct children (one level only).
         // Maps sanitized-id → cluster_index (so SVG-traversal can find membership).
         const clusters = [];  // [{root: origId, members: Set<sanitizedId>}]
@@ -185,6 +195,12 @@
                     if (!nodeToCluster.has(m)) nodeToCluster.set(m, idx);
                 }
             }
+        }
+        if (loose.length) {   // the column "Ohne Gruppe" drags as one, as the other columns
+            const members = new Set([LOOSE_SID, ...loose.map(_sanitizeId)]);
+            const idx = clusters.length;
+            clusters.push({ root: LOOSE_SID, members });
+            for (const m of members) if (!nodeToCluster.has(m)) nodeToCluster.set(m, idx);
         }
         // Any node that didn't get assigned (deep grandchildren or isolated)
         // becomes its own single-node cluster so it's still dragable.
@@ -236,6 +252,13 @@
         }
 
         for (const [from, to] of groupLinks) lines.push(`    ${_sanitizeId(from)} ~~~ ${_sanitizeId(to)}`);
+        if (loose.length) {
+            lines.push(`    ${LOOSE_SID}["Ohne Gruppe"]`);
+            lines.push(`    class ${LOOSE_SID} groupHead`);
+            rootSids.push(LOOSE_SID);   // the last column
+            let above = LOOSE_SID;
+            for (const id of loose) { lines.push(`    ${above} ~~~ ${_sanitizeId(id)}`); above = _sanitizeId(id); }
+        }
 
         // Invisible hub forces all roots onto one rank. We use SOLID --> edges
         // (not dotted -.- which Mermaid sometimes ignores for layout) and

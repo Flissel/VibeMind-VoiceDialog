@@ -37,9 +37,23 @@ test('grouped cards stand in columns under their heading, not all in one row', (
     assert.ok(lines.includes('n_0000abcd_0011 ~~~ n_0000abcd_0013'));
     assert.ok(lines.includes('n_0000abcd_0002 ~~~ n_0000abcd_0021'));
 
-    const hub = lines.filter((l) => l.startsWith('HUB -->')).map((l) => l.slice('HUB --> '.length)).sort();
-    assert.deepEqual(hub, ['n_0000abcd_0001', 'n_0000abcd_0002', 'n_0000abcd_0099'],
-        'the top row: the headings and the card without a group, no member');
+    const hub = lines.filter((l) => l.startsWith('HUB -->')).map((l) => l.slice('HUB --> '.length));
+    assert.deepEqual(hub, ['n_0000abcd_0001', 'n_0000abcd_0002', 'OHNE_GRUPPE'],
+        'the top row: the headings, "Ohne Gruppe" last; no card');
+});
+
+// Lauf 11: the card without a group stood in the top row beside the headings and looked like one.
+test('cards without a group stand in their own last column "Ohne Gruppe"; headings have no card frame', () => {
+    const { graph, nodeToCluster } = load().build(nodes, []);
+    const lines = graph.split('\n').map((l) => l.trim());
+    assert.ok(lines.includes('OHNE_GRUPPE["Ohne Gruppe"]'));
+    assert.ok(lines.includes('class OHNE_GRUPPE groupHead'));
+    assert.ok(lines.includes('OHNE_GRUPPE ~~~ n_0000abcd_0099'));
+    assert.ok(!lines.includes('class n_0000abcd_0099 rootNode'), 'the card is no root of the top row');
+    assert.equal(nodeToCluster.get('n_0000abcd_0099'), nodeToCluster.get('OHNE_GRUPPE'), 'the column drags as one');
+    const style = lines.find((l) => l.startsWith('classDef groupHead'));
+    assert.match(style, /fill:transparent,stroke:transparent/);
+    assert.match(style, /font-size:19px/);
 });
 
 test('a column drags as one: the members belong to the cluster of their heading', () => {
