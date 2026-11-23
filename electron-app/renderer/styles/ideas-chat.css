@@ -79,6 +79,13 @@
     color: #ff8a98;
 }
 
+/* the Brain did not understand or asks back: a calm question, not an error */
+.ideas-chat-rueckfrage {
+    align-self: flex-start;
+    background: rgba(40, 44, 66, 0.9);
+    border: 1px dashed rgba(var(--space-accent-rgb), 0.45);
+}
+
 .ideas-chat-row {
     display: flex;
     gap: 8px;

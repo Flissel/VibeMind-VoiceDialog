@@ -52,8 +52,10 @@ test('the generic to-python channel cannot claim a typed sentence', () => {
     assert.match(flowzen, /this\.sendToPython\(withoutTypedMark\(message\)\)/);
     assert.match(main, /env: withProof\(pythonEnv\)/);
     assert.match(main, /eingabe_beleg: '\*\*\*'/, 'the proof is never shown in the IPC log of the renderer');
-    // the ClawPort channel never carries a context, so never the mark
-    const clawport = main.slice(main.indexOf("ipcMain.handle('clawport:chat-text-input'"), main.indexOf("ipcMain.handle('clawport:chat-text-input'") + 300);
+    // the ClawPort channel carries only its space, never the mark
+    const start = main.indexOf("ipcMain.handle('clawport:chat-text-input'");
+    const clawport = main.slice(start, main.indexOf('ipcMain.handle(', start + 10));
+    assert.match(clawport, /\{ type: 'chat_text_input', text, context: \{ space: 'clawport' \} \}/);
     assert.doesNotMatch(clawport, /eingabe|typed|chatMessage/);
 });
 

@@ -82,6 +82,8 @@ const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./s
 const { initBrainEventBridge } = require('./brain-event-bridge');
 const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
 const { chatMessage, withoutTypedMark, withProof } = require('./chat-input');
+// What a chat field shows when Python gives no answer in time; the technical reason goes to the log.
+const NO_ANSWER_IN_TIME = 'Keine Antwort in 30 Sekunden. Bitte noch einmal versuchen.';
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -2594,9 +2596,12 @@ function setupIpcHandlers() {
 
     ipcMain.handle('clawport:chat-text-input', async (_event, { text }) => {
         try {
-            return await sendToPythonAndWait({ type: 'chat_text_input', text }, 'chat_response', 30000);
+            // The chat of the Dashboard tab: its sentences name that space, like every chat field of the app.
+            // Only the space, never the mark of the person: this page has no proof of a send by them.
+            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', 30000);
         } catch (e) {
-            return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };
+            console.warn(`[Chat] clawport: no answer – ${e.message}`);
+            return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };
         }
     });
 
@@ -2609,7 +2614,8 @@ function setupIpcHandlers() {
             const message = chatMessage(text, context, typed);
             return await sendToPythonAndWait(message, 'chat_response', 30000);
         } catch (e) {
-            return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };
+            console.warn(`[Chat] renderer: no answer – ${e.message}`);
+            return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };
         }
     });
 

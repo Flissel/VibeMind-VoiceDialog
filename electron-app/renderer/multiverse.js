@@ -2633,16 +2633,20 @@ class MultiverseApp {
         document.getElementById('gc-send-btn').classList.add('hidden');
 
         try {
-            // In the Ideas overview the sentence carries the bubbles on screen, so names can be resolved.
-            const context = this.currentSpace === 'ideas' && window.VibeIdeasChat && window.VibeIdeasChat.contextNow
+            // Every sentence names the space on screen; in the Ideas overview it also carries the
+            // bubbles on screen, so names can be resolved (renderer/sentence-answer.js).
+            const answers = window.VibeSentenceAnswer;
+            const ideas = this.currentSpace === 'ideas' && window.VibeIdeasChat && window.VibeIdeasChat.contextNow
                 ? window.VibeIdeasChat.contextNow() : undefined;
+            const context = answers ? answers.contextFor(this.currentSpace, ideas) : ideas;
             const response = await window.vibemind.sendChatMessage(text, context, typed === true);
-            const agentMsg = response?.message || 'No response';
-            const isError = response?.success === false;
-            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: { text: response?.message || '', success: !isError } }));
-            this.addGcMessage(agentMsg, isError ? 'error' : 'agent');
+            const shown = answers ? answers.view(response)
+                : { kind: response?.success === false ? 'fehler' : 'antwort', text: response?.message || 'Keine Antwort.' };
+            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: { text: shown.text, success: shown.kind !== 'fehler' } }));
+            this.addGcMessage(shown.text, shown.kind === 'fehler' ? 'error' : shown.kind === 'rueckfrage' ? 'rueckfrage' : 'agent');
         } catch (err) {
-            this.addGcMessage(`Error: ${err.message}`, 'error');
+            if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });
+            this.addGcMessage('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error');
         } finally {
             this.gcBusy = false;
             document.getElementById('gc-spinner').classList.add('hidden');

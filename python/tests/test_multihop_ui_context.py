@@ -194,6 +194,18 @@ def test_a_question_back_reaches_the_user():
     assert result.response_hint == "Welche Bubble meinst du?"
 
 
+def test_not_understood_is_a_question_back_with_the_german_sentence_only():
+    result = _execute({
+        "ok": False, "verstanden": False, "plan_id": "p5", "executed": {}, "state": {},
+        "final_text": "Das habe ich nicht verstanden. Sag zum Beispiel: Halt fest: Preise prüfen.",
+        "fehler": "NoCapabilityMatch: score 0.12 < 0.35",
+    })
+
+    assert result.event_type == "brain.multihop.question"
+    assert result.response_hint.startswith("Das habe ich nicht verstanden.")
+    assert "NoCapabilityMatch" not in result.response_hint, "the raw original is never passed on"
+
+
 def test_nothing_found_still_falls_through():
     assert _execute({"ok": False, "error": "planner returned no plan"}) is None
     assert _execute({"ok": False, "final_text": "", "executed": {}}) is None

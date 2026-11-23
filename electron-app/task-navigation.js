@@ -107,6 +107,14 @@ function resultText(preview) {
 }
 
 /**
+ * The reason a step or plan failed, as the user reads it: the Brain's German sentence (`final_text`),
+ * else `error`. The raw original (`fehler`) is never shown.
+ */
+function errorText(payload) {
+  return text(payload && payload.final_text) || text(payload && payload.error) || 'fehlgeschlagen';
+}
+
+/**
  * A step whose work goes on after the plan: the Brain took the order and a model works on it
  * ({ ok: true, pending: true, status: 'angenommen' }). Its result arrives later at the card,
  * through the database. Read from the event itself or from the preview of its result.
@@ -238,7 +246,7 @@ function createTaskNavigator(send) {
           step: payload.description || payload.capability || '',
           // An accepted order has no result yet; its preview is the receipt of the Brain, not a sentence.
           result: payload.ok === false || taken ? '' : resultText(payload.result_preview),
-          error: payload.ok === false ? String(payload.error || 'fehlgeschlagen').slice(0, RESULT_MAX) : '',
+          error: payload.ok === false ? errorText(payload) : '',
           result_ref: text(payload.result_ref),
           ...stageOf(payload),
         };
@@ -254,7 +262,12 @@ function createTaskNavigator(send) {
           last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
           return status('accepted', { ...elapsed, targets: accepted.targets });
         }
-        return status(payload.ok === false ? 'failed' : 'done', elapsed);
+        // A step without a usable answer (ok: false) gets no ✓, even when the plan as a whole says ok.
+        if (payload.ok === false || failedStep) {
+          if (payload.ok === false && !last.error) last = { ...last, error: errorText(payload) };
+          return status('failed', elapsed);
+        }
+        return status('done', elapsed);
       }
       return null;
     },

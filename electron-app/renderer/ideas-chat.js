@@ -527,8 +527,11 @@
                 const response = await root.vibemind.sendChatMessage(text, contextNow(newId), typed === true);
                 // The Brain took the order, a model works on it; the result comes later at the card.
                 const accepted = isAccepted(response);
-                const failed = !accepted && (!response || response.success === false || response.ok === false);
-                const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
+                // Not understood or asked back (question, rueckfrage, verstanden: false): a calm question,
+                // never a failure; the raw original of an error (`fehler`) is never shown.
+                const asks = !accepted && !!response && (response.question === true || response.rueckfrage === true || response.verstanden === false);
+                const failed = !accepted && !asks && (!response || response.success === false || response.ok === false);
+                const message = (response && (response.message || response.final_text)) || (failed ? 'Keine Antwort' : asks ? 'Wie meinst du das?' : 'OK');
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
                     text: (response && response.message) || '', success: !failed,
@@ -536,7 +539,7 @@
                 } }));
                 if (failed && newId) store.reject(newId, message);
                 // A question back stored nothing: the card noted in advance goes as well.
-                if (response && response.question && newId) store.settle(newId);
+                if (asks && newId) store.settle(newId);
                 if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
                 if (accepted) {
@@ -544,11 +547,12 @@
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
                     say(ACCEPTED_LINE + said, 'agent', asked);
                 } else {
-                    say(message, failed ? 'error' : 'agent', asked);
+                    say(message, failed ? 'error' : asks ? 'rueckfrage' : 'agent', asked);
                 }
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
-                say('Fehler: ' + error.message, 'error', asked);
+                if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] sentence failed', { error: String(error && error.message) });
+                say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked);
             } finally {
                 busy = false;
                 waiting = false;

@@ -63,6 +63,14 @@
     color: var(--vm-status-error, #ff5a6e);
 }
 
+/* the Brain did not understand or asks back: a calm question, not an error */
+.gc-msg.gc-rueckfrage {
+    align-self: flex-start;
+    background: var(--vm-bg-elevated, rgba(30, 27, 48, 0.88));
+    border: 1px dashed rgba(var(--space-accent-rgb), 0.45);
+    color: var(--vm-text-primary, #f0e8ff);
+}
+
 .gc-msg.gc-fading {
     opacity: 0;
 }

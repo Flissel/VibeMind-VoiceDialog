@@ -253,11 +253,12 @@ class ClawPortHandlers:
                 answer["targets"] = [str(t) for t in tool_result.get("targets") or [] if str(t).strip()]
             self.send_message(answer)
         except Exception as e:
+            # The raw error goes to the log; the chat gets a German sentence.
             debug_log(f"Chat input error: {e}")
             self.send_message({
                 "type": "chat_response",
                 "success": False,
-                "message": str(e),
+                "message": "Das hat nicht geklappt. Bitte noch einmal versuchen.",
             })
 
     async def handle_get_conversation_history(self, message: dict):

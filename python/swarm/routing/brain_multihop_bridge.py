@@ -167,7 +167,9 @@ class BrainMultihopBridge:
         ok = bool(data.get("ok"))
         final_text = (data.get("final_text") or "").strip()
         executed = data.get("executed") or {}
-        question = bool(data.get("rueckfrage"))
+        # Not understood (verstanden=false) is a question back as well: the Brain names examples
+        # from the space on screen in final_text. Its raw original (`fehler`) is never passed on.
+        question = bool(data.get("rueckfrage")) or data.get("verstanden") is False
 
         # ok=false has two meanings. CapabilityRouter found nothing, or the planner
         # gave up: nothing to say, quiet fall-through (introspection.py:2392). But the
