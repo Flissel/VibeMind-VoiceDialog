@@ -110,6 +110,7 @@
         let pending = null;      // { space, tries } a jump waiting for a camera move to end
         let followed = '';       // the space the app is jumping to because of a task
         let answer = '';         // the answer to the sentence last sent, once it is there
+        let refusal = '';        // ... or the Brain's sentence on why it did not work
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => { lastInputAt = Date.now(); }, { capture: true, passive: true });
         }
@@ -199,6 +200,7 @@
         }
         root.addEventListener('vibemind:sentence-sent', () => {
             answer = '';
+            refusal = '';
             fresh();
             // The first thing to see after a sentence, before the Brain has said anything: a neutral
             // line. The first event of the plan replaces it; an answer without a plan removes it.
@@ -216,9 +218,15 @@
         root.addEventListener('vibemind:sentence-answered', (event) => {
             const detail = (event && event.detail) || {};
             answer = detail.success === false ? '' : shorten(detail.text);
+            // A tool refused or failed: the Brain's sentence says why, in words for the user.
+            refusal = detail.success === false ? shorten(detail.text) : '';
             if (current && current.waiting) clear(); // answered without a plan that had a place in the app
             if (answer && current && current.state === 'done') {
                 current.result = answer;
+                render();
+            }
+            if (refusal && current && current.state === 'failed') {
+                current.error = refusal;
                 render();
             }
         });
@@ -227,6 +235,7 @@
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
             if (message.state === 'done' && answer) message = { ...message, result: answer };
+            if (message.state === 'failed' && refusal) message = { ...message, error: refusal };
             current = message;
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);

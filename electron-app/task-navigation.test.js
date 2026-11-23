@@ -287,3 +287,11 @@ test('a neutral line stands in the title bar from the moment a sentence is sent'
     assert.match(page, /if \(current && current\.waiting\) clear\(\);/, 'an answer without a plan removes it');
     assert.match(page, /if \(current && current\.waiting\) \{\s*el\.textContent = WAITING_TEXT;/);
 });
+
+test('a failed task shows the sentence of the Brain on why, not the raw error of the tool', () => {
+    const page = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
+
+    assert.match(page, /refusal = detail\.success === false \? shorten\(detail\.text\) : '';/);
+    assert.match(page, /if \(message\.state === 'failed' && refusal\) message = \{ \.\.\.message, error: refusal \};/, 'the answer came first');
+    assert.match(page, /if \(refusal && current && current\.state === 'failed'\) \{\s*current\.error = refusal;/, 'the end of the plan came first');
+});
