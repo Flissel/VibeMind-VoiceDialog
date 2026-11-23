@@ -341,3 +341,14 @@ test('/stand: the main process reads only, checks the id and lets only known fie
     assert.match(fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8'), /initTaskNavigation\(mainWindow, \{ ipcMain \}\);/);
     assert.match(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), /orderStand: \(id\) => ipcRenderer\.invoke\('task:order-stand', String\(id\)\)/);
 });
+
+// Lauf 5: ein abgelehnter Auftrag, den das Gehirn an /stand nicht kennt, haengt nicht auf "arbeitet …".
+test('/stand unbekannt for 5 minutes: the line says plainly that no answer came', async () => {
+    const { w } = await acceptedWithStand(Array.from({ length: 80 }, () => ({ stand: 'unbekannt' })));
+    for (let i = 0; i < 59; i += 1) { w.advance(5000); await tick(); }
+    assert.notEqual(w.line(), 'ℹ Ideas: Keine Rückmeldung zum Auftrag Nr. 0000abcd.', 'not before 5 minutes');
+    w.advance(5000); await tick();
+    assert.equal(w.line(), 'ℹ Ideas: Keine Rückmeldung zum Auftrag Nr. 0000abcd.');
+    assert.ok(!w.statuses.includes('failed'));
+    assert.ok(w.chatLog().includes('ℹ Keine Rückmeldung zum Auftrag Nr. 0000abcd.'));
+});

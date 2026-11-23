@@ -116,7 +116,8 @@
     const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
     const ACCEPTED_MAX_MS = 20 * 60 * 1000;      // an accepted order whose result never shows: the line goes
     const ACCEPTED_STALE_MS = 3 * 60 * 1000;
-    const STAND_MS = 5000;                       // an accepted order: how often the Brain is asked how it stands
+    const STAND_MS = 5000;
+    const STAND_UNKNOWN_MS = 5 * 60 * 1000;      // /stand says "unbekannt" this long: no answer will come                       // an accepted order: how often the Brain is asked how it stands
     /** States of /stand that end the accepted line; laeuft, wartet and unbekannt keep it. */
     const STAND_ENDS = Object.freeze(['fertig', 'vorschlag', 'abgebrochen', 'fehler']);     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
 
@@ -466,15 +467,22 @@
         /** The stand of an order ends the accepted line, or not yet (false). */
         function applyStand(stand, id) {
             if (!current || current.state !== 'accepted' || firstOrder() !== id) return true;
-            if (!stand || !STAND_ENDS.includes(stand.stand)) return false;
             const since = watch && watch.since;
+            // The Brain does not know the order (e.g. it refused it): after STAND_UNKNOWN_MS the line
+            // says so plainly instead of "arbeitet …" for twenty minutes.
+            const silent = stand && stand.stand === 'unbekannt' && typeof since === 'number' && clock() - since >= STAND_UNKNOWN_MS;
+            if (!silent && (!stand || !STAND_ENDS.includes(stand.stand))) return false;
             stopAccepted();
             const elapsed = typeof stand.dauer_s === 'number' ? stand.dauer_s
                 : typeof since === 'number' ? Math.max(0, (clock() - since) / 1000) : null;
             const saetze = Array.isArray(stand.saetze) ? stand.saetze : [];
             const said = typeof stand.meldung === 'string' ? stand.meldung : '';
             const base = { ...current, accepted: false, stale: false, elapsed_s: elapsed, saetze };
-            if (stand.stand === 'fertig') {
+            if (silent) {
+                const nr = orderNumber(current.orders);
+                current = { ...base, state: 'note', note: 'hinweis', elapsed_s: null,
+                    result: 'Keine Rückmeldung zum Auftrag' + (nr ? ' Nr. ' + nr : '') + '.', error: '' };
+            } else if (stand.stand === 'fertig') {
                 current = { ...base, state: 'done', result: said || 'Ergebnis an der Karte', error: '' };
             } else if (stand.stand === 'fehler') {
                 current = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
@@ -630,7 +638,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_ENDS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
