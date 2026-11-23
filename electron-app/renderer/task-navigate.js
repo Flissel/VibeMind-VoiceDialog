@@ -58,7 +58,13 @@
      * `away` = the task runs in another space than the one on screen.
      */
     function describe(message, label, away) {
-        const state = message.state === 'done' || message.state === 'failed' || message.state === 'accepted' ? message.state : 'running';
+        const state = message.state === 'done' || message.state === 'failed' || message.state === 'accepted' || message.state === 'note' ? message.state : 'running';
+        // A question back or a hint of the Brain: calm, with a question mark or an info sign; never red.
+        if (state === 'note') {
+            const sign = message.note === 'hinweis' ? 'ℹ' : '?';
+            const said = message.result && !isRaw(message.result) ? ` ${shorten(message.result)}` : '';
+            return { state: 'note', text: `${sign} ${label}:${said || (message.note === 'hinweis' ? ' Hinweis' : ' Rückfrage')}${away ? ' →' : ''}`, title: message.result || '' };
+        }
         const count = message.total > 1 ? ` (${Math.min(message.done + (state === 'running' ? 1 : 0), message.total)}/${message.total})` : '';
         const arrow = away ? ' →' : '';
         // The Brain took the order, a model works on it; the result comes later at the card. Never "fehlgeschlagen".
@@ -154,7 +160,7 @@
         return typeof text === 'string' && (/^\s*[[{(<]/.test(text) || /['"]_meta['"]/.test(text));
     }
 
-    const finished = (message) => Boolean(message) && (message.state === 'done' || message.state === 'failed');
+    const finished = (message) => Boolean(message) && (message.state === 'done' || message.state === 'failed' || message.state === 'note');
 
     /**
      * How much of a status is shown while onScreen is the space on screen:
@@ -187,6 +193,7 @@
         let staleTimer = null;
         let lastRow = null;      // the last row of the open bubble (vibemind:bubble-row)
         let lastPlanId = '';     // the plan the last status was about
+        let noted = null;        // the answer to the sentence asked back or gave a hint: { kind, text }
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => {
                 lastInputAt = Date.now();
@@ -303,6 +310,7 @@
             lastInputAt = 0;
             answer = '';
             refusal = '';
+            noted = null;
             awaiting = true;
             root.clearTimeout(answerTimer);
             fresh();
@@ -341,6 +349,23 @@
                 render();
                 return;
             }
+            // A question back or a hint: calm, never "fehlgeschlagen", whatever the plan reported.
+            if (detail.note === 'rueckfrage' || detail.note === 'hinweis') {
+                answer = '';
+                refusal = '';
+                noted = { kind: detail.note, text: shorten(detail.text) };
+                const app = root.multiverseApp;
+                const space = (current && current.space) || detail.space || (app && app.currentSpace) || '';
+                if (space && (!current || current.waiting || finished(current))) {
+                    current = { ...(current || {}), waiting: false, state: 'note', space, note: noted.kind, result: noted.text, error: '' };
+                    root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                    root.clearTimeout(keepTimer);
+                    keepTimer = root.setTimeout(clear, KEEP_MS);
+                }
+                render();
+                return;
+            }
+            noted = null;
             answer = detail.success === false ? '' : shorten(detail.text);
             // A tool refused or failed: the Brain's sentence says why, in words for the user.
             refusal = detail.success === false ? shorten(detail.text) : '';
@@ -451,12 +476,16 @@
             }
             if (message.state === 'done' && answer) message = { ...message, result: answer };
             if (message.state === 'failed' && refusal) message = { ...message, error: refusal };
+            // The answer to the sentence asked back or gave a hint: the end of its plan is calm too.
+            if ((message.state === 'failed' || message.state === 'done') && noted) {
+                message = { ...message, state: 'note', note: noted.kind, result: noted.text || message.result, error: '' };
+            }
             current = message;
             if (message.state === 'accepted' || message.accepted) startAccepted();
             else stopAccepted();
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
-            if (message.state === 'done' || message.state === 'failed') keepTimer = root.setTimeout(clear, KEEP_MS);
+            if (finished(message)) keepTimer = root.setTimeout(clear, KEEP_MS);
             // A finished plan waits a little for the answer to the sentence; then it shows "fertig" without it.
             if (message.state === 'done' && awaiting && !answer) {
                 root.clearTimeout(answerTimer);

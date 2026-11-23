@@ -2650,7 +2650,7 @@ class MultiverseApp {
                     targets: Array.isArray(response.targets) ? response.targets.map(String) : [],
                     orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
             } }));
-            this.addGcMessage(shown.text, shown.kind === 'fehler' ? 'error' : shown.kind === 'rueckfrage' ? 'rueckfrage' : 'agent');
+            this.addGcMessage(shown.text, shown.kind === 'fehler' ? 'error' : shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : 'agent');
         } catch (err) {
             if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });
             this.addGcMessage('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error');

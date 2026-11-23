@@ -206,6 +206,16 @@ def test_not_understood_is_a_question_back_with_the_german_sentence_only():
     assert "NoCapabilityMatch" not in result.response_hint, "the raw original is never passed on"
 
 
+def test_a_hint_reaches_the_user_as_a_hint_not_a_failure():
+    result = _execute({
+        "ok": False, "hinweis": True, "plan_id": "p6", "executed": {}, "state": {},
+        "final_text": "Die Tabelle hat keine Spalten; sag, welche es geben soll.",
+    })
+
+    assert result.event_type == "brain.multihop.hint"
+    assert result.response_hint.startswith("Die Tabelle hat keine Spalten")
+
+
 def test_nothing_found_still_falls_through():
     assert _execute({"ok": False, "error": "planner returned no plan"}) is None
     assert _execute({"ok": False, "final_text": "", "executed": {}}) is None

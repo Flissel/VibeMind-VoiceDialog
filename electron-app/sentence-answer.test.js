@@ -63,7 +63,8 @@ test('not understood is a calm question back; an error shows the German sentence
     assert.equal(view(null).kind, 'fehler');
     assert.deepEqual(view({ success: true, message: 'Notiz angelegt.' }), { kind: 'antwort', text: 'Notiz angelegt.' });
 
-    assert.match(scene, /shown\.kind === 'fehler' \? 'error' : shown\.kind === 'rueckfrage' \? 'rueckfrage' : 'agent'/);
+    assert.match(scene, /shown\.kind === 'fehler' \? 'error' : shown\.kind === 'rueckfrage' \|\| shown\.kind === 'hinweis' \? shown\.kind : 'agent'/);
+    assert.deepEqual(view({ success: true, hinweis: true, message: 'Die Tabelle hat keine Spalten.' }), { kind: 'hinweis', text: 'Die Tabelle hat keine Spalten.' });
     assert.doesNotMatch(scene, /`Error: \$\{err\.message\}`/, 'no raw error in the console');
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'game-console.css'), 'utf8'), /\.gc-msg\.gc-rueckfrage \{/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'ideas-chat.css'), 'utf8'), /\.ideas-chat-rueckfrage \{/);

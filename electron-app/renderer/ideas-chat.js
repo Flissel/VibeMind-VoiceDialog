@@ -531,16 +531,18 @@
                 // Not understood or asked back (question, rueckfrage, verstanden: false): a calm question,
                 // never a failure; the raw original of an error (`fehler`) is never shown.
                 const asks = !accepted && !!response && (response.question === true || response.rueckfrage === true || response.verstanden === false);
-                const failed = !accepted && !asks && (!response || response.success === false || response.ok === false);
+                // A hint ("keine Spalten") is information for the user, not a failure.
+                const hint = !accepted && !asks && !!response && response.hinweis === true;
+                const failed = !accepted && !asks && !hint && (!response || response.success === false || response.ok === false);
                 const message = (response && (response.message || response.final_text)) || (failed ? 'Keine Antwort' : asks ? 'Wie meinst du das?' : 'OK');
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
-                    text: (response && response.message) || '', success: !failed,
+                    text: (response && response.message) || '', success: !failed, note: asks ? 'rueckfrage' : hint ? 'hinweis' : '',
                     ...(accepted ? { accepted: true, space: 'ideas', targets, orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
                 } }));
                 if (failed && newId) store.reject(newId, message);
                 // A question back stored nothing: the card noted in advance goes as well.
-                if (asks && newId) store.settle(newId);
+                if ((asks || hint) && newId) store.settle(newId);
                 if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
                 if (accepted) {
@@ -548,7 +550,7 @@
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
                     say(ACCEPTED_LINE + said, 'agent', asked);
                 } else {
-                    say(message, failed ? 'error' : asks ? 'rueckfrage' : 'agent', asked);
+                    say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked);
                 }
             } catch (error) {
                 if (newId) store.reject(newId, error.message);

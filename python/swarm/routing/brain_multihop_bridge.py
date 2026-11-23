@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 EVENT_DONE = "brain.multihop"
 EVENT_FAILED = "brain.multihop.failed"
 EVENT_QUESTION = "brain.multihop.question"
+EVENT_HINT = "brain.multihop.hint"  # a hint of the Brain ("keine Spalten"): information, not a failure
 
 # A sentence a person typed into a chat field of the app (electron-app/chat-input.js sets
 # eingabe "getippt" in the main process). The field alone does not count for the Brain: the
@@ -170,6 +171,7 @@ class BrainMultihopBridge:
         # Not understood (verstanden=false) is a question back as well: the Brain names examples
         # from the space on screen in final_text. Its raw original (`fehler`) is never passed on.
         question = bool(data.get("rueckfrage")) or data.get("verstanden") is False
+        hint = not question and data.get("hinweis") is True
 
         # ok=false has two meanings. CapabilityRouter found nothing, or the planner
         # gave up: nothing to say, quiet fall-through (introspection.py:2392). But the
@@ -177,7 +179,7 @@ class BrainMultihopBridge:
         # when it asks back (rueckfrage=true); then final_text is its sentence for the
         # user. Dropping that sentence made the old path answer "I did not understand
         # you" while the tool had plainly said what was wrong.
-        if not ok and not (final_text and (question or executed)):
+        if not ok and not (final_text and (question or hint or executed)):
             return None
 
         # MH-5 (Phase 0): feed the REAL per-hop truth-verdict back as a
@@ -225,6 +227,8 @@ class BrainMultihopBridge:
             event_type = EVENT_DONE
         elif question:
             event_type = EVENT_QUESTION
+        elif hint:
+            event_type = EVENT_HINT
         else:
             event_type = EVENT_FAILED
 

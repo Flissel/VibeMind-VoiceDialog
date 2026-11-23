@@ -71,6 +71,16 @@
     color: var(--vm-text-primary, #f0e8ff);
 }
 
+/* a hint of the Brain ("keine Spalten"): information, not an error */
+.gc-msg.gc-hinweis {
+    align-self: flex-start;
+    background: var(--vm-bg-elevated, rgba(30, 27, 48, 0.88));
+    border: 1px solid rgba(150, 170, 230, 0.35);
+    color: var(--vm-text-primary, #f0e8ff);
+}
+.gc-msg.gc-hinweis::before { content: 'ℹ '; }
+.gc-msg.gc-rueckfrage::before { content: '? '; }
+
 .gc-msg.gc-fading {
     opacity: 0;
 }

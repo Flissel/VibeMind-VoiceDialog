@@ -244,6 +244,9 @@ class ClawPortHandlers:
             }
             if event_type == "brain.multihop.question":
                 answer["question"] = True
+            # A hint of the Brain: shown calmly as information, never as a failure.
+            if event_type == "brain.multihop.hint":
+                answer["hinweis"] = True
             # An order the Brain took; a model works on it, the result comes later at the card.
             # The chat shows "arbeitet … (Auftrag angenommen)" for it, never a failure.
             if isinstance(tool_result, dict) and tool_result.get("pending") is True:

@@ -46,6 +46,13 @@
     background: rgba(30, 110, 70, 0.35);
 }
 
+/* a question back or a hint of the Brain: calm, never red */
+.task-status[data-state="note"] {
+    border-color: rgba(150, 170, 230, 0.5);
+    background: rgba(50, 58, 95, 0.4);
+    color: #dfe5ff;
+}
+
 /* an accepted order without a reported end: plain, it no longer pretends to work */
 .task-status[data-state="stale"] {
     border-color: rgba(180, 185, 210, 0.4);

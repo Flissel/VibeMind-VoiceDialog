@@ -86,6 +86,16 @@
     border: 1px dashed rgba(var(--space-accent-rgb), 0.45);
 }
 
+.ideas-chat-rueckfrage::before { content: '? '; }
+
+/* a hint of the Brain ("keine Spalten"): information, not an error */
+.ideas-chat-hinweis {
+    align-self: flex-start;
+    background: rgba(40, 44, 66, 0.9);
+    border: 1px solid rgba(150, 170, 230, 0.35);
+}
+.ideas-chat-hinweis::before { content: 'ℹ '; }
+
 .ideas-chat-row {
     display: flex;
     gap: 8px;

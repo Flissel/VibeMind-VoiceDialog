@@ -207,3 +207,34 @@ test('an assessment ends when the bubble gets a new reason: no card changes for 
     assert.match(w.line(), /^✓ Ideas: fertig.*Einschätzung an der Bubble$/);
     assert.match(w.chatLog().join('\n'), /✓ fertig — Einschätzung an der Bubble/);
 });
+
+test('a hint or a question back is never "✕ fehlgeschlagen": calm, with ℹ or ?', async () => {
+    // the plan reports the step with ok false, but the Brain marks it as a hint
+    const w = world();
+    plan(w, { ok: false, hinweis: true, final_text: 'Die Tabelle hat keine Spalten.' });
+    assert.equal(w.line(), 'ℹ Ideas: Die Tabelle hat keine Spalten.');
+    assert.ok(!w.statuses.includes('failed'));
+
+    const q = world();
+    plan(q, { ok: false, rueckfrage: true, final_text: 'Ja, zurück?' });
+    assert.equal(q.line(), '? Ideas: Ja, zurück?');
+
+    // the plan failed, the answer to the sentence is a question back: the line turns calm
+    const a = world();
+    a.answerWith({ success: true, question: true, message: 'Welche Karte meinst du?' });
+    plan(a, { ok: false, error: 'mehrdeutig' });
+    assert.match(a.line(), /^✕/);
+    await a.send('Mach daraus eine Tabelle');
+    assert.equal(a.line(), '? Ideas: Welche Karte meinst du?');
+    assert.match(a.chatLog().join('\n'), /Welche Karte meinst du\?/);
+
+    // and the chat: a hint stays a hint
+    const h = world();
+    h.answerWith({ success: true, hinweis: true, message: 'Die Tabelle hat keine Spalten.' });
+    await h.send('Mach Karte 1 zur Tabelle');
+    assert.doesNotMatch(h.chatLog().join('\n'), /fehlgeschlagen|Keine Antwort/);
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked\);/);
+    const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'titlebar.css'), 'utf8');
+    assert.match(css, /\.task-status\[data-state="note"\] \{/);
+});

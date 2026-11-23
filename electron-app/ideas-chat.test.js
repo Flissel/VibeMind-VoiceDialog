@@ -318,12 +318,12 @@ test('a failed plan and a question back take the card noted in advance away', ()
 
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
     assert.match(chat, /if \(failed && newId\) store\.reject\(newId, message\);/, 'a refused tool: the card goes, the chat names the reason');
-    assert.match(chat, /if \(asks && newId\) store\.settle\(newId\);/);
+    assert.match(chat, /if \(\(asks \|\| hint\) && newId\) store\.settle\(newId\);/);
     // a question back (question, rueckfrage or verstanden: false) is calm, never a failure
     assert.match(chat, /const asks = !accepted && !!response && \(response\.question === true \|\| response\.rueckfrage === true \|\| response\.verstanden === false\);/);
-    assert.match(chat, /const failed = !accepted && !asks &&/);
+    assert.match(chat, /const failed = !accepted && !asks && !hint &&/);
     assert.match(chat, /if \(status\.state === 'failed'\) store\.failAll\(\);/);
-    assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : 'agent', asked\);/);
+    assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked\);/);
     assert.doesNotMatch(chat, /response\.fehler/, 'the raw original of an error is never shown');
 });
 

@@ -34,17 +34,22 @@
             && (response.question === true || response.rueckfrage === true || response.verstanden === false);
     }
 
-    /** { kind: 'antwort' | 'rueckfrage' | 'fehler', text } for an answer of the Brain. */
+    function isHint(response) {
+        return !!response && typeof response === 'object' && response.hinweis === true;
+    }
+
+    /** { kind: 'antwort' | 'rueckfrage' | 'hinweis' | 'fehler', text } for an answer of the Brain. */
     function view(response) {
         const said = (value) => (typeof value === 'string' && value.trim() ? value.trim() : '');
         const text = response && typeof response === 'object' ? said(response.message) || said(response.final_text) : '';
         if (isQuestion(response)) return { kind: 'rueckfrage', text: text || 'Wie meinst du das?' };
+        if (isHint(response)) return { kind: 'hinweis', text: text || 'Hinweis ohne Text.' };
         const failed = !response || typeof response !== 'object' || response.success === false || response.ok === false;
         if (failed) return { kind: 'fehler', text: text || NO_ANSWER };
         return { kind: 'antwort', text: text || 'OK' };
     }
 
-    const api = { contextFor, isQuestion, view, NO_ANSWER };
+    const api = { contextFor, isQuestion, isHint, view, NO_ANSWER };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.VibeSentenceAnswer = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -114,6 +114,14 @@ function errorText(payload) {
   return text(payload && payload.final_text) || text(payload && payload.error) || 'fehlgeschlagen';
 }
 
+/** 'rueckfrage' or 'hinweis' when the Brain asks back or gives a hint (shown calmly, never as failed), else ''. */
+function noteOf(payload) {
+  if (!payload) return '';
+  if (payload.rueckfrage === true || payload.verstanden === false) return 'rueckfrage';
+  if (payload.hinweis === true) return 'hinweis';
+  return '';
+}
+
 /**
  * A step whose work goes on after the plan: the Brain took the order and a model works on it
  * ({ ok: true, pending: true, status: 'angenommen' }). Its result arrives later at the card,
@@ -164,6 +172,7 @@ function createTaskNavigator(send) {
   let last = null; // { space, registry_space, step, result, error }
   let accepted = null; // { space, registry_space, step, targets } the step whose order a model still works on
   let failedStep = false;
+  let note = null; // { kind: 'rueckfrage' | 'hinweis', text } a step that asked back or gave a hint
 
   const status = (state, extra = {}) => {
     const message = {
@@ -201,6 +210,7 @@ function createTaskNavigator(send) {
         last = null;
         accepted = null;
         failedStep = false;
+        note = null;
         // A new plan: what the plan before ended with is no longer the news.
         const reset = { type: 'task_status', state: 'reset', plan_id: planId };
         send(reset);
@@ -238,15 +248,18 @@ function createTaskNavigator(send) {
         done += 1;
         const space = appKeyForSpace(payload.space);
         const taken = acceptedOf(payload);
-        if (payload.ok === false) failedStep = true;
+        // A hint or a question back of the Brain (ok false with hinweis/rueckfrage true) is no failure.
+        const calm = noteOf(payload);
+        if (calm) note = { kind: calm, text: text(payload.final_text) || text(payload.meldung) };
+        if (payload.ok === false && !calm) failedStep = true;
         if (!space) return null;
         last = {
           space,
           registry_space: payload.space,
           step: payload.description || payload.capability || '',
           // An accepted order has no result yet; its preview is the receipt of the Brain, not a sentence.
-          result: payload.ok === false || taken ? '' : resultText(payload.result_preview),
-          error: payload.ok === false ? errorText(payload) : '',
+          result: calm ? note.text : payload.ok === false || taken ? '' : resultText(payload.result_preview),
+          error: payload.ok === false && !calm ? errorText(payload) : '',
           result_ref: text(payload.result_ref),
           ...stageOf(payload),
         };
@@ -261,6 +274,14 @@ function createTaskNavigator(send) {
         if (accepted && !failedStep) {
           last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
           return status('accepted', { ...elapsed, targets: accepted.targets });
+        }
+        // A hint or a question back ends the plan calmly: neither ✓ nor ✕.
+        const calm = noteOf(payload);
+        if (!failedStep && (calm || note)) {
+          const kind = calm || note.kind;
+          const said = text(payload.final_text) || (note && note.text) || '';
+          last = { ...last, result: said, error: '' };
+          return status('note', { ...elapsed, note: kind });
         }
         // A step without a usable answer (ok: false) gets no ✓, even when the plan as a whole says ok.
         if (payload.ok === false || failedStep) {
@@ -329,5 +350,5 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
-  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
+  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };
