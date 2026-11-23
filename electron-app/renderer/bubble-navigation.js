@@ -125,17 +125,6 @@
 
                     // Clear flag after view switch complete
                     window.isEnteringBubble = false;
-    // The mark "the user is entering a bubble" clears itself when the entry never ends
-    // (navigation-guard.js); otherwise every later answer of the backend would be held back.
-    if (window.VibeNavigationGuard) {
-        window.VibeNavigationGuard.guardFlag(window, 'isEnteringBubble', { onStuck: function(info) {
-            console.warn('[Enter] Eintritt in die Bubble hing und wurde freigegeben:', JSON.stringify(info));
-            if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[Enter] bubble entry stuck, released', info);
-            var overlay = document.getElementById('transition-overlay');
-            if (overlay) overlay.classList.remove('active');
-            window.dispatchEvent(new CustomEvent('vibemind:navigation-stuck', { detail: info }));
-        } });
-    }
 
                     // Hide overlay after view switch
                     setTimeout(function() {
@@ -163,32 +152,10 @@
 
                 // Clear flag
                 window.isEnteringBubble = false;
-    // The mark "the user is entering a bubble" clears itself when the entry never ends
-    // (navigation-guard.js); otherwise every later answer of the backend would be held back.
-    if (window.VibeNavigationGuard) {
-        window.VibeNavigationGuard.guardFlag(window, 'isEnteringBubble', { onStuck: function(info) {
-            console.warn('[Enter] Eintritt in die Bubble hing und wurde freigegeben:', JSON.stringify(info));
-            if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[Enter] bubble entry stuck, released', info);
-            var overlay = document.getElementById('transition-overlay');
-            if (overlay) overlay.classList.remove('active');
-            window.dispatchEvent(new CustomEvent('vibemind:navigation-stuck', { detail: info }));
-        } });
-    }
             }
         } catch(e) {
             console.error('[Enter] Error:', e);
             window.isEnteringBubble = false;
-    // The mark "the user is entering a bubble" clears itself when the entry never ends
-    // (navigation-guard.js); otherwise every later answer of the backend would be held back.
-    if (window.VibeNavigationGuard) {
-        window.VibeNavigationGuard.guardFlag(window, 'isEnteringBubble', { onStuck: function(info) {
-            console.warn('[Enter] Eintritt in die Bubble hing und wurde freigegeben:', JSON.stringify(info));
-            if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[Enter] bubble entry stuck, released', info);
-            var overlay = document.getElementById('transition-overlay');
-            if (overlay) overlay.classList.remove('active');
-            window.dispatchEvent(new CustomEvent('vibemind:navigation-stuck', { detail: info }));
-        } });
-    }
         }
     }
 
