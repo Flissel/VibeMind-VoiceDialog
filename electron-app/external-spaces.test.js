@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const THREE = require('./renderer/lib/three.min.js');
 const {
-    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, ExternalSpaceManager,
+    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
 } = require('./external-spaces');
 const { sceneEntry, buildGate } = require('./renderer/external-spaces');
 const { pickSpace } = require('./renderer/space-pick');
@@ -112,44 +112,86 @@ test('the manager shows one space at a time, each in its own session, and sends 
 });
 
 test('a path names a place inside the space and nothing else', () => {
-    const base = 'https://sales.example.test/';
-    const pages = ['/', '/freigaben', '/kontakte'];
-    assert.equal(pathTarget(base, '/freigaben#fg-12', pages), 'https://sales.example.test/freigaben#fg-12');
-    assert.equal(pathTarget(base, '/kontakte/42', pages), 'https://sales.example.test/kontakte/42');
+    const base = 'https://space.example.test/';
+    const pages = ['/', '/liste', '/eintrag'];
+    assert.equal(pathTarget(base, '/liste#nr-12', pages), 'https://space.example.test/liste#nr-12');
+    assert.equal(pathTarget(base, '/eintrag/42', pages), 'https://space.example.test/eintrag/42');
     assert.equal(pathTarget(base, '/', pages), base);
-    for (const bad of ['//evil.example/x', 'https://evil.example/', '/\\evil.example', 'freigaben', 'javascript:alert(1)', '', null, '/a b',
-        '/logout', '/api/senden', '/freigaben?senden=1', '/kontakte/../logout', '/kontakte/%2e%2e/logout', '/kontakteX', '/freigaben/./x/../../logout']) {
+    for (const bad of ['//evil.example/x', 'https://evil.example/', '/\\evil.example', 'liste', 'javascript:alert(1)', '', null, '/a b',
+        '/logout', '/api/senden', '/liste?senden=1', '/eintrag/../logout', '/eintrag/%2e%2e/logout', '/eintragX', '/liste/./x/../../logout']) {
         assert.equal(pathTarget(base, bad, pages), '', String(bad));
     }
-    assert.equal(pathTarget('', '/freigaben', pages), '', 'a space without an address has no paths');
-    assert.equal(pathTarget(base, '/freigaben'), '', 'a space without listed pages takes none');
-    assert.equal(pathTarget(base, '/freigaben', []), '');
+    assert.equal(pathTarget('', '/liste', pages), '', 'a space without an address has no paths');
+    assert.equal(pathTarget(base, '/liste'), '', 'a space without listed pages takes none');
+    assert.equal(pathTarget(base, '/liste', []), '');
 });
+
+test('the pages of a space come from the environment, not from this repository', () => {
+    assert.deepEqual(parsePaths(' /, /liste ,/eintrag/alt,,//evil.example,/a/../b,kein-pfad,/x?y=1 '), ['/', '/liste', '/eintrag/alt']);
+    assert.deepEqual(parsePaths(undefined), []);
+
+    const sales = (env) => resolveSpaces(env).find((s) => s.id === 'sales');
+    assert.deepEqual(sales({}).paths, [], 'without the list no path is taken');
+    assert.deepEqual(sales({ SALES_UI_PATHS: '/,/liste' }).paths, ['/', '/liste']);
+    assert.equal(JSON.stringify(describeForRenderer({ SALES_UI_PATHS: '/geheim' })).includes('geheim'), false, 'the renderer does not learn them');
+
+    const source = fs.readFileSync(path.join(__dirname, 'external-spaces.js'), 'utf8');
+    assert.doesNotMatch(source, /paths: \[/, 'no page of a space is listed in the code');
+});
+
+function salesManager(electron, extra = {}) {
+    return new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} },
+        env: { SALES_UI_URL: 'https://space.example.test/', SALES_UI_PATHS: '/,/liste,/eintrag', ...extra },
+    });
+}
 
 test('an open space goes to a path in its own session; a closed one goes there when it is opened', () => {
     const electron = fakeElectron();
-    const manager = new ExternalSpaceManager(electron.window, {
-        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} },
-        env: { SALES_UI_URL: 'https://sales.example.test/' },
-    });
+    const manager = salesManager(electron);
     const targets = [];
     manager._load = (id) => { targets.push(manager._targets(manager.spaces.get(id))[0].url); manager.views.get(id).result = { ok: true }; };
 
     assert.equal(manager.goTo('sales', '//evil.example/'), false);
     assert.equal(manager.goTo('orders', '/x'), false, 'a local page has no paths');
     assert.equal(manager.goTo('sales', '/logout'), false, 'only the listed pages of the space');
-    assert.equal(manager.goTo('marketing', '/freigaben'), false, 'a space without listed pages takes none');
-    assert.equal(manager.goTo('sales', '/freigaben'), true);
+    assert.equal(manager.goTo('marketing', '/liste'), false, 'a space without listed pages takes none');
+    assert.equal(manager.goTo('sales', '/liste'), true);
     manager.show('sales');
-    assert.deepEqual(targets, ['https://sales.example.test/freigaben']);
+    assert.deepEqual(targets, ['https://space.example.test/liste']);
 
     const went = [];
     electron.made[0].webContents.loadURL = (url) => went.push(url);
-    manager.goTo('sales', '/kontakte/42');
-    assert.deepEqual(went, ['https://sales.example.test/kontakte/42']);
+    manager.goTo('sales', '/eintrag/42');
+    assert.deepEqual(went, ['https://space.example.test/eintrag/42']);
     assert.equal(electron.made[0].options.webPreferences.partition, 'persist:space-sales', 'same session, the sign-in stays');
     manager.show('sales');
     assert.equal(targets.length, 1, 'opening it again does not reload');
+});
+
+test('a path that ends on the sign-in page is loaded once more after the sign-in', () => {
+    const electron = fakeElectron();
+    const manager = salesManager(electron);
+    manager._load = (id) => { manager.views.get(id).result = { ok: true }; };
+    manager.show('sales');
+    const went = [];
+    electron.made[0].webContents.loadURL = (url) => went.push(url);
+    const arrive = (url) => manager._navigated('sales', url);
+
+    manager.goTo('sales', '/liste#nr-12');
+    arrive('https://space.example.test/anmelden');          // the sign-in ran out
+    arrive('https://space.example.test/anmelden');          // a wrong password: still there
+    assert.equal(went.length, 1);
+    arrive('https://space.example.test/');                  // signed in, the page went to its start
+    assert.deepEqual(went, ['https://space.example.test/liste#nr-12', 'https://space.example.test/liste#nr-12']);
+    arrive('https://space.example.test/liste');
+    arrive('https://space.example.test/anderswo');
+    assert.equal(went.length, 2, 'only once');
+
+    manager.goTo('sales', '/eintrag/7');
+    arrive('https://space.example.test/eintrag/7');         // arrived directly: nothing is repeated
+    arrive('https://space.example.test/');
+    assert.equal(went.length, 3);
 });
 
 test('a space that showed a status card is checked again when it is opened next', () => {

@@ -23,8 +23,10 @@ const EXTERNAL_SPACES = Object.freeze([
   {
     id: 'sales', label: 'Sales', icon: '\u{1F91D}', color: 0x4fc3f7, position: [26, 0, 2],
     urlEnv: 'SALES_UI_URL',
-    // Pages a finished task may send this space to (goTo). Anything else is refused.
-    paths: ['/', '/freigaben', '/kontakte', '/posteingang', '/post/aufraeumen'],
+    // Pages a finished task may send this space to (goTo): a comma-separated list in the
+    // environment, like the address. The pages of a space are its own business and are not
+    // written into this repository. Without the list no path is taken.
+    pathsEnv: 'SALES_UI_PATHS',
     agent: { name: 'Sales', slug: 'sales', role: 'Kontakte, Post, Termine' },
   },
   {
@@ -62,12 +64,22 @@ function cleanUrl(value) {
   }
 }
 
+const PAGE = /^\/[A-Za-z0-9_\-.~\/]*$/;
+
+/** The listed pages of a space from its environment value: "/, /seite, /liste/alt". */
+function parsePaths(value) {
+  if (typeof value !== 'string') return [];
+  return value.split(',').map((entry) => entry.trim())
+    .filter((entry) => PAGE.test(entry) && !entry.startsWith('//') && !entry.split('/').includes('..'));
+}
+
 /** The spaces with their resolved address ('' when none is configured). */
 function resolveSpaces(env = process.env) {
   return EXTERNAL_SPACES.map((space) => ({
     ...space,
     url: space.urlEnv ? cleanUrl(env[space.urlEnv]) || cleanUrl(space.defaultUrl) : '',
     file: space.localPage ? path.join(__dirname, space.localPage) : '', // a page shipped with the app
+    paths: space.pathsEnv ? parsePaths(env[space.pathsEnv]) : [],
   }));
 }
 
@@ -97,13 +109,13 @@ function authFor(space, env = process.env) {
 
 /**
  * The address of a path inside a space, or '' when the text is not a plain path of that space.
- * A task result names only the path ("/freigaben#fg-12"); the base address stays in the environment.
+ * A task result names only the path ("/seite/7#anker"); the base address stays in the environment.
  * Anything that could leave the space (a scheme, "//host", a backslash) is refused.
  *
  * The path comes out of a task result, which an agent wrote: it is not trusted. The page is
  * signed in, so loading an arbitrary address of it could act in the user's name. Therefore only
- * the pages listed for the space (llowed, a page or anything below it) are taken, without a
- * query, without ".." and without escapes; a fragment ("#fg-12") may follow.
+ * the pages listed for the space (allowed: a page or anything below it) are taken, without a
+ * query, without ".." and without escapes; a fragment ("#anker") may follow.
  */
 function pathTarget(spaceUrl, pathText, allowed) {
   const text = typeof pathText === 'string' ? pathText.trim() : '';
@@ -142,6 +154,7 @@ class ExternalSpaceManager {
     this._ready = new Map();  // id -> promise that settles once the first load was started
     this._issued = new Map(); // id -> access cookie set for this space (main process only)
     this._pathOnOpen = new Map(); // id -> address inside the space to go to when it is opened next (goTo)
+    this._wanted = new Map();     // id -> { target, detour } a path on its way, see _navigated
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -202,6 +215,7 @@ class ExternalSpaceManager {
         });
       }
     });
+    view.webContents.on('did-navigate', (_event, url) => this._navigated(id, url));
     this.views.set(id, { view, result: null });
     if (space.access && space.url) {
       this._ready.set(id, this._signIn(space, view).then(() => { this._load(id); }));
@@ -262,9 +276,36 @@ class ExternalSpaceManager {
       return true;
     }
     // A status card means the service is not there; the next opening tries the path again.
-    if (entry.result && !entry.result.ok) this._pathOnOpen.set(id, target);
-    else entry.view.webContents.loadURL(target);
+    if (entry.result && !entry.result.ok) {
+      this._pathOnOpen.set(id, target);
+    } else {
+      this._wanted.set(id, { target, detour: '' });
+      entry.view.webContents.loadURL(target);
+    }
     return true;
+  }
+
+  /**
+   * The page of a space arrived somewhere. A sign-in that ran out sends a wanted path to the
+   * sign-in page instead; the page does not come back by itself afterwards. So the path is
+   * remembered and loaded once more as soon as the page leaves that detour (the user signed in).
+   */
+  _navigated(id, url) {
+    const wanted = this._wanted.get(id);
+    const entry = this.views.get(id);
+    if (!wanted || !entry) return;
+    let here;
+    try { here = new URL(url); } catch (_) { return; }
+    const goal = new URL(wanted.target);
+    if (here.origin !== goal.origin) return;
+    if (here.pathname === goal.pathname) {
+      this._wanted.delete(id); // arrived
+    } else if (!wanted.detour) {
+      wanted.detour = here.pathname; // sent elsewhere: wait there
+    } else if (here.pathname !== wanted.detour) {
+      this._wanted.delete(id); // left the detour: try the path once more, and only once
+      entry.view.webContents.loadURL(wanted.target);
+    }
   }
 
   hideAll() {
@@ -289,5 +330,5 @@ class ExternalSpaceManager {
 }
 
 module.exports = {
-  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, ExternalSpaceManager,
+  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
 };
