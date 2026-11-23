@@ -58,8 +58,6 @@
     <script defer src="exploration_dialog.js"></script>
     <!-- Extracted modules (Tier 1 — self-contained) -->
     <script defer src="stage-renderers.js"></script>
-    <script defer src="summaries-panel.js"></script>
-    <script defer src="whitepaper-panel.js"></script>
     <!-- Extracted modules (Tier 2 — few dependencies) -->
     <script defer src="flowzen-panel.js"></script>
     <script defer src="vnc-preview.js"></script>
@@ -153,50 +151,7 @@
                 <span id="space-title">Space</span>
             </div>
             <div id="space-canvas"></div>
-            
-            <!-- Summaries Toggle Button -->
-            <button id="summaries-toggle" class="summaries-toggle">📋 Summaries</button>
-            
-            <!-- Summaries Panel -->
-            <div id="summaries-panel" class="hidden">
-                <div class="summaries-header">
-                    <h3>📋 Summaries</h3>
-                    <button class="summaries-close" id="summaries-close">×</button>
-                </div>
-                <div class="summaries-content" id="summaries-content">
-                    <div class="no-summaries">
-                        <div class="no-summaries-icon">📝</div>
-                        <div>No summaries yet</div>
-                        <div style="font-size: 11px; margin-top: 4px;">Say "summarize this idea" to create one</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- White Paper Toggle Button -->
-            <button id="whitepaper-toggle" class="whitepaper-toggle">📄 White Paper</button>
-            
-            <!-- White Paper Panel (A4 Document) -->
-            <div id="whitepaper-panel" class="hidden">
-                <div class="whitepaper-header">
-                    <h3>📄 <span id="whitepaper-title">White Paper</span></h3>
-                    <button class="whitepaper-close" id="whitepaper-close">×</button>
-                </div>
-                <div class="whitepaper-content" id="whitepaper-content">
-                    <div class="whitepaper-a4">
-                        <div class="whitepaper-placeholder">
-                            <div class="whitepaper-placeholder-icon">📄</div>
-                            <div>No White Paper generated yet</div>
-                            <div style="font-size: 11px; margin-top: 4px;">Say "generate white paper from [idea name]"</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="whitepaper-footer">
-                    <button id="whitepaper-print" title="Print as PDF">🖨️ Print</button>
-                    <button id="whitepaper-copy" title="Copy Markdown">📋 Copy</button>
-                    <button id="whitepaper-export" title="Download as Markdown">💾 Export</button>
-                    <span class="whitepaper-meta" id="whitepaper-meta"></span>
-                </div>
-            </div>
+            <!-- Zusammenfassung und White Paper: Knoepfe der Bubble-Leiste (bubble-bar.js) -->
         </div>
 
         <!-- Voice Status Panel -->
@@ -1486,33 +1441,6 @@
                     }, 350);
                     break;
 
-                case 'idea_summarized':
-                    // Handle idea summarization result
-                    console.log('[Tool] Idea summarized:', message);
-                    if (typeof addSummary === 'function') {
-                        window.summariesPanel.addSummary(
-                            message.idea_title || 'Untitled',
-                            message.summary || '',
-                            message.style || 'concise',
-                            message.node_count || 0
-                        );
-                    }
-                    break;
-
-                case 'white_paper_generated':
-                    // Handle White Paper generation result
-                    console.log('[Tool] White Paper generated:', message);
-                    if (window.whitepaperPanel) {
-                        window.whitepaperPanel.displayWhitePaper(
-                            message.title || 'White Paper',
-                            message.content || '',
-                            message.node_count || 0,
-                            message.max_depth_reached || 0
-                        );
-                    }
-                    showTranscript('System', `White Paper "${message.title}" generated with ${message.node_count} ideas`);
-                    break;
-
                 // ============================================
                 // SPACE NAVIGATION & AGENT SWITCH MESSAGES
                 // ============================================
@@ -2084,7 +2012,7 @@
                 panel.classList.add('hidden');
             }, 5000);
         }
-        // Expose showTranscript for extracted modules (whitepaper-panel.js, etc.)
+        // Expose showTranscript for extracted modules
         window.showTranscript = showTranscript;
 
         // Request initial bubbles from Python
@@ -2104,8 +2032,6 @@
         // Space Navigation — now in space-navigator.js
         
         // Flowzen Panel — now in flowzen-panel.js
-        // Summaries Panel — now in summaries-panel.js
-        // White Paper Panel — now in whitepaper-panel.js
     </script>
 
     <!-- Phase 11.U.L — Eval Side-Panel (right, persistent toggle) ── -->

@@ -112,13 +112,6 @@
 #space-view.with-bar .mermaid-zoom-controls,
 #space-view.with-bar .canvas-toolbar,
 #space-view.with-bar .zoom-controls,
-#space-view.with-bar #summaries-toggle,
-#space-view.with-bar #whitepaper-toggle,
-/* the old English result windows: they stayed open from one bubble to the next and lay over the
-   cards (measured on 0d7d85f in an empty bubble); results now come as cards (Zusammenfassung,
-   White Paper of the bar) */
-#space-view.with-bar #summaries-panel,
-#space-view.with-bar #whitepaper-panel,
 /* the board itself says "Noch keine Notizen …" and where to type */
 #space-view.with-bar .ideas-empty-hint,
 body.bubble-open #eval-toggle,

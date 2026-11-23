@@ -1,8 +1,8 @@
 /**
- * Canvas Handlers — entered_bubble, node/edge CRUD, tool messages, summaries, whitepaper.
+ * Canvas Handlers — entered_bubble, node/edge CRUD, tool messages.
  * Extracted from index.html message handler.
  *
- * Dependencies: window.spaceCanvas, window.multiverseApp, window.summariesPanel, window.whitepaperPanel
+ * Dependencies: window.spaceCanvas, window.multiverseApp
  */
 (function() {
     'use strict';
@@ -185,30 +185,5 @@
     H['canvas_refresh'] = function(msg) {
         console.log('[Tool] Canvas refresh requested');
         if (window.spaceCanvas) window.spaceCanvas.refresh();
-    };
-
-    H['idea_summarized'] = function(msg) {
-        console.log('[Tool] Idea summarized:', msg);
-        if (window.summariesPanel) {
-            window.summariesPanel.addSummary(
-                msg.idea_title || 'Untitled',
-                msg.summary || '',
-                msg.style || 'concise',
-                msg.node_count || 0
-            );
-        }
-    };
-
-    H['white_paper_generated'] = function(msg) {
-        console.log('[Tool] White Paper generated:', msg);
-        if (window.whitepaperPanel) {
-            window.whitepaperPanel.displayWhitePaper(
-                msg.title || 'White Paper',
-                msg.content || '',
-                msg.node_count || 0,
-                msg.max_depth_reached || 0
-            );
-        }
-        window.showTranscript('System', 'White Paper "' + msg.title + '" generated with ' + msg.node_count + ' ideas');
     };
 })();

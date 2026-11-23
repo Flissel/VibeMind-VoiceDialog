@@ -117,15 +117,14 @@ test('below the header, covering nothing: a row of its own, the view knows it', 
     assert.match(css, /#space-view\.with-bar #space-canvas \{\s*height: calc\(100% - 84px\);/);
     assert.match(css, /#space-view\.with-bar #ideas-chat \{\s*top: 84px;/);
     // the controls every view used to bring along are hidden inside a bubble: the bar works them
-    // and the old English result windows, which stayed open from one bubble to the next (empty bubble, 0d7d85f)
-    for (const old of ['.kv-bar', '.kv-back', '.mermaid-zoom-controls', '.canvas-toolbar', '.zoom-controls', '#summaries-toggle', '#whitepaper-toggle',
-        '#summaries-panel', '#whitepaper-panel', '.ideas-empty-hint']) {
+    for (const old of ['.kv-bar', '.kv-back', '.mermaid-zoom-controls', '.canvas-toolbar', '.zoom-controls', '.ideas-empty-hint']) {
         assert.ok(css.includes(`#space-view.with-bar ${old}`), old);
     }
     assert.ok(css.includes('body.bubble-open #eval-toggle') && css.includes('body.bubble-open #voice-panel'));
     const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
     assert.match(html, /<script defer src="bubble-bar\.js"><\/script>/);
     assert.doesNotMatch(html, /edge-bar\.js/);
+    assert.match(html, /<div id="space-canvas"><\/div>\s*<!-- [^>]*-->\s*<\/div>/, 'the bubble view holds only header and canvas');
     assert.match(html, /<button id="back-btn">← Zurück<\/button>/, 'German in the header too');
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles.css'), 'utf8'), /styles\/bubble-bar\.css/);
 });
@@ -281,4 +280,18 @@ test('a row that arrives after another bubble was opened is not announced', asyn
 test('the chat takes the reasons of the row the canvas announces', () => {
     const src = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
     assert.match(src, /addEventListener\('vibemind:bubble-row', \(event\) => bubbleRow\(event\.detail && event\.detail\.row\)\)/);
+});
+
+test('the old result windows are gone: nobody sends idea_summarized or white_paper_generated any more', () => {
+    const renderer = path.join(__dirname, 'renderer');
+    for (const file of ['summaries-panel.js', 'whitepaper-panel.js']) {
+        assert.ok(!fs.existsSync(path.join(renderer, file)), file);
+    }
+    const sources = [path.join(renderer, 'index.html'), path.join(renderer, 'handlers', 'canvas-handlers.js'),
+        path.join(renderer, 'styles', 'panels.css'), path.join(renderer, 'styles', 'bubble-bar.css')]
+        .map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+    for (const gone of ['summaries-panel', 'whitepaper-panel', 'summaries-toggle', 'whitepaper-toggle',
+        'idea_summarized', 'white_paper_generated', 'summariesPanel', 'whitepaperPanel']) {
+        assert.ok(!sources.includes(gone), gone);
+    }
 });
