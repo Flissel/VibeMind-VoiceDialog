@@ -21,7 +21,10 @@
         hierarchy: 'Gliederung', technical_specs: 'Anforderungen', kanban: 'Kanban', mindmap: 'Mindmap',
         swot: 'SWOT-Analyse', user_story: 'Nutzergeschichten', flowchart: 'Ablauf',
         comparison_table: 'Vergleich', research: 'Recherche',
+        zusammenfassung: 'Zusammenfassung', white_paper: 'White Paper',
     };
+    // Dokument-Karten (idea_document): node_type "dokument", die Art steht in metadata.art.
+    const DOCUMENT_KINDS = new Set(['zusammenfassung', 'white_paper']);
     const FORMAT_ALIASES = { pros_cons_table: 'pros_cons' };
     // Vorlagentext der alten Formatier-Agenten: sieht aus wie Inhalt, sagt aber nichts.
     const TEMPLATE_TEXTS = new Set([
@@ -96,6 +99,8 @@
             }
         }
         if ((!isText(fmt) || !fmt) && row.node_type === 'research') fmt = 'research';
+        const art = isMap(row.metadata) ? row.metadata.art : null;
+        if ((!isText(fmt) || !fmt) && row.node_type === 'dokument' && DOCUMENT_KINDS.has(art)) fmt = art;
         fmt = isText(fmt) ? (FORMAT_ALIASES[fmt] || fmt) : null;
         return fmt || 'note';
     }
@@ -131,6 +136,10 @@
             const n = metadata.citation_count;
             if (Number.isInteger(n) && n > 0) parts.push(count(n, 'Quelle', 'Quellen'));
             return parts.join(' · ');
+        }
+        if (row.node_type === 'dokument') {
+            const n = Array.isArray(metadata.quellen) ? metadata.quellen.length : 0;
+            return n ? `aus ${count(n, 'Karte', 'Karten')}` : null;
         }
         if (metadata.ai_generated) {
             const origin = plain(metadata.source_title);

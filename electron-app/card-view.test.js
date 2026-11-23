@@ -537,3 +537,12 @@ test('die gesetzte Wurzel traegt an ihrer Karte das Zeichen "Wurzel"', () => {
     assert.match(canvas, /this\._board\.setRoot\(this\._wurzel\)/);
     assert.match(canvas, /this\._board\.setRoot\(null\)/, 'eine andere Bubble: die alte Wurzel gilt nicht');
 });
+
+test('eine Dokument-Karte heisst nach ihrer Art und sagt, aus wie vielen Karten sie ist', () => {
+    const doc = { id: 'z2', title: 'Zusammenfassung B', node_type: 'dokument', content: 'Kurz gesagt: alles gut.',
+        metadata: { art: 'zusammenfassung', quellen: ['a', 'b', 'c'] } };
+    assert.equal(cv.cardShort(doc).art, 'Zusammenfassung');
+    assert.equal(cv.cardShort(doc).quelle, 'aus 3 Karten');
+    assert.equal(cv.cardShort({ ...doc, metadata: { art: 'white_paper', quellen: ['a'] } }).art, 'White Paper');
+    assert.equal(cv.cardShort({ ...doc, metadata: { art: 'zusammenfassung' } }).quelle, null);
+});
