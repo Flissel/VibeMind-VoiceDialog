@@ -37,7 +37,7 @@ test('exitReason: erste Zeile, gekuerzt; bei Traceback die Exception-Zeile am En
   assert.ok(long.endsWith('…'));
 });
 
-function harness(spawnImpl) {
+function harness(spawnImpl, extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'swe-mgr-'));
   const re = path.join(root, 'python', 'spaces', 'shuttles', 'swe_desgine');
   fs.mkdirSync(re, { recursive: true });
@@ -62,7 +62,7 @@ function harness(spawnImpl) {
     webContents: { send: (_c, msg) => sent.push(msg) },
   };
   const m = new SweDesignManager(mainWindow, {
-    BrowserView: FakeBrowserView, shell: {}, projectRoot: root, spawn: spawnImpl,
+    BrowserView: FakeBrowserView, shell: {}, projectRoot: root, spawn: spawnImpl, env: {}, ...extra,
   });
   return { m, views, sent, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
@@ -81,16 +81,58 @@ function fakeProc({ code, stderr }) {
   };
 }
 
-test('Server beendet sich mit Exit 1: Statuskarte mit Grund statt leerer Ansicht', async () => {
-  const h = harness(fakeProc({ code: 1, stderr: "Traceback (most recent call last):\nModuleNotFoundError: No module named 'dataclasses_json'\n" }));
+test('Der Reiter zeigt die Stufenansicht des Space und startet den alten Server nicht', async () => {
+  let spawned = 0;
+  const asked = [];
+  const h = harness(() => { spawned += 1; return fakeProc({ code: 1, stderr: '' })(); }, {
+    overlayDeps: { fetchImpl: async (url) => { asked.push(url); return { ok: true, status: 200, body: null }; }, logger: { warn() {} } },
+  });
   try {
     await h.m.show();
+    assert.equal(spawned, 0);
+    assert.deepEqual(asked, ['http://127.0.0.1:8162/'], 'der Dienst nimmt nur 127.0.0.1 an, nie localhost');
+    assert.deepEqual(h.views[0].loads, ['http://127.0.0.1:8162/']);
+    assert.equal(h.m.getIsVisible(), true);
+
+    h.m.hide();
+    await h.m.show();
     assert.equal(h.views.length, 1);
+    assert.equal(h.views[0].loads.length, 1, 'erneutes Oeffnen laedt eine geladene Seite nicht neu');
+  } finally { h.cleanup(); }
+});
+
+test('Dienst der Stufenansicht nicht da: Statuskarte, beim naechsten Oeffnen neuer Versuch', async () => {
+  let up = false;
+  const h = harness(null, {
+    overlayDeps: {
+      fetchImpl: async () => {
+        if (up) return { ok: true, status: 200, body: null };
+        const err = new Error('fetch failed');
+        err.cause = { code: 'ECONNREFUSED' };
+        throw err;
+      },
+      logger: { warn() {} },
+    },
+  });
+  try {
+    await h.m.show();
     const url = h.views[0].loads[0];
     assert.ok(url.startsWith(CARD_PREFIX), url);
-    const html = decodeURIComponent(url.slice(CARD_PREFIX.length));
-    assert.match(html, /SWE Design nicht verfuegbar – Server beendet \(Exit 1\): ModuleNotFoundError/);
+    assert.match(decodeURIComponent(url.slice(CARD_PREFIX.length)), /SWE Design nicht verfuegbar – nicht erreichbar \(ECONNREFUSED\)/);
     assert.equal(h.m.getIsVisible(), true);
     assert.equal(h.sent[0].status, 'error');
+
+    up = true;
+    h.m.hide();
+    await h.m.show();
+    assert.equal(h.views[0].loads[1], 'http://127.0.0.1:8162/');
   } finally { h.cleanup(); }
+});
+
+test('Adresse der Stufenansicht: aus SWE_DESIGN_UI_URL, sonst dieser Rechner', () => {
+  const { stageViewUrl } = SweDesignManager;
+  assert.equal(stageViewUrl({}), 'http://127.0.0.1:8162/');
+  assert.equal(stageViewUrl({ SWE_DESIGN_UI_URL: ' http://127.0.0.1:9000/ ' }), 'http://127.0.0.1:9000/');
+  assert.equal(stageViewUrl({ SWE_DESIGN_UI_URL: 'file:///etc/passwd' }), 'http://127.0.0.1:8162/');
+  assert.equal(stageViewUrl({ SWE_DESIGN_UI_URL: 'kaputt' }), 'http://127.0.0.1:8162/');
 });

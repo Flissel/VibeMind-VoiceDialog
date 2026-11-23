@@ -10,7 +10,7 @@
  *   destroy() → stop server + kill Python process
  */
 
-const { resolveElectronParts, statusCardUrl } = require('./overlay-status');
+const { resolveElectronParts, statusCardUrl, loadOverlay } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -82,6 +82,18 @@ function resolvePythonPath(projectRoot, reProjectRoot, existsSync = fs.existsSyn
 }
 
 /** Kurzgrund fuer die Statuskarte: "Server beendet (Exit N): <Zeile aus stderr>". */
+const DEFAULT_STAGE_URL = 'http://127.0.0.1:8162/';
+
+/** Address of the stage view: SWE_DESIGN_UI_URL when it is a valid http(s) address, else this machine. */
+function stageViewUrl(env = process.env) {
+  const text = typeof env.SWE_DESIGN_UI_URL === 'string' ? env.SWE_DESIGN_UI_URL.trim() : '';
+  try {
+    const url = new URL(text);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch (_) { /* not set or not an address */ }
+  return DEFAULT_STAGE_URL;
+}
+
 function exitReason(code, stderr) {
   const lines = String(stderr || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   // Python-Traceback: die aussagekraeftige Zeile (Exception) steht am Ende, sonst die erste.
@@ -126,7 +138,11 @@ class SweDesignManager {
     // Python path: own swe_desgine/.venv first, then voice/.venv312, then 'python'
     this.pythonPath = resolvePythonPath(projectRoot, this.reProjectRoot, this._existsSync);
 
-    this.port = 8086; // 8085 often held by zombie; use 8086 as default
+    this.port = 8086; // old dashboard (wizard); 8085 often held by zombie
+
+    // Stage view of the space. The service accepts the host name 127.0.0.1 only (anything else: 403),
+    // so never "localhost" here.
+    this.stageUrl = stageViewUrl(dependencies.env || process.env);
 
     // Resize handler
     if (this.mainWindow) {
@@ -257,55 +273,46 @@ class SweDesignManager {
   }
 
   /**
-   * Show the SWE Design wizard BrowserView.
-   * Starts the Python dashboard server on first call.
+   * Show the SWE Design BrowserView: the stage view of the space (run, six stages, results).
+   *
+   * The page is served by the space itself on this machine; the app only embeds it. It replaced
+   * the old "RE System Dashboard" as the main view: that page reads the projects of a pipeline
+   * that no longer runs and stayed empty whatever the stage run did. The app therefore no longer
+   * starts the old server here (_startServer stays for the wizard, which is not linked yet).
+   * When the service is not there, the usual status card says so.
    */
   async show() {
     if (!this.mainWindow) {
       console.error('[SweDesignManager] No main window available');
       return;
     }
-
-    // Prevent concurrent start attempts
-    if (this._starting) {
-      console.log('[SweDesignManager] Already starting, please wait...');
-      return;
+    const first = !this.view;
+    if (first) {
+      this._createView();
+    } else {
+      this.mainWindow.setBrowserView(this.view);
+      this._updateBounds();
     }
+    this.isVisible = true;
+    // A status card is checked again on every opening: the service may be up now.
+    if (first || this._cardShown) await this._loadStageView();
+    console.log('[SweDesignManager] Shown');
+  }
 
-    try {
-      // Start server if not running
-      if (!this._serverReady) {
-        this._starting = true;
-        console.log('[SweDesignManager] Starting RE dashboard server...');
-        this.port = await this._startServer();
-        this._starting = false;
-      }
-
-      // Create BrowserView if needed
-      if (!this.view) {
-        this._createView();
-        this._loadDashboard();
-      } else {
-        // Re-attach existing view
-        this.mainWindow.setBrowserView(this.view);
-        this._updateBounds();
-        // Eine fruehere Statuskarte durch das jetzt laufende Dashboard ersetzen
-        if (this._cardShown) this._loadDashboard();
-      }
-      this.isVisible = true;
-      console.log('[SweDesignManager] Shown');
-    } catch (err) {
-      this._starting = false;
-      console.error('[SweDesignManager] Failed to show:', err.message);
-      if (err.exitCode !== undefined) this._showCard(exitReason(err.exitCode, err.stderr));
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('python-message', {
-          type: 'swedesign_view_status',
-          status: 'error',
-          message: err.message,
-        });
-      }
+  /** Load the stage view, or the status card when its service does not answer. */
+  async _loadStageView() {
+    const result = await loadOverlay(
+      this.view.webContents,
+      { space: SPACE_NAME, targets: [{ kind: 'url', url: this.stageUrl }] },
+      this._overlayDeps,
+    );
+    this._cardShown = !result.ok;
+    if (!result.ok && this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('python-message', {
+        type: 'swedesign_view_status', status: 'error', message: result.reason,
+      });
     }
+    return result;
   }
 
   /** Create the BrowserView, attach it and wire the status events. */
@@ -454,3 +461,4 @@ class SweDesignManager {
 module.exports = SweDesignManager;
 module.exports.resolvePythonPath = resolvePythonPath;
 module.exports.exitReason = exitReason;
+module.exports.stageViewUrl = stageViewUrl;
