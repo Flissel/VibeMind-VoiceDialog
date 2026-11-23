@@ -1677,6 +1677,9 @@ function setupIpcHandlers() {
         }
     });
 
+    // Links in cards: system browser, never inside the app, only http/https (external-link.js)
+    ipcMain.handle('app:open-external', (_event, url) => require('./external-link').openExternal(shell, url));
+
     // File System
     ipcMain.handle('fs:open-folder', async (event, folderPath) => {
         try {

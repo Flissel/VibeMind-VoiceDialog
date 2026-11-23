@@ -38,6 +38,17 @@
     const MD_PREFIX = /^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+)/;  // Nummern bleiben: sie tragen die Reihenfolge
     const MD_MARKS = /(\*\*|__|`|~~)/g;
     const MD_HEADING = /^(#{1,6})\s+(.*)$/;
+    // Wiki form, as it stands in the data: "== Titel ==" (== is the first level below the title)
+    const WIKI_HEADING = /^(={1,7})\s*([^=].*?)\s*\1$/;
+
+    /** A heading in Markdown or wiki form: its level (1 = top) and text, or null. */
+    function headingOf(line) {
+        const md = MD_HEADING.exec(line);
+        if (md) return { level: md[1].length, text: md[2] };
+        const wiki = WIKI_HEADING.exec(line);
+        if (wiki) return { level: Math.min(Math.max(wiki[1].length - 1, 1), 6), text: wiki[2] };
+        return null;
+    }
     const RESEARCH_TITLE = /^Research:\s*(.*?)\s*(\d{4})-(\d{2})-(\d{2})(?:\s+[\d:]+)?\s*$/;
     const SUMMARY_HEAD = /summary|zusammenfassung|kurzfassung|fazit/i;
     const RULE_CHARS = new Set('-|: =*_');
@@ -88,7 +99,8 @@
     /** Eine Zeile fuer Menschen: ohne Markdown-Zeichen, ohne Vorlagentext, mit Auslassung gekuerzt. */
     function plain(value, limit = CARD_LINE_CHARS) {
         if (!isText(value)) return '';
-        let text = words(value.replace(MD_PREFIX, '').replace(MD_MARKS, '').trim());
+        const wiki = WIKI_HEADING.exec(value.trim());
+        let text = words((wiki ? wiki[2] : value).replace(MD_PREFIX, '').replace(MD_MARKS, '').trim());
         if (!text || TEMPLATE_TEXTS.has(text)) return '';
         if (limit != null && chars(text).length > limit) text = chars(text).slice(0, limit - 1).join('').trimEnd() + '…';
         return text;
@@ -134,8 +146,8 @@
         if (!text.trim() || text.trim() === title.trim()) return [];
         const sections = [[null, []]];
         for (const raw of text.split(/\r\n|\r|\n/)) {
-            const heading = MD_HEADING.exec(raw.trim());
-            if (heading) { sections.push([plain(heading[2], limit) || null, []]); continue; }
+            const heading = headingOf(raw.trim());
+            if (heading) { sections.push([plain(heading.text, limit) || null, []]); continue; }
             let stripped = raw.trim();
             if (!stripped || chars(stripped).every((c) => RULE_CHARS.has(c))) continue;
             if (stripped.startsWith('|')) {
@@ -334,8 +346,8 @@
 
     // ------------------------------------------------------------------
     // Markdown zum Lesen: erst alles maskieren, dann wenige sichere Formen.
-    // Links werden gezeigt (Text und Adresse), oeffnen aber kein Fenster:
-    // die App hat dafuer keinen geprueften Weg.
+    // Adressen (nur http/https) werden Links; ein Klick oeffnet sie im Browser
+    // des Systems (window.vibemind.openExternal), nie in der App selbst.
     // ------------------------------------------------------------------
 
     function escapeHtml(text) {
@@ -343,18 +355,52 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    const unescapeHtml = (html) => html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+
+    /** The address as it may be opened: http or https with a host, nothing else. */
+    function safeUrl(value) {
+        if (!isText(value)) return null;
+        const text = value.trim();
+        if (!text || text.length > 2048 || /[\s\u0000-\u001f]/.test(text)) return null;
+        let url;
+        try { url = new URL(text); } catch (_) { return null; }
+        if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password) return null;
+        return url.href;
+    }
+
+    /** escaped address -> link; label is escaped HTML already */
+    function linkHtml(escapedHref, label) {
+        const url = safeUrl(unescapeHtml(escapedHref));
+        if (!url) return label;
+        const attr = escapeHtml(url);
+        return `<span class="kv-link" role="link" tabindex="0" data-url="${attr}" title="${attr} (öffnet im Browser)">${label}</span>`;
+    }
+
     function inline(text) {
         let html = escapeHtml(text);
         const codes = [];
         html = html.replace(/`([^`]+)`/g, (_, code) => { codes.push(code); return `\u0000${codes.length - 1}\u0000`; });
-        html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-            (_, label, href) => `<span class="kv-link" title="${href}">${label}</span>`);
-        html = html.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,
-            (_, lead, href) => `${lead}<span class="kv-link" title="${href}">${href}</span>`);
+        const links = [];
+        const keep = (made) => { links.push(made); return `\u0001${links.length - 1}\u0001`; };
+        html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, href) => keep(linkHtml(href, label)));
+        // bare addresses, also in <…> and after "Abgerufen von"; trailing punctuation stays text
+        html = html.replace(/(^|[\s(\[:]|&lt;)(https?:\/\/[^\s<>"\u0001]+)/g, (_, lead, found) => {
+            let href = found;
+            let tail = '';
+            for (;;) {
+                const end = /(&gt;|&quot;|&#39;|[.,;:!?)\]])$/.exec(href);
+                if (!end || (end[1] === ')' && (href.match(/\(/g) || []).length >= (href.match(/\)/g) || []).length)) break;
+                tail = end[1] + tail;
+                href = href.slice(0, -end[1].length);
+            }
+            return lead + keep(linkHtml(href, href)) + tail;
+        });
         html = html.replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a, b) => `<strong>${a || b}</strong>`);
         html = html.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, (_, lead, body) => `${lead}<em>${body}</em>`);
         html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
         html = html.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[Number(i)]}</code>`);
+        html = html.replace(/\u0001(\d+)\u0001/g, (_, i) => links[Number(i)]);
         return html;
     }
 
@@ -374,13 +420,13 @@
             const raw = lines[i];
             const line = raw.trim();
             if (!line) { flushPara(); closeList(); continue; }
-            const heading = MD_HEADING.exec(line);
+            const heading = headingOf(line);
             if (heading) {
                 flushPara(); closeList();
-                const level = Math.min(heading[1].length + 1, 6);
+                const level = Math.min(heading.level + 1, 6);
                 const anchor = `kv-h-${headings.length}`;
-                headings.push({ level: heading[1].length, text: plain(heading[2], null), anchor });
-                out.push(`<h${level} id="${anchor}">${inline(heading[2])}</h${level}>`);
+                headings.push({ level: heading.level, text: plain(heading.text, null), anchor });
+                out.push(`<h${level} id="${anchor}">${inline(heading.text)}</h${level}>`);
                 continue;
             }
             if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) { flushPara(); closeList(); out.push('<hr>'); continue; }
@@ -548,15 +594,21 @@
             countEl.textContent = query.trim()
                 ? `${shown.length} von ${rows.length} Karten`
                 : (rows.length === 1 ? '1 Karte' : `${rows.length} Karten`);
-            none.hidden = shown.length > 0 || rows.length === 0;
-            none.textContent = query.trim() ? `Keine Karte mit „${query.trim()}“ im Titel` : '';
+            none.hidden = shown.length > 0;
+            none.textContent = rows.length === 0
+                ? 'Noch keine Notizen in dieser Bubble.'
+                : (query.trim() ? `Keine Karte mit „${query.trim()}“ im Titel` : '');
         }
 
         function section(head, lines) {
             const box = el('section', 'kv-section');
             if (head) box.append(el('h3', null, head));
             const ul = el('ul');
-            for (const line of lines) ul.append(el('li', null, line));
+            for (const line of lines) {
+                const li = el('li');
+                li.innerHTML = inline(line);   // maskiert; Adressen werden Links
+                ul.append(li);
+            }
             box.append(ul);
             return box;
         }
@@ -688,6 +740,23 @@
         }
 
         reader.addEventListener('click', (e) => { if (e.target === reader) close(); });
+        // Links: im Browser des Systems, nie in der App (preload: vibemind.openExternal, main prueft erneut)
+        const openUrl = typeof options.openUrl === 'function' ? options.openUrl : (url) => {
+            const win = doc.defaultView || (typeof window !== 'undefined' ? window : null);
+            const api = win && win.vibemind;
+            if (api && typeof api.openExternal === 'function') api.openExternal(url);
+        };
+        const followLink = (e) => {
+            const target = e.target && typeof e.target.closest === 'function' ? e.target.closest('.kv-link[data-url]') : null;
+            if (!target) return;
+            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            e.preventDefault();
+            e.stopPropagation();
+            const url = safeUrl(target.getAttribute('data-url'));
+            if (url) openUrl(url);
+        };
+        reader.addEventListener('click', followLink);
+        reader.addEventListener('keydown', followLink);
         // Esc schliesst die Karte und nur die Karte: die App darf dabei die Bubble nicht verlassen.
         const onKey = (e) => {
             if (e.key !== 'Escape' || reader.hidden || !rootEl.isConnected) return;
@@ -738,6 +807,6 @@
     return {
         FORMAT_NAMES, CARD_LINES, CARD_LINE_CHARS, SIZES,
         rowOf, cardFormat, plain, cardTitle, cardSource, cardShort, cardRead, cardLinks,
-        renderMarkdown, escapeHtml, searchKey, matches, board,
+        renderMarkdown, escapeHtml, safeUrl, headingOf, searchKey, matches, board,
     };
 });

@@ -234,7 +234,7 @@ test('Markdown wird gelesen, nie ausgefuehrt', () => {
     assert.match(md.html, /<strong>zwei<\/strong>/);
     assert.match(md.html, /<ul>\n<li>Quelle A<\/li>\n<\/ul>/);
     assert.match(md.html, /<ol>\n<li>eins<\/li>\n<li>zwei<\/li>\n<\/ol>/);
-    assert.match(md.html, /<span class="kv-link" title="https:\/\/example.org\/a\?b=&quot;c&quot;">Quelle<\/span>/);
+    assert.match(md.html, /<span class="kv-link" role="link" tabindex="0" data-url="https:\/\/example.org\/a\?b=%22c%22"[^>]*>Quelle<\/span>/);
     assert.deepEqual(md.headings.map((h) => h.text),
         ['Wettbewerbsanalyse: Bubble A', '0. Executive Summary', '1. Wettbewerbsprofile', '2. Quellen']);
 });
@@ -313,6 +313,105 @@ test('eine andere Bubble: die offene Karte der letzten schliesst', () => {
     assert.equal(w.boards[0].closed, 1);
     w.canvas.setBubble('0000000b');
     assert.equal(w.boards[0].closed, 1);
+});
+
+test('Quellen sind Links: nur http/https, Satzzeichen bleiben Text', () => {
+    const md = cv.renderMarkdown([
+        '## Quellen',
+        '1. Beispiel, A. (2026). Titel. Abgerufen am 1.1.2026 von https://example.org/bericht?x=1&y=2.',
+        '2. <https://example.com/seite_(2)>',
+        '3. (siehe https://example.net/a__b__c), weiter',
+        '4. javascript:alert(1) und file:///C:/geheim und [boese](javascript:alert(1))',
+        '5. Quelle:https://example.org/z',
+    ].join('\n'));
+    const urls = [...md.html.matchAll(/data-url="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    assert.deepEqual(urls, [
+        'https://example.org/bericht?x=1&y=2',
+        'https://example.com/seite_(2)',
+        'https://example.net/a__b__c',
+        'https://example.org/z',
+    ]);
+    assert.match(md.html, /y=2<\/span>\./, 'der Punkt am Satzende gehoert nicht zur Adresse');
+    assert.doesNotMatch(md.html, /<strong>/, 'Unterstriche in Adressen werden nicht fett');
+    assert.doesNotMatch(md.html, /data-url="(javascript|file)/);
+    assert.equal(cv.safeUrl('javascript:alert(1)'), null);
+    assert.equal(cv.safeUrl('https://user:pw@example.org/'), null);
+    assert.equal(cv.safeUrl('https://example.org/a b'), null);
+    assert.equal(cv.safeUrl('http://example.org'), 'http://example.org/');
+});
+
+test('ein Klick auf einen Link oeffnet ihn im Browser des Systems, nie in der App', () => {
+    const external = require('./external-link');
+    const opened = [];
+    const shell = { openExternal: async (url) => { opened.push(url); } };
+    return Promise.all([
+        external.openExternal(shell, 'https://example.org/x'),
+        external.openExternal(shell, 'javascript:alert(1)'),
+        external.openExternal(shell, 'file:///C:/Windows'),
+        external.openExternal(shell, 42),
+    ]).then((results) => {
+        assert.deepEqual(results.map((r) => r.success), [true, false, false, false]);
+        assert.deepEqual(opened, ['https://example.org/x']);
+        const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+        assert.match(main, /ipcMain\.handle\('app:open-external', \(_event, url\) => require\('\.\/external-link'\)\.openExternal\(shell, url\)\)/);
+        const preload = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+        assert.match(preload, /openExternal: \(url\) => ipcRenderer\.invoke\('app:open-external', url\)/);
+    });
+});
+
+test('Wiki-Ueberschriften "== Titel ==" werden Ueberschriften', () => {
+    assert.deepEqual(cv.headingOf('== Abschnitt 1 =='), { level: 1, text: 'Abschnitt 1' });
+    assert.deepEqual(cv.headingOf('=== Teil ==='), { level: 2, text: 'Teil' });
+    assert.equal(cv.headingOf('== offen'), null);
+    assert.equal(cv.headingOf('a == b'), null);
+    const md = cv.renderMarkdown('Vorab\n== Abschnitt 1 ==\nText\n=== Teil ===\nmehr');
+    assert.match(md.html, /<h2 id="kv-h-0">Abschnitt 1<\/h2>/);
+    assert.match(md.html, /<h3 id="kv-h-1">Teil<\/h3>/);
+    assert.doesNotMatch(md.html, /==/);
+    assert.equal(cv.plain('== Abschnitt 1 =='), 'Abschnitt 1', 'auf der kleinen Karte ohne Gleichheitszeichen');
+});
+
+test('eine leere Bubble zeigt das Raster mit "Noch keine Notizen", nicht die alte Werkzeugleiste', () => {
+    const w = canvasWorld();
+    let reinit = 0;
+    w.canvas.init = () => { reinit += 1; };
+    w.canvas.loadNodes([], []);
+    assert.equal(w.boards.length, 1);
+    assert.equal(w.boards[0].element.parentNode, w.canvas.container);
+    assert.deepEqual(w.boards[0].updates, [[0, 0]]);
+    assert.equal(w.polls(), 1, 'Karten, die Agenten in die leere Bubble schreiben, erscheinen');
+    w.canvas.loadNodes([PRO_CONTRA], []);
+    w.canvas.loadNodes(null);
+    assert.deepEqual(w.boards[0].updates, [[0, 0], [1, 0], [0, 0]], 'dasselbe Raster, nur leer');
+    assert.equal(reinit, 0, 'der alte DOM-Canvas mit seiner Werkzeugleiste wird nicht aufgebaut');
+});
+
+test('das Raster sagt in einer leeren Bubble "Noch keine Notizen"', () => {
+    const made = [];
+    const fake = (tag) => {
+        const node = { tag, children: [], className: '', textContent: '', value: '', hidden: false, dataset: {}, style: { setProperty() {} },
+            append(...c) { node.children.push(...c); }, replaceChildren(...c) { node.children = c; },
+            setAttribute() {}, addEventListener() {}, remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [] };
+        made.push(node);
+        return node;
+    };
+    const doc = { createElement: fake, addEventListener() {}, removeEventListener() {}, defaultView: null };
+    const board = cv.board(doc, {});
+    board.mount({ appendChild() {}, append() {} });
+    board.update([], []);
+    const none = made.find((n) => n.className === 'kv-none');
+    assert.equal(none.hidden, false);
+    assert.match(none.textContent, /^Noch keine Notizen/);
+    board.update([PRO_CONTRA], []);
+    assert.equal(none.hidden, true);
+});
+
+test('kein technischer Hinweis ("loadNodes: 98 nodes, 82 edges") auf dem Bildschirm', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
+    assert.doesNotMatch(source, /cy-debug-banner/);
+    assert.doesNotMatch(source, /loadNodes: \$\{/);
+    const body = /_showBanner\(msg[^)]*\) \{([\s\S]*?)\n    \}/.exec(source)[1];
+    assert.doesNotMatch(body, /document|createElement/, 'nur ins Protokoll');
 });
 
 test('Esc schliesst nur die Karte, die App verlaesst die Bubble dabei nicht', () => {

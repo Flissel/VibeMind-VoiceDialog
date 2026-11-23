@@ -324,9 +324,23 @@ class UniverseCanvas {
         this.lastNodes = Array.isArray(nodes) ? nodes : [];
         // bubbleId: whose cards these are, so the chat never names cards of another bubble.
         window.dispatchEvent(new CustomEvent('vibemind:canvas-loaded', { detail: { nodes: this.lastNodes, bubbleId: this.bubbleId || null } }));
-        this._showBanner(`loadNodes: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`, '#666');
-
         this.lastEdges = Array.isArray(edges) ? edges : [];
+
+        // Karten: every card readable in a grid (card-view.js), an empty bubble too ("Noch keine
+        // Notizen"); the old toolbar of the DOM canvas no longer shows. The diagram stays one click away.
+        if (this._view() === 'karten' && window.CardView && typeof window.CardView.board === 'function') {
+            this._loadGen = (this._loadGen || 0) + 1;   // a diagram still rendering must not replace the cards
+            if (!this._board) {
+                this._board = window.CardView.board(document, { onGraph: () => this.showView('graph') });
+            }
+            this._board.mount(this.container);
+            this._board.update(this.lastNodes, this.lastEdges);
+            this._mermaidMode = true;   // same refresh path as the diagram: updates reload, the 5-s poll runs
+            this.nodes.clear();
+            this.edges = [];
+            this._startMermaidPoll();   // cards written by agents into an empty bubble show up too
+            return;
+        }
 
         if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
             this._stopMermaidPoll();
@@ -338,21 +352,6 @@ class UniverseCanvas {
                 this._mermaidMode = false;
             }
             this.clear();
-            return;
-        }
-
-        // Karten: every card readable in a grid (card-view.js). The diagram stays one click away.
-        if (this._view() === 'karten' && window.CardView && typeof window.CardView.board === 'function') {
-            this._loadGen = (this._loadGen || 0) + 1;   // a diagram still rendering must not replace the cards
-            if (!this._board) {
-                this._board = window.CardView.board(document, { onGraph: () => this.showView('graph') });
-            }
-            this._board.mount(this.container);
-            this._board.update(nodes, this.lastEdges);
-            this._mermaidMode = true;   // same refresh path as the diagram: updates reload, the 5-s poll runs
-            this.nodes.clear();
-            this.edges = [];
-            this._startMermaidPoll();
             return;
         }
 
@@ -490,26 +489,10 @@ class UniverseCanvas {
     }
 
     _showBanner(msg, color = '#3a7') {
-        // Phase 11.U.G — Visible status banner because DevTools sometimes
-        // refuses to open. Shows the cytoscape-layout pipeline state right
-        // at the top of the screen for 5 seconds.
-        try {
-            let b = document.getElementById('cy-debug-banner');
-            if (!b) {
-                b = document.createElement('div');
-                b.id = 'cy-debug-banner';
-                b.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
-                    'z-index:99999;padding:6px 14px;font:12px monospace;color:#fff;' +
-                    'border-radius:4px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.5)';
-                document.body.appendChild(b);
-            }
-            b.style.background = color;
-            b.textContent = msg;
-            clearTimeout(this.__bannerTimer);
-            this.__bannerTimer = setTimeout(() => {
-                if (b && b.parentNode) b.parentNode.removeChild(b);
-            }, 5000);
-        } catch (_) { /* ignore */ }
+        // Technical state of the layout pipeline ("loadNodes: 98 nodes, 82 edges", Mermaid/fCoSE):
+        // only in the log, never on the screen. Red means an error, so it goes out as a warning.
+        const log = color === '#c33' || color === '#c80' ? console.warn : console.log;
+        log('[UniverseCanvas]', msg);
     }
 
     async _runAutoLayout(nodes, edges) {

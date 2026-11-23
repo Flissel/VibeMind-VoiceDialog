@@ -442,6 +442,9 @@ contextBridge.exposeInMainWorld('vibemind', {
         },
     },
 
+    // A link from a card in the system's browser (only http/https, checked in main.js)
+    openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
+
     // File System Operations
     fs: {
         openFolder: (path) => ipcRenderer.invoke('fs:open-folder', path),
