@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const { buildContext, reloadsCards, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
 
-const B1 = 'fa8d4158-f721-4290-a0cf-7f20da754372';
+const B1 = '00000000-0000-4000-8000-00000000000d';
 const B2 = '0b1c2d3e-0000-4000-8000-123456789abc';
 
 test('inside a bubble the context names the bubble and its cards', () => {
@@ -250,21 +250,21 @@ test('a failed plan and a question back take the card noted in advance away', ()
 });
 
 test('the id of the open bubble is its database id, never the local number of the Python part', () => {
-    // The state measured in the running app on 2026-11-23, bubble "Sheerlay" open:
+    // The state measured in the running app on 2026-11-23, bubble "Bubble A" open:
     // spaceCanvas.bubbleId null, __currentBubbleId 1, selectedBubbleId the UUID. The app sent "1".
-    const scene = { userData: { id: B1, db_id: B1, title: 'Sheerlay', data: { id: B1 } } };
+    const scene = { userData: { id: B1, db_id: B1, title: 'Bubble A', data: { id: B1 } } };
     const lookup = (value) => (value === 1 || value === B1 ? scene : null);
 
     assert.equal(bubbleDbId([undefined, B1, null, 1, undefined], lookup), B1, 'as measured');
     assert.equal(bubbleDbId([null, null, null, 1], lookup), B1, 'only the local number is known: looked up');
-    assert.equal(bubbleDbId([null, 'Sheerlay', null, 7], () => null), null, 'a title or a number is no id');
+    assert.equal(bubbleDbId([null, 'Bubble A', null, 7], () => null), null, 'a title or a number is no id');
     assert.equal(bubbleDbId([null, null, null, 1], () => ({ userData: { id: 1, title: 'ohne Kennung' } })), null);
     assert.equal(bubbleDbId([], lookup), null);
 
-    assert.deepEqual(buildContext({ bubble: { id: B1, title: 'Sheerlay' }, nodes: [] }).bubble, { id: B1, title: 'Sheerlay' });
-    for (const wrong of [null, 1, '1', 'Sheerlay']) {
-        assert.deepEqual(buildContext({ bubble: { id: wrong, title: 'Sheerlay' }, nodes: [] }).bubble,
-            { id: null, title: 'Sheerlay' }, 'rather no id than a wrong one: ' + String(wrong));
+    assert.deepEqual(buildContext({ bubble: { id: B1, title: 'Bubble A' }, nodes: [] }).bubble, { id: B1, title: 'Bubble A' });
+    for (const wrong of [null, 1, '1', 'Bubble A']) {
+        assert.deepEqual(buildContext({ bubble: { id: wrong, title: 'Bubble A' }, nodes: [] }).bubble,
+            { id: null, title: 'Bubble A' }, 'rather no id than a wrong one: ' + String(wrong));
     }
 });
 
@@ -280,17 +280,17 @@ test('the chat reads the open bubble through the database id only', () => {
 test('database ids come in three forms and are passed on unchanged', () => {
     // Counted in the stock on 2026-11-23: 9 of 15 bubbles carry 8 hex characters, 6 a UUID;
     // connections carry 32 hex characters.
-    const short = 'db424a20';
+    const short = '0000000b';
     const long = '0123456789abcdef0123456789abcdef';
 
     for (const id of [short, long, B1]) {
         assert.deepEqual(buildContext({ bubble: { id, title: 'X' }, nodes: [] }).bubble, { id, title: 'X' }, id);
     }
-    const scene = { userData: { id: 3, db_id: short, title: 'Sheerlay' } };
+    const scene = { userData: { id: 3, db_id: short, title: 'Bubble A' } };
     assert.equal(bubbleDbId([null, null, null, 1], (value) => (value === 1 ? scene : null)), short, 'looked up through the local number');
     assert.equal(bubbleDbId([short, B1], () => null), short, 'the first database id wins, whatever its form');
 
-    for (const wrong of ['1', 'Sheerlay', 'db424a2', 'db424a20x', 'zz424a20', '']) {
+    for (const wrong of ['1', 'Bubble A', '0000000', '0000000bx', 'zz00000b', '']) {
         assert.equal(buildContext({ bubble: { id: wrong, title: 'X' }, nodes: [] }).bubble.id, null, wrong);
     }
 
