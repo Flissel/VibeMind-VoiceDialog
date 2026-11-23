@@ -106,3 +106,25 @@ test('a local page gets its preload and is loaded as a file', () => {
     assert.equal(targets[0][0].kind, 'file');
     assert.deepEqual(targets[1], []);
 });
+
+test('the page reading its list is no task of the person: the status line leaves that plan out', () => {
+  const { createTaskNavigator } = require('./task-navigation');
+  const { OWN_PLAN_PREFIX } = require('./orders-data');
+  assert.equal(OWN_PLAN_PREFIX, 'auftraege-');
+  const sent = [];
+  const nav = createTaskNavigator((message) => sent.push(message));
+  // the sentence: one plan, one ✓
+  nav.handle('plan_started', { plan_id: 'lesen_1', hops: [{}], space: 'schedule' });
+  nav.handle('hop_completed', { space: 'schedule', ok: true, result_preview: "'leer'" });
+  assert.equal(nav.handle('plan_completed', { ok: true }).state, 'done');
+  const before = sent.length;
+  // then the tab opens and its page reads the list: nothing of that reaches the line
+  assert.equal(nav.handle('plan_started', { plan_id: 'auftraege-0aef4f', hops: [{}], space: 'schedule' }), null);
+  assert.equal(nav.handle('hop_started', { space: 'schedule' }), null);
+  assert.equal(nav.handle('hop_completed', { space: 'schedule', ok: true }), null);
+  assert.equal(nav.handle('plan_completed', { ok: true, plan_id: 'auftraege-0aef4f' }), null);
+  assert.equal(sent.length, before, 'no second ✓, no jump');
+  // the next plan of a sentence shows again
+  nav.handle('plan_started', { plan_id: 'lesen_2', hops: [{}], space: 'schedule' });
+  assert.ok(sent.length > before);
+});

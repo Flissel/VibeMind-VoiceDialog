@@ -11,6 +11,7 @@
  * Whether to really switch (the user may be busy) is decided in the renderer.
  */
 const http = require('node:http');
+const { OWN_PLAN_PREFIX } = require('./orders-data');
 
 /**
  * Registry space id -> key in the app's scene (multiverse.js `this.spaces`).
@@ -199,9 +200,16 @@ function createTaskNavigator(send) {
     return message;
   };
 
+  // Plans the app runs for its own pages (the list of the entry "Auftraege") are no task of the person.
+  const ownPlan = (id) => typeof id === 'string' && id.startsWith(OWN_PLAN_PREFIX);
+  let ignoring = false;
+
   return {
     handle(kind, payload) {
       if (!payload) payload = {};
+      if (kind === 'plan_started') ignoring = ownPlan(payload.plan_id);
+      const id = typeof payload.plan_id === 'string' && payload.plan_id ? payload.plan_id : null;
+      if (id ? ownPlan(id) : ignoring) return null;
       if (kind === 'plan_started') {
         planId = typeof payload.plan_id === 'string' ? payload.plan_id : '';
         total = Array.isArray(payload.hops) ? payload.hops.length : 0;

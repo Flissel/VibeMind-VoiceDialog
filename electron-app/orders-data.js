@@ -12,9 +12,13 @@ function brainBase(env = process.env) {
   return `http://127.0.0.1:${Number.isInteger(port) && port > 0 && port < 65536 ? port : 5000}`;
 }
 
+// The page's own reads run as plans of the brain; the status line leaves them out (task-navigation.js):
+// they are no task of the person (measured: "… im Dashboard?" showed two ✓, the second was this read).
+const OWN_PLAN_PREFIX = 'auftraege-';
+
 function listPlan(capability, id) {
   return {
-    plan_id: `auftraege-${id}`,
+    plan_id: `${OWN_PLAN_PREFIX}${id}`,
     intent: '',
     rationale: 'Anzeige im Eintrag Auftraege',
     hops: [{ step_id: 's1', description: capability, capability, arg_template: '', retries: 1 }],
@@ -92,4 +96,4 @@ async function readOrders({ base = brainBase(), fetchJson = defaultFetchJson, id
   return summarize({ schedule, minibook, research });
 }
 
-module.exports = { brainBase, listPlan, summarize, readOrders };
+module.exports = { brainBase, listPlan, summarize, readOrders, OWN_PLAN_PREFIX };
