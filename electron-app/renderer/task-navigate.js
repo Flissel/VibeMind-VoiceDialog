@@ -77,6 +77,8 @@
     }
 
     const LINE_MAX = 240;
+    const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
+    const WAITING_TEXT = '\u25CF arbeitet \u2026';
 
     /** One line of at most 240 characters out of any text. */
     function shorten(text) {
@@ -160,6 +162,15 @@
         function render() {
             const el = statusElement();
             if (!el) return;
+            if (current && current.waiting) {
+                el.textContent = WAITING_TEXT;
+                el.title = '';
+                el.dataset.state = 'running';
+                el.dataset.space = '';
+                el.hidden = false;
+                markTab('', '');
+                return;
+            }
             if (!current || !current.space) {
                 el.hidden = true;
                 markTab('', '');
@@ -189,6 +200,14 @@
         root.addEventListener('vibemind:sentence-sent', () => {
             answer = '';
             fresh();
+            // The first thing to see after a sentence, before the Brain has said anything: a neutral
+            // line. The first event of the plan replaces it; an answer without a plan removes it.
+            if (!current) {
+                current = { state: 'running', space: '', waiting: true };
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(() => { if (current && current.waiting) clear(); }, WAIT_MS);
+                render();
+            }
         });
 
         // The answer to the sentence is the plan's own summary, written for the user. It is what a
@@ -197,6 +216,7 @@
         root.addEventListener('vibemind:sentence-answered', (event) => {
             const detail = (event && event.detail) || {};
             answer = detail.success === false ? '' : shorten(detail.text);
+            if (current && current.waiting) clear(); // answered without a plan that had a place in the app
             if (answer && current && current.state === 'done') {
                 current.result = answer;
                 render();
@@ -260,7 +280,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS };
+    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS, WAITING_TEXT };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

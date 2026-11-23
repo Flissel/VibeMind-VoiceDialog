@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator } = require('./task-navigation');
-const { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS } = require('./renderer/task-navigate');
+const { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS, WAITING_TEXT } = require('./renderer/task-navigate');
 
 test('registry spaces map to the keys of the app scene', () => {
     assert.equal(appKeyForSpace('coding'), 'projects');
@@ -259,4 +259,31 @@ test('a finished task shows the answer to the sentence, not the raw result of it
     assert.equal(shorten(' 15 Bubbles:\n„A“, „B“ \t(und 13 weitere). '), '15 Bubbles: „A“, „B“ (und 13 weitere).');
     assert.equal(shorten('x'.repeat(500)).length, 240);
     assert.equal(shorten(undefined), '');
+});
+
+test('a plan that names its space at the start is followed at once', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+
+    navigator.handle('plan_started', { plan_id: 'p11', space: 'sales', intent: 'Entwirf eine Mail', hops: [{}, {}] });
+    assert.deepEqual(sent.map((m) => m.type + ':' + (m.state || m.space)), ['task_status:reset', 'task_navigate:sales', 'task_status:running']);
+    assert.equal(sent[2].space, 'sales');
+    assert.equal(sent[2].step, '', 'no step yet');
+    assert.equal(sent[2].total, 2);
+
+    navigator.handle('hop_started', { space: 'sales', description: 'Kontakt suchen' });
+    assert.equal(sent.filter((m) => m.type === 'task_navigate').length, 1, 'the first step in the same space does not jump again');
+    assert.equal(sent.at(-1).step, 'Kontakt suchen');
+
+    navigator.handle('plan_started', { plan_id: 'p12', space: 'gibt-es-nicht' });
+    assert.equal(sent.at(-1).state, 'reset', 'an unknown space: wait for the steps as before');
+});
+
+test('a neutral line stands in the title bar from the moment a sentence is sent', () => {
+    const page = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
+
+    assert.equal(WAITING_TEXT, '\u25CF arbeitet \u2026');
+    assert.match(page, /if \(!current\) \{\s*current = \{ state: 'running', space: '', waiting: true \};/, 'only when nothing is running already');
+    assert.match(page, /if \(current && current\.waiting\) clear\(\);/, 'an answer without a plan removes it');
+    assert.match(page, /if \(current && current\.waiting\) \{\s*el\.textContent = WAITING_TEXT;/);
 });

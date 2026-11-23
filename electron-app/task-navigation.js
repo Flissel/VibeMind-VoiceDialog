@@ -162,6 +162,15 @@ function createTaskNavigator(send) {
         // A new plan: what the plan before ended with is no longer the news.
         const reset = { type: 'task_status', state: 'reset', plan_id: planId };
         send(reset);
+        // The Brain names the space of a plan with its start. Then the app follows at once and does
+        // not wait for the first step, which can come seconds later.
+        const start = appKeyForSpace(payload.space);
+        if (start) {
+          last = { space: start, registry_space: payload.space, step: '', result: '', error: '', result_ref: '', ...stageOf(payload) };
+          visited.add(start);
+          send({ type: 'task_navigate', space: start, registry_space: payload.space, capability: '', description: text(payload.intent) });
+          status('running');
+        }
         return null;
       }
       if (kind === 'hop_started') {
