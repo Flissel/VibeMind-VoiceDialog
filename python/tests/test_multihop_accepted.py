@@ -96,3 +96,24 @@ def test_the_order_numbers_travel_to_the_app():
                        "executed": {"s1": {"ok": True, "result": {"ok": True, "pending": True, "auftrag_id": ORDER}}},
                        "final_text": "Auftrag angenommen, Nr. 00000000 - die Einschaetzung folgt.", "targets": [CARD]})
     assert result.tool_result["orders"] == [ORDER], "once, from answer and hop"
+
+ORDER_2 = "00000000-0000-4000-8000-0000000000bb"
+
+
+def test_the_step_that_hands_the_order_over_is_no_failure():
+    """Lauf 7: der Schritt, der den Auftrag an ein Modell gibt, sagt ok false, pending true.
+
+    Die Bruecke wertete das als echten Fehler: kein pending, keine Auftragsnummer in der App,
+    die App fragte /stand nie und zeigte den Vorschlag nicht.
+    """
+    result = _execute({"ok": True, "pending": True, "status": "angenommen", "plan_id": "p7", "state": {},
+                       "final_text": "Auftrag angenommen, Nr. 00000000 – das Ergebnis kommt, sobald es geprueft ist.",
+                       "executed": {"s1": {"ok": False, "pending": True, "invocation_id": ORDER_2,
+                                           "result": {"auftrag_id": ORDER_2, "agent": "agent-a", "status": "offen"}}}})
+    assert result.tool_result == {"pending": True, "status": "angenommen", "targets": [], "orders": [ORDER_2]}
+
+
+def test_a_step_that_really_failed_still_is_one():
+    result = _execute({"ok": False, "plan_id": "p8", "state": {}, "final_text": "Das hat nicht geklappt.",
+                       "executed": {"s1": {"ok": False, "error": "Der Dienst ist gerade nicht erreichbar."}}})
+    assert result.tool_result is None

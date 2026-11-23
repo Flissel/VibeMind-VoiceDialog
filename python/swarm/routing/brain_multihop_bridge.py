@@ -358,7 +358,10 @@ class BrainMultihopBridge:
             if not isinstance(hop, dict):
                 continue
             result = hop.get("result")
-            if marked(hop) or marked(result):
+            # The step that hands an order to a model says {ok: false, pending: true,
+            # result: {auftrag_id, status: "offen"}}: the order is taken, nothing failed.
+            handed = hop.get("pending") is True
+            if marked(hop) or marked(result) or handed:
                 accepted = True
                 collect(hop)
                 collect(result)
