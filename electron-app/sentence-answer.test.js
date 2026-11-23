@@ -6,6 +6,8 @@ const path = require('node:path');
 const { contextFor, view, isQuestion } = require('./renderer/sentence-answer');
 const { EXTERNAL_SPACES } = require('./external-spaces');
 const { createTaskNavigator } = require('./task-navigation');
+const vm = require('node:vm');
+const sentenceAnswer = require('./renderer/sentence-answer');
 
 const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
 const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
@@ -23,8 +25,8 @@ test('every tab names its own space with each sentence of the console', () => {
     for (const id of TABS) {
         assert.deepEqual(contextFor(id), { space: id }, id);
     }
-    // what the console sends: the space on screen (set on arrival for every tab, fixed or external)
-    assert.match(scene, /const context = answers \? answers\.contextFor\(this\.currentSpace, ideas\) : ideas;/);
+    // what the console sends: the space on screen (set on arrival for every tab, fixed or external),
+    // checked on the sending itself below
     assert.match(scene, /_arriveAtSpace\(targetSpace, space\) \{[\s\S]{0,200}this\.currentSpace = targetSpace;/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'external-spaces.js'), 'utf8'), /app\.navigateToSpace\(space\.id\)/,
         'an external tab goes the same way');
@@ -119,4 +121,59 @@ test('a proposal for a changed card shows its sentence and two answers to click 
     assert.match(chat, /const failed = !accepted && !asks && !hint && !proposes &&/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'ideas-chat.css'), 'utf8'), /\.ideas-chat-vorschlag \{/);
     assert.match(fs.readFileSync(path.join(__dirname, '..', 'python', 'ipc', 'clawport_handlers.py'), 'utf8'), /answer\["vorschlag"\] = dict\(tool_result\["vorschlag"\]\)/);
+});
+
+
+/**
+ * sendGameConsoleMessage of multiverse.js as it is, in a stand-in window: what goes to the Brain
+ * with a sentence typed in the console of a tab.
+ */
+async function consoleSends(space, ideasContext) {
+    const start = scene.indexOf('    async sendGameConsoleMessage(');
+    const end = scene.indexOf('\n    addGcMessage(', start);
+    const method = scene.slice(start, end).replace(/\n\s*\/\*\*[\s\S]*?\*\/\s*$/, '');
+    const el = () => ({ value: '', classList: { add() {}, remove() {} } });
+    const ids = { 'gc-input': el(), 'gc-spinner': el(), 'gc-send-btn': el() };
+    const sent = [];
+    const events = [];
+    let n = 0;
+    const window = {
+        VibeSentenceAnswer: sentenceAnswer,
+        VibeIdeasChat: ideasContext ? { contextNow: () => ideasContext } : undefined,
+        crypto: { randomUUID: () => '00000000-0000-4000-8000-0000000000' + String(++n).padStart(2, '0') },
+        vibemind: { sendChatMessage: async (text, context, typed) => { sent.push({ text, context, typed }); return { success: true, message: 'ok' }; } },
+        dispatchEvent: (event) => events.push(event),
+    };
+    const context = vm.createContext({
+        window, document: { getElementById: (id) => ids[id] },
+        CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+    });
+    vm.runInContext('class Scene {\n' + method + '\n    addGcMessage() { return {}; }\n}\nthis.Scene = Scene;', context);
+    const app = new context.Scene();
+    app.currentSpace = space;
+    for (const text of ['Satz eins', 'Satz zwei']) {
+        ids['gc-input'].value = text;
+        await app.sendGameConsoleMessage({ typed: true });
+    }
+    return { sent, events };
+}
+
+test('the console sends the space on screen with each sentence, and each sentence its own trace', async () => {
+    for (const space of ['orders', 'video', 'sales', 'desktop']) {
+        const { sent, events } = await consoleSends(space);
+        assert.equal(sent.length, 2);
+        for (const { context } of sent) {
+            assert.equal(context.space, space, space);
+            assert.match(context.trace_id, /^[0-9a-f-]{36}$/);
+            assert.deepEqual(Object.keys(context).sort(), ['space', 'trace_id'], 'nothing else outside Ideas');
+        }
+        assert.notEqual(sent[0].context.trace_id, sent[1].context.trace_id, 'one trace per sentence');
+        const sentTraces = events.filter((e) => e.type === 'vibemind:sentence-sent').map((e) => e.detail.trace_id);
+        assert.deepEqual(sentTraces, sent.map((x) => x.context.trace_id), 'the status line gets the same trace');
+    }
+    // in Ideas the context of the Ideas chat goes along, still naming the space
+    const ideas = { space: 'ideas', bubble: null, bubbles: [] };
+    const { sent } = await consoleSends('ideas', ideas);
+    assert.deepEqual({ ...sent[0].context, trace_id: 'x' }, { ...ideas, trace_id: 'x' });
+    assert.equal(sent[0].typed, true);
 });
