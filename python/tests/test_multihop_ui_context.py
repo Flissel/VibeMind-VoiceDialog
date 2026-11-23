@@ -241,8 +241,24 @@ def test_a_proposal_reaches_the_app_with_only_card_and_title():
 def test_nothing_found_still_falls_through():
     assert _execute({"ok": False, "error": "planner returned no plan"}) is None
     assert _execute({"ok": False, "final_text": "", "executed": {}}) is None
-    # a sentence without anything executed and without a question is not the Brain's verdict
-    assert _execute({"ok": False, "final_text": "irgendein Text", "executed": {}}) is None
+    assert _execute({"ok": False, "final_text": "   ", "executed": {}}) is None
+
+
+# Lauf 19: the answer of the Brain (curl against /api/multihop/execute, space ideas, no bubble) was
+# {"ok": false, "executed": {}, "final_text": "...", "trace_id": "...", "weg": "lesen-fehlt"}: no
+# rueckfrage, no plan. The bridge returned None, the old path answered "nicht ganz verstanden".
+def test_every_sentence_of_the_brain_is_shown_as_a_calm_question_back():
+    sentence = ("Welche Bereiche in Bereich B stehen, kann ich noch nicht sagen: "
+                "die Lese-Karten (spaces/bereich_b/liste) fehlen auf diesem Stand.")
+    result = _execute({"ok": False, "executed": {}, "final_text": sentence,
+                       "trace_id": "tr_000000000000", "weg": "lesen-fehlt"})
+
+    assert result is not None, "never the old path"
+    assert result.event_type == "brain.multihop.question", "calm, never a failure"
+    assert result.response_hint == sentence
+    assert result.error is None
+    # also without executed and weg at all
+    assert _execute({"ok": False, "final_text": "irgendein Text"}).event_type == "brain.multihop.question"
 
 
 def test_a_plan_that_ran_is_reported_as_before():

@@ -205,9 +205,9 @@ class BrainMultihopBridge:
     ) -> Optional[OrchestrationResult]:
         """POST /api/multihop/execute with the raw intent text.
 
-        Returns OrchestrationResult only when Brain reports ok=true AND a
-        non-empty final_text (or a synthesizable executed-hop summary).
-        Returns None in every other case so Phase -1 / HybridRouter run.
+        Returns OrchestrationResult whenever the Brain has a sentence (final_text, or for
+        ok=true an accepted order or a synthesizable executed-hop summary). Returns None
+        only without any sentence, so Phase -1 / HybridRouter run.
         Never raises.
         """
         if not self._available:
@@ -246,9 +246,14 @@ class BrainMultihopBridge:
         # Brain also answers ok=false when it DID act and a tool refused or failed, and
         # when it asks back (rueckfrage=true); then final_text is its sentence for the
         # user. Dropping that sentence made the old path answer "I did not understand
-        # you" while the tool had plainly said what was wrong.
-        if not ok and not (final_text and (question or hint or proposal is not None or executed)):
+        # you" while the tool had plainly said what was wrong. Every sentence of the Brain
+        # is shown: also one with only a way (`weg`, e.g. "lesen-fehlt") and no other mark
+        # (Lauf 19: "Welche Agenten gibt es in Rowboat?" went to the old path that way).
+        if not ok and not final_text:
             return None
+        if not ok and not (question or hint or proposal is not None or executed):
+            # nothing done, no failure of a tool: the Brain's sentence, calmly, as a question back
+            question = True
 
         # MH-5 (Phase 0): feed the REAL per-hop truth-verdict back as a
         # reward, keyed on the top-level plan_id (MH-5a response contract).
