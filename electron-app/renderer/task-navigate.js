@@ -55,7 +55,11 @@
         const arrow = away ? ' →' : '';
         if (state === 'running') {
             // A pipeline names its stage; it comes before the step.
-            const what = [message.stage, message.step].filter(Boolean).join(' · ');
+            // With its position the short form of the pipelines: "Stufe 3 von 6, Requirements".
+            const name = message.stage_label || message.stage;
+            const stage = message.stage_nr && message.stage_total
+                ? `Stufe ${message.stage_nr} von ${message.stage_total}${name ? ', ' + name : ''}` : name;
+            const what = stage && message.stage_nr ? stage : [stage, message.step].filter(Boolean).join(' · ');
             const step = what ? `: ${what}` : '';
             return { state, text: `● ${label}${step}${count}${arrow}`, title: message.result || message.step || '' };
         }

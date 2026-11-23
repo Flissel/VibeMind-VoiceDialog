@@ -84,7 +84,8 @@ test('a plan reports where it stands and how it ended', () => {
     navigator.handle('hop_started', { space: 'sales', capability: 'sales_draft', description: 'Angebot entwerfen' });
     assert.deepEqual(states()[0], {
         type: 'task_status', state: 'running', plan_id: 'p7', space: 'sales', registry_space: 'sales',
-        step: 'Angebot entwerfen', done: 0, total: 2, result: '', error: '', stage: '', result_ref: '',
+        step: 'Angebot entwerfen', done: 0, total: 2, result: '', error: '', stage: '',
+        stage_nr: null, stage_total: null, stage_label: '', result_ref: '',
     });
 
     navigator.handle('hop_completed', {
@@ -213,6 +214,10 @@ test('stage and result pointer are passed on and shown once the Brain sends them
 
     const line = describe({ state: 'running', stage: 'Requirements', step: 'Anforderungen sammeln', done: 0, total: 1 }, 'SWE Design', false);
     assert.equal(line.text, '● SWE Design: Requirements · Anforderungen sammeln');
+    navigator.handle('hop_started', { space: 'swedesign', description: 'x', stage: 'requirements', stage_nr: 3, stage_total: 6, stage_label: 'Requirements' });
+    assert.equal(sent.at(-1).stage_nr, 3);
+    const short = describe(sent.at(-1), 'SWE Design', false);
+    assert.equal(short.text, '\u25CF SWE Design: Stufe 3 von 6, Requirements');
     const done = describe({ state: 'done', result: '12 Anforderungen', result_ref: 'shuttle:42' }, 'SWE Design', false);
     assert.equal(done.title, '12 Anforderungen\nshuttle:42');
 });

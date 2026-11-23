@@ -72,6 +72,18 @@ function parseSse(buffer) {
 
 const RESULT_MAX = 240;
 
+const count = (value) => (Number.isInteger(value) && value > 0 ? value : null);
+
+/** Stage of a pipeline step: id, position and readable name (field names provisional). */
+function stageOf(payload) {
+  return {
+    stage: text(payload.stage),
+    stage_nr: count(payload.stage_nr),
+    stage_total: count(payload.stage_total),
+    stage_label: text(payload.stage_label),
+  };
+}
+
 const text = (value) => (typeof value === 'string' ? value.trim().slice(0, RESULT_MAX) : '');
 
 /**
@@ -122,6 +134,10 @@ function createTaskNavigator(send) {
       error: last ? last.error : '',
       // Announced by the Brain, names provisional: the stage of a pipeline and a pointer to the result.
       stage: last ? last.stage : '',
+      // Position of the stage in its pipeline and its readable name, when the Brain sends them.
+      stage_nr: last ? last.stage_nr : null,
+      stage_total: last ? last.stage_total : null,
+      stage_label: last ? last.stage_label : '',
       result_ref: last ? last.result_ref : '',
       ...extra,
     };
@@ -143,7 +159,7 @@ function createTaskNavigator(send) {
       if (kind === 'hop_started') {
         const space = appKeyForSpace(payload.space);
         if (!space) return null; // a general step, or a space without a place in the app
-        last = { space, registry_space: payload.space, step: payload.description || payload.capability || '', result: '', error: '', stage: text(payload.stage), result_ref: '' };
+        last = { space, registry_space: payload.space, step: payload.description || payload.capability || '', result: '', error: '', result_ref: '', ...stageOf(payload) };
         let navigation = null;
         if (!visited.has(space)) {
           visited.add(space);
@@ -169,8 +185,8 @@ function createTaskNavigator(send) {
           step: payload.description || payload.capability || '',
           result: payload.ok === false ? '' : resultText(payload.result_preview),
           error: payload.ok === false ? String(payload.error || 'fehlgeschlagen').slice(0, RESULT_MAX) : '',
-          stage: text(payload.stage),
           result_ref: text(payload.result_ref),
+          ...stageOf(payload),
         };
         return status('running', { step_ok: payload.ok !== false });
       }
