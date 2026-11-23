@@ -56,26 +56,39 @@
         return lines.join('\n');
     }
 
+    /**
+     * The columns of a board: its own columns (name + cards) when it has them. todo / doing / done
+     * only for old cards without columns: the Ideas server sent both for one board, and both drawn
+     * doubled every card (Lauf 10, "Offen" twice).
+     */
+    function _kanbanColumns(cj) {
+        const own = (Array.isArray(cj.columns) ? cj.columns : [])
+            .filter((c) => c && typeof c === 'object')
+            .map((c) => ({ head: c.name || c.title || c.label || '', items: Array.isArray(c.cards) ? c.cards : (Array.isArray(c.items) ? c.items : []) }))
+            .filter((c) => c.head);
+        if (own.length) return own;
+        return [['todo', 'Offen'], ['doing', 'In Arbeit'], ['done', 'Erledigt']]
+            .map(([key, head]) => ({ head, items: Array.isArray(cj[key]) ? cj[key] : [] }));
+    }
+
     function _buildKanban(cj) {
-        const cols = ['todo', 'doing', 'done'];
         const lines = [
             'graph LR',
             '    classDef colC fill:#312e81,stroke:#a78bfa,stroke-width:2px,color:#fff',
             '    classDef cardC fill:#1e293b,stroke:#a78bfa,color:#fff',
         ];
-        for (const col of cols) {
-            const items = Array.isArray(cj[col]) ? cj[col] : [];
-            const cid = `COL_${col}`;
-            lines.push(`    ${cid}["${col.toUpperCase()} (${items.length})"]`);
+        _kanbanColumns(cj).forEach(({ head, items }, n) => {
+            const cid = `COL_${n}`;
+            lines.push(`    ${cid}["${_escapeMermaid(head)} (${items.length})"]`);
             lines.push(`    class ${cid} colC`);
-            items.forEach((it, i) => {
-                const text = _escapeMermaid(it.title || it.text || it.point || '?');
-                const nid = `${cid}_${i}`;
+            items.forEach((it, k) => {
+                const text = _escapeMermaid((it && typeof it === 'object') ? (it.title || it.text || it.point || '?') : it);
+                const nid = `${cid}_${k}`;
                 lines.push(`    ${nid}["${text}"]`);
                 lines.push(`    class ${nid} cardC`);
                 lines.push(`    ${cid} --> ${nid}`);
             });
-        }
+        });
         return lines.join('\n');
     }
 
@@ -550,5 +563,6 @@
     window.openFormatPanel = _openWithTracking;
     window.closeFormatPanel = _closeWithTracking;
     window.refreshOpenFormatPanel = refreshOpenFormatPanel;
+    window.VibeFormatBuild = { kanban: _buildKanban };   // the text of a board, for its test
     console.log('[format-renderer] rev5 — auto-refresh of open card on poll');
 })();
