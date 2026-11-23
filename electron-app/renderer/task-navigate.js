@@ -592,8 +592,20 @@
             render();
         }
 
+        /**
+         * An order with a number ends by /stand alone. A changed card says nothing about it: the
+         * person may change the card meanwhile. Measured 2026-11-23: a change sent 8 s after the
+         * order ended 0.7 s after the acceptance, the card watch took it for the result ("fertig in
+         * 0,7 s"), /stand was no longer asked and the proposal never showed. The card watch stays
+         * for orders without a number.
+         */
+        function endsByStand() {
+            const api = root.vibemind;
+            return Boolean(firstOrder()) && Boolean(api) && typeof api.orderStand === 'function';
+        }
+
         root.addEventListener('vibemind:canvas-loaded', (event) => {
-            if (!current || current.state !== 'accepted' || !watch) return;
+            if (!current || current.state !== 'accepted' || !watch || endsByStand()) return;
             const detail = (event && event.detail) || {};
             const nodes = Array.isArray(detail.nodes) ? detail.nodes : [];
             const bubbleId = detail.bubbleId || null;
@@ -616,7 +628,7 @@
             const row = event && event.detail ? event.detail.row : null;
             if (!row || row.id == null) return;
             lastRow = row;
-            if (!current || current.state !== 'accepted' || !watch) return;
+            if (!current || current.state !== 'accepted' || !watch || endsByStand()) return;
             if (watch.bubbleId && String(watch.bubbleId) !== String(row.id)) return;
             const count = reasonCount(row);
             if (count === null) return;

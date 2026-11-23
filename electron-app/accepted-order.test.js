@@ -483,3 +483,63 @@ test('/stand uebernommen ends with ✓ and the message, no buttons; ungeprueft c
     assert.equal(quiet.w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
     assert.equal(brain({ stand: 'Böse<script>', meldung: 'x' }), null, 'only plain state names pass');
 });
+
+// Lauf 8 (window log): "Formuliere … aus", 8 s later "Ergänze bei …". The Brain took the order only
+// after 16 s and sent its acceptance under the plan of the change; the change ended 0.7 s later.
+// The card it changed is no result of the order: only /stand ends a numbered order.
+test('a change made before the order was taken does not end the order; its proposal still comes', async () => {
+    const w = world();
+    const asked = [];
+    const stands = [{ stand: 'laeuft' }, { stand: 'vorschlag', meldung: 'Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.', hinweis: true,
+        saetze: ['Vorschlag zeigen', 'Vorschlag trotzdem übernehmen', 'Vorschlag verwerfen'] }];
+    w.window.vibemind.orderStand = async (id) => { asked.push(id); return stands.shift() || { stand: 'laeuft' }; };
+    const replies = [];
+    w.window.vibemind.sendChatMessage = () => new Promise((resolve) => replies.push(resolve));
+    const status = (fields) => w.handle({ type: 'task_status', space: 'ideas', registry_space: 'ideas', result: '…', error: '', ...fields });
+
+    status({ state: 'reset', plan_id: 'ideen_A' });
+    status({ state: 'running', plan_id: 'ideen_A', step: '', done: 0, total: 1 });
+    const order = w.send('Formuliere die Notiz Karte 1 aus');
+    w.advance(8000);
+    status({ state: 'reset', plan_id: 'ideen_B' });
+    status({ state: 'running', plan_id: 'ideen_B', step: '', done: 0, total: 1 });
+    const change = w.send('Ergänze bei Karte 1: eine offene Frage');
+    w.advance(8000);
+    status({ state: 'running', plan_id: 'ideen_B', step: 'Ausformulieren', done: 0, total: 1 });
+    status({ state: 'running', plan_id: 'ideen_B', step: 'Notiz ändern', done: 0, total: 1 });
+    status({ state: 'running', plan_id: 'ideen_B', step: 'Ausformulieren', done: 1, total: 1, step_ok: true, accepted: true });
+    status({ state: 'accepted', plan_id: 'ideen_B', step: 'Ausformulieren', done: 1, total: 1, elapsed_s: null, targets: [] });
+    replies[0]({ type: 'chat_response', success: true, message: 'Auftrag angenommen, Nr. 0000abcd – zuständig: brain-ideas.',
+        event_type: 'brain.multihop', plan_id: 'ideen_A', pending: true, status: 'angenommen', targets: [], orders: [ORDER] });
+    await order;
+    status({ state: 'running', plan_id: 'ideen_B', step: 'Notiz ändern', done: 2, total: 1, result: 'erledigt', step_ok: true });
+    status({ state: 'accepted', plan_id: 'ideen_B', step: 'Ausformulieren', done: 2, total: 1, elapsed_s: null, targets: [] });
+    replies[1]({ type: 'chat_response', success: true, message: '„Karte 1“ ergänzt.', event_type: 'brain.multihop', plan_id: 'ideen_B' });
+    await change;
+    w.advance(700);
+    const changed = cards('kurz\n\nOffene Frage: eine offene Frage');
+    changed[0].updated_at = '2026-11-23T10:00:16Z';
+    w.loaded(changed);                               // the 5-s reload shows the change
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'the change is no result of the order');
+    assert.doesNotMatch(w.chatLog().join('\n'), /✓ fertig/);
+
+    w.advance(5000); await tick();
+    w.advance(5000); await tick();
+    assert.deepEqual(asked, [ORDER, ORDER], '/stand is still asked');
+    assert.equal(w.line(), 'ℹ Ideas: Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.');
+    const log = w.chatLog();
+    assert.ok(log.includes('ℹ Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.'), 'the proposal shows in the chat');
+    assert.ok(log.indexOf('ℹ Karte 1 wurde inzwischen geändert; ein Vorschlag liegt vor.') < log.indexOf('Ergänze bei Karte 1: eine offene Frage'),
+        'in place of the "angenommen" line of the order, under its sentence');
+});
+
+test('an order without a number still ends by the changed card', () => {
+    const w = world();
+    plan(w, { ok: true, pending: true, status: 'angenommen', targets: [CARD_1] });
+    w.window.vibemind.orderStand = async () => ({ stand: 'laeuft' });
+    w.loaded(cards());
+    const done = cards('Ergebnis, lang');
+    done[0].updated_at = '2026-11-23T10:07:00Z';
+    w.loaded(done);
+    assert.match(w.line(), /^✓ Ideas: fertig/);
+});
