@@ -81,7 +81,7 @@ const OpenFangManager = require('./openfang-manager');
 const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
 const { initBrainEventBridge } = require('./brain-event-bridge');
 const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
-const { chatContext } = require('./chat-input');
+const { chatMessage, withoutTypedMark, withProof } = require('./chat-input');
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -408,9 +408,10 @@ function startPythonBackend() {
     pythonProcess = spawn(pythonPath, [backendPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: path.join(__dirname, '..', 'python'),
-        env: pythonEnv,
+        // the proof for typed sentences of this start (chat-input.js); not logged
+        env: withProof(pythonEnv),
     });
-    
+
     console.log('[Main] Python process started with PID:', pythonProcess.pid);
     sentry.setContext('python_backend', { status: 'running', pid: pythonProcess.pid });
 
@@ -676,7 +677,9 @@ function sendToPython(message) {
         sentry.addBreadcrumb({ category: 'ipc.python', message: `-> ${message.type}`, level: 'info' });
         // Emit in renderer context so CDP Debug Agent sees it
         if (mainWindow?.webContents) {
-            const j = JSON.stringify({__ipc_log: true, dir: '\u2190', type: message.type, preview: json.substring(0, 150)});
+            // The proof of a typed sentence (chat-input.js) never goes into a log or a renderer.
+            const shown = message && message.eingabe_beleg ? JSON.stringify({ ...message, eingabe_beleg: '***' }) : json;
+            const j = JSON.stringify({__ipc_log: true, dir: '\u2190', type: message.type, preview: shown.substring(0, 150)});
             mainWindow.webContents.executeJavaScript(`console.log(${JSON.stringify(j)})`).catch(() => {});
         }
         pythonProcess.stdin.write(json + '\n');
@@ -1108,7 +1111,8 @@ function setupIpcHandlers() {
             });
             return;
         }
-        sendToPython(message);
+        // Nothing from this channel may claim a typed sentence (chat-input.js).
+        sendToPython(withoutTypedMark(message));
     });
 
     // Renderer log → file (for autonomous debugging)
@@ -2596,11 +2600,10 @@ function setupIpcHandlers() {
     // Game console chat overlay (renderer 3D view → same pipeline as voice)
     ipcMain.handle('renderer:chat-text-input', async (_event, { text, context, typed }) => {
         try {
-            const message = { type: 'chat_text_input', text };
             // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js.
-            // Only here is the mark "typed by the person" set (chat-input.js); the Brain runs Desktop tasks only with it.
-            const passed = chatContext(context, typed);
-            if (passed) message.context = passed;
+            // Only here is the mark "typed by the person" set, with the proof of this main process
+            // (chat-input.js); the Brain runs Desktop tasks only with it.
+            const message = chatMessage(text, context, typed);
             return await sendToPythonAndWait(message, 'chat_response', 30000);
         } catch (e) {
             return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };

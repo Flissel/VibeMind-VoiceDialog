@@ -18,13 +18,46 @@ const supabaseConfig = ipcRenderer.sendSync('vibemind:supabase-config') || {};
 const SUPABASE_URL = supabaseConfig.url;
 const SUPABASE_ANON_KEY = supabaseConfig.anonKey;
 
-/** A real key press or click of the person in the last seconds (transient user activation of the browser). */
-function personActedJustNow() {
-    try {
-        return Boolean(globalThis.navigator && navigator.userActivation && navigator.userActivation.isActive);
-    } catch (e) {
-        return false;
-    }
+/**
+ * A sentence counts as typed by the person only when, in the isolated world of this preload, a
+ * trusted Enter or click on one of the two chat fields was seen just before, and the sentence is
+ * the text that stood in that field then. A script of the page can neither raise a trusted event
+ * nor reach this record. See chat-input.js for what the main process does with it.
+ */
+const CHAT_FIELDS = { 'gc-input': 'gc-input', 'ideas-chat-input': 'ideas-chat-input' };
+const SEND_BUTTONS = { 'gc-send-btn': 'gc-input' };
+const SEND_WINDOW_MS = 2000;
+let lastSend = null; // { at, text }
+
+function noteSend(field) {
+    const input = field && typeof document !== 'undefined' ? document.getElementById(field) : null;
+    lastSend = input ? { at: Date.now(), text: String(input.value || '').trim() } : null;
+}
+
+try {
+    window.addEventListener('keydown', (event) => {
+        const target = event.target;
+        if (!event.isTrusted || event.key !== 'Enter' || event.shiftKey || !target || !CHAT_FIELDS[target.id]) return;
+        noteSend(CHAT_FIELDS[target.id]);
+    }, true);
+    window.addEventListener('click', (event) => {
+        if (!event.isTrusted || !event.target || !event.target.closest) return;
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (SEND_BUTTONS[button.id]) { noteSend(SEND_BUTTONS[button.id]); return; }
+        const form = button.closest('form.ideas-chat-row');
+        if (form && button.type === 'submit') noteSend('ideas-chat-input');
+    }, true);
+} catch (e) { /* no window: nothing counts as typed */ }
+
+/** Whether the person sent exactly this sentence from a chat field just now; a record is used once. */
+function sentByPerson(text) {
+    const seen = lastSend;
+    lastSend = null;
+    let active = false;
+    try { active = Boolean(navigator.userActivation && navigator.userActivation.isActive); } catch (e) { active = false; }
+    return Boolean(seen) && active && Date.now() - seen.at <= SEND_WINDOW_MS
+        && seen.text !== '' && seen.text === String(text || '').trim();
 }
 
 // Expose protected methods to the renderer
@@ -65,10 +98,10 @@ contextBridge.exposeInMainWorld('vibemind', {
     // context (optional): what is on screen, so names in the sentence can be resolved (renderer/ideas-chat.js)
     // typed: true only when the person sent the sentence from a chat field (trusted key or click);
     // the main process then marks it, see chat-input.js. A script of the page could pass true as
-    // well, so the preload (isolated world, contextIsolation) also asks the browser for a real
-    // gesture of the person in the last seconds; a script cannot raise that itself.
+    // well, so the preload (isolated world, contextIsolation) checks it against the trusted Enter
+    // or click it saw on the chat field and the text that stood there (sentByPerson).
     sendChatMessage: (text, context, typed) =>
-        ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && personActedJustNow() }),
+        ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && sentByPerson(text) }),
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {

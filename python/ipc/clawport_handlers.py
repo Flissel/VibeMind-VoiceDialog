@@ -5,7 +5,33 @@ Extracted from electron_backend.py — handles all ClawPort dashboard
 tab messages: Schedule, Agents, Chat, Memory, Plugins.
 """
 
+import hmac
+import os
+
 from electron_backend import debug_log
+
+PROOF_ENV = "VIBEMIND_EINGABE_BELEG"
+
+
+def trusted_ui_context(message: dict):
+    """The context of a chat message, with eingabe "getippt" only when the main process vouches for it.
+
+    The generic `to-python` channel of the app lets a page forward any message, so the mark in
+    the context proves nothing. The main process of the app adds `eingabe_beleg`, a random value
+    it gave this process in its environment at start (electron-app/chat-input.js). Without that
+    value the mark is dropped; the rest of the context goes on unchanged.
+    """
+    ui_context = message.get("context")
+    if not isinstance(ui_context, dict) or not ui_context:
+        return None
+    if "eingabe" not in ui_context:
+        return ui_context
+    expected = os.environ.get(PROOF_ENV) or ""
+    given = message.get("eingabe_beleg")
+    if expected and isinstance(given, str) and hmac.compare_digest(given, expected):
+        return ui_context
+    context = {k: v for k, v in ui_context.items() if k != "eingabe"}
+    return context or None
 
 
 class ClawPortHandlers:
@@ -186,7 +212,8 @@ class ClawPortHandlers:
                 return
             # What the app has on screen (open bubble, visible cards) travels with the sentence,
             # unchanged, up to the request to the Brain.
-            ui_context = message.get("context")
+            # eingabe "getippt" stays only with the proof of the main process (trusted_ui_context).
+            ui_context = trusted_ui_context(message)
             if isinstance(ui_context, dict) and ui_context:
                 from swarm.event_team.task_seeder import TaskContext
                 result = await orchestrator.process_intent(

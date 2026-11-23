@@ -10,6 +10,7 @@
 
 const path = require('path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
+const { withoutTypedMark } = require('./chat-input');
 
 const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
 function _fzLog(...a) { process.stdout.write(`${_FZ_C}[FlowzenManager] ${a.join(' ')}${_RST}\n`); }
@@ -85,7 +86,8 @@ class FlowzenManager {
     const ipcMain = this._ipcMain || require('electron').ipcMain;
     ipcMain.on('to-python', (_event, message) => {
       if (this.sendToPython) {
-        this.sendToPython(message);
+        // Nothing from this channel may claim a typed sentence (chat-input.js).
+        this.sendToPython(withoutTypedMark(message));
       }
     });
 
