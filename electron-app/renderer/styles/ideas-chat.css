@@ -1,7 +1,7 @@
 /* Ideas space: chat next to the canvas of the open bubble (ideas-chat.js). */
 
 #space-view.with-chat #space-canvas {
-    width: calc(100% - 340px);
+    width: calc(100% - 300px);
 }
 
 #ideas-chat {
@@ -9,7 +9,7 @@
     top: 44px;              /* below #space-header */
     right: 0;
     bottom: 0;
-    width: 340px;
+    width: 300px;
     display: flex;
     flex-direction: column;
     background: rgba(14, 16, 28, 0.97);
@@ -161,7 +161,7 @@
 .ideas-empty-hint {
     position: absolute;
     top: 50%;
-    left: calc((100% - 340px) / 2);
+    left: calc((100% - 300px) / 2);
     transform: translate(-50%, -50%);
     z-index: 130;
     color: rgba(200, 215, 240, 0.6);
@@ -179,7 +179,7 @@ body.ideas-chat-open #game-console {
 }
 
 body.ideas-chat-open .zoom-controls {
-    right: 360px;
+    right: 320px;
 }
 
 /* Reasons given for ratings of the open bubble. */
@@ -247,4 +247,49 @@ body.ideas-chat-open .zoom-controls {
     font-size: 12px;
     color: rgba(200, 215, 240, 0.5);
     font-style: italic;
+}
+
+/* The chat folded to a strip: the cards get the width. */
+.ideas-chat-fold {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.4);
+    background: rgba(var(--space-accent-rgb), 0.12);
+    color: #e6eeff;
+    font: 16px/1 system-ui, "Segoe UI", sans-serif;
+    cursor: pointer;
+}
+
+.ideas-chat-fold:hover {
+    background: rgba(var(--space-accent-rgb), 0.3);
+}
+
+#space-view.with-chat.chat-folded #space-canvas {
+    width: calc(100% - 44px);
+}
+
+#space-view.chat-folded #ideas-chat {
+    width: 44px;
+}
+
+#space-view.chat-folded #ideas-chat > :not(.ideas-chat-head),
+#space-view.chat-folded .ideas-chat-head > :not(.ideas-chat-fold) {
+    display: none;
+}
+
+#space-view.chat-folded .ideas-chat-head {
+    justify-content: center;
+    padding: 10px 0;
+    border-bottom: 0;
+}
+
+#space-view.chat-folded .ideas-empty-hint {
+    left: calc((100% - 44px) / 2);
+}
+
+body.ideas-chat-open #space-view.chat-folded ~ .zoom-controls,
+body.ideas-chat-open:has(#space-view.chat-folded) .zoom-controls {
+    right: 64px;
 }

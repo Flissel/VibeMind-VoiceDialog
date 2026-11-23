@@ -251,7 +251,10 @@ class UniverseCanvas {
      * opened later (bubble "Bubble A", measured 2026-11-23: 1 node every 5 s while in roarboot).
      */
     setBubble(bubbleId) {
+        const before = this.bubbleId;
         this.bubbleId = UniverseCanvas.dbIdOf(bubbleId);
+        // another bubble: an open card and a search of the last one do not carry over
+        if (this._board && before !== this.bubbleId) { this._board.close(); this._board.setQuery(''); }
         if (!this.bubbleId) this._stopMermaidPoll();
     }
 
@@ -287,9 +290,33 @@ class UniverseCanvas {
         window.dispatchEvent(new CustomEvent('vibemind:canvas-loaded', { detail: { nodes: this.lastNodes, bubbleId: this.bubbleId || null } }));
         this._showBanner(`loadNodes: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`, '#666');
 
+        this.lastEdges = Array.isArray(edges) ? edges : [];
+
         if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
             this._stopMermaidPoll();
+            if (this._board && this._board.element.parentNode === this.container) {
+                // the cards of the last bubble must not stay up in an empty one
+                this._board.close();
+                this.container.innerHTML = '';
+                this.init();
+                this._mermaidMode = false;
+            }
             this.clear();
+            return;
+        }
+
+        // Karten: every card readable in a grid (card-view.js). The diagram stays one click away.
+        if (this._view() === 'karten' && window.CardView && typeof window.CardView.board === 'function') {
+            this._loadGen = (this._loadGen || 0) + 1;   // a diagram still rendering must not replace the cards
+            if (!this._board) {
+                this._board = window.CardView.board(document, { onGraph: () => this.showView('graph') });
+            }
+            this._board.mount(this.container);
+            this._board.update(nodes, this.lastEdges);
+            this._mermaidMode = true;   // same refresh path as the diagram: updates reload, the 5-s poll runs
+            this.nodes.clear();
+            this.edges = [];
+            this._startMermaidPoll();
             return;
         }
 
@@ -306,6 +333,16 @@ class UniverseCanvas {
                 if (gen !== this._loadGen) return;
                 if (ok) {
                     this._showBanner(`Mermaid rendered ${nodes.length} nodes`, '#3a7');
+                    if (window.CardView) {
+                        const back = document.createElement('button');
+                        back.type = 'button';
+                        back.className = 'kv-btn kv-back';
+                        back.textContent = 'Karten';
+                        back.title = 'Alle Karten lesbar als Raster zeigen';
+                        back.addEventListener('mousedown', (e) => e.stopPropagation());
+                        back.addEventListener('click', () => this.showView('karten'));
+                        this.container.appendChild(back);
+                    }
                     // Phase 11.U.N rev5 — refresh any open format-card with fresh content_json
                     if (typeof window.refreshOpenFormatPanel === 'function') {
                         try { window.refreshOpenFormatPanel(); } catch (_) {}
@@ -335,6 +372,30 @@ class UniverseCanvas {
 
         // Fallback path (mermaid not loaded) — old fCoSE pipeline.
         this._loadNodesFallback(nodes, edges);
+    }
+
+    /** 'karten' (grid of readable cards, the default) or 'graph' (the diagram of connections). */
+    _view() {
+        if (!this._viewName) {
+            let saved = null;
+            try { saved = window.localStorage && window.localStorage.getItem('vibemind.canvas.ansicht'); } catch (_) { /* none */ }
+            this._viewName = saved === 'graph' ? 'graph' : 'karten';
+        }
+        return this._viewName;
+    }
+
+    /** The person switches between cards and diagram; the cards already loaded are drawn again. */
+    showView(name) {
+        this._viewName = name === 'graph' ? 'graph' : 'karten';
+        try { window.localStorage && window.localStorage.setItem('vibemind.canvas.ansicht', this._viewName); } catch (_) { /* none */ }
+        if (this._board) this._board.close();
+        if (this.lastNodes && this.lastNodes.length) this.loadNodes(this.lastNodes, this.lastEdges || []);
+    }
+
+    /** Opens one card of the open bubble big (cards view); false when it is not shown here. */
+    showCard(id) {
+        if (!this._board || this._view() !== 'karten' || this._board.element.parentNode !== this.container) return false;
+        return this._board.open(String(id));
     }
 
     _loadNodesFallback(nodes, edges) {

@@ -254,7 +254,20 @@
         const head = el('div', 'ideas-chat-head');
         const headTitle = el('span', 'ideas-chat-title', 'Chat');
         const headState = el('span', 'ideas-chat-state');
-        head.append(headTitle, headState);
+        // The chat can be folded to a narrow strip, so the cards get the whole width.
+        const fold = el('button', 'ideas-chat-fold');
+        fold.type = 'button';
+        const setFolded = (folded) => {
+            view.classList.toggle('chat-folded', folded);
+            fold.textContent = folded ? '‹' : '›';
+            fold.title = folded ? 'Chat aufklappen' : 'Chat einklappen';
+            fold.setAttribute('aria-label', fold.title);
+            try { root.localStorage && root.localStorage.setItem('vibemind.chat.eingeklappt', folded ? '1' : '0'); } catch (_) { /* none */ }
+        };
+        let foldedBefore = false;
+        try { foldedBefore = !!root.localStorage && root.localStorage.getItem('vibemind.chat.eingeklappt') === '1'; } catch (_) { /* none */ }
+        fold.addEventListener('click', () => setFolded(!view.classList.contains('chat-folded')));
+        head.append(fold, headTitle, headState);
         const log = el('div', 'ideas-chat-log');
         log.id = 'ideas-chat-log';
         const row = el('form', 'ideas-chat-row');
@@ -280,6 +293,7 @@
         /** Goes to a card and marks it, where the canvas can do that (not while it draws one diagram). */
         function showCard(id) {
             const canvas = root.spaceCanvas;
+            if (canvas && typeof canvas.showCard === 'function' && canvas.showCard(id)) return true;  // cards view: open it big
             if (!canvas || canvas._mermaidMode || !canvas.nodes || !canvas.findNodeById) return false;
             const found = canvas.findNodeById(id);
             if (!found || !found.element) return false;
@@ -336,6 +350,7 @@
         hint.hidden = true;
         view.append(stack, hint, panel);
         view.classList.add('with-chat');
+        setFolded(foldedBefore);
 
         const history = createHistory();
         let shownKey = null;     // the bubble whose history is in the log
