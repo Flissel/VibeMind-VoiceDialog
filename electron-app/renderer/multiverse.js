@@ -2674,6 +2674,9 @@ class MultiverseApp {
             this.addGcMessage(shown.text, kind, ask);
         } catch (err) {
             if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });
+            // The status line must not wait 60 s on "arbeitet …" for an answer that will not come.
+            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
+                text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: this.currentSpace } }));
             this.addGcMessage('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', ask);
         } finally {
             if (ask.__pair) ask.__pair.__waiting = false;

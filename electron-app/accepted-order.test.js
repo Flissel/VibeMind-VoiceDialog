@@ -385,3 +385,47 @@ test('an open order ending while nothing else runs takes the line', async () => 
     w.advance(5000); await tick();
     assert.equal(w.line(), '✓ Ideas: fertig in 9,0 s — Fertig.');
 });
+
+// Danach 4: ausserhalb der Ideen haengt die Standzeile nicht auf "arbeitet …".
+const answered = (w, detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
+
+test('outside Ideas: answered, but the plan never reports its end: the answer ends the line after 15 s', () => {
+    const w = world();
+    w.window.multiverseApp.currentSpace = 'video';   // the person is in that space
+    w.handle({ type: 'task_status', state: 'running', space: 'video', plan_id: 'p5', step: 'Video schneiden', done: 0, total: 1 });
+    answered(w, { text: 'Das Video liegt bereit.', success: true, space: 'video' });
+    w.advance(10000);
+    // a further step of the same plan: it still works, the wait starts again
+    w.handle({ type: 'task_status', state: 'running', space: 'video', plan_id: 'p5', step: 'Video exportieren', done: 1, total: 2 });
+    w.advance(14999);
+    assert.match(w.line(), /^● Video Studio/);
+    w.advance(1);
+    assert.match(w.line(), /^✓ Video Studio: fertig — Das Video liegt bereit\./);
+});
+
+test('outside Ideas: the plan reports its end in time: nothing extra happens later', () => {
+    const w = world();
+    w.handle({ type: 'task_status', state: 'running', space: 'video', plan_id: 'p6', step: 'Video schneiden', done: 0, total: 1 });
+    answered(w, { text: 'Fertig geschnitten.', success: true, space: 'video' });
+    w.handle({ type: 'task_status', state: 'failed', space: 'video', plan_id: 'p6', error: 'Der Dienst ist gerade nicht erreichbar.' });
+    const before = w.statuses.length;
+    w.advance(20000);
+    assert.equal(w.statuses.length, before, 'the timer of the answer does not overwrite the reported end');
+});
+
+test('outside Ideas: an order accepted without a number ends calmly, not "arbeitet" for minutes', () => {
+    const w = world();
+    w.window.multiverseApp.currentSpace = 'roarboot';
+    answered(w, { text: 'Auftrag angenommen', success: true, accepted: true, space: 'roarboot', targets: [], orders: [] });
+    assert.equal(w.line(), '● Rowboat: arbeitet … (Auftrag angenommen)');
+    w.advance(10000);
+    assert.equal(w.line(), 'ℹ Rowboat: Auftrag angenommen. Das Ergebnis erscheint im Bereich, sobald es fertig ist.');
+    assert.ok(!w.statuses.includes('failed'));
+});
+
+test('a sentence of the console that fails reports it: the line does not wait 60 s', () => {
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    assert.match(scene, /catch \(err\) \{[\s\S]{0,400}vibemind:sentence-answered[\s\S]{0,200}success: false, space: this\.currentSpace/);
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(chat, /catch \(error\) \{[\s\S]{0,400}vibemind:sentence-answered[\s\S]{0,200}success: false, space: 'ideas'/);
+});

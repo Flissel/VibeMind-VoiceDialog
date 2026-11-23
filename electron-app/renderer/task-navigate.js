@@ -112,6 +112,8 @@
     const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
     const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
     const ANSWER_WAIT_MS = 5000;                 // plan done before the answer came: wait this long for it
+    const RUN_AFTER_ANSWER_MS = 15000;           // answered, but the plan never reported its end: the answer ends it
+    const BLIND_ACCEPT_MS = 10000;               // accepted outside Ideas without an order number: nothing to watch
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
     const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
     const ACCEPTED_MAX_MS = 20 * 60 * 1000;      // an accepted order whose result never shows: the line goes
@@ -203,6 +205,8 @@
         let acceptedTimer = null;
         let staleTimer = null;
         let standTimer = null;   // the next look at /stand of an accepted order
+        let runTimer = null;     // the sentence is answered, its plan still says "running"
+        let blindTimer = null;   // an accepted order the app cannot follow
         let lastRow = null;      // the last row of the open bubble (vibemind:bubble-row)
         let lastPlanId = '';     // the plan the last status was about
         let noted = null;        // the answer to the sentence asked back or gave a hint: { kind, text }
@@ -402,6 +406,9 @@
                 root.clearTimeout(keepTimer);
                 keepTimer = root.setTimeout(() => { if (current && current.waiting) clear(); }, ANSWER_GRACE_MS);
             }
+            // The answer is the end of the sentence. A plan still "running" then lost its end event:
+            // after a while the answer ends it, the line does not hang on "arbeitet …".
+            if (current && current.state === 'running' && !current.accepted && (answer || refusal)) armRun(current.plan_id);
             if (current && current.state === 'done') {
                 if (answer) current.result = answer;
                 render(); // also ends the neutral line a finished plan kept while waiting for this answer
@@ -416,6 +423,25 @@
          * An order was accepted: remember the cards as they are now. The 5-s reload of the canvas
          * (vibemind:canvas-loaded) then shows when its result has arrived at the card.
          */
+        /**
+         * The sentence of plan `plan` is answered while the plan still says "running". Each further
+         * step of it starts the wait again (a pipeline still works); silence ends it with the answer.
+         */
+        let answeredPlan = null;
+        function armRun(plan) {
+            answeredPlan = plan;
+            root.clearTimeout(runTimer);
+            runTimer = root.setTimeout(() => {
+                answeredPlan = null;
+                if (!current || current.state !== 'running' || current.accepted || current.plan_id !== plan) return;
+                current = { ...current, state: refusal ? 'failed' : 'done', result: answer, error: refusal, elapsed_s: null };
+                root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(clear, KEEP_MS);
+                render();
+            }, RUN_AFTER_ANSWER_MS);
+        }
+
         function startAccepted() {
             const canvas = root.spaceCanvas;
             const nodes = canvas && Array.isArray(canvas.lastNodes) ? canvas.lastNodes : [];
@@ -439,6 +465,19 @@
                 }
             }, ACCEPTED_STALE_MS);
             pollStand();
+            // Outside Ideas without an order number there is no card and no /stand to watch: the
+            // line says plainly where the result comes, instead of "arbeitet …" for minutes.
+            root.clearTimeout(blindTimer);
+            blindTimer = root.setTimeout(() => {
+                if (!current || current.state !== 'accepted' || current.space === 'ideas' || firstOrder()) return;
+                stopAccepted();
+                current = { ...current, state: 'note', note: 'hinweis', accepted: false, stale: false, elapsed_s: null, error: '',
+                    result: 'Auftrag angenommen. Das Ergebnis erscheint im Bereich, sobald es fertig ist.' };
+                root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(clear, KEEP_MS);
+                render();
+            }, BLIND_ACCEPT_MS);
         }
 
         /** The first order of a task, as the receipt of the Brain named it. */
@@ -601,6 +640,10 @@
                 message = { ...message, state: 'note', note: noted.kind, result: noted.text || message.result, error: '' };
             }
             current = message;
+            if (answeredPlan !== null) {
+                if (message.state === 'running' && !message.accepted && message.plan_id === answeredPlan) armRun(answeredPlan);
+                else { answeredPlan = null; root.clearTimeout(runTimer); }
+            }
             if (message.state === 'accepted' || message.accepted) startAccepted();
             else stopAccepted();
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
@@ -660,7 +703,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

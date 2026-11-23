@@ -632,6 +632,8 @@
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
                 if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] sentence failed', { error: String(error && error.message) });
+                root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
+                    text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: 'ideas' } }));
                 say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked, null, ask);
             } finally {
                 inFlight = Math.max(0, inFlight - 1);
