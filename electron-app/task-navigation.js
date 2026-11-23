@@ -116,7 +116,7 @@ function errorText(payload) {
 }
 
 /** A technical error of a tool or service ("ConnectionError: HTTPConnectionPool(host=…)"), not a sentence. */
-const RAW_ERROR = /Error\b|Exception|Traceback|HTTPConnectionPool|Max retries|Timeout|timed out|refused|\bHTTP\b|\b[45]\d\d\b|\bhost=|\bport=|Errno|https?:\/\/|File "|[{}[\]<>]|\w+\.\w+\(|^\s*[A-Za-z_]+(?:Error|Exception):\s/;
+const RAW_ERROR = /Error\b|Exception|Traceback|HTTPConnectionPool|Max retries|Timeout|timed out|refused|\bHTTP\b|\b[45]\d\d\s+(?:Not Found|Forbidden|Unauthori[sz]ed|Bad Request|Bad Gateway|Internal Server Error|Service Unavailable)\b|\bhost=|\bport=|Errno|https?:\/\/|File "|[{}[\]<>]|\w+\.\w+\(|^\s*[A-Za-z_]+(?:Error|Exception):\s/;
 
 /**
  * An error as a person reads it. A German sentence stays; a raw error of a hop never reaches the
@@ -334,9 +334,56 @@ function createTaskNavigator(send) {
   };
 }
 
+/** The states of an order the Brain names at GET /api/agent-auftraege/{id}/stand. */
+const ORDER_STANDS = Object.freeze(['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'wartet', 'fehler', 'unbekannt']);
+/** An order id as the Brain gives it; anything else is never put into a path. */
+const ORDER_ID = /^[A-Za-z0-9-]{4,64}$/;
+
+/**
+ * The answer of /stand as the app uses it: { stand, meldung, ok, dauer_s, hinweis, saetze } or null.
+ * Only these fields pass; meldung is a sentence of the Brain, a raw error becomes a plain one.
+ */
+function standOf(body) {
+  if (!body || typeof body !== 'object') return null;
+  const stand = ORDER_STANDS.includes(body.stand) ? body.stand : null;
+  if (!stand) return null;
+  const seconds = Number(body.dauer_s);
+  const saetze = Array.isArray(body.saetze)
+    ? body.saetze.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 80)).slice(0, 4) : [];
+  return {
+    stand,
+    meldung: plainError(body.meldung),
+    ok: body.ok !== false,
+    dauer_s: body.dauer_s != null && Number.isFinite(seconds) && seconds >= 0 ? seconds : null,
+    hinweis: body.hinweis === true,
+    saetze,
+  };
+}
+
+/** Read the stand of one order from the Brain (only reading). Resolves null on any trouble. */
+function readOrderStand(id, { host = '127.0.0.1', port = 5000, timeoutMs = 4000 } = {}) {
+  return new Promise((resolve) => {
+    if (typeof id !== 'string' || !ORDER_ID.test(id)) { resolve(null); return; }
+    const request = http.get({ host, port, path: '/api/agent-auftraege/' + encodeURIComponent(id) + '/stand',
+      headers: { Accept: 'application/json' }, timeout: timeoutMs }, (res) => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { if (raw.length < 65536) raw += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) { resolve(null); return; }
+        try { resolve(standOf(JSON.parse(raw))); } catch { resolve(null); }
+      });
+      res.on('error', () => resolve(null));
+    });
+    request.on('timeout', () => request.destroy());
+    request.on('error', () => resolve(null));
+  });
+}
+
 let _request = null;
 let _timer = null;
 let _closed = false;
+let _standHandled = false;
 
 function initTaskNavigation(mainWindow, options = {}) {
   const host = options.host || process.env.BRAIN_HOST || '127.0.0.1';
@@ -351,6 +398,11 @@ function initTaskNavigation(mainWindow, options = {}) {
     }
   });
   _closed = false;
+  // The stand of an accepted order (renderer: every 5 s while the line says "arbeitet").
+  if (options.ipcMain && !_standHandled) {
+    _standHandled = true;
+    options.ipcMain.handle('task:order-stand', (_event, id) => readOrderStand(id, { host, port }));
+  }
 
   const reconnect = (ms) => {
     if (_closed || _timer) return;
@@ -389,6 +441,6 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
-  plainError,
+  plainError, standOf, readOrderStand, ORDER_STANDS,
   SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };

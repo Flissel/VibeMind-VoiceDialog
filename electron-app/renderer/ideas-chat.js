@@ -680,7 +680,11 @@
             if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
                 const key = acceptedKey;
                 acceptedKey = null;
-                if (status.state === 'done') say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key);
+                // The sentence of the Brain on the order (/stand meldung) and its fixed sentences as buttons.
+                const choices = Array.isArray(status.saetze) && status.saetze.length ? status.saetze : null;
+                if (status.state === 'done') say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices);
+                else if (status.state === 'note') say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices);
+                else if (status.state === 'failed') say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices);
             }
             showState();
             // The plan failed: nothing of it was stored. The cards noted in advance go, even when the

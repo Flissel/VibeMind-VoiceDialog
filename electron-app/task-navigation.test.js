@@ -182,7 +182,7 @@ test('main process and page are wired to task navigation', () => {
     const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
 
     assert.match(main, /require\('\.\/task-navigation'\)/);
-    assert.match(main, /initTaskNavigation\(mainWindow\)/);
+    assert.match(main, /initTaskNavigation\(mainWindow, \{ ipcMain \}\)/);
     assert.ok(html.indexOf('src="task-navigate.js"') > -1);
     assert.match(html, /case 'task_navigate':/);
     assert.match(html, /case 'task_status':/);
@@ -377,4 +377,28 @@ test('a raw hop error becomes a plain sentence; a German sentence of the Brain s
     second.handle('hop_started', { space: 'video', description: 'Video schneiden' });
     second.handle('hop_completed', { space: 'video', ok: false, meldung: 'Das Video-Studio laeuft gerade nicht.', error: 'ConnectionError: x' });
     assert.equal(said.at(-1).error, 'Das Video-Studio laeuft gerade nicht.');
+});
+
+test('readOrderStand asks GET /api/agent-auftraege/{id}/stand and never sends a bad id', async () => {
+    const http = require('node:http');
+    const { readOrderStand } = require('./task-navigation');
+    const seen = [];
+    const server = http.createServer((req, res) => {
+        seen.push(`${req.method} ${req.url}`);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ auftrag_id: 'x', stand: 'fertig', meldung: 'Fertig.', ok: true, dauer_s: 7 }));
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    try {
+        const stand = await readOrderStand('0000abcd-0000-4000-8000-0000000000aa', { port });
+        assert.equal(stand.stand, 'fertig');
+        assert.equal(stand.dauer_s, 7);
+        assert.equal(await readOrderStand('../plans', { port }), null);
+        assert.equal(await readOrderStand('a b', { port }), null);
+        assert.deepEqual(seen, ['GET /api/agent-auftraege/0000abcd-0000-4000-8000-0000000000aa/stand']);
+    } finally {
+        server.close();
+    }
+    assert.equal(await readOrderStand('0000abcd', { port: 1 }), null, 'no Brain: null, no throw');
 });

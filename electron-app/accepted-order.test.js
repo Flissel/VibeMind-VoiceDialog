@@ -286,3 +286,58 @@ test('the console keeps each sentence with its answers as a pair, and nothing fa
     assert.match(scene, /space: context && context\.space \? context\.space : this\.currentSpace,/);
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'game-console.css'), 'utf8'), /\.gc-msg\.gc-answer \{/);
 });
+
+// Danach 2: das Gehirn sagt an /stand, wie ein angenommener Auftrag steht. Das beendet die Zeile
+// auch dann, wenn sich keine Karte aendert (Einschaetzung, Vorschlag, abgebrochenes White Paper).
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+async function acceptedWithStand(stands) {
+    const w = world();
+    const asked = [];
+    w.window.vibemind.orderStand = async (id) => { asked.push(id); return stands.shift() || { stand: 'laeuft' }; };
+    w.answerWith({ success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen', orders: [ORDER] });
+    await w.send('Was hältst du von Karte 1?');
+    return { w, asked };
+}
+
+test('/stand fertig ends the line with the sentence of the Brain and its duration, no card change needed', async () => {
+    const { w, asked } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'fertig', meldung: 'Einschätzung liegt an der Bubble.', dauer_s: 42, saetze: [] }]);
+    w.advance(5000); await tick();
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'laeuft keeps the line');
+    w.advance(5000); await tick();
+    assert.deepEqual(asked, [ORDER, ORDER], 'asked every 5 s with the number of the order');
+    assert.equal(w.line(), '✓ Ideas: fertig in 42,0 s — Einschätzung liegt an der Bubble.');
+    assert.ok(w.chatLog().includes('✓ fertig — Einschätzung liegt an der Bubble.'));
+    w.advance(60000); await tick();
+    assert.equal(asked.length, 2, 'no more asking once it ended');
+});
+
+test('/stand vorschlag is calm and offers its sentences as buttons; abgebrochen calm; fehler is ✕ with the sentence', async () => {
+    const proposal = await acceptedWithStand([{ stand: 'vorschlag', meldung: 'Ein Vorschlag für Karte 1 liegt vor.', hinweis: true,
+        saetze: ['Vorschlag zeigen', 'Vorschlag übernehmen', 'Vorschlag verwerfen'] }]);
+    proposal.w.advance(5000); await tick();
+    assert.equal(proposal.w.line(), 'ℹ Ideas: Ein Vorschlag für Karte 1 liegt vor.');
+    assert.ok(proposal.w.chatLog().some((t) => t.startsWith('ℹ Ein Vorschlag für Karte 1 liegt vor.')));
+    assert.ok(!proposal.w.statuses.includes('failed'));
+
+    const stopped = await acceptedWithStand([{ stand: 'abgebrochen', meldung: '' }]);
+    stopped.w.advance(5000); await tick();
+    assert.equal(stopped.w.line(), 'ℹ Ideas: Der Auftrag wurde abgebrochen.');
+
+    const failed = await acceptedWithStand([{ stand: 'fehler', meldung: 'Das White Paper ließ sich nicht schreiben.' }]);
+    failed.w.advance(5000); await tick();
+    assert.equal(failed.w.line(), '✕ Ideas: fehlgeschlagen — Das White Paper ließ sich nicht schreiben.');
+});
+
+test('/stand: the main process reads only, checks the id and lets only known fields through', () => {
+    const { standOf, ORDER_STANDS } = require('./task-navigation');
+    assert.deepEqual([...ORDER_STANDS], ['laeuft', 'fertig', 'vorschlag', 'abgebrochen', 'wartet', 'fehler', 'unbekannt']);
+    assert.equal(standOf({ stand: 'irgendwas' }), null);
+    assert.deepEqual(standOf({ stand: 'fehler', meldung: "ConnectionError: HTTPConnectionPool(host='dienst-a')", ok: false, geheim: 'x' }),
+        { stand: 'fehler', meldung: 'Der Dienst ist gerade nicht erreichbar.', ok: false, dauer_s: null, hinweis: false, saetze: [] });
+    const main = fs.readFileSync(path.join(__dirname, 'task-navigation.js'), 'utf8');
+    assert.match(main, /const ORDER_ID = \/\^\[A-Za-z0-9-\]\{4,64\}\$\/;/);
+    assert.match(main, /path: '\/api\/agent-auftraege\/' \+ encodeURIComponent\(id\) \+ '\/stand'/);
+    assert.match(fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8'), /initTaskNavigation\(mainWindow, \{ ipcMain \}\);/);
+    assert.match(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), /orderStand: \(id\) => ipcRenderer\.invoke\('task:order-stand', String\(id\)\)/);
+});

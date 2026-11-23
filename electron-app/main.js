@@ -3089,7 +3089,7 @@ app.whenReady().then(async () => {
     });
     await startupPolicy.runExternalStartup('Task navigation', async () => {
         // Follows the Brain's plan steps and tells the renderer which space a task belongs to
-        initTaskNavigation(mainWindow);
+        initTaskNavigation(mainWindow, { ipcMain });
     });
     await startupPolicy.runExternalStartup('AgentFarm manager', async () => {
         // n8n on another machine over plain http is reached through a local forward, so the

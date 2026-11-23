@@ -131,6 +131,8 @@ contextBridge.exposeInMainWorld('vibemind', {
     
     // Get current space info
     getCurrentSpace: () => ipcRenderer.invoke('get-current-space'),
+    // The stand of an accepted order from the Brain (only reading; main validates the id).
+    orderStand: (id) => ipcRenderer.invoke('task:order-stand', String(id)),
     
     // Listen for space changes
     onSpaceChanged: (callback) => {
