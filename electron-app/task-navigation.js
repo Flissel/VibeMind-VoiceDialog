@@ -130,7 +130,8 @@ function noteOf(payload) {
  */
 function acceptedOf(payload) {
   if (!payload || payload.ok === false) return false;
-  if (payload.pending === true || payload.status === 'angenommen') return true;
+  // fertig: false (new Brain): the plan gave an order and ended; the result is not there yet.
+  if (payload.pending === true || payload.status === 'angenommen' || payload.fertig === false) return true;
   const preview = typeof payload.result_preview === 'string' ? payload.result_preview : '';
   return /['"]pending['"]\s*:\s*(?:True|true)\b/.test(preview) || /['"]status['"]\s*:\s*['"]angenommen['"]/.test(preview);
 }
@@ -277,7 +278,15 @@ function createTaskNavigator(send) {
       if (kind === 'plan_completed') {
         if (!last) return null; // nothing of this plan had a place in the app
         const seconds = Number(payload.elapsed_s);
-        const elapsed = { elapsed_s: Number.isFinite(seconds) ? seconds : null };
+        // berichtigt: true (new Brain): a second end of the same plan replaces the first, e.g. a
+        // result found unreadable afterwards (ok: false, nicht_lesbar: true). It is judged afresh.
+        const corrected = payload.berichtigt === true;
+        if (corrected) {
+          accepted = null;
+          note = null;
+          last = { ...last, result: text(payload.final_text) || last.result, error: payload.ok === false ? errorText(payload) : '' };
+        }
+        const elapsed = { elapsed_s: Number.isFinite(seconds) ? seconds : null, ...(corrected ? { berichtigt: true } : {}) };
         // The plan is over, the order it gave is not: a model still works on it. Not failed, not done.
         // The receipt may also come only with the end of the plan ({ pending: true, status: 'angenommen' }).
         if (!accepted && acceptedOf(payload)) {
@@ -286,7 +295,7 @@ function createTaskNavigator(send) {
         if (accepted && !failedStep) {
           last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
           // No duration: the time it took to accept the order is not the time of its result.
-          return status('accepted', { elapsed_s: null, targets: accepted.targets });
+          return status('accepted', { elapsed_s: null, targets: accepted.targets, ...(corrected ? { berichtigt: true } : {}) });
         }
         // A hint or a question back ends the plan calmly: neither ✓ nor ✕.
         const calm = noteOf(payload);

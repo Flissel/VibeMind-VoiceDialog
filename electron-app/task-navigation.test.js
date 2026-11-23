@@ -251,7 +251,7 @@ test('a finished task shows the answer to the sentence, not the raw result of it
     const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
 
-    assert.match(page, /if \(message\.state === 'done' && answer\) message = \{ \.\.\.message, result: answer \};/, 'the answer came first');
+    assert.match(page, /if \(message\.state === 'done' && answer && !corrected\) message = \{ \.\.\.message, result: answer \};/, 'the answer came first');
     assert.match(page, /if \(current && current\.state === 'done'\) \{\s*if \(answer\) current\.result = answer;/, 'the end of the plan came first');
     // the order of events itself is played through in task-status-line.test.js
     assert.match(scene, /CustomEvent\('vibemind:sentence-answered'/);
@@ -293,6 +293,55 @@ test('a failed task shows the sentence of the Brain on why, not the raw error of
     const page = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
 
     assert.match(page, /refusal = detail\.success === false \? shorten\(detail\.text\) : '';/);
-    assert.match(page, /if \(message\.state === 'failed' && refusal\) message = \{ \.\.\.message, error: refusal \};/, 'the answer came first');
+    assert.match(page, /if \(message\.state === 'failed' && refusal && !corrected\) message = \{ \.\.\.message, error: refusal \};/, 'the answer came first');
     assert.match(page, /if \(refusal && current && current\.state === 'failed'\) \{\s*current\.error = refusal;/, 'the end of the plan came first');
+});
+
+// Punkt 0: neue Felder des Gehirns. fertig:false heisst angenommen, nie ein Haken;
+// berichtigt:true ueberschreibt das erste Ende desselben Plans.
+function runPlan(id, ends) {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+    navigator.handle('plan_started', { plan_id: id, hops: [{}] });
+    navigator.handle('hop_started', { space: 'video', description: 'Video schneiden' });
+    navigator.handle('hop_completed', { space: 'video', ok: true, result_preview: "'Auftrag liegt vor'" });
+    for (const end of ends) navigator.handle('plan_completed', { plan_id: id, ...end });
+    return sent;
+}
+
+test('fertig:false is accepted, never done', () => {
+    const end = runPlan('p20', [{ ok: true, fertig: false, final_text: 'Auftrag angenommen' }]).at(-1);
+    assert.equal(end.state, 'accepted');
+});
+
+test('berichtigt:true overrides the first end: unreadable after ok becomes failed with its sentence', () => {
+    const sent = runPlan('p21', [
+        { ok: true, final_text: 'Zusammenfassung fertig', elapsed_s: 3 },
+        { ok: false, berichtigt: true, nicht_lesbar: true, final_text: 'Das Ergebnis war nicht lesbar.' },
+    ]);
+    assert.equal(sent.at(-2).state, 'done');
+    const end = sent.at(-1);
+    assert.equal(end.state, 'failed');
+    assert.equal(end.berichtigt, true);
+    assert.equal(end.error, 'Das Ergebnis war nicht lesbar.');
+});
+
+test('berichtigt:true also overrides an earlier acceptance', () => {
+    const end = runPlan('p22', [
+        { ok: true, fertig: false },
+        { ok: false, berichtigt: true, final_text: 'Der Auftrag liess sich nicht ausfuehren.' },
+    ]).at(-1);
+    assert.equal(end.state, 'failed');
+    assert.equal(end.error, 'Der Auftrag liess sich nicht ausfuehren.');
+});
+
+test('a plan without synthesis and ok:true stays done; today\'s Brain without the new fields too', () => {
+    assert.equal(runPlan('p23', [{ ok: true }]).at(-1).state, 'done');
+    assert.equal(runPlan('p24', [{ ok: true, fertig: true }]).at(-1).state, 'done');
+});
+
+test('the renderer lets a correction through: no fold into acceptance or the earlier answer', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
+    assert.match(source, /current\.state === 'accepted'\s*&& message\.berichtigt !== true/);
+    assert.match(source, /const corrected = message\.berichtigt === true;/);
 });

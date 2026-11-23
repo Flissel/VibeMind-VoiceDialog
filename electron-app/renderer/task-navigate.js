@@ -496,7 +496,7 @@
             // The plan that took an order ends with "done": that is the acceptance, not the result.
             // The line keeps saying "arbeitet" until the result is there; no "fertig", no duration.
             if ((message.state === 'done' || message.state === 'running') && current && current.state === 'accepted'
-                && (!current.plan_id || !message.plan_id || current.plan_id === message.plan_id)) {
+                && message.berichtigt !== true && (!current.plan_id || !message.plan_id || current.plan_id === message.plan_id)) {
                 message = { ...message, state: 'accepted', result: '', elapsed_s: null,
                     targets: current.targets, orders: current.orders, plan_id: current.plan_id || message.plan_id,
                     stale: current.stale };
@@ -506,10 +506,12 @@
                 && current && Array.isArray(current.orders) && current.orders.length) {
                 message = { ...message, orders: current.orders };
             }
-            if (message.state === 'done' && answer) message = { ...message, result: answer };
-            if (message.state === 'failed' && refusal) message = { ...message, error: refusal };
+            // A correction of the Brain (berichtigt) says more than the earlier answer to the sentence.
+            const corrected = message.berichtigt === true;
+            if (message.state === 'done' && answer && !corrected) message = { ...message, result: answer };
+            if (message.state === 'failed' && refusal && !corrected) message = { ...message, error: refusal };
             // The answer to the sentence asked back or gave a hint: the end of its plan is calm too.
-            if ((message.state === 'failed' || message.state === 'done') && noted) {
+            if ((message.state === 'failed' || message.state === 'done') && noted && !corrected) {
                 message = { ...message, state: 'note', note: noted.kind, result: noted.text || message.result, error: '' };
             }
             current = message;
