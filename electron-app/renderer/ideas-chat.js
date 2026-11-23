@@ -85,14 +85,24 @@
             // Marked cards in the order of marking ("verbinde die beiden"), and the card last made or changed ("mach das zur Tabelle").
             context.selection = (Array.isArray(selection) ? selection : []).map(String).filter((id) => known.has(id));
             if (lastId != null && known.has(String(lastId))) context.last_id = String(lastId);
-        } else {
-            context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
-                // only bubbles whose database id is known: an index or a title is no id
-                .filter((item) => item && isDbId(String(item.id)))
-                .map((item) => ({ id: String(item.id), title: String(item.title || '') }));
         }
+        // Also with a bubble open: when its own id is not known (id null), the Brain finds it by
+        // its title in this list.
+        context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
+            // only bubbles whose database id is known: an index or a title is no id
+            .filter((item) => item && isDbId(String(item.id)))
+            .map((item) => ({ id: String(item.id), title: String(item.title || '') }));
         if (newId) context.new_id = newId;
         return context;
+    }
+
+    // A sentence that takes something back or removes it. Its answer reports no changed rows, so the
+    // list of cards is loaded again once the answer is there.
+    const REMOVES = /(zur(?:ü|ue)ck|r(?:ü|ue)ckg(?:ä|ae)ngig|\bundo\b|l(?:ö|oe)sch|entfern)/i;
+
+    /** Whether the cards of the bubble have to be loaded again after the answer to this sentence. */
+    function reloadsCards(sentence) {
+        return typeof sentence === 'string' && REMOVES.test(sentence);
     }
 
     // Only a plain opening at the start of the sentence makes a card at once; anything else would turn
@@ -422,6 +432,23 @@
             for (const id of targets) store.working(String(id), String(id) === newId ? note : titleOf(id));
         }
 
+        /**
+         * Load the cards of the open bubble again from the database (UniverseCanvas.refresh, in
+         * place, no navigation). Its loadNodes() reports the new list as vibemind:canvas-loaded.
+         */
+        function reloadCards() {
+            const canvas = root.spaceCanvas;
+            if (view.classList.contains('hidden') || !canvas || typeof canvas.refresh !== 'function') return;
+            if (!canvas.bubbleId) {
+                const bubble = openBubble();
+                if (!bubble || !bubble.id) return; // without the database id there is nothing to ask for
+                canvas.bubbleId = bubble.id;
+            }
+            Promise.resolve(canvas.refresh()).catch((error) => {
+                if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('warn', '[IdeasChat] reload of cards failed', { error: String(error) });
+            });
+        }
+
         async function submit(text) {
             if (!text || busy) return;
             busy = true;
@@ -447,6 +474,7 @@
                 // A question back stored nothing: the card noted in advance goes as well.
                 if (response && response.question && newId) store.settle(newId);
                 if (!failed) applyAnswer(response, newId, note);
+                if (!failed && reloadsCards(text)) reloadCards();
                 say(message, failed ? 'error' : 'agent', asked);
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
@@ -483,6 +511,14 @@
             // The card is shown as soon as the database reports it; the text of the answer comes seconds later.
             if (node.id != null) { store.settle(node.id); lastId = String(node.id); }
             store.matchLoaded([node]);
+            renderCards();
+        });
+        // A card deleted in the database is no longer one the Brain may be told about.
+        root.addEventListener('vibemind:canvas-node-removed', (event) => {
+            const id = event.detail && event.detail.id;
+            if (id == null) return;
+            nodes = nodes.filter((node) => !node || String(node.id) !== String(id));
+            if (lastId === String(id)) lastId = null;
             renderCards();
         });
         // A report of the database for a card ends the work on it.
@@ -524,7 +560,7 @@
         return { submit, contextNow, store, bubbleRow };
     }
 
-    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
+    const api = { buildContext, reloadsCards, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

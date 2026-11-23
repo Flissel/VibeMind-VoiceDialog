@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
+const { buildContext, reloadsCards, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
 
 const B1 = 'fa8d4158-f721-4290-a0cf-7f20da754372';
 const B2 = '0b1c2d3e-0000-4000-8000-123456789abc';
@@ -18,7 +18,7 @@ test('inside a bubble the context names the bubble and its cards', () => {
             null,
             { title: 'ohne Kennung' },
         ],
-        bubbles: [{ id: B2, title: 'nicht gefragt' }],
+        bubbles: [{ id: B1, title: 'Marketing' }, { id: B2, title: 'Vertrieb' }],
         newId: 'u-1',
         selection: ['n2', 'gibt-es-nicht'],
         lastId: 'n3',
@@ -34,8 +34,35 @@ test('inside a bubble the context names the bubble and its cards', () => {
         ],
         selection: ['n2'],
         last_id: 'n3',
+        bubbles: [{ id: B1, title: 'Marketing' }, { id: B2, title: 'Vertrieb' }],
         new_id: 'u-1',
     });
+});
+
+test('with a bubble open whose id is not known, the list of bubbles lets the Brain find it by title', () => {
+    const context = buildContext({ bubble: { id: '1', title: 'Marketing' }, nodes: [], bubbles: [{ id: B1, title: 'Marketing' }, { id: 1, title: 'Ordnungszahl' }] });
+
+    assert.deepEqual(context.bubble, { id: null, title: 'Marketing' });
+    assert.deepEqual(context.bubbles, [{ id: B1, title: 'Marketing' }]);
+});
+
+test('a sentence that takes something back or removes it loads the cards again', () => {
+    for (const sentence of ['Nimm das zurück', 'zurueck', 'Mach das rückgängig', 'rueckgaengig bitte', 'undo', 'Lösche die Karte Preise', 'loesch das', 'Entferne Druckerei']) {
+        assert.equal(reloadsCards(sentence), true, sentence);
+    }
+    for (const sentence of ['Notiere: API Design', 'Zeig die Notizen dieser Bubble', 'Verbinde die beiden', '', null]) {
+        assert.equal(reloadsCards(sentence), false, String(sentence));
+    }
+});
+
+test('after the answer to such a sentence the chat reloads the canvas in place, and a deleted card leaves the context', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(source, /if \(!failed && reloadsCards\(text\)\) reloadCards\(\);/);
+    assert.match(source, /canvas\.refresh\(\)/, 'refresh() loads in place, without entering the bubble again');
+    assert.match(source, /addEventListener\('vibemind:canvas-node-removed'/);
+    const canvas = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
+    const deleted = canvas.slice(canvas.indexOf('onNodeDeleted(nodeId) {'), canvas.indexOf('onNodeDeleted(nodeId) {') + 200);
+    assert.match(deleted, /vibemind:canvas-node-removed/);
 });
 
 test('in the overview the context names the bubbles instead', () => {

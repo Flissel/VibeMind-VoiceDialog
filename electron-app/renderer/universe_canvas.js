@@ -1562,6 +1562,7 @@ class UniverseCanvas {
     }
 
     onNodeDeleted(nodeId) {
+        window.dispatchEvent(new CustomEvent('vibemind:canvas-node-removed', { detail: { id: nodeId } }));
         if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         const node = this.nodes.get(nodeId);
         if (node) {
