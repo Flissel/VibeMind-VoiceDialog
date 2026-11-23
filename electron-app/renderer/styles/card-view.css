@@ -433,3 +433,31 @@
     color: #ffb3bd;
     font: 13px/1.4 system-ui, "Segoe UI", sans-serif;
 }
+
+/* the root set for the bubble (metadata.wurzel): a small mark next to the kind */
+.kv-wurzel {
+    margin-right: auto;
+    padding: 0 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--space-accent-rgb, 167, 139, 250), 0.6);
+    font-size: 11px;
+    color: #e6eeff;
+}
+
+.kv-read-head .kv-wurzel {
+    margin-right: 0;
+    align-self: center;
+}
+
+/* a card named in the text of a summary: a jump to that card */
+.kv-jump {
+    color: #9cc4ff;
+    text-decoration: underline dotted;
+    cursor: pointer;
+}
+
+.kv-jump:hover,
+.kv-jump:focus {
+    color: #e6eeff;
+    outline: none;
+}

@@ -255,7 +255,7 @@ function canvasWorld() {
             board(doc, options) {
                 const b = { element: { parentNode: null }, updates: [], opened: [], closed: 0, options,
                     mount(c) { this.element.parentNode = c; }, update(n, e) { this.updates.push([n.length, e.length]); },
-                    open(id) { this.opened.push(id); return true; }, close() { this.closed += 1; }, setQuery() {} };
+                    open(id) { this.opened.push(id); return true; }, close() { this.closed += 1; }, setQuery() {}, roots: [], setRoot(id) { this.roots.push(id); } };
                 boards.push(b);
                 return b;
             },
@@ -456,4 +456,84 @@ test('Suche nach Titel ohne Gross/klein, Umlaute und Unterstriche', () => {
     assert.ok(cv.matches('Zahlungsübersicht', 'uebersicht'));
     assert.ok(cv.matches('irgendwas', '  '));
     assert.ok(!cv.matches('Karte 5', 'import'));
+});
+
+// Lauf 3 der Pruefung: Kanban "Noch ohne Inhalt", Wurzel unsichtbar, Verweise nur Text.
+test('Kanban liest beide Formen und den Inhalt von vor dem Formatieren', () => {
+    const spalten = { id: 'k1', title: 'Karte 1', content: 'Karte 1', metadata: {},
+        content_json: { type: 'kanban', columns: [{ title: 'Offen', items: ['Logo'] }, { name: 'Fertig', cards: [{ text: 'Flyer' }] }] } };
+    assert.deepEqual(cv.cardShort(spalten).zeilen, ['Offen: Logo', 'Fertig: Flyer']);
+    const todo = { id: 'k2', title: 'Karte 2', content: 'Karte 2', metadata: {},
+        content_json: { type: 'kanban', todo: [{ title: 'Logo' }], doing: [{ text: 'Flyer' }], done: [] } };
+    assert.deepEqual(cv.cardShort(todo).zeilen, ['Offen: Logo', 'In Arbeit: Flyer']);
+    assert.equal(cv.cardShort(todo).leer, false);
+
+    // das Gehirn formatiert: content_json traegt nur den Titel, der Inhalt stand im content_json davor
+    const formatiert = { id: 'k3', title: 'Karte 3', content: 'Karte 3', metadata: {},
+        format_schema: { type: 'kanban' },
+        content_json: { type: 'kanban', title: 'Karte 3', text: 'Karte 3' },
+        previous_content_json: JSON.stringify({ type: 'action_list', items: [{ task: 'Angebot schicken', status: 'completed' }, { task: 'Anrufen' }] }) };
+    const kurz = cv.cardShort(formatiert);
+    assert.equal(kurz.leer, false, 'nicht "Noch ohne Inhalt"');
+    assert.equal(kurz.art, 'Kanban');
+    assert.deepEqual(kurz.zeilen, ['Aufgaben: Angebot schicken (erledigt)', 'Aufgaben: Anrufen']);
+    assert.equal(cv.cardRead(formatiert).leer, false);
+
+    // Text steht im content, das Format traegt einen leeren Text
+    const leererText = { id: 'k4', title: 'Karte 4', content: 'Offen: Logo\nIn Arbeit: Flyer', metadata: {},
+        content_json: { type: 'kanban', title: 'Karte 4', text: '' } };
+    assert.equal(cv.cardShort(leererText).leer, false);
+    assert.match(cv.cardRead(leererText).text, /Offen: Logo/);
+
+    // wirklich leer bleibt leer
+    const leer = { id: 'k5', title: 'Karte 5', content: 'Karte 5', metadata: {}, content_json: { type: 'kanban', title: 'Karte 5', text: 'Karte 5' } };
+    assert.equal(cv.cardShort(leer).leer, true);
+});
+
+test('eine Zusammenfassung nennt ihre Karten als Spruenge, nie als Kennung', () => {
+    const titles = new Map([['00000000-0000-4000-8000-00000000000a', 'Karte 1'], ['00000000-0000-4000-8000-00000000000b', 'Karte 2'], ['z1', 'Zusammenfassung A']]);
+    const summary = { id: 'z1', title: 'Zusammenfassung A', node_type: 'dokument',
+        content: '## Kern\n\nAus „Karte 1“ folgt der Plan, „Karte 9“ gibt es nicht.',
+        metadata: { art: 'zusammenfassung', quellen: ['00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-00000000000b', 'weg', '00000000-0000-4000-8000-00000000000a'] } };
+    const view = cv.cardRead(summary, [], titles);
+    assert.deepEqual(view.quellen, [{ id: '00000000-0000-4000-8000-00000000000a', titel: 'Karte 1' }, { id: '00000000-0000-4000-8000-00000000000b', titel: 'Karte 2' }],
+        'bekannte Karten, jede einmal, eine geloeschte faellt weg');
+    const html = cv.linkMentions(cv.renderMarkdown(view.text).html, titles, 'z1');
+    assert.match(html, /„<span class="kv-jump" role="link" tabindex="0" data-card-id="00000000-0000-4000-8000-00000000000a" title="Karte öffnen">Karte 1<\/span>“/);
+    assert.match(html, /„Karte 9“/, 'ein unbekannter Titel bleibt Text');
+    assert.equal(cv.linkMentions('<p>„Zusammenfassung A“</p>', titles, 'z1'), '<p>„Zusammenfassung A“</p>', 'nie ein Sprung auf sich selbst');
+    assert.equal(cv.linkMentions('<p>„<b>x</b>“</p>', titles, 'z1'), '<p>„<b>x</b>“</p>');
+    const source = fs.readFileSync(path.join(__dirname, 'renderer', 'card-view.js'), 'utf8');
+    assert.match(source, /closest\('\.kv-jump\[data-card-id\]'\)/, 'der Klick oeffnet die Karte im selben Leser');
+});
+
+test('die gesetzte Wurzel traegt an ihrer Karte das Zeichen "Wurzel"', () => {
+    const made = [];
+    const fake = (tag) => {
+        const node = { tag, children: [], className: '', textContent: '', value: '', hidden: false, disabled: false, dataset: {}, style: { setProperty() {} },
+            append(...c) { node.children.push(...c); }, replaceChildren(...c) { node.children = c; },
+            setAttribute() {}, addEventListener() {}, remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [] };
+        made.push(node);
+        return node;
+    };
+    const doc = { createElement: fake, addEventListener() {}, removeEventListener() {}, defaultView: null };
+    const board = cv.board(doc, {});
+    const a = { id: '00000000-0000-4000-8000-00000000000a', title: 'Karte 1', content: 'Text eins', metadata: {} };
+    const b = { id: '00000000-0000-4000-8000-00000000000b', title: 'Karte 2', content: 'Text zwei', metadata: {} };
+    board.update([a, b], []);
+    const marks = () => made.filter((n) => n.className === 'kv-wurzel');
+    assert.equal(marks().length, 0);
+    assert.equal(board.setRoot('00000000-0000-4000-8000-00000000000b'), true);
+    const grid = made.find((n) => n.className === 'kv-grid');
+    const marked = grid.children.filter((card) => card.children.some((part) => part.className === 'kv-top'
+        && part.children.some((c) => c.className === 'kv-wurzel' && c.textContent === 'Wurzel')));
+    assert.deepEqual(marked.map((card) => card.dataset.cardId), ['00000000-0000-4000-8000-00000000000b']);
+    assert.equal(board.setRoot('00000000-0000-4000-8000-00000000000b'), false, 'gleich: kein neues Zeichnen');
+    board.setRoot(null);
+    assert.equal(board.rootId, null);
+
+    const canvas = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
+    assert.match(canvas, /row\.metadata\.wurzel/, 'aus der Zeile der Bubble (bubble_wurzel)');
+    assert.match(canvas, /this\._board\.setRoot\(this\._wurzel\)/);
+    assert.match(canvas, /this\._board\.setRoot\(null\)/, 'eine andere Bubble: die alte Wurzel gilt nicht');
 });

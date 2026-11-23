@@ -254,7 +254,8 @@ class UniverseCanvas {
         const before = this.bubbleId;
         this.bubbleId = UniverseCanvas.dbIdOf(bubbleId);
         // another bubble: an open card and a search of the last one do not carry over
-        if (this._board && before !== this.bubbleId) { this._board.close(); this._board.setQuery(''); }
+        if (this._board && before !== this.bubbleId) { this._board.close(); this._board.setQuery(''); this._board.setRoot(null); }
+        if (before !== this.bubbleId) this._wurzel = null;   // the root of the last bubble is not this one's
         if (!this.bubbleId) this._stopMermaidPoll();
         else if (before !== this.bubbleId) this._loadBubbleRow();   // its reasons, at once (the poll repeats it)
         // a bubble was named but its database id is not known: say so, never a silent null
@@ -333,6 +334,7 @@ class UniverseCanvas {
             this._loadGen = (this._loadGen || 0) + 1;   // a diagram still rendering must not replace the cards
             if (!this._board) {
                 this._board = window.CardView.board(document, { onGraph: () => this.showView('graph') });
+                this._board.setRoot(this._wurzel || null);
             }
             this._board.mount(this.container);
             this._board.update(this.lastNodes, this.lastEdges);
@@ -490,6 +492,10 @@ class UniverseCanvas {
             const rows = await res.json();
             const row = Array.isArray(rows) ? rows[0] : null;
             if (!row || this.bubbleId !== asked) return null;   // another bubble opened meanwhile
+            // the root set for the bubble (bubble_wurzel writes metadata.wurzel): a small mark on its card
+            const wurzel = row.metadata && typeof row.metadata === 'object' ? row.metadata.wurzel : null;
+            this._wurzel = typeof wurzel === 'string' && wurzel ? wurzel : null;
+            if (this._board) this._board.setRoot(this._wurzel);
             window.dispatchEvent(new CustomEvent('vibemind:bubble-row', { detail: { row, bubbleId: asked } }));
             return row;
         } catch (err) {

@@ -63,16 +63,20 @@
     function rowOf(node) {
         if (!isMap(node)) return {};
         const content = node.content;
-        let structured = node.content_json;
-        if (isText(structured)) {
-            try { structured = JSON.parse(structured); } catch (_) { structured = null; }
-        }
+        const parsed = (value) => {
+            if (!isText(value)) return value;
+            try { return JSON.parse(value); } catch (_) { return null; }
+        };
+        const structured = parsed(node.content_json);
+        const previous = parsed(node.previous_content_json);
         return {
             id: node.id != null ? String(node.id) : (node.db_id != null ? String(node.db_id) : null),
             title: isText(node.title) ? node.title : (isMap(content) && isText(content.title) ? content.title : null),
             content: isText(content) ? content : (isMap(content) && isText(content.text) ? content.text : null),
             node_type: node.node_type || node.type || null,
             content_json: structured === undefined ? null : structured,
+            // what the card held before it was formatted: the Brain's format writes only text (often just the title)
+            previous_content_json: isMap(previous) ? previous : null,
             format_schema: node.format_schema || null,
             metadata: isMap(node.metadata) ? node.metadata : {},
         };
@@ -238,8 +242,13 @@
         if (fmt === 'kanban') {
             const sections = [];
             for (const column of items(data.columns)) {
-                const head = plain(field(column, 'name'), limit);
-                if (head) sections.push([head, lines(get(column, 'cards'), 'title')]);
+                const head = plain(field(column, 'name', 'title', 'label'), limit);
+                const cards = get(column, 'cards') !== undefined ? get(column, 'cards') : get(column, 'items');
+                if (head) sections.push([head, lines(cards, 'title', 'text', 'name')]);
+            }
+            // the other shape of the same format (format-renderer.js): todo / doing / done
+            for (const [key, head] of [['todo', 'Offen'], ['doing', 'In Arbeit'], ['done', 'Erledigt']]) {
+                if (Array.isArray(data[key])) sections.push([head, lines(data[key], 'title', 'text', 'point')]);
             }
             const cards = sections.reduce((sum, [, list]) => sum + list.length, 0);
             return [sections, sections.length ? `${count(cards, 'Karte', 'Karten')} in ${count(sections.length, 'Spalte', 'Spalten')}` : null];
@@ -259,10 +268,31 @@
         let [sections, said] = structuredSections(fmt, structured, limit);
         sections = sections.filter(([, found]) => found.length);
         if (sections.length) return [fmt, sections, said, false];
-        const text = isText(structured.text) ? structured.text : row.content;
-        sections = textSections(isText(text) ? text : '', title, limit);
+        sections = textSections(cardText(row), title, limit);
+        if (!sections.some(([, found]) => found.length)) {
+            // formatted by the Brain: the new content_json carries only the title, the content stayed in the one before
+            const before = row.previous_content_json;
+            if (isMap(before)) {
+                const beforeFmt = isText(before.type) ? (FORMAT_ALIASES[before.type] || before.type) : 'note';
+                let [found, beforeSaid] = structuredSections(beforeFmt, before, limit);
+                found = found.filter(([, list]) => list.length);
+                if (found.length) return [fmt, found, beforeSaid, false];
+            }
+        }
         const headings = sections.filter(([head]) => head).length;
         return [fmt, sections, headings > 1 ? `${headings} Abschnitte` : null, true];
+    }
+
+    /** The text of a card: the text of its format if it says more than the title, else the stored text. */
+    function cardText(row) {
+        const structured = isMap(row.content_json) ? row.content_json : {};
+        const title = isText(row.title) ? row.title.trim() : '';
+        const said = (value) => isText(value) && value.trim() && value.trim() !== title;
+        if (said(structured.text)) return structured.text;
+        if (said(row.content)) return row.content;
+        const before = row.previous_content_json;
+        if (isMap(before) && said(before.text)) return before.text;
+        return isText(structured.text) ? structured.text : (isText(row.content) ? row.content : '');
     }
 
     /** Die zugeklappte Karte: Titel, Art, bis zu drei lesbare Zeilen, Umfang, Herkunft. */
@@ -320,13 +350,44 @@
         return links;
     }
 
+    /** The cards a summary or white paper was written from (metadata.quellen), by title; unknown ids show nothing. */
+    function cardSources(row, titles) {
+        const metadata = isMap(row.metadata) ? row.metadata : {};
+        const found = [];
+        for (const id of items(metadata.quellen)) {
+            const key = id != null ? String(id) : null;
+            const known = titles instanceof Map ? titles.get(key) : (titles || {})[key];
+            if (key && key !== row.id && isText(known) && !found.some((s) => s.id === key)) found.push({ id: key, titel: known });
+        }
+        return found;
+    }
+
+    /**
+     * A card named in the text („Titel“) becomes a jump to that card in the same reader.
+     * html is built from escaped text; only whole quoted titles of other cards of this bubble are touched.
+     */
+    function linkMentions(html, titles, ownId) {
+        const known = titles instanceof Map ? [...titles.entries()] : Object.entries(titles || {});
+        const byTitle = new Map();
+        for (const [id, title] of known) {
+            if (id !== ownId && isText(title) && title.trim() && !byTitle.has(title.trim())) byTitle.set(title.trim(), id);
+        }
+        if (!byTitle.size) return html;
+        // typographic quotes only: a plain " is escaped in text and stands only in attributes
+        return html.replace(/([„“])([^„“”<>\n]{1,200})([“”])/g, (whole, open, inner, shut) => {
+            const id = byTitle.get(unescapeHtml(inner).trim());
+            if (!id) return whole;
+            return `${open}<span class="kv-jump" role="link" tabindex="0" data-card-id="${escapeHtml(id)}" title="Karte öffnen">${inner}</span>${shut}`;
+        });
+    }
+
     /** Die aufgeklappte Karte: alles Lesbare, Abschnitte der Reihe nach, Verbindungen nach Titel. */
     function cardRead(input, edges, titles) {
         const row = rowOf(input);
         const [fmt, sections, said, isTextCard] = cardParts(row, null);
         let text = null;
         if (isTextCard) {
-            const raw = isMap(row.content_json) && isText(row.content_json.text) ? row.content_json.text : row.content;
+            const raw = cardText(row);
             const title = isText(row.title) ? row.title : '';
             text = isText(raw) && raw.trim() && raw.trim() !== title.trim() ? raw : null;
         }
@@ -340,6 +401,7 @@
             abschnitte: sections.map(([head, found]) => ({ ueberschrift: head, zeilen: found })),
             text,
             verbindungen: cardLinks(row.id, edges, titles),
+            quellen: cardSources(row, titles),
             leer: !sections.some(([, found]) => found.length),
         };
     }
@@ -534,6 +596,7 @@
         let titles = new Map();
         let signature = '';
         let openId = null;
+        let rootId = null;   // the root set for the bubble (ideas.metadata.wurzel), marked on its card
         // nichts gespeichert: die Standardgroesse (Number(null) waere 0, die kleinste Stufe)
         const stored = remember(doc, 'vibemind.karten.groesse');
         let size = stored === null || stored === '' ? NaN : Number(stored);
@@ -556,6 +619,12 @@
             return n;
         }
 
+        function rootMark() {
+            const mark = el('span', 'kv-wurzel', 'Wurzel');
+            mark.title = 'Die Wurzel dieser Bubble';
+            return mark;
+        }
+
         function cardEl(row) {
             const short = cardShort(row);
             const card = el('article', 'kv-card' + (short.leer ? ' kv-leer' : ''));
@@ -563,6 +632,7 @@
             card.dataset.cardId = row.id || '';
             const top = el('div', 'kv-top');
             top.append(el('span', 'kv-art', short.art));
+            if (rootId && row.id === rootId) top.append(rootMark());
             const rating = ratingOf(row);
             if (rating != null) {
                 const chip = el('span', 'kv-wert', String(rating));
@@ -655,6 +725,7 @@
             const titleBox = el('div', 'kv-read-titles');
             titleBox.append(el('div', 'kv-read-meta', meta), el('h2', 'kv-read-title', view.titel));
             head.append(titleBox);
+            if (rootId && row.id === rootId) head.append(rootMark());
             if (view.bewertung != null) {
                 const chip = el('span', 'kv-wert kv-wert-gross', String(view.bewertung));
                 chip.title = 'Bewertung';
@@ -672,13 +743,27 @@
             if (view.leer) content.append(el('p', 'kv-empty', 'Noch ohne Inhalt'));
             else if (view.text) {
                 const md = renderMarkdown(view.text);
-                content.innerHTML = md.html;   // aus maskiertem Text gebaut (renderMarkdown)
+                content.innerHTML = linkMentions(md.html, titles, row.id);   // aus maskiertem Text gebaut (renderMarkdown)
                 content.classList.add('kv-md');
                 toc = md.headings;
             } else if (cardFormat(row) === 'table' && tableOf(row)) {
                 content.append(tableOf(row));
             } else {
                 for (const part of view.abschnitte) content.append(section(part.ueberschrift, part.zeilen));
+            }
+            if (view.quellen.length) {
+                const box = el('section', 'kv-section kv-links kv-quellen');
+                box.append(el('h3', null, view.quellen.length === 1 ? 'Geschrieben aus dieser Karte' : `Geschrieben aus diesen Karten (${view.quellen.length})`));
+                const list = el('div', 'kv-link-list');
+                for (const source of view.quellen) {
+                    const go = el('button', 'kv-link-btn', source.titel);
+                    go.type = 'button';
+                    go.title = 'Karte öffnen';
+                    go.addEventListener('click', () => open(source.id));
+                    list.append(go);
+                }
+                box.append(list);
+                content.append(box);
             }
             if (view.verbindungen.length) {
                 const box = el('section', 'kv-section kv-links');
@@ -759,6 +844,17 @@
         };
         reader.addEventListener('click', followLink);
         reader.addEventListener('keydown', followLink);
+        // a card named in the text opens in the same reader
+        const followMention = (e) => {
+            const target = e.target && typeof e.target.closest === 'function' ? e.target.closest('.kv-jump[data-card-id]') : null;
+            if (!target) return;
+            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            e.preventDefault();
+            e.stopPropagation();
+            open(target.getAttribute('data-card-id'));
+        };
+        reader.addEventListener('click', followMention);
+        reader.addEventListener('keydown', followMention);
         // Esc schliesst die Karte und nur die Karte: die App darf dabei die Bubble nicht verlassen.
         const onKey = (e) => {
             if (e.key !== 'Escape' || reader.hidden || !rootEl.isConnected) return;
@@ -808,6 +904,16 @@
             },
             open,
             close,
+            /** The root of the bubble (metadata.wurzel); null clears it. Redraws only on a change. */
+            setRoot(id) {
+                const next = id != null && String(id) ? String(id) : null;
+                if (next === rootId) return false;
+                rootId = next;
+                renderGrid();
+                if (openId) renderReader();
+                return true;
+            },
+            get rootId() { return rootId; },
             get openId() { return openId; },
             get count() { return rows.length; },
             get query() { return search.value; },
@@ -824,7 +930,7 @@
 
     return {
         FORMAT_NAMES, CARD_LINES, CARD_LINE_CHARS, SIZES,
-        rowOf, cardFormat, plain, cardTitle, cardSource, cardShort, cardRead, cardLinks,
+        rowOf, cardFormat, plain, cardTitle, cardSource, cardShort, cardRead, cardLinks, cardSources, linkMentions,
         renderMarkdown, escapeHtml, safeUrl, headingOf, searchKey, matches, board,
     };
 });
