@@ -206,12 +206,18 @@ class ClawPortHandlers:
                     self._active_vibecoder_session = vibecoder_sid
                     debug_log(f"VibeCoder session started from chat: {vibecoder_sid}")
 
-            self.send_message({
+            # The Brain's own sentence reaches the chat in every case. A tool that refused
+            # or failed is not a success: the app then takes back what it had noted in
+            # advance. A question back is neither; nothing was stored yet.
+            answer = {
                 "type": "chat_response",
-                "success": True,
+                "success": event_type != "brain.multihop.failed",
                 "message": response_msg,
                 "event_type": event_type,
-            })
+            }
+            if event_type == "brain.multihop.question":
+                answer["question"] = True
+            self.send_message(answer)
         except Exception as e:
             debug_log(f"Chat input error: {e}")
             self.send_message({

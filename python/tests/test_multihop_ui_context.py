@@ -87,3 +87,60 @@ def test_execute_hands_the_context_to_the_request():
     asyncio.run(_main())
 
     assert calls == [("notiere: API Design", UI_CONTEXT), ("ohne Kontext", None)]
+
+
+def _execute(answer):
+    bridge = BrainMultihopBridge()
+
+    async def _fake_post(text, ui_context=None):
+        return answer
+
+    async def _no_reward(plan_id, success):
+        return None
+
+    bridge._post_multihop = _fake_post
+    bridge._reward_multihop = _no_reward
+
+    async def _main():
+        result = await bridge.execute("notiere: API Design")
+        await asyncio.sleep(0)
+        return result
+
+    return asyncio.run(_main())
+
+
+def test_a_refused_tool_keeps_the_sentence_of_the_brain():
+    result = _execute({
+        "ok": False, "plan_id": "p2", "state": {},
+        "executed": {"s1": {"ok": False, "error": "supabase_http_error"}},
+        "final_text": "Das Werkzeug hat eine Angabe abgelehnt: Bubble unbekannt.",
+    })
+
+    assert result is not None, "the sentence must not be dropped"
+    assert result.event_type == "brain.multihop.failed"
+    assert result.response_hint == "Das Werkzeug hat eine Angabe abgelehnt: Bubble unbekannt."
+    assert result.error is None, "with error set the orchestrator would fall through and lose it again"
+
+
+def test_a_question_back_reaches_the_user():
+    result = _execute({
+        "ok": False, "rueckfrage": True, "plan_id": "p3", "executed": {}, "state": {},
+        "final_text": "Welche Bubble meinst du?",
+    })
+
+    assert result.event_type == "brain.multihop.question"
+    assert result.response_hint == "Welche Bubble meinst du?"
+
+
+def test_nothing_found_still_falls_through():
+    assert _execute({"ok": False, "error": "planner returned no plan"}) is None
+    assert _execute({"ok": False, "final_text": "", "executed": {}}) is None
+    # a sentence without anything executed and without a question is not the Brain's verdict
+    assert _execute({"ok": False, "final_text": "irgendein Text", "executed": {}}) is None
+
+
+def test_a_plan_that_ran_is_reported_as_before():
+    result = _execute(ANSWER)
+
+    assert result.event_type == "brain.multihop"
+    assert result.response_hint == "done"

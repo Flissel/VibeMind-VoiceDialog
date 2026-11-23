@@ -41,6 +41,11 @@ from swarm.orchestrator.result_formatter import OrchestrationResult
 
 logger = logging.getLogger(__name__)
 
+# Event types of a multihop result: the plan ran, a tool refused or failed, the Brain asks back.
+EVENT_DONE = "brain.multihop"
+EVENT_FAILED = "brain.multihop.failed"
+EVENT_QUESTION = "brain.multihop.question"
+
 
 class BrainMultihopBridge:
     """Phase -2 voice→brain→cap bridge. POSTs to /api/multihop/execute."""
@@ -108,13 +113,19 @@ class BrainMultihopBridge:
         if data is None:
             return None
 
-        # CapabilityRouter found nothing OR planner gave up. The Brain side
-        # signals this with ok=false (introspection.py:2392). Quiet fall-through.
-        if not data.get("ok"):
-            return None
-
+        ok = bool(data.get("ok"))
         final_text = (data.get("final_text") or "").strip()
         executed = data.get("executed") or {}
+        question = bool(data.get("rueckfrage"))
+
+        # ok=false has two meanings. CapabilityRouter found nothing, or the planner
+        # gave up: nothing to say, quiet fall-through (introspection.py:2392). But the
+        # Brain also answers ok=false when it DID act and a tool refused or failed, and
+        # when it asks back (rueckfrage=true); then final_text is its sentence for the
+        # user. Dropping that sentence made the old path answer "I did not understand
+        # you" while the tool had plainly said what was wrong.
+        if not ok and not (final_text and (question or executed)):
+            return None
 
         # MH-5 (Phase 0): feed the REAL per-hop truth-verdict back as a
         # reward, keyed on the top-level plan_id (MH-5a response contract).
@@ -149,9 +160,19 @@ class BrainMultihopBridge:
             f"len(final_text)={len(final_text)}"
         )
 
+        # `error` stays empty on purpose: the orchestrator falls through to the old path
+        # on a result with `error`, and the Brain's own sentence would be lost again.
+        # The outcome travels in the event type (see clawport_handlers).
+        if ok:
+            event_type = EVENT_DONE
+        elif question:
+            event_type = EVENT_QUESTION
+        else:
+            event_type = EVENT_FAILED
+
         return OrchestrationResult(
             job_id=job_id,
-            event_type="brain.multihop",
+            event_type=event_type,
             stream="brain",
             response_hint=final_text,
             is_conversational=False,
