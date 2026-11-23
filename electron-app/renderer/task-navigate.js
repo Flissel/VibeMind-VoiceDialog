@@ -200,6 +200,11 @@
             if (finished(current)) clear();
         }
         root.addEventListener('vibemind:sentence-sent', () => {
+            // The key or click that sent the sentence is no sign that the user works here: they asked
+            // for the task and want to see it. Counting it as such kept every typed sentence from
+            // jumping (the Enter came 0 s before the plan; only sends without a key event jumped).
+            // Input after the send still holds the jump back.
+            lastInputAt = 0;
             answer = '';
             refusal = '';
             fresh();
