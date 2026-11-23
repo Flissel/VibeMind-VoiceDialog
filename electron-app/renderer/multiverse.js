@@ -21,6 +21,10 @@ class MultiverseApp {
         this.currentSpace = 'ideas';
         this.currentAgent = 'rachel';
         this.isNavigating = false;
+        // The lock of the scene clears itself when a move never ends (navigation-guard.js).
+        if (window.VibeNavigationGuard) {
+            window.VibeNavigationGuard.guardFlag(this, 'isNavigating', { onStuck: (info) => this._navigationStuck(info) });
+        }
         this.handSocket = null;
         this.selectedBubbleIndex = -1;  // Track selected bubble
         this.selectedBubbleId = null;    // Track selected bubble ID
@@ -2228,6 +2232,23 @@ class MultiverseApp {
     
     getSpaceInfo(spaceId) {
         return this.spaces[spaceId] || null;
+    }
+
+    /**
+     * A move did not end in time and its lock was cleared (navigation-guard.js). Put back what a
+     * half-done move leaves behind, and say so: the cause still has to be found.
+     */
+    _navigationStuck(info) {
+        const state = {
+            flag: info.flag, afterMs: info.afterMs, space: this.currentSpace,
+            insideBubble: Boolean(this.isInsideBubble), hidden: document.visibilityState === 'hidden',
+        };
+        console.warn('[Multiverse] Navigation hing und wurde freigegeben:', JSON.stringify(state));
+        if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[Multiverse] navigation stuck, released', state);
+        const overlay = document.getElementById('transition-overlay');
+        if (overlay) overlay.classList.remove('active');
+        if (window.spaceNavigator && window.spaceNavigator.syncSpace) window.spaceNavigator.syncSpace(this.currentSpace);
+        window.dispatchEvent(new CustomEvent('vibemind:navigation-stuck', { detail: state }));
     }
 
     /** Starts the move to a space. Returns false when nothing was started (already there, or a move is running). */
