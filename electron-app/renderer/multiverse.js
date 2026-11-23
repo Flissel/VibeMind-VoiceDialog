@@ -3392,7 +3392,7 @@ class MultiverseApp {
                 document.body.appendChild(ripple);
                 setTimeout(() => ripple.remove(), 600);
                 try {
-                    await fetch('http://localhost:8007/api/automation/click', {
+                    await fetch('http://127.0.0.1:8007/api/automation/click', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ x: realX, y: realY, button }),
@@ -3446,7 +3446,7 @@ class MultiverseApp {
             // Wait for backend health
             const waitForHealth = () => new Promise((resolve) => {
                 const check = () => {
-                    fetch('http://localhost:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
+                    fetch('http://127.0.0.1:8007/api/health/health', { signal: AbortSignal.timeout(2000) })
                         .then(r => { if (r.ok || r.status === 503) resolve(); else setTimeout(check, 3000); })
                         .catch(() => setTimeout(check, 3000));
                 };
@@ -3458,7 +3458,7 @@ class MultiverseApp {
             let monitorCount = 1;
             let monitorGeometries = {};
             try {
-                const mr = await fetch('http://localhost:8007/api/desktop/monitors', { signal: AbortSignal.timeout(3000) });
+                const mr = await fetch('http://127.0.0.1:8007/api/desktop/monitors', { signal: AbortSignal.timeout(3000) });
                 if (mr.ok) {
                     const mdata = await mr.json();
                     monitorCount = mdata.count || 1;
@@ -3493,7 +3493,7 @@ class MultiverseApp {
                 const pollMonitor = async () => {
                     if (!_desktopStreamActive) return;
                     try {
-                        const r = await fetch(`http://localhost:8007/api/desktop/screenshot?monitor=${i}`, {
+                        const r = await fetch(`http://127.0.0.1:8007/api/desktop/screenshot?monitor=${i}`, {
                             signal: AbortSignal.timeout(3000),
                         });
                         if (r.ok) {
