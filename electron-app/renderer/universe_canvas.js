@@ -256,11 +256,47 @@ class UniverseCanvas {
         // another bubble: an open card and a search of the last one do not carry over
         if (this._board && before !== this.bubbleId) { this._board.close(); this._board.setQuery(''); }
         if (!this.bubbleId) this._stopMermaidPoll();
+        // a bubble was named but its database id is not known: say so, never a silent null
+        this._bubbleUnknown(!this.bubbleId && bubbleId !== null && bubbleId !== undefined && bubbleId !== '');
+    }
+
+    /**
+     * The bubble named by an entered_bubble of Python. Python names it by its local number
+     * (bubble_id, e.g. 15) and, since this change, by its database id (db_bubble_id). The local
+     * number alone is no database id: when it cannot be resolved, the bubble the entry opened
+     * (enterSpace set it) stays. Measured: content after the animation set bubbleId to null,
+     * the chat then sent no cards and the 5-s poll stopped loading.
+     */
+    fromPython(message) {
+        const named = UniverseCanvas.dbIdOf(message && message.db_bubble_id) || UniverseCanvas.dbIdOf(message && message.bubble_id);
+        if (named) { this.setBubble(named); return named; }
+        if (this.bubbleId) return this.bubbleId;
+        this.setBubble(message && message.bubble_id);
+        return null;
+    }
+
+    /** A visible note while the open bubble has no known database id (no cards for the chat, no reload). */
+    _bubbleUnknown(on) {
+        this.bubbleUnknown = !!on;
+        const host = this.container && this.container.parentNode;
+        if (!host || typeof document === 'undefined' || !document.createElement) return;
+        let note = host.querySelector ? host.querySelector('.canvas-bubble-unknown') : null;
+        if (on && !note) {
+            note = document.createElement('div');
+            note.className = 'canvas-bubble-unknown';
+            note.setAttribute('role', 'alert');
+            note.textContent = 'Diese Bubble ist nicht erkannt: neue Karten erscheinen erst nach erneutem Öffnen, der Chat kennt ihre Karten nicht.';
+            host.appendChild(note);
+            console.error('[UniverseCanvas] open bubble has no database id');
+        } else if (!on && note && note.remove) {
+            note.remove();
+        }
     }
 
     /** Leaving the bubble: nothing may be loaded for it any more. */
     leaveBubble() {
         this.bubbleId = null;
+        this._bubbleUnknown(false);
         this._stopMermaidPoll();
         if (this._mermaidRefreshTimer) { clearTimeout(this._mermaidRefreshTimer); this._mermaidRefreshTimer = null; }
     }

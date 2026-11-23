@@ -1,5 +1,5 @@
-// "Clicked another bubble, a few seconds later the app pulled me back into Bubble A" (
-// 2026-11-23, voice cda26d8). Measured in the app: with no bubble open the canvas kept loading
+// "Clicked another bubble, a few seconds later the app pulled me back into Bubble A"
+// (2026-11-23, voice cda26d8). Measured in the app: with no bubble open the canvas kept loading
 // the cards of Bubble A every 5 s (refresh in-place: 1 nodes); its bubbleId was left from an
 // earlier visit, and most entries load their cards without setting it.
 const test = require('node:test');
@@ -11,18 +11,21 @@ const vm = require('node:vm');
 const A = '00000000-0000-4000-8000-00000000000a'; // "Bubble A"
 const B = '0000000b';
 
-function world() {
+function world({ bubbles = [] } = {}) {
     let timers = [];
     let nextId = 1;
     const view = { hidden: false, classList: { contains: (name) => name === 'hidden' && view.hidden } };
     const fetched = [];
+    const notes = []; // what the canvas shows on the page next to it (a visible error)
     const window = {
         vibemind: { supabase: { url: 'http://db', anonKey: 'k' } },
-        multiverseApp: { getBubbleById: () => null },
+        // like multiverse.js: === against userData.id or userData.db_id
+        multiverseApp: { getBubbleById: (id) => bubbles.find((b) => b.userData.id === id || b.userData.db_id === id) || null },
     };
     const context = {
         window,
-        document: { getElementById: (id) => (id === 'space-view' ? view : null), querySelector: () => null },
+        document: { getElementById: (id) => (id === 'space-view' ? view : null), querySelector: () => null,
+            createElement: () => { const el = { className: '', textContent: '', setAttribute() {}, remove() { notes.splice(notes.indexOf(el), 1); } }; return el; } },
         console: { log() {}, warn() {}, error() {} },
         setInterval(fn, ms) { const t = { id: nextId++, fn, ms, every: true }; timers.push(t); return t.id; },
         clearInterval(id) { timers = timers.filter((t) => t.id !== id); },
@@ -39,11 +42,12 @@ function world() {
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8'), context);
     const UniverseCanvas = window.UniverseCanvas;
     const canvas = Object.create(UniverseCanvas.prototype);
+    canvas.container = { parentNode: { appendChild: (el) => notes.push(el), querySelector: (sel) => notes.find((n) => '.' + n.className === sel) || null } };
     const shown = [];
     const loadedFor = []; // the bubble the canvas names with each load (it goes with vibemind:canvas-loaded)
     canvas.loadNodes = function (nodes) { shown.push(nodes.map((n) => n.id).join(',')); loadedFor.push(this.bubbleId); };
     return {
-        canvas, view, shown, fetched, loadedFor,
+        canvas, view, shown, fetched, loadedFor, notes,
         /** Every timer fires, the 5-s poll three times; then the fetches settle. */
         async runAllTimers() {
             for (let round = 0; round < 3; round++) {
@@ -118,8 +122,75 @@ test('every entry sets the bubble of the canvas, every exit clears it, and the c
     assert.match(nav, /window\.spaceCanvas\.leaveBubble\(\);/);
     for (const [name, source, word] of [['canvas-handlers', handlers, 'msg'], ['index.html', html, 'message']]) {
         const loads = (source.match(new RegExp(`spaceCanvas\\.loadNodes\\(${word}\\.content`, 'g')) || []).length;
-        const sets = (source.match(new RegExp(`spaceCanvas\\.setBubble\\(${word}\\.bubble_id\\);\\s*window\\.spaceCanvas\\.loadNodes\\(${word}\\.content`, 'g')) || []).length;
+        const sets = (source.match(new RegExp(`spaceCanvas\\.fromPython\\(${word}\\);\\s*window\\.spaceCanvas\\.loadNodes\\(${word}\\.content`, 'g')) || []).length;
         assert.equal(sets, loads, name + ': every load of an entered bubble names the bubble first');
+        assert.doesNotMatch(source, /setBubble\((msg|message)\.bubble_id\)/, name + ': the local number of Python is never taken as the id');
     }
     assert.doesNotMatch(chat, /canvas\.bubbleId\s*=/);
+    const python = fs.readFileSync(path.join(__dirname, '..', 'python', 'ipc', 'canvas_manager.py'), 'utf8');
+    assert.match(python, /"type": "entered_bubble",\s*"bubble_id": bubble_id,\s*#[^\n]*\n\s*"db_bubble_id": db_bubble_id,/);
+});
+
+// Content after the animation (measured: content at 1471 ms, animation done at 816 ms, first opening
+// of a big bubble): entered_bubble arrives with the view already open and names the bubble by
+// Python's local number (15). The canvas took that as its bubble: bubbleId null, the chat sent no
+// cards although 99 were on screen, refresh() returned at once.
+const LOCAL = 15;
+const BUBBLE_A = { userData: { type: 'bubble', id: A, db_id: A, title: 'Bubble A' } };
+const contentOfA = [{ id: 'card-1' }, { id: 'card-2' }];
+
+for (const [order, entry] of [
+    ['content after the animation', (w) => {
+        w.canvas.setBubble(A);                                                     // enterSpace: animation done
+        w.canvas.fromPython({ bubble_id: LOCAL, content: contentOfA });            // late entered_bubble (old Python)
+        w.canvas.loadNodes(contentOfA);
+    }],
+    ['content after the animation, Python names the database id', (w) => {
+        w.canvas.setBubble(A);
+        w.canvas.fromPython({ bubble_id: LOCAL, db_bubble_id: A, content: contentOfA });
+        w.canvas.loadNodes(contentOfA);
+    }],
+    ['content during the animation', (w) => {
+        const pending = { content: contentOfA };                                   // stored by the early path
+        w.canvas.setBubble(A);                                                     // enterSpace callback
+        w.canvas.loadNodes(pending.content);
+    }],
+]) {
+    test(`with the local number of Python the canvas keeps the database id: ${order}`, async () => {
+        const w = world({ bubbles: [BUBBLE_A] });
+        entry(w);
+        assert.equal(w.canvas.bubbleId, A);
+        assert.deepEqual(w.loadedFor, [A], 'canvas-loaded names A: the chat sends the cards with A');
+        assert.equal(w.notes.length, 0);
+        // the chat checks exactly this: cards only with the bubble they were loaded for
+        const { buildContext } = require('./renderer/ideas-chat');
+        const context = buildContext({ bubble: { id: A, title: 'Bubble A' }, nodes: [{ id: 'card-1', title: 'Karte 1' }, { id: 'card-2', title: 'Karte 2' }], nodesBubbleId: w.loadedFor[0] });
+        assert.equal(context.cards.length, 2);
+        // and the 5-s reload loads A, so cards from agent runs show up
+        w.shown.length = 0;
+        await w.canvas.refresh();
+        assert.deepEqual(w.fetched, [A]);
+        assert.deepEqual(w.shown, ['card-of-' + A]);
+    });
+}
+
+test('Python names another bubble by its database id: the canvas follows it', () => {
+    const w = world({ bubbles: [BUBBLE_A] });
+    w.canvas.setBubble(A);
+    w.canvas.fromPython({ bubble_id: 16, db_bubble_id: B });
+    assert.equal(w.canvas.bubbleId, B);
+});
+
+test('a bubble open without any known id is a visible error, not a silent null', () => {
+    const w = world();
+    w.canvas.fromPython({ bubble_id: LOCAL });
+    assert.equal(w.canvas.bubbleId, null);
+    assert.equal(w.canvas.bubbleUnknown, true);
+    assert.equal(w.notes.length, 1);
+    assert.match(w.notes[0].textContent, /nicht erkannt/);
+    w.canvas.setBubble(A);                      // known again
+    assert.equal(w.notes.length, 0);
+    w.canvas.fromPython({ bubble_id: LOCAL });
+    w.canvas.leaveBubble();                     // leaving: no bubble, no error
+    assert.equal(w.canvas.bubbleUnknown, false);
 });

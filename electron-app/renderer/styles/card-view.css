@@ -406,3 +406,18 @@
     .kv-toc { position: static; border-right: 0; }
     .kv-reader { padding: 8px; }
 }
+
+/* the open bubble has no known database id (universe_canvas.js _bubbleUnknown) */
+.canvas-bubble-unknown {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 160;
+    max-width: 420px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 90, 110, 0.5);
+    background: rgba(40, 12, 18, 0.95);
+    color: #ffb3bd;
+    font: 13px/1.4 system-ui, "Segoe UI", sans-serif;
+}

@@ -693,6 +693,8 @@ class CanvasManager:
         self.send_message({
             "type": "entered_bubble",
             "bubble_id": bubble_id,
+            # the database id as well: the renderer cannot resolve the local number alone
+            "db_bubble_id": db_bubble_id,
             "bubble_title": self.backend.bubbles[bubble_id].title,
             "content": self.backend.bubbles[bubble_id].content,
             "edges": edges
