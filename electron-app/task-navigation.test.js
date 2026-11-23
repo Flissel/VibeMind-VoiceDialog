@@ -345,3 +345,36 @@ test('the renderer lets a correction through: no fold into acceptance or the ear
     assert.match(source, /current\.state === 'accepted'\s*&& message\.berichtigt !== true/);
     assert.match(source, /const corrected = message\.berichtigt === true;/);
 });
+
+// Danach 1: ein roher Fehler eines Schritts erscheint nie in der Standzeile, nur ein verstaendlicher Satz.
+test('a raw hop error becomes a plain sentence; a German sentence of the Brain stays', () => {
+    const { plainError } = require('./task-navigation');
+    assert.equal(plainError("ConnectionError: HTTPConnectionPool(host='dienst-a', port=8000): Max retries exceeded with url: /x"),
+        'Der Dienst ist gerade nicht erreichbar.');
+    assert.equal(plainError('ReadTimeout: read timed out'), 'Der Dienst hat nicht rechtzeitig geantwortet.');
+    assert.equal(plainError('HTTP 404 Not Found'), 'Der Dienst hat das Gesuchte nicht gefunden.');
+    assert.equal(plainError('403 Forbidden'), 'Der Dienst hat den Zugriff abgelehnt.');
+    assert.equal(plainError("KeyError: 'title'"), 'Der Schritt hat nicht geklappt.');
+    assert.equal(plainError('Traceback (most recent call last): File "x.py", line 3'), 'Der Schritt hat nicht geklappt.');
+    assert.equal(plainError('Dienst nicht erreichbar'), 'Dienst nicht erreichbar');
+    assert.equal(plainError('Die Karte fehlt.'), 'Die Karte fehlt.');
+
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+    navigator.handle('plan_started', { plan_id: 'p30', hops: [{}] });
+    navigator.handle('hop_started', { space: 'coding', description: 'Projekt anlegen' });
+    navigator.handle('hop_completed', { space: 'coding', ok: false, error: "ConnectionError: HTTPConnectionPool(host='dienst-a', port=8000)" });
+    assert.equal(sent.at(-1).error, 'Der Dienst ist gerade nicht erreichbar.');
+    navigator.handle('plan_completed', { plan_id: 'p30', ok: false });
+    const end = sent.at(-1);
+    assert.equal(end.state, 'failed');
+    assert.doesNotMatch(end.error, /ConnectionError|HTTPConnectionPool|host=/);
+
+    // the sentence of the Brain (final_text, soon also meldung) goes before any error
+    const said = [];
+    const second = createTaskNavigator((m) => said.push(m));
+    second.handle('plan_started', { plan_id: 'p31', hops: [{}] });
+    second.handle('hop_started', { space: 'video', description: 'Video schneiden' });
+    second.handle('hop_completed', { space: 'video', ok: false, meldung: 'Das Video-Studio laeuft gerade nicht.', error: 'ConnectionError: x' });
+    assert.equal(said.at(-1).error, 'Das Video-Studio laeuft gerade nicht.');
+});

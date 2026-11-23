@@ -112,7 +112,24 @@ function resultText(preview) {
  * else `error`. The raw original (`fehler`) is never shown.
  */
 function errorText(payload) {
-  return text(payload && payload.final_text) || text(payload && payload.error) || 'fehlgeschlagen';
+  return text(payload && payload.final_text) || text(payload && payload.meldung) || plainError(payload && payload.error) || 'fehlgeschlagen';
+}
+
+/** A technical error of a tool or service ("ConnectionError: HTTPConnectionPool(host=…)"), not a sentence. */
+const RAW_ERROR = /Error\b|Exception|Traceback|HTTPConnectionPool|Max retries|Timeout|timed out|refused|\bHTTP\b|\b[45]\d\d\b|\bhost=|\bport=|Errno|https?:\/\/|File "|[{}[\]<>]|\w+\.\w+\(|^\s*[A-Za-z_]+(?:Error|Exception):\s/;
+
+/**
+ * An error as a person reads it. A German sentence stays; a raw error of a hop never reaches the
+ * status line, it becomes one plain sentence about what happened.
+ */
+function plainError(value) {
+  const said = text(value);
+  if (!said || !RAW_ERROR.test(said)) return said;
+  if (/timed? ?out|timeout|Zeitüberschreitung/i.test(said)) return 'Der Dienst hat nicht rechtzeitig geantwortet.';
+  if (/Connection|connect|refused|unreachable|Name or service|getaddrinfo|resolve|Max retries|Errno 111|Errno 11001/i.test(said)) return 'Der Dienst ist gerade nicht erreichbar.';
+  if (/\b(401|403)\b|Unauthori[sz]ed|Forbidden|permission/i.test(said)) return 'Der Dienst hat den Zugriff abgelehnt.';
+  if (/\b404\b|Not Found|NotFound/i.test(said)) return 'Der Dienst hat das Gesuchte nicht gefunden.';
+  return 'Der Schritt hat nicht geklappt.';
 }
 
 /** 'rueckfrage' or 'hinweis' when the Brain asks back or gives a hint (shown calmly, never as failed), else ''. */
@@ -372,5 +389,6 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
+  plainError,
   SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };
