@@ -147,7 +147,7 @@ test('weitere Formate', () => {
         [{ type: 'action_list', items: [{ task: 'Angebot schicken', status: 'completed' }, { task: 'Anrufen' }] },
             ['Angebot schicken (erledigt)', 'Anrufen'], '1 von 2 erledigt', 'Aufgabenliste'],
         [{ type: 'kanban', columns: [{ name: 'Offen', cards: [{ title: 'Logo' }] }, { name: 'Fertig', cards: [] }] },
-            ['Offen: Logo'], '1 Karte in 2 Spalten', 'Kanban'],
+            ['Offen (1): Logo'], '1 Karte in 2 Spalten', 'Kanban'],
         [{ type: 'table', headers: ['Posten', 'Preis'], rows: [['Stand', '900'], ['Druck', '120']] },
             ['Stand · 900', 'Druck · 120'], '2 Zeilen', 'Tabelle'],
         [{ type: 'hierarchy', levels: [{ items: [{ name: 'Fragen', children: [{ name: 'Wer?' }] }] }] },
@@ -462,10 +462,10 @@ test('Suche nach Titel ohne Gross/klein, Umlaute und Unterstriche', () => {
 test('Kanban liest beide Formen und den Inhalt von vor dem Formatieren', () => {
     const spalten = { id: 'k1', title: 'Karte 1', content: 'Karte 1', metadata: {},
         content_json: { type: 'kanban', columns: [{ title: 'Offen', items: ['Logo'] }, { name: 'Fertig', cards: [{ text: 'Flyer' }] }] } };
-    assert.deepEqual(cv.cardShort(spalten).zeilen, ['Offen: Logo', 'Fertig: Flyer']);
+    assert.deepEqual(cv.cardShort(spalten).zeilen, ['Offen (1): Logo', 'Fertig (1): Flyer']);
     const todo = { id: 'k2', title: 'Karte 2', content: 'Karte 2', metadata: {},
         content_json: { type: 'kanban', todo: [{ title: 'Logo' }], doing: [{ text: 'Flyer' }], done: [] } };
-    assert.deepEqual(cv.cardShort(todo).zeilen, ['Offen: Logo', 'In Arbeit: Flyer']);
+    assert.deepEqual(cv.cardShort(todo).zeilen, ['Offen (1): Logo', 'In Arbeit (1): Flyer']);
     assert.equal(cv.cardShort(todo).leer, false);
 
     // das Gehirn formatiert: content_json traegt nur den Titel, der Inhalt stand im content_json davor
@@ -588,40 +588,27 @@ test('Gruppieren: die Ueberschrift-Karte steht als Kopf ueber den Karten ihrer S
     assert.match(canvas, /if \(data\.metadata && data\.metadata\.gruppen_kopf === true\) el\.classList\.add\('canvas-node--kopf'\);/);
 });
 
-// Lauf 8: the Kanban card showed one list "In Arbeit: …" with a footer, no columns. The form is the one
-// from the window log (node_updated after "als Kanban"), with an invented title.
-test('Kanban in der Form des Gehirns: Spalten nebeneinander auf der Karte und in der Leseansicht', () => {
+// Lauf 10: "6 Karten in 6 Spalten" (Offen, In Arbeit, Fertig, Offen, In Arbeit, Erledigt), columns in
+// card width with the text upright. The form is the one of the window log (entered_bubble): the Ideas
+// server sends columns (with a colour) AND todo/doing/done for one board. Titles invented.
+test('Kanban in der Form des Gehirns: nur die Spalten, auf der Karte kurz, in der Leseansicht lesbar breit', () => {
     const KANBAN = { id: 'k6', title: 'Karte 6', content: 'Karte 6', metadata: { width: 200, height: 100 },
         format_schema: { type: 'kanban' }, format_type: 'kanban',
-        content_json: { text: 'Karte 6 – Offen: Punkt 1\n\nIn Arbeit: Punkt 2\n\nFertig: Punkt 3', type: 'kanban', title: 'Karte 6',
-            columns: [{ name: 'In Arbeit', cards: [{ id: 'k1', title: 'Punkt 2' }, { id: 'k3', title: 'Punkt 1' }] },
-                { name: 'Fertig', cards: [{ id: 'k2', title: 'Punkt 3' }] }] } };
+        content_json: { type: 'kanban', title: 'Karte 6',
+            todo: [{ title: 'Punkt 1' }], doing: [{ title: 'Punkt 2' }], done: [{ title: 'Punkt 3' }],
+            columns: [{ name: 'Offen', cards: [{ id: 'k3', title: 'Punkt 1' }, { id: 'k4', title: 'Punkt 4' }], color: '#6c757d' },
+                { name: 'In Arbeit', cards: [{ id: 'k1', title: 'Punkt 2' }], color: '#0d6efd' },
+                { name: 'Fertig', cards: [{ id: 'k2', title: 'Punkt 3' }], color: '#198754' }] } };
     const kurz = cv.cardShort(KANBAN);
-    assert.deepEqual(kurz.spalten, [{ name: 'In Arbeit', zeilen: ['Punkt 2', 'Punkt 1'] }, { name: 'Fertig', zeilen: ['Punkt 3'] }]);
-    assert.equal(kurz.umfang, '3 Karten in 2 Spalten');
-    assert.equal(cv.cardShort({ id: 'n1', title: 'Notiz', content: 'Ein Text.', metadata: {} }).spalten, undefined, 'only a Kanban has columns');
-
-    const made = [];
-    const fake = (tag) => {
-        const node = { tag, children: [], className: '', textContent: '', value: '', hidden: false, dataset: {}, style: { setProperty() {} },
-            classList: { add(c) { node.className += ' ' + c; } },
-            append(...c) { node.children.push(...c); }, replaceChildren(...c) { node.children = c; },
-            setAttribute() {}, addEventListener() {}, remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [] };
-        made.push(node);
-        return node;
-    };
-    const doc = { createElement: (tag) => fake(tag), addEventListener() {}, removeEventListener() {}, defaultView: null };
-    const board = cv.board(doc, {});
-    board.mount({ appendChild() {}, append() {} });
-    board.update([KANBAN], []);
-    const columns = made.filter((n) => n.className === 'kv-spalte');
-    assert.equal(columns.length, 2, 'two columns on the card');
-    assert.deepEqual(columns.map((c) => c.children[0].textContent), ['In Arbeit', 'Fertig']);
-    assert.deepEqual(columns[0].children[1].children.map((li) => li.textContent), ['Punkt 2', 'Punkt 1']);
+    assert.equal(kurz.umfang, '4 Karten in 3 Spalten', 'columns only, todo/doing/done not a second time');
+    assert.deepEqual(kurz.zeilen, ['Offen (2): Punkt 1', 'In Arbeit (1): Punkt 2', 'Fertig (1): Punkt 3'], 'one line per column');
+    assert.equal(kurz.spalten, undefined, 'no columns side by side in card width');
+    const read = cv.cardRead(KANBAN);
+    assert.deepEqual(read.abschnitte.map((a) => a.ueberschrift), ['Offen', 'In Arbeit', 'Fertig'], 'the reading view: each column once');
 
     const css = require('node:fs').readFileSync(require('node:path').join(__dirname, 'renderer', 'styles', 'card-view.css'), 'utf8');
-    assert.match(css, /\.kv-spalten \{\s*display: grid;\s*grid-auto-flow: column;/);
-    assert.match(css, /\.kv-read-content\.kv-kanban \{\s*display: grid;/);
+    assert.match(css, /\.kv-read-content\.kv-kanban \{[^}]*grid-auto-columns: minmax\(180px, 1fr\);[^}]*overflow-x: auto;/);
+    assert.doesNotMatch(css, /\.kv-spalten/);
     assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, 'renderer', 'card-view.js'), 'utf8'),
         /if \(cardFormat\(row\) === 'kanban'\) content\.classList\.add\('kv-kanban'\);/);
 });

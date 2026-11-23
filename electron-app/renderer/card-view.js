@@ -284,9 +284,13 @@
                 const cards = get(column, 'cards') !== undefined ? get(column, 'cards') : get(column, 'items');
                 if (head) sections.push([head, lines(cards, 'title', 'text', 'name')]);
             }
-            // the other shape of the same format (format-renderer.js): todo / doing / done
-            for (const [key, head] of [['todo', 'Offen'], ['doing', 'In Arbeit'], ['done', 'Erledigt']]) {
-                if (Array.isArray(data[key])) sections.push([head, lines(data[key], 'title', 'text', 'point')]);
+            // the other shape of the same format (format-renderer.js): todo / doing / done. Only when
+            // there are no columns: the Ideas server sends both for one board, and both drawn made
+            // "6 Karten in 6 Spalten" with "Offen" twice (Lauf 10).
+            if (!sections.length) {
+                for (const [key, head] of [['todo', 'Offen'], ['doing', 'In Arbeit'], ['done', 'Erledigt']]) {
+                    if (Array.isArray(data[key])) sections.push([head, lines(data[key], 'title', 'text', 'point')]);
+                }
             }
             const cards = sections.reduce((sum, [, list]) => sum + list.length, 0);
             return [sections, sections.length ? `${count(cards, 'Karte', 'Karten')} in ${count(sections.length, 'Spalte', 'Spalten')}` : null];
@@ -353,15 +357,17 @@
             for (const [head, found] of sections) for (const line of found) shown.push(labelled && head ? `${head}: ${line}` : line);
             shown = shown.slice(0, CARD_LINES);
         }
-        // A Kanban shows its columns side by side, each with its first cards (Lauf 8: one list
-        // "In Arbeit: …", the columns were not to be seen).
-        const spalten = fmt === 'kanban' && !text
-            ? sections.map(([head, found]) => ({ name: head, zeilen: found.slice(0, CARD_LINES) })) : null;
+        // A Kanban on the small card: one line per column, its count and first card ("Offen (2): Logo");
+        // the whole board in the reading view. Side by side in card width the columns were a few
+        // letters wide, the text stood upright (Lauf 10).
+        if (fmt === 'kanban' && sections.length && / Spalten?$/.test(said || '')) {   // its own columns, not an earlier format
+            shown = sections.slice(0, CARD_LINES).map(([head, found]) =>
+                `${head} (${found.length})${found.length ? ': ' + found[0] : ''}`);
+        }
         return {
             titel: cardTitle(row),
             art: FORMAT_NAMES[fmt] || 'Notiz',
             zeilen: shown,
-            ...(spalten ? { spalten } : {}),
             umfang: said,
             quelle: cardSource(row),
             leer: !shown.length,
@@ -684,18 +690,7 @@
             }
             card.append(top, el('h3', 'kv-title', short.titel));
             if (short.leer) card.append(el('p', 'kv-empty', 'Noch ohne Inhalt'));
-            else if (short.spalten) {
-                const board = el('div', 'kv-spalten');
-                for (const column of short.spalten) {
-                    const box = el('div', 'kv-spalte');
-                    box.append(el('div', 'kv-spalte-kopf', column.name));
-                    const ul = el('ul', 'kv-lines');
-                    for (const line of column.zeilen) ul.append(el('li', null, line));
-                    box.append(ul);
-                    board.append(box);
-                }
-                card.append(board);
-            } else {
+            else {
                 const ul = el('ul', 'kv-lines');
                 for (const line of short.zeilen) ul.append(el('li', null, line));
                 card.append(ul);
