@@ -612,3 +612,22 @@ test('Kanban in der Form des Gehirns: nur die Spalten, auf der Karte kurz, in de
     assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, 'renderer', 'card-view.js'), 'utf8'),
         /if \(cardFormat\(row\) === 'kanban'\) content\.classList\.add\('kv-kanban'\);/);
 });
+
+// Lauf 13: a board made from one note; its card reads "<title of the note> – <text>" (window log,
+// node_updated). On the small card the title stands above already: the line drops it. Titles invented.
+test('Kanban aus einer Notiz: die Zeile traegt den Titel der Karte nicht noch einmal', () => {
+    const NOTE = { id: 'k7', title: 'Karte 7', content: 'Karte 7 – ein Satz zur Karte', metadata: { width: 200, height: 100 },
+        format_schema: { type: 'kanban' }, format_type: 'kanban',
+        content_json: { type: 'kanban', title: 'Karte 7', text: 'Karte 7 – ein Satz zur Karte',
+            todo: [{ title: 'Karte 7 – ein Satz zur Karte' }], doing: [], done: [],
+            columns: [{ name: 'Offen', cards: [{ id: 'k1', title: 'Karte 7 – ein Satz zur Karte' }], color: '#6c757d' },
+                { name: 'In Arbeit', cards: [], color: '#0d6efd' }, { name: 'Erledigt', cards: [], color: '#198754' }] } };
+    const kurz = cv.cardShort(NOTE);
+    assert.deepEqual(kurz.zeilen, ['Offen (1): ein Satz zur Karte']);
+    assert.equal(kurz.umfang, '1 Karte in 3 Spalten');
+    const read = cv.cardRead(NOTE);
+    assert.ok(!JSON.stringify(read.abschnitte).includes('Karte 7 –'), 'the reading view drops it too');
+    // a card that only starts like the title stays whole
+    const other = { ...NOTE, content_json: { ...NOTE.content_json, columns: [{ name: 'Offen', cards: [{ title: 'Karte 70 bleibt' }] }] } };
+    assert.deepEqual(cv.cardShort(other).zeilen, ['Offen (1): Karte 70 bleibt']);
+});

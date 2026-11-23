@@ -302,6 +302,13 @@
         return [[], null];
     }
 
+    /** A line without the title of its card in front ("Titel – Text" -> "Text"); the line as it is otherwise. */
+    function withoutTitle(line, title) {
+        if (typeof line !== 'string' || !line.startsWith(title)) return line;
+        const rest = /^\s*[–—:-]\s+(\S[\s\S]*)$/.exec(line.slice(title.length));
+        return rest ? rest[1] : line;
+    }
+
     /** [Format, Abschnitte, Umfang, ist Text] einer Karte; Abschnitte halten nur lesbare Zeilen. */
     function cardParts(row, limit) {
         const fmt = cardFormat(row);
@@ -309,6 +316,9 @@
         const structured = isMap(row.content_json) ? row.content_json : {};
         let [sections, said] = structuredSections(fmt, structured, limit);
         sections = sections.filter(([, found]) => found.length);
+        // A board made from one note: its card reads "<title of the note> – <text>"; on the card of that
+        // note the title stands above already (Lauf 13: "Offen (1): <title> – …").
+        if (fmt === 'kanban' && title) sections = sections.map(([head, found]) => [head, found.map((line) => withoutTitle(line, title))]);
         if (sections.length) return [fmt, sections, said, false];
         sections = textSections(cardText(row), title, limit);
         if (!sections.some(([, found]) => found.length)) {
