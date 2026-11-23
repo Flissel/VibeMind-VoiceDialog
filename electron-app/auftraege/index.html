@@ -71,7 +71,10 @@
     }));
   }
 
+  let liest = false;
   async function laden() {
+    if (liest) return; // one read at a time
+    liest = true;
     knopf.disabled = true;
     stand.textContent = 'Wird gelesen …';
     try {
@@ -81,9 +84,15 @@
       stand.textContent = 'Das Gehirn ist gerade nicht erreichbar.';
     }
     knopf.disabled = false;
+    liest = false;
   }
 
   knopf.addEventListener('click', laden);
+  // Shown again (a sentence jumped here, or the tab was opened): read again. The page stays loaded
+  // between showings, so without this it showed the list of its first opening, not the result.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') laden();
+  });
   laden();
 </script>
 </body>
