@@ -3,11 +3,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
+const { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
+
+const B1 = 'fa8d4158-f721-4290-a0cf-7f20da754372';
+const B2 = '0b1c2d3e-0000-4000-8000-123456789abc';
 
 test('inside a bubble the context names the bubble and its cards', () => {
     const context = buildContext({
-        bubble: { id: 7, title: 'Marketing' },
+        bubble: { id: B1, title: 'Marketing' },
         nodes: [
             { id: 'n1', content: { title: 'Zielgruppe' }, metadata: { bewertung: { wert: 80 } } },
             { id: 'n2', title: 'Kanäle', content_json: { type: 'table' } },
@@ -15,7 +18,7 @@ test('inside a bubble the context names the bubble and its cards', () => {
             null,
             { title: 'ohne Kennung' },
         ],
-        bubbles: [{ id: 'b1', title: 'nicht gefragt' }],
+        bubbles: [{ id: B2, title: 'nicht gefragt' }],
         newId: 'u-1',
         selection: ['n2', 'gibt-es-nicht'],
         lastId: 'n3',
@@ -23,7 +26,7 @@ test('inside a bubble the context names the bubble and its cards', () => {
 
     assert.deepEqual(context, {
         space: 'ideas',
-        bubble: { id: '7', title: 'Marketing' },
+        bubble: { id: B1, title: 'Marketing' },
         cards: [
             { id: 'n1', title: 'Zielgruppe', format: 'note', score: 80 },
             { id: 'n2', title: 'Kanäle', format: 'table', score: null },
@@ -36,9 +39,9 @@ test('inside a bubble the context names the bubble and its cards', () => {
 });
 
 test('in the overview the context names the bubbles instead', () => {
-    const context = buildContext({ bubble: null, nodes: [{ id: 'n1' }], bubbles: [{ id: 'b1', title: 'Marketing' }, { title: 'ohne' }] });
+    const context = buildContext({ bubble: null, nodes: [{ id: 'n1' }], bubbles: [{ id: B1, title: 'Marketing' }, { title: 'ohne' }, { id: 3, title: 'nur eine Ordnungszahl' }] });
 
-    assert.deepEqual(context, { space: 'ideas', bubble: null, bubbles: [{ id: 'b1', title: 'Marketing' }] });
+    assert.deepEqual(context, { space: 'ideas', bubble: null, bubbles: [{ id: B1, title: 'Marketing' }] });
 });
 
 test('the context is capped', () => {
@@ -217,4 +220,32 @@ test('a failed plan and a question back take the card noted in advance away', ()
     assert.match(chat, /if \(response && response\.question && newId\) store\.settle\(newId\);/);
     assert.match(chat, /if \(status\.state === 'failed'\) store\.failAll\(\);/);
     assert.match(chat, /say\(message, failed \? 'error' : 'agent', asked\);/);
+});
+
+test('the id of the open bubble is its database id, never the local number of the Python part', () => {
+    // The state measured in the running app on 2026-11-23, bubble "Sheerlay" open:
+    // spaceCanvas.bubbleId null, __currentBubbleId 1, selectedBubbleId the UUID. The app sent "1".
+    const scene = { userData: { id: B1, db_id: B1, title: 'Sheerlay', data: { id: B1 } } };
+    const lookup = (value) => (value === 1 || value === B1 ? scene : null);
+
+    assert.equal(bubbleDbId([undefined, B1, null, 1, undefined], lookup), B1, 'as measured');
+    assert.equal(bubbleDbId([null, null, null, 1], lookup), B1, 'only the local number is known: looked up');
+    assert.equal(bubbleDbId([null, 'Sheerlay', null, 7], () => null), null, 'a title or a number is no id');
+    assert.equal(bubbleDbId([null, null, null, 1], () => ({ userData: { id: 1, title: 'ohne Kennung' } })), null);
+    assert.equal(bubbleDbId([], lookup), null);
+
+    assert.deepEqual(buildContext({ bubble: { id: B1, title: 'Sheerlay' }, nodes: [] }).bubble, { id: B1, title: 'Sheerlay' });
+    for (const wrong of [null, 1, '1', 'Sheerlay']) {
+        assert.deepEqual(buildContext({ bubble: { id: wrong, title: 'Sheerlay' }, nodes: [] }).bubble,
+            { id: null, title: 'Sheerlay' }, 'rather no id than a wrong one: ' + String(wrong));
+    }
+});
+
+test('the chat reads the open bubble through the database id only', () => {
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    const open = chat.slice(chat.indexOf('        function openBubble() {'), chat.indexOf('        function overviewBubbles() {'));
+
+    assert.match(open, /id: bubbleDbId\(candidates, lookup\),/);
+    assert.doesNotMatch(open, /id: root\.__currentBubbleId|\|\| root\.__currentBubbleId \|\|/, 'the local number is only used to look the bubble up');
+    assert.match(chat, /context\.bubble = \{ id: isUuid\(bubble\.id\) \? String\(bubble\.id\) : null, title:/);
 });

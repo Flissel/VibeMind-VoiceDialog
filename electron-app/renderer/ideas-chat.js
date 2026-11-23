@@ -38,6 +38,28 @@
      * The context sent along with a sentence. Kept in one place: its form is agreed with
      * the Ideas space and may still change.
      */
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = (value) => typeof value === 'string' && UUID.test(value);
+
+    /**
+     * The database id (a UUID) of the open bubble, or null.
+     * `candidates`: what the app holds about the bubble, in order of trust. A candidate that is a
+     * UUID is the id. Any other (the local number of the Python part, a title, an index) is only
+     * used to look the bubble up (`lookup` returns the scene object) and to read its db_id.
+     */
+    function bubbleDbId(candidates, lookup) {
+        const known = (Array.isArray(candidates) ? candidates : []).filter((value) => value != null && value !== '');
+        const direct = known.find(isUuid);
+        if (direct) return direct;
+        for (const value of known) {
+            const found = typeof lookup === 'function' ? lookup(value) : null;
+            const data = (found && found.userData) || {};
+            const id = [data.db_id, data.id, data.data && data.data.id].find(isUuid);
+            if (id) return id;
+        }
+        return null;
+    }
+
     function cardScore(node) {
         const value = node && node.metadata && node.metadata.bewertung ? Number(node.metadata.bewertung.wert) : NaN;
         return Number.isFinite(value) ? value : null;
@@ -45,8 +67,11 @@
 
     function buildContext({ bubble, nodes, bubbles, newId, selection, lastId } = {}) {
         const context = { space: 'ideas', bubble: null };
-        if (bubble && bubble.id != null) {
-            context.bubble = { id: String(bubble.id), title: String(bubble.title || '') };
+        if (bubble) {
+            // The id is the database id of the bubble or null, never anything else: a wrong id made
+            // every tool fail (the local number "1" was sent, measured 2026-11-23). With null and
+            // the title the Brain can find the bubble or ask back.
+            context.bubble = { id: isUuid(bubble.id) ? String(bubble.id) : null, title: String(bubble.title || '') };
             const all = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
             context.cards = all.slice(0, MAX_CARDS)
                 .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node), score: cardScore(node) }));
@@ -58,7 +83,8 @@
             if (lastId != null && known.has(String(lastId))) context.last_id = String(lastId);
         } else {
             context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
-                .filter((item) => item && item.id != null)
+                // only bubbles whose database id is known: an index or a title is no id
+                .filter((item) => item && isUuid(String(item.id)))
                 .map((item) => ({ id: String(item.id), title: String(item.title || '') }));
         }
         if (newId) context.new_id = newId;
@@ -243,7 +269,8 @@
 
         function renderReasons() {
             const bubble = view.classList.contains('hidden') ? null : openBubble();
-            const row = bubble ? rows.get(String(bubble.id)) || overviewRow(bubble.id) : null;
+            // rows are kept under the database id; without it the row of the overview is looked up
+            const row = bubble ? (bubble.id && rows.get(bubble.id)) || overviewRow(bubble.id || bubble.key) : null;
             const list = reasonsFor(row, nodes);
             reasons.hidden = list.length === 0;
             reasonsHead.textContent = `Begründungen (${list.length})`;
@@ -298,7 +325,7 @@
 
         function bubbleKey() {
             const bubble = view.classList.contains('hidden') ? null : openBubble();
-            return bubble ? String(bubble.id) : '';
+            return bubble ? bubble.key : '';
         }
 
         /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
@@ -334,8 +361,20 @@
             const app = root.multiverseApp;
             const canvas = root.spaceCanvas;
             const titleEl = doc.getElementById('space-title');
-            const id = (canvas && canvas.bubbleId) || root.__currentBubbleId || (app && app.selectedBubbleId) || null;
-            return id == null ? null : { id, title: titleEl ? titleEl.textContent : '' };
+            const entered = root.__currentEvalBubble || {};
+            // What the app knows about the open bubble, the database id first. __currentBubbleId is
+            // the local number of the Python part and canvas.bubbleId is often not set; they only
+            // serve to look the bubble up.
+            const candidates = [entered.dbId, app && app.selectedBubbleId, canvas && canvas.bubbleId,
+                root.__currentBubbleId, entered.localId];
+            const lookup = (value) => (app && app.getBubbleById ? app.getBubbleById(value) : null);
+            const raw = candidates.find((value) => value != null && value !== '');
+            if (raw == null) return null;
+            return {
+                id: bubbleDbId(candidates, lookup),      // null when the database id is not known
+                key: String(bubbleDbId(candidates, lookup) || raw),
+                title: titleEl ? titleEl.textContent : '',
+            };
         }
 
         function overviewBubbles() {
@@ -481,7 +520,7 @@
         return { submit, contextNow, store, bubbleRow };
     }
 
-    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
+    const api = { buildContext, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
