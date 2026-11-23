@@ -344,3 +344,10 @@ body.ideas-chat-open:has(#space-view.chat-folded) .zoom-controls {
     opacity: 0.45;
     cursor: default;
 }
+
+/* Before "Vorschlag übernehmen" replaces a card: what goes, said once. */
+.ideas-chat-warn {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #f5c46b;
+}

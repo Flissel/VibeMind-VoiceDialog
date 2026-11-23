@@ -405,6 +405,17 @@
         const history = createHistory();
         let shownKey = null;     // the bubble whose history is in the log
 
+        /** An answer that replaces the content of a card: asks once before it is sent. */
+        const REPLACES = /^Vorschlag übernehmen$/i;
+
+        /** The title of the first card an order named (its targets), from the cards on the canvas. */
+        function cardTitle(targets) {
+            const id = Array.isArray(targets) && targets.length ? String(targets[0]) : '';
+            const nodes = root.spaceCanvas && Array.isArray(root.spaceCanvas.lastNodes) ? root.spaceCanvas.lastNodes : [];
+            const node = id ? nodes.find((n) => n && String(n.id) === id) : null;
+            return node && node.title ? String(node.title) : '';
+        }
+
         function line(entry) {
             const msg = el('div', 'ideas-chat-msg ideas-chat-' + entry.kind, entry.text);
             if (!Array.isArray(entry.answers) || !entry.answers.length) return msg;
@@ -417,6 +428,15 @@
                 button.disabled = entry.used === true;
                 button.addEventListener('click', (event) => {
                     if (entry.used) return;
+                    // Taking a proposal replaces the card, the person's own additions too: the first
+                    // click says what goes, the second takes it.
+                    if (REPLACES.test(answer) && !entry.warned) {
+                        entry.warned = true;
+                        button.textContent = 'Ja, übernehmen';
+                        const card = entry.titel ? `der Karte „${entry.titel}“` : 'der Karte';
+                        msg.append(el('div', 'ideas-chat-warn', `Ersetzt den Inhalt ${card}, auch deine eigenen Ergänzungen. Zum Übernehmen noch einmal klicken.`));
+                        return;
+                    }
                     entry.used = true;
                     for (const other of choices.children) other.disabled = true;
                     submit(answer, { typed: event.isTrusted === true });
@@ -597,7 +617,8 @@
                 if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
                 if (proposes) {
-                    say(proposal.text, 'vorschlag', asked, proposal.answers, ask);
+                    const entry = say(proposal.text, 'vorschlag', asked, proposal.answers, ask);
+                    if (entry && proposal.titel) entry.titel = String(proposal.titel);
                 } else if (accepted) {
                     acceptedKey = asked;
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
@@ -682,9 +703,11 @@
                 acceptedKey = null;
                 // The sentence of the Brain on the order (/stand meldung) and its fixed sentences as buttons.
                 const choices = Array.isArray(status.saetze) && status.saetze.length ? status.saetze : null;
-                if (status.state === 'done') say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices);
-                else if (status.state === 'note') say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices);
-                else if (status.state === 'failed') say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices);
+                const titel = choices ? cardTitle(status.targets) : '';
+                const said = (entry) => { if (entry && titel) entry.titel = titel; };
+                if (status.state === 'done') said(say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices));
+                else if (status.state === 'note') said(say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices));
+                else if (status.state === 'failed') said(say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices));
             }
             showState();
             // The plan failed: nothing of it was stored. The cards noted in advance go, even when the

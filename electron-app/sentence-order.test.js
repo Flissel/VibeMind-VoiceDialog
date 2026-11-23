@@ -149,3 +149,33 @@ test('the console: a late answer goes under its sentence, and the sentence waits
     assert.match(scene, /pair\.__waiting = true;/);
     assert.match(scene, /if \(ask\.__pair\) ask\.__pair\.__waiting = false;/);
 });
+
+// Lauf 5: "Vorschlag übernehmen" ersetzt die Karte samt eigener Ergaenzungen. Der Knopf sagt das vorher.
+test('"Vorschlag übernehmen" says first what it replaces, the second click takes it', () => {
+    const w = world({ space: 'ideas', bubbleOpen: true });
+    w.win.spaceCanvas = { lastNodes: [{ id: '00000000-0000-4000-8000-000000000001', title: 'Karte 1' }] };
+    const status = (detail) => w.win.dispatchEvent(new w.win.CustomEvent('vibemind:task-status', { detail: { space: 'ideas', targets: ['00000000-0000-4000-8000-000000000001'], ...detail } }));
+    status({ state: 'accepted' });
+    status({ state: 'note', note: 'hinweis', result: 'Ein Vorschlag liegt vor.', saetze: ['Vorschlag zeigen', 'Vorschlag übernehmen', 'Vorschlag verwerfen'] });
+    const found = [];
+    const walk = (n) => { if (n && n.className === 'ideas-chat-answer') found.push(n); (n && n.children || []).forEach(walk); };
+    walk(w.view);
+    const take = found.find((b) => b.textContent === 'Vorschlag übernehmen');
+    assert.ok(take, 'the sentences of the Brain are buttons');
+    const click = () => take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
+    click();
+    assert.equal(w.sent.length, 0, 'the first click sends nothing');
+    assert.equal(take.textContent, 'Ja, übernehmen');
+    const warn = [];
+    const look = (n) => { if (n && n.className === 'ideas-chat-warn') warn.push(n.textContent); (n && n.children || []).forEach(look); };
+    look(w.view);
+    assert.deepEqual(warn, ['Ersetzt den Inhalt der Karte „Karte 1“, auch deine eigenen Ergänzungen. Zum Übernehmen noch einmal klicken.']);
+    click();
+    assert.equal(w.sent.length, 1);
+    assert.equal(w.sent[0].text, 'Vorschlag übernehmen');
+    click();
+    assert.equal(w.sent.length, 1, 'once');
+    // "Vorschlag zeigen" asks nothing first
+    const show = found.find((b) => b.textContent === 'Vorschlag zeigen');
+    assert.equal(show.disabled, true, 'after one answer the others rest');
+});
