@@ -2642,7 +2642,14 @@ class MultiverseApp {
             const response = await window.vibemind.sendChatMessage(text, context, typed === true);
             const shown = answers ? answers.view(response)
                 : { kind: response?.success === false ? 'fehler' : 'antwort', text: response?.message || 'Keine Antwort.' };
-            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: { text: shown.text, success: shown.kind !== 'fehler' } }));
+            // The Brain took an order a model works on: the status line says "arbeitet" until it is finished.
+            const accepted = !!response && response.ok !== false && (response.pending === true || response.status === 'angenommen');
+            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
+                text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
+                ...(accepted ? { accepted: true, space: this.currentSpace,
+                    targets: Array.isArray(response.targets) ? response.targets.map(String) : [],
+                    orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
+            } }));
             this.addGcMessage(shown.text, shown.kind === 'fehler' ? 'error' : shown.kind === 'rueckfrage' ? 'rueckfrage' : 'agent');
         } catch (err) {
             if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });

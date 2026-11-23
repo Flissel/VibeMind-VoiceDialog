@@ -62,6 +62,12 @@
         const count = message.total > 1 ? ` (${Math.min(message.done + (state === 'running' ? 1 : 0), message.total)}/${message.total})` : '';
         const arrow = away ? ' →' : '';
         // The Brain took the order, a model works on it; the result comes later at the card. Never "fehlgeschlagen".
+        // Past ACCEPTED_STALE_MS without an end the line stops pretending to work and says so plainly.
+        if (state === 'accepted' && message.stale) {
+            const nr = orderNumber(message.orders);
+            return { state: 'stale', text: `${label}: noch in Arbeit${nr ? ', Nr. ' + nr : ''}${arrow}`,
+                title: 'Kein Abschluss gemeldet. Das Ergebnis erscheint an der Karte, sobald es da ist.' };
+        }
         if (state === 'accepted' || (state === 'running' && message.accepted)) {
             return { state: 'accepted', text: `● ${label}: ${ACCEPTED_TEXT.slice(2)}${arrow}`, title: message.step || '' };
         }
@@ -96,6 +102,19 @@
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
     const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
     const ACCEPTED_MAX_MS = 20 * 60 * 1000;      // an accepted order whose result never shows: the line goes
+    const ACCEPTED_STALE_MS = 3 * 60 * 1000;     // ... before that it says "noch in Arbeit, Nr. …" instead of "arbeitet"
+
+    /** The number of an order as the Brain's receipt names it: the first 8 characters of its id. */
+    function orderNumber(orders) {
+        const first = Array.isArray(orders) ? orders.find((id) => typeof id === 'string' && id.trim()) : '';
+        return first ? first.trim().slice(0, 8) : '';
+    }
+
+    /** How many reasons the bubble holds (`metadata.bewertungen`); null when the row does not say. */
+    function reasonCount(row) {
+        const list = row && row.metadata && typeof row.metadata === 'object' ? row.metadata.bewertungen : null;
+        return Array.isArray(list) ? list.length : null;
+    }
 
     /** What changes in a card row when a model writes its result into it. */
     function cardPrint(node) {
@@ -165,6 +184,9 @@
         let answerTimer = null;  // ... how long a finished plan waits for that answer
         let watch = null;        // an accepted order: { before, bubbleId } the cards as they were when it was taken
         let acceptedTimer = null;
+        let staleTimer = null;
+        let lastRow = null;      // the last row of the open bubble (vibemind:bubble-row)
+        let lastPlanId = '';     // the plan the last status was about
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => {
                 lastInputAt = Date.now();
@@ -308,7 +330,10 @@
                 refusal = '';
                 if (!current || current.waiting || current.state === 'accepted' || finished(current)) {
                     current = { state: 'accepted', space: detail.space || (current && current.space) || 'ideas',
-                        step: '', done: 0, total: 0, targets: Array.isArray(detail.targets) ? detail.targets.map(String) : [] };
+                        step: '', done: 0, total: 0, targets: Array.isArray(detail.targets) ? detail.targets.map(String) : [],
+                        orders: Array.isArray(detail.orders) ? detail.orders.map(String) : [],
+                        // the plan that took the order: its "done" is the acceptance, not the result
+                        plan_id: (current && current.plan_id) || lastPlanId };
                     root.clearTimeout(keepTimer);
                     startAccepted();
                     root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
@@ -344,23 +369,39 @@
         function startAccepted() {
             const canvas = root.spaceCanvas;
             const nodes = canvas && Array.isArray(canvas.lastNodes) ? canvas.lastNodes : [];
-            if (!watch) watch = { before: nodes.length ? snapshot(nodes) : null, bubbleId: (canvas && canvas.bubbleId) || null };
+            const bubbleId = (canvas && canvas.bubbleId) || null;
+            if (!watch) {
+                watch = { before: nodes.length ? snapshot(nodes) : null, bubbleId,
+                    // An assessment writes to the bubble (a new reason), not to a card.
+                    reasons: lastRow && bubbleId && String(lastRow.id) === String(bubbleId) ? reasonCount(lastRow) : null };
+            }
             root.clearTimeout(acceptedTimer);
             acceptedTimer = root.setTimeout(() => {
                 if (current && current.state === 'accepted') { watch = null; clear(); }
             }, ACCEPTED_MAX_MS);
+            // No end reported for a while: "noch in Arbeit, Nr. …", not an endless "arbeitet".
+            root.clearTimeout(staleTimer);
+            staleTimer = root.setTimeout(() => {
+                if (current && current.state === 'accepted') {
+                    current = { ...current, stale: true };
+                    root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                    render();
+                }
+            }, ACCEPTED_STALE_MS);
         }
 
         function stopAccepted() {
             watch = null;
             root.clearTimeout(acceptedTimer);
+            root.clearTimeout(staleTimer);
         }
 
-        /** The result is at the card: the line says so, the chat ends its "arbeitet". */
-        function finishAccepted(title) {
+        /** The result is there: the line says so, the chat ends its "arbeitet". */
+        function finishAccepted(title, where = 'card') {
             stopAccepted();
-            const result = title ? `Ergebnis an der Karte „${shorten(title)}“` : 'Ergebnis an der Karte';
-            current = { ...current, state: 'done', accepted: false, result, error: '' };
+            const result = where === 'bubble' ? 'Einschätzung an der Bubble'
+                : title ? `Ergebnis an der Karte „${shorten(title)}“` : 'Ergebnis an der Karte';
+            current = { ...current, state: 'done', accepted: false, stale: false, result, error: '' };
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
             root.clearTimeout(keepTimer);
             keepTimer = root.setTimeout(clear, KEEP_MS);
@@ -385,9 +426,29 @@
             finishAccepted(node ? String(node.title || '') : '');
         });
 
+        // The row of the open bubble, loaded on open and every 5 s (universe_canvas.js). A new reason
+        // there ends an accepted assessment: its result is at the bubble, no card changes.
+        root.addEventListener('vibemind:bubble-row', (event) => {
+            const row = event && event.detail ? event.detail.row : null;
+            if (!row || row.id == null) return;
+            lastRow = row;
+            if (!current || current.state !== 'accepted' || !watch) return;
+            if (watch.bubbleId && String(watch.bubbleId) !== String(row.id)) return;
+            const count = reasonCount(row);
+            if (count === null) return;
+            if (watch.reasons === null || watch.reasons === undefined) { watch.reasons = count; return; }
+            if (count > watch.reasons) finishAccepted('', 'bubble');
+        });
+
         function handleStatus(message) {
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
+            if (message.plan_id) lastPlanId = message.plan_id;
+            // The status of the main process does not know the order numbers; the answer to the sentence did.
+            if ((message.state === 'accepted' || message.accepted) && !Array.isArray(message.orders)
+                && current && Array.isArray(current.orders) && current.orders.length) {
+                message = { ...message, orders: current.orders };
+            }
             if (message.state === 'done' && answer) message = { ...message, result: answer };
             if (message.state === 'failed' && refusal) message = { ...message, error: refusal };
             current = message;
@@ -450,7 +511,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

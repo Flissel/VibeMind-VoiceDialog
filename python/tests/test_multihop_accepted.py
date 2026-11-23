@@ -38,7 +38,7 @@ def test_accepted_in_the_answer_itself():
                        "final_text": "Die Recherche laeuft.", "targets": [CARD]})
     assert result.event_type == "brain.multihop"
     assert result.response_hint == "Die Recherche laeuft."
-    assert result.tool_result == {"pending": True, "status": "angenommen", "targets": [CARD]}
+    assert result.tool_result == {"pending": True, "status": "angenommen", "targets": [CARD], "orders": []}
 
 
 def test_accepted_in_a_hop_result_without_a_sentence():
@@ -81,4 +81,15 @@ def test_the_chat_answer_says_pending_not_failed(monkeypatch):
     handlers.send_message = sent.append
     asyncio.run(handlers.handle_chat_text_input({"type": "chat_text_input", "text": "recherchiere zu Karte 1"}))
     assert sent == [{"type": "chat_response", "success": True, "message": "Die Recherche laeuft.",
-                     "event_type": "brain.multihop", "pending": True, "status": "angenommen", "targets": [CARD]}]
+                     "event_type": "brain.multihop", "pending": True, "status": "angenommen", "targets": [CARD], "orders": []}]
+
+
+ORDER = "00000000-0000-4000-8000-0000000000aa"
+
+
+def test_the_order_numbers_travel_to_the_app():
+    result = _execute({"ok": True, "pending": True, "status": "angenommen", "plan_id": "p5", "state": {},
+                       "auftraege": [{"auftrag_id": ORDER, "agent": "brain-ideas", "capability": "idea_explain"}],
+                       "executed": {"s1": {"ok": True, "result": {"ok": True, "pending": True, "auftrag_id": ORDER}}},
+                       "final_text": "Auftrag angenommen, Nr. 00000000 - die Einschaetzung folgt.", "targets": [CARD]})
+    assert result.tool_result["orders"] == [ORDER], "once, from answer and hop"

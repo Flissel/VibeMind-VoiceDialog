@@ -251,6 +251,8 @@ class ClawPortHandlers:
                 answer["pending"] = True
                 answer["status"] = "angenommen"
                 answer["targets"] = [str(t) for t in tool_result.get("targets") or [] if str(t).strip()]
+                # The orders the Brain took: the app ends its "arbeitet" line by them.
+                answer["orders"] = [str(o) for o in tool_result.get("orders") or [] if str(o).strip()]
             self.send_message(answer)
         except Exception as e:
             # The raw error goes to the log; the chat gets a German sentence.

@@ -275,6 +275,7 @@
         let planRuns = false;
         let busy = false;
         let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
+        let staleKey = null;     // ... and the one whose "noch in Arbeit" the chat has already said
 
         const el = (tag, className, text) => {
             const node = doc.createElement(tag);
@@ -535,7 +536,7 @@
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
                     text: (response && response.message) || '', success: !failed,
-                    ...(accepted ? { accepted: true, space: 'ideas', targets } : {}),
+                    ...(accepted ? { accepted: true, space: 'ideas', targets, orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
                 } }));
                 if (failed && newId) store.reject(newId, message);
                 // A question back stored nothing: the card noted in advance goes as well.
@@ -614,6 +615,12 @@
             // An accepted order still runs after its plan: a model works on it.
             planRuns = status.state === 'running' || status.state === 'accepted';
             if (status.state === 'accepted' && acceptedKey === null) acceptedKey = bubbleKey();
+            // No end reported for minutes: the chat says so once, with the number of the order.
+            if (status.state === 'accepted' && status.stale && acceptedKey !== null && staleKey !== acceptedKey) {
+                staleKey = acceptedKey;
+                const nr = Array.isArray(status.orders) && status.orders.length ? String(status.orders[0]).slice(0, 8) : '';
+                say('● noch in Arbeit' + (nr ? ', Nr. ' + nr : '') + ' — das Ergebnis erscheint, sobald es da ist.', 'agent', acceptedKey);
+            }
             // The result is at the card (task-navigate.js saw it arrive): the chat says so once.
             if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
                 const key = acceptedKey;

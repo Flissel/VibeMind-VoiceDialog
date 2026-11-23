@@ -46,6 +46,13 @@
     background: rgba(30, 110, 70, 0.35);
 }
 
+/* an accepted order without a reported end: plain, it no longer pretends to work */
+.task-status[data-state="stale"] {
+    border-color: rgba(180, 185, 210, 0.4);
+    background: rgba(60, 62, 80, 0.4);
+    color: #c9cce0;
+}
+
 .task-status[data-state="failed"] {
     border-color: rgba(255, 110, 110, 0.6);
     background: rgba(130, 40, 40, 0.4);

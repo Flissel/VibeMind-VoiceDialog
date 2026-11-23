@@ -234,7 +234,8 @@ class BrainMultihopBridge:
             stream="brain",
             response_hint=final_text,
             is_conversational=False,
-            tool_result={"pending": True, "status": "angenommen", "targets": targets} if accepted else None,
+            tool_result={"pending": True, "status": "angenommen", "targets": targets,
+                         "orders": self._orders(data, executed)} if accepted else None,
         )
 
     # ------------------------------------------------------------------
@@ -341,6 +342,32 @@ class BrainMultihopBridge:
         if failed:
             return False, []
         return accepted, list(dict.fromkeys(targets))
+
+    @staticmethod
+    def _orders(data: Dict[str, Any], executed: Dict[str, Any]) -> List[str]:
+        """Ids of the orders the Brain took (`auftraege: [{auftrag_id, …}]`), from the answer and its hops.
+
+        The app ends its "arbeitet" line by them once the order is finished.
+        """
+        ids: List[str] = []
+
+        def collect(value: Any) -> None:
+            if not isinstance(value, dict):
+                return
+            one = value.get("auftrag_id")
+            if isinstance(one, str) and one.strip():
+                ids.append(one.strip())
+            listed = value.get("auftraege")
+            for item in listed if isinstance(listed, list) else []:
+                if isinstance(item, dict) and isinstance(item.get("auftrag_id"), str) and item["auftrag_id"].strip():
+                    ids.append(item["auftrag_id"].strip())
+
+        collect(data)
+        for hop in (executed or {}).values() if isinstance(executed, dict) else []:
+            if isinstance(hop, dict):
+                collect(hop)
+                collect(hop.get("result"))
+        return list(dict.fromkeys(ids))
 
     @staticmethod
     def _summarize_executed(executed: Dict[str, Any]) -> str:

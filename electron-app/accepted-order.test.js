@@ -98,7 +98,7 @@ test('accepted order in the plan: "arbeitet … (Auftrag angenommen)", never fai
     assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
     assert.ok(!w.statuses.includes('failed'));
     assert.equal(w.chatState(), 'arbeitet … (Auftrag angenommen)');
-    w.advance(5 * 60 * 1000);                       // a model takes minutes; the line stays
+    w.advance(2 * 60 * 1000);                       // a model takes minutes; the line stays
     w.loaded(cards());                               // the 5-s reload: nothing new yet
     w.loaded(cards('kurz', 'Karte 2 von Hand geaendert'));   // another card changed: not the result
     assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
@@ -171,4 +171,39 @@ test('an order whose result never shows: the line goes after 20 minutes', () => 
     assert.notEqual(w.line(), '');
     w.advance(1);
     assert.equal(w.line(), '');
+});
+
+const ORDER = '0000abcd-0000-4000-8000-0000000000aa';
+
+test('no end reported: after 3 minutes the line says "noch in Arbeit, Nr. …" plainly, the chat says it once', async () => {
+    const w = world();
+    w.answerWith({ success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen, Nr. 0000abcd', orders: [ORDER] });
+    await w.send('Was hältst du von Karte 1?');
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+    w.advance(3 * 60 * 1000 - 1);
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+    w.advance(1);
+    assert.equal(w.line(), 'Ideas: noch in Arbeit, Nr. 0000abcd', 'no dot, no "arbeitet …"');
+    w.advance(60 * 1000);
+    const said = w.chatLog().filter((t) => /noch in Arbeit/.test(t));
+    assert.deepEqual(said, ['● noch in Arbeit, Nr. 0000abcd — das Ergebnis erscheint, sobald es da ist.']);
+    w.advance(20 * 60 * 1000);
+    assert.equal(w.line(), '', 'after the upper limit the line goes');
+});
+
+test('an assessment ends when the bubble gets a new reason: no card changes for it', async () => {
+    const w = world();
+    const row = (n) => ({ id: BUBBLE, metadata: { bewertungen: Array.from({ length: n }, (_, i) => ({ text: 'Grund ' + i, karten: [CARD_1] })) } });
+    const bubbleRow = (r) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:bubble-row', { detail: { row: r } }));
+    bubbleRow(row(1));                                  // the bubble as it was opened
+    w.answerWith({ success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen', orders: [ORDER] });
+    await w.send('Was hältst du von Karte 1?');
+    bubbleRow(row(1));                                  // the 5-s reload: nothing new
+    w.loaded(cards());
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)');
+    bubbleRow({ id: '00000000-0000-4000-8000-00000000000c', metadata: { bewertungen: [{}, {}, {}] } });
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'another bubble does not count');
+    bubbleRow(row(2));
+    assert.match(w.line(), /^✓ Ideas: fertig.*Einschätzung an der Bubble$/);
+    assert.match(w.chatLog().join('\n'), /✓ fertig — Einschätzung an der Bubble/);
 });
