@@ -119,6 +119,11 @@
     border-color: rgba(var(--space-accent-rgb), 0.7);
 }
 
+/* the "?" of start-examples.js: its sentences only when asked for */
+.ideas-chat-help { align-self: center; flex: none; }
+.ideas-chat-start:not(.gc-start-shown) { display: none; }
+.ideas-chat-start { padding: 6px 12px; }
+
 .ideas-chat-send {
     width: 34px;
     border-radius: 50%;

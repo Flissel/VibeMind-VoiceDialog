@@ -26,6 +26,9 @@
         // the sentence answers from the Dashboard too; its result lies in Aufträge, the app goes there
         clawport: ['Welche geplanten Aufgaben gibt es?'],
     };
+    // In an open bubble (its own chat): sentences measured there (Lauf 10), none that starts an order
+    // of a model (those cost the budget of the Brain).
+    const BUBBLE = ['Wie viele Karten hat diese Bubble?', 'Halte fest: …'];
     const MAX = 3;
     const SHOWN = 'gc-start-shown';
 
@@ -106,5 +109,48 @@
         else start();
     }
 
-    return { examplesFor, fieldText, mount, EVERYWHERE, OWN };
+    /**
+     * The "?" of the chat in an open bubble (ideas-chat.js): before its send button, the sentences
+     * at the end of its log; a click fills its field, the person sends. Lauf 11: the bubble chat had none.
+     */
+    function attachChat(doc, { row, input, send, log }) {
+        if (!row || !input || !send || !log) return null;
+        const box = doc.createElement('div');
+        box.className = 'gc-start ideas-chat-start';
+        const help = doc.createElement('button');
+        help.type = 'button';
+        help.id = 'ideas-chat-help';
+        help.className = 'gc-help-btn ideas-chat-help';
+        help.textContent = '?';
+        help.title = 'Beispielsätze zeigen';
+        help.setAttribute('aria-expanded', 'false');
+        const toggle = (on) => {
+            box.classList.toggle(SHOWN, on);
+            help.setAttribute('aria-expanded', on ? 'true' : 'false');
+            if (!on) return;
+            log.appendChild(box);          // at the end, where the person reads
+            log.scrollTop = log.scrollHeight;
+        };
+        const label = doc.createElement('span');
+        label.className = 'gc-start-label';
+        label.textContent = 'Sag zum Beispiel:';
+        box.appendChild(label);
+        for (const sentence of BUBBLE) {
+            const button = doc.createElement('button');
+            button.type = 'button';
+            button.className = 'gc-start-example';
+            button.textContent = '„' + sentence + '“';
+            button.addEventListener('click', () => {
+                input.value = fieldText(sentence);
+                input.focus();
+                toggle(false);
+            });
+            box.appendChild(button);
+        }
+        help.addEventListener('click', () => toggle(!box.classList.contains(SHOWN)));
+        row.insertBefore(help, send);
+        return { help, box };
+    }
+
+    return { examplesFor, fieldText, mount, attachChat, EVERYWHERE, OWN, BUBBLE };
 });

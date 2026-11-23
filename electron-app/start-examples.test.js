@@ -109,3 +109,43 @@ test('"?" at the input shows the sentences again below a full list; a sentence o
     assert.equal(box.classList.contains('gc-start-shown'), false, 'a second "?" hides them');
     assert.match(read('renderer/styles/game-console.css'), /\.gc-messages:has\(\.gc-msg\) > \.gc-start\.gc-start-shown \{\s*display: flex;/);
 });
+
+// Lauf 11: the chat of an open bubble had no "?". Its own sentences, none that starts a model order.
+test('the bubble chat gets its "?": before send, the sentences at the end of its log, a click fills the field', () => {
+    const el = (tag) => {
+        const classes = new Set();
+        const node = { tag, children: [], attrs: {}, listeners: {}, textContent: '', value: '', focused: false, scrollTop: 0, scrollHeight: 50,
+            classList: { add: (c) => classes.add(c), contains: (c) => classes.has(c),
+                toggle: (c, on) => { if (on) classes.add(c); else classes.delete(c); } },
+            set className(v) { for (const c of String(v).split(' ')) classes.add(c); },
+            appendChild(c) { node.children = node.children.filter((x) => x !== c).concat([c]); return c; },
+            insertBefore(c, ref) { const i = node.children.indexOf(ref); node.children.splice(i < 0 ? node.children.length : i, 0, c); },
+            setAttribute(k, v) { node.attrs[k] = v; },
+            addEventListener(type, fn) { node.listeners[type] = fn; },
+            focus() { node.focused = true; } };
+        return node;
+    };
+    const doc = { createElement: el };
+    const row = el('form'); const input = el('input'); const send = el('button'); const log = el('div');
+    row.appendChild(input); row.appendChild(send);
+    log.appendChild(el('div'));                                        // a line of the chat already there
+    const { help, box } = start.attachChat(doc, { row, input, send, log });
+    assert.deepEqual(row.children, [input, help, send], '"?" stands before the send button');
+    assert.equal(help.textContent, '?');
+    assert.ok(!box.classList.contains('gc-start-shown'));
+    help.listeners.click();
+    assert.ok(box.classList.contains('gc-start-shown'));
+    assert.equal(log.children[log.children.length - 1], box, 'at the end of the log');
+    assert.equal(help.attrs['aria-expanded'], 'true');
+    const sentences = box.children.filter((c) => c.tag === 'button').map((b) => b.textContent);
+    assert.deepEqual(sentences, ['„Wie viele Karten hat diese Bubble?“', '„Halte fest: …“']);
+    box.children.find((c) => c.textContent === '„Halte fest: …“').listeners.click();
+    assert.equal(input.value, 'Halte fest: ');
+    assert.ok(input.focused);
+    assert.ok(!box.classList.contains('gc-start-shown'), 'a click hides them; the person sends');
+});
+
+test('the bubble chat asks for its "?" when it builds its input row', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    assert.match(source, /VibeStartExamples\.attachChat\(doc, \{ row, input, send, log \}\)/);
+});

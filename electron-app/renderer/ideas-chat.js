@@ -342,6 +342,8 @@
         const send = el('button', 'ideas-chat-send', '▶');
         send.type = 'submit';
         row.append(input, send);
+        // "?" before the send button: example sentences for an open bubble (start-examples.js)
+        if (root.VibeStartExamples && root.VibeStartExamples.attachChat) root.VibeStartExamples.attachChat(doc, { row, input, send, log });
         // Reasons given for ratings of the open bubble: a list of their own, not on the cards.
         const reasons = el('details', 'ideas-reasons');
         reasons.id = 'ideas-reasons';
