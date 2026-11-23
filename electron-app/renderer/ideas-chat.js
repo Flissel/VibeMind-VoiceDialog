@@ -379,6 +379,7 @@
             busy = true;
             panel.dataset.busy = 'true';
             const asked = bubbleKey();
+            root.dispatchEvent(new root.CustomEvent('vibemind:sentence-sent'));
             say(text, 'user', asked);
             const note = noteText(text);
             const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';

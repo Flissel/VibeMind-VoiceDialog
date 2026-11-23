@@ -154,6 +154,9 @@ function createTaskNavigator(send) {
         done = 0;
         visited = new Set();
         last = null;
+        // A new plan: what the plan before ended with is no longer the news.
+        const reset = { type: 'task_status', state: 'reset', plan_id: planId };
+        send(reset);
         return null;
       }
       if (kind === 'hop_started') {
@@ -212,7 +215,7 @@ function initTaskNavigation(mainWindow, options = {}) {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('python-message', message);
     if (message.type === 'task_navigate') {
       log.log(`[Task-Nav] ${message.registry_space} -> ${message.space} (${message.capability})`);
-    } else if (message.state !== 'running') {
+    } else if (message.state === 'done' || message.state === 'failed') {
       log.log(`[Task-Nav] Plan ${message.state} in ${message.space}`);
     }
   });

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator } = require('./task-navigation');
-const { decide, describe, labelFor, BUSY_MS } = require('./renderer/task-navigate');
+const { decide, describe, labelFor, shows, BUSY_MS, KEEP_MS } = require('./renderer/task-navigate');
 
 test('registry spaces map to the keys of the app scene', () => {
     assert.equal(appKeyForSpace('coding'), 'projects');
@@ -52,7 +52,7 @@ test('one navigation per plan and space: a plan is followed into each space once
     navigator.handle('plan_started', { plan_id: 'p1' });
     navigator.handle('hop_started', { space: null, capability: 'chitchat' });          // general step
     navigator.handle('hop_started', { space: 'n8n', capability: 'n8n_list' });             // no place yet
-    assert.equal(sent.length, 0);
+    assert.deepEqual(sent.map((m) => m.state), ['reset'], 'a new plan only clears what the one before ended with');
     navigator.handle('hop_started', { space: 'coding', capability: 'code_generate', description: 'App bauen' });
     navigator.handle('hop_started', { space: 'coding', capability: 'code_status' });   // same space: no second jump
     navigator.handle('hop_started', { space: 'video', capability: 'video_status' });   // the plan moves on
@@ -78,7 +78,7 @@ test('Sales and software design have a place in the app', () => {
 test('a plan reports where it stands and how it ended', () => {
     const sent = [];
     const navigator = createTaskNavigator((m) => sent.push(m));
-    const states = () => sent.filter((m) => m.type === 'task_status');
+    const states = () => sent.filter((m) => m.type === 'task_status' && m.state !== 'reset');
 
     navigator.handle('plan_started', { plan_id: 'p7', hops: [{}, {}] });
     navigator.handle('hop_started', { space: 'sales', capability: 'sales_draft', description: 'Angebot entwerfen' });
@@ -130,7 +130,7 @@ test('a plan without a place in the app reports nothing', () => {
     navigator.handle('hop_completed', { space: null, ok: true });
     navigator.handle('plan_completed', { plan_id: 'p9', ok: true });
 
-    assert.equal(sent.length, 0);
+    assert.deepEqual(sent, [{ type: 'task_status', state: 'reset', plan_id: 'p9' }]);
 });
 
 test('resultText makes a short line out of a Python repr', () => {
@@ -221,4 +221,23 @@ test('stage and result pointer are passed on and shown once the Brain sends them
     assert.equal(short.text, '\u25CF SWE Design: Stufe 3 von 6, Requirements');
     const done = describe({ state: 'done', result: '12 Anforderungen', result_ref: 'shuttle:42' }, 'SWE Design', false);
     assert.equal(done.title, '12 Anforderungen\nshuttle:42');
+});
+test('a finished task is named only in its own space; a running one everywhere', () => {
+    assert.equal(shows({ state: 'running', space: 'sales' }, 'ideas'), 'line');
+    assert.equal(shows({ state: 'failed', space: 'ideas' }, 'ideas'), 'line');
+    assert.equal(shows({ state: 'failed', space: 'ideas' }, 'sales'), 'dot', 'an old error of another space is not shown here');
+    assert.equal(shows({ state: 'done', space: 'ideas' }, 'desktop'), 'dot');
+    assert.equal(shows(null, 'ideas'), 'none');
+    assert.ok(KEEP_MS <= 30000, 'a finished task does not stay for long');
+});
+
+test('a new sentence and a new plan clear what an earlier task ended with', () => {
+    const page = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+
+    assert.match(page, /addEventListener\('vibemind:sentence-sent', fresh\)/);
+    assert.match(page, /message\.state === 'reset'\) \{ fresh\(\); return 'reset'; \}/);
+    assert.match(scene, /CustomEvent\('vibemind:sentence-sent'\)/);
+    assert.match(chat, /CustomEvent\('vibemind:sentence-sent'\)/);
 });

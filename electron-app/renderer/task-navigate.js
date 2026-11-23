@@ -18,7 +18,7 @@
     const BUSY_MS = 4000;       // an input this recent means: the user is working here
     const RETRY_MS = 250;       // a camera move is running: try again
     const RETRY_LIMIT = 24;     // ... for six seconds at most
-    const KEEP_MS = 90000;      // a finished task stays visible this long
+    const KEEP_MS = 30000;      // a finished task stays visible this long
 
     /** What to do with a task that belongs to `space`. */
     function decide({ space, currentSpace, knownSpaces, lastInputAt, now, insideBubble }) {
@@ -74,6 +74,22 @@
             text: `✓ ${label}: fertig${took ? ' in ' + took : ''}${result}${arrow}`,
             title: [message.result, message.result_ref].filter(Boolean).join('\n'),
         };
+    }
+
+    const finished = (message) => Boolean(message) && (message.state === 'done' || message.state === 'failed');
+
+    /**
+     * How much of a status is shown while onScreen is the space on screen:
+     *   'line'  the line in the title bar and the dot on the tab
+     *   'dot'   only the dot on the tab of its space
+     *   'none'
+     * A running task is always named. A finished one is named only in its own space: an old
+     * result or error of another space must not stand above the space the user is in.
+     */
+    function shows(message, onScreen) {
+        if (!message || !message.space) return 'none';
+        if (!finished(message)) return 'line';
+        return message.space === onScreen ? 'line' : 'dot';
     }
 
     function install() {
@@ -141,13 +157,14 @@
                 return;
             }
             const app = root.multiverseApp;
-            const away = Boolean(app && app.currentSpace !== current.space);
-            const line = describe(current, labelFor(current.space, app && app.spaces), away);
+            const onScreen = app ? app.currentSpace : current.space;
+            const line = describe(current, labelFor(current.space, app && app.spaces), onScreen !== current.space);
             el.textContent = line.text;
             el.title = line.title;
             el.dataset.state = line.state;
             el.dataset.space = current.space;
-            el.hidden = false;
+            el.hidden = shows(current, onScreen) !== 'line';
+            if (!el.hidden && finished(current)) current.seen = true; // the user had it in front of them
             markTab(current.space, line.state);
         }
 
@@ -156,7 +173,14 @@
             render();
         }
 
+        /** A new sentence was sent, or a new plan began: what an earlier task ended with is no longer the news. */
+        function fresh() {
+            if (finished(current)) clear();
+        }
+        root.addEventListener('vibemind:sentence-sent', fresh);
+
         function handleStatus(message) {
+            if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
             current = message;
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
@@ -200,6 +224,8 @@
                 if (app && app.enterDesktopDashboard) app.enterDesktopDashboard();
             }
             if (space === followed) followed = '';
+            // A finished task the user has seen in its space goes when they move on.
+            if (finished(current) && current.seen && space !== current.space) { clear(); return; }
             render(); // the arrow at the end of the line depends on the space on screen
         });
 
@@ -209,7 +235,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, BUSY_MS };
+    const api = { decide, describe, labelFor, shows, BUSY_MS, KEEP_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

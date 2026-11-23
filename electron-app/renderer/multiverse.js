@@ -2603,6 +2603,7 @@ class MultiverseApp {
 
         // Show user message
         this.addGcMessage(text, 'user');
+        window.dispatchEvent(new CustomEvent('vibemind:sentence-sent'));
 
         // Show spinner, hide send button
         document.getElementById('gc-spinner').classList.remove('hidden');
