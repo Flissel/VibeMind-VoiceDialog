@@ -90,6 +90,30 @@
         return ` ${icon} ${tag}`;
     }
 
+    /** x or y of a card as stored (x/y, else position.x/y), or null; the same rule as card-view.js rowOf. */
+    function _coord(n, axis) {
+        const raw = n[axis] ?? (n.position && typeof n.position === 'object' ? n.position[axis] : undefined);
+        const value = Number(raw);
+        return raw != null && Number.isFinite(value) ? value : null;
+    }
+
+    /**
+     * The groups of "nach Thema gruppieren": a heading card (metadata.gruppen_kopf) and the cards of
+     * its column (same x, below it), as in the grid (card-view.js grouped). [{ head, members }] of ids.
+     */
+    function _groups(nodes) {
+        const isHead = (n) => !!(n.metadata && typeof n.metadata === 'object' && n.metadata.gruppen_kopf === true);
+        const heads = nodes.filter((n) => isHead(n) && _coord(n, 'x') !== null);
+        return heads.map((head) => {
+            const x = _coord(head, 'x');
+            const top = _coord(head, 'y');
+            const members = nodes.filter((n) => !isHead(n) && _coord(n, 'x') === x
+                && (top === null || _coord(n, 'y') === null || _coord(n, 'y') > top))
+                .sort((a, b) => (_coord(a, 'y') ?? 0) - (_coord(b, 'y') ?? 0));
+            return { head: String(head.id), members: members.map((n) => String(n.id)) };
+        });
+    }
+
     function _buildGraph(nodes, edges) {
         // Phase 11.U.I rev4 — TD (top-down) instead of LR.
         // With LR + many disjoint clusters, Mermaid stacks them in vertical
@@ -104,8 +128,17 @@
             '    classDef formattedNode fill:#1e293b,stroke:#10b981,stroke-width:3px,color:#fff,font-size:14px,radius:8px',
             '    classDef formattedRoot fill:#312e81,stroke:#10b981,stroke-width:3px,color:#fff,font-size:16px,radius:10px',
             '    classDef hubNode fill:transparent,stroke:transparent,color:transparent',
+            // the heading of a group: stands over its column
+            '    classDef groupHead fill:#3b2f0b,stroke:#f59e0b,stroke-width:2px,color:#fde68a,font-size:15px,font-weight:bold',
         ];
         const nodeIdSet = new Set(nodes.map(n => String(n.id)));
+
+        // Grouped by theme: each heading holds its cards below it by invisible links (~~~). Without
+        // them every card without a connection stood in one row; the positions in the data were
+        // ignored (Lauf 9). A member counts as linked, so it is no root on the top row.
+        const groups = _groups(nodes);
+        const headIds = new Set(groups.map((g) => g.head));
+        const groupLinks = [];
 
         // Build incoming + outgoing adjacency. Roots = no incoming edges.
         const incoming = new Map();
@@ -117,6 +150,18 @@
             incoming.set(tgt, (incoming.get(tgt) || 0) + 1);
             if (!outgoing.has(src)) outgoing.set(src, []);
             outgoing.get(src).push(tgt);
+        }
+
+        for (const group of groups) {
+            let above = group.head;
+            for (const member of group.members) {
+                // a chain head ~~~ card 1 ~~~ card 2: the cards stand under each other in their column
+                groupLinks.push([above, member]);
+                incoming.set(member, (incoming.get(member) || 0) + 1);
+                if (!outgoing.has(group.head)) outgoing.set(group.head, []);
+                outgoing.get(group.head).push(member);   // the column moves together when dragged
+                above = member;
+            }
         }
 
         // Cluster: each root + its direct children (one level only).
@@ -166,7 +211,10 @@
             const cj = n.content_json;
             const isFormatted = !!(cj && cj.type && cj.type !== 'note');
             const isRoot = !incoming.get(String(n.id));
-            if (isRoot) {
+            if (headIds.has(String(n.id))) {
+                lines.push(`    class ${sid} groupHead`);
+                rootSids.push(sid);
+            } else if (isRoot) {
                 lines.push(`    class ${sid} ${isFormatted ? 'formattedRoot' : 'rootNode'}`);
                 rootSids.push(sid);
             } else {
@@ -186,6 +234,8 @@
             edgeList.push({ from: fid, to: tid });
             edgeCount++;
         }
+
+        for (const [from, to] of groupLinks) lines.push(`    ${_sanitizeId(from)} ~~~ ${_sanitizeId(to)}`);
 
         // Invisible hub forces all roots onto one rank. We use SOLID --> edges
         // (not dotted -.- which Mermaid sometimes ignores for layout) and
@@ -749,6 +799,7 @@
     }
 
     window.renderMermaidIntoContainer = renderMermaidIntoContainer;
+    window.VibeMermaidGraph = { build: _buildGraph };   // the graph text, for tests
     window.computeMermaidLayout = computeMermaidLayout;
     console.log('[mermaid-layout] v11.U.I rev2 — direct-SVG mode registered');
 })();
