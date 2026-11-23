@@ -99,6 +99,9 @@ function resultText(preview) {
   else text = text.replace(/^(['"])([\s\S]*)\1$/, '$2');
   // the repr writes a line break as backslash-n and escapes quotes
   text = text.replace(/\\[nrt]/g, ' ').replace(/\\(['"\\])/g, '$1');
+  // Identifiers of rows say nothing to the user: "(id=3f2a..., score=0)" and bare UUIDs go.
+  text = text.replace(/\(\s*id\s*=[^)]*\)/gi, '').replace(/\bid\s*=\s*[\w-]+,?/gi, '')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   text = text.replace(/\s+/g, ' ').trim();
   return text.length > RESULT_MAX ? text.slice(0, RESULT_MAX - 1) + '\u2026' : text;
 }

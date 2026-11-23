@@ -76,6 +76,14 @@
         };
     }
 
+    const LINE_MAX = 240;
+
+    /** One line of at most 240 characters out of any text. */
+    function shorten(text) {
+        const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+        return line.length > LINE_MAX ? line.slice(0, LINE_MAX - 1) + '…' : line;
+    }
+
     const finished = (message) => Boolean(message) && (message.state === 'done' || message.state === 'failed');
 
     /**
@@ -99,6 +107,7 @@
         let keepTimer = null;
         let pending = null;      // { space, tries } a jump waiting for a camera move to end
         let followed = '';       // the space the app is jumping to because of a task
+        let answer = '';         // the answer to the sentence last sent, once it is there
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => { lastInputAt = Date.now(); }, { capture: true, passive: true });
         }
@@ -177,11 +186,27 @@
         function fresh() {
             if (finished(current)) clear();
         }
-        root.addEventListener('vibemind:sentence-sent', fresh);
+        root.addEventListener('vibemind:sentence-sent', () => {
+            answer = '';
+            fresh();
+        });
+
+        // The answer to the sentence is the plan's own summary, written for the user. It is what a
+        // finished task shows; the result of its last step (raw data of a tool) is only the fallback.
+        // Answer and end of the plan arrive in either order.
+        root.addEventListener('vibemind:sentence-answered', (event) => {
+            const detail = (event && event.detail) || {};
+            answer = detail.success === false ? '' : shorten(detail.text);
+            if (answer && current && current.state === 'done') {
+                current.result = answer;
+                render();
+            }
+        });
 
         function handleStatus(message) {
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
+            if (message.state === 'done' && answer) message = { ...message, result: answer };
             current = message;
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
@@ -235,7 +260,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, BUSY_MS, KEEP_MS };
+    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

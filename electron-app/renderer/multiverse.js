@@ -2637,6 +2637,7 @@ class MultiverseApp {
             const response = await window.vibemind.sendChatMessage(text, context);
             const agentMsg = response?.message || 'No response';
             const isError = response?.success === false;
+            window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: { text: response?.message || '', success: !isError } }));
             this.addGcMessage(agentMsg, isError ? 'error' : 'agent');
         } catch (err) {
             this.addGcMessage(`Error: ${err.message}`, 'error');

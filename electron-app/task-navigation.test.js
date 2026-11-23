@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator } = require('./task-navigation');
-const { decide, describe, labelFor, shows, BUSY_MS, KEEP_MS } = require('./renderer/task-navigate');
+const { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS } = require('./renderer/task-navigate');
 
 test('registry spaces map to the keys of the app scene', () => {
     assert.equal(appKeyForSpace('coding'), 'projects');
@@ -137,6 +137,9 @@ test('resultText makes a short line out of a Python repr', () => {
     assert.equal(resultText("{'success': True, 'message': 'Bubble \"Marketing\" erstellt'}"), 'Bubble "Marketing" erstellt');
     assert.equal(resultText("'nur ein Satz'"), 'nur ein Satz');
     assert.equal(resultText("'1 bubbles:\\n- Marketing (score=0)'"), '1 bubbles: - Marketing (score=0)', 'no backslash-n in the line (seen in the app on 2026-11-23)');
+    assert.equal(resultText("'2 bubbles:\\n- Marketing (id=fa8d4158-f721-4290-a0cf-7f20da754372, score=0)\\n- Vertrieb (id=0b1c2d3e-0000-4000-8000-123456789abc, score=3)'"),
+        '2 bubbles: - Marketing - Vertrieb', 'identifiers of rows are not shown');
+    assert.equal(resultText("'Karte fa8d4158-f721-4290-a0cf-7f20da754372 angelegt'"), 'Karte angelegt');
     assert.equal(resultText('None'), '');
     assert.equal(resultText(undefined), '');
     assert.equal(resultText('x'.repeat(600)).length, 240);
@@ -237,8 +240,23 @@ test('a new sentence and a new plan clear what an earlier task ended with', () =
     const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
 
-    assert.match(page, /addEventListener\('vibemind:sentence-sent', fresh\)/);
+    assert.match(page, /addEventListener\('vibemind:sentence-sent', \(\) => \{[^}]*fresh\(\);/);
     assert.match(page, /message\.state === 'reset'\) \{ fresh\(\); return 'reset'; \}/);
     assert.match(scene, /CustomEvent\('vibemind:sentence-sent'\)/);
     assert.match(chat, /CustomEvent\('vibemind:sentence-sent'\)/);
+});
+
+test('a finished task shows the answer to the sentence, not the raw result of its last step', () => {
+    const page = fs.readFileSync(path.join(__dirname, 'renderer', 'task-navigate.js'), 'utf8');
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+
+    assert.match(page, /if \(message\.state === 'done' && answer\) message = \{ \.\.\.message, result: answer \};/, 'the answer came first');
+    assert.match(page, /if \(answer && current && current\.state === 'done'\) \{\s*current\.result = answer;/, 'the end of the plan came first');
+    assert.match(scene, /CustomEvent\('vibemind:sentence-answered'/);
+    assert.match(chat, /CustomEvent\('vibemind:sentence-answered'/);
+
+    assert.equal(shorten(' 15 Bubbles:\n„A“, „B“ \t(und 13 weitere). '), '15 Bubbles: „A“, „B“ (und 13 weitere).');
+    assert.equal(shorten('x'.repeat(500)).length, 240);
+    assert.equal(shorten(undefined), '');
 });

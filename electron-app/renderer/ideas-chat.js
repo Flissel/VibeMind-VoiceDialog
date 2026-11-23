@@ -394,6 +394,7 @@
                 const response = await root.vibemind.sendChatMessage(text, contextNow(newId));
                 const failed = !response || response.success === false;
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
+                root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: { text: (response && response.message) || '', success: !failed } }));
                 if (failed && newId) store.reject(newId, message);
                 if (!failed) applyAnswer(response, newId, note);
                 say(message, failed ? 'error' : 'agent', asked);
