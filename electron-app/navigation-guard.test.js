@@ -99,3 +99,11 @@ test('a move nobody can see ends at its next step', () => {
     assert.match(scene, /const duration = this\._moveDuration\(800\);/, 'entering a bubble');
     assert.match(scene, /const duration = this\._moveDuration\(600\);/, 'leaving a bubble');
 });
+
+test('the main window is not slowed down in the background', () => {
+    const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+    const window = main.slice(main.indexOf('mainWindow = new BrowserWindow({'), main.indexOf("icon: path.join(__dirname, 'build', 'icon.png')"));
+
+    assert.match(window, /backgroundThrottling: false,/);
+    assert.doesNotMatch(main, /CalculateNativeWinOcclusion/, 'the window may still be reported as covered: nothing is drawn for nobody');
+});

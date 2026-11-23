@@ -289,6 +289,10 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            // Agents work while this window is covered by something else. Chromium slows the
+            // timers of a page in the background (to one a second, later one a minute); the app
+            // would then follow a task late or not at all. The page is not slowed down here.
+            backgroundThrottling: false,
         },
         icon: path.join(__dirname, 'build', 'icon.png'),
     });
