@@ -264,3 +264,25 @@ test('the end of the plan that took the order is the acceptance: no "fertig", no
     w.loaded(cards('Ergebnis'));
     assert.equal(w.line(), '✓ Ideas: fertig in 7 min — Ergebnis an der Karte „Karte 1“');
 });
+
+test('two sentences at once: the answer that arrives last is the line, also for the earlier sentence', () => {
+    const w = world();
+    const send = () => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-sent'));
+    const answered = (detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
+    send();
+    send();
+    answered({ text: 'In diesem Bereich kann ich das noch nicht.', success: true, note: 'rueckfrage', space: 'ideas' });
+    assert.match(w.line(), /^\?/, 'the question of the second sentence first');
+    answered({ text: '15 Bubbles.', success: true, note: '', space: 'ideas' });
+    assert.match(w.line(), /^✓ .*15 Bubbles\./, 'then the later answer of the first sentence');
+});
+
+test('the console keeps each sentence with its answers as a pair, and nothing fades', () => {
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    assert.doesNotMatch(scene, /GC_FADE_DELAY|_gcFadeLater|gc-fading/, 'answers stay to be read');
+    assert.match(scene, /pair\.className = 'gc-pair';/);
+    assert.match(scene, /div\.classList\.add\('gc-answer'\);\s*ask\.__pair\.appendChild\(div\);/);
+    assert.match(scene, /findIndex\(\(unit\) => !unit\.__waiting\)/, 'a pair still waiting is never cut');
+    assert.match(scene, /space: context && context\.space \? context\.space : this\.currentSpace,/);
+    assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'game-console.css'), 'utf8'), /\.gc-msg\.gc-answer \{/);
+});

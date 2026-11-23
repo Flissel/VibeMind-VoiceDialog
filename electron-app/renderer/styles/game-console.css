@@ -176,3 +176,21 @@
 .gc-spinner.hidden {
     display: none;
 }
+
+/* a sentence and its answers, kept together: a late answer stands under its own sentence */
+.gc-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(var(--space-accent-rgb), 0.10);
+}
+
+.gc-pair:last-child {
+    border-bottom: 0;
+}
+
+.gc-msg.gc-answer {
+    margin-left: 14px;
+    border-left: 2px solid rgba(var(--space-accent-rgb), 0.45);
+}

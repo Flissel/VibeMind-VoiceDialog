@@ -377,6 +377,18 @@
             answer = detail.success === false ? '' : shorten(detail.text);
             // A tool refused or failed: the Brain's sentence says why, in words for the user.
             refusal = detail.success === false ? shorten(detail.text) : '';
+            // Two sentences at once: the answer that arrives last is the news, also when it belongs to
+            // the earlier sentence. A question or hint shown for the other one gives way to it
+            // (measured: the line kept the question of the second sentence, the later answer never showed).
+            if ((answer || refusal) && current && current.state === 'note') {
+                current = { space: detail.space || current.space, state: refusal ? 'failed' : 'done', step: '', done: 0, total: 0,
+                    result: answer, error: refusal, elapsed_s: null, plan_id: current.plan_id };
+                root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(clear, KEEP_MS);
+                render();
+                return;
+            }
             // Answered before any event of the plan: the events of the plan come on another way and
             // often a moment later. Clearing now made the line vanish and come back a moment later
             // as "fertig" (flicker at about 1 s, measured 2026-11-23). The neutral line stays a

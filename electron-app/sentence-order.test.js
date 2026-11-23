@@ -144,7 +144,8 @@ test('the main process waits per sentence: an answer names its request, a late o
 test('the console: a late answer goes under its sentence, and the sentence waits for it', () => {
     const scene = read('renderer/multiverse.js');
     assert.doesNotMatch(scene, /if \(!text \|\| this\.gcBusy\) return;/, 'a second sentence is not dropped');
-    assert.match(scene, /const ask = this\.addGcMessage\(text, 'user', null, \{ fade: false \}\);/);
+    assert.match(scene, /const ask = this\.addGcMessage\(text, 'user'\);/);
     assert.match(scene, /this\.addGcMessage\(shown\.text, kind, ask\);/);
-    assert.match(scene, /container\.insertBefore\(div, after\.nextSibling\);/);
+    assert.match(scene, /pair\.__waiting = true;/);
+    assert.match(scene, /if \(ask\.__pair\) ask\.__pair\.__waiting = false;/);
 });

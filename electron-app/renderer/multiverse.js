@@ -2571,8 +2571,8 @@ class MultiverseApp {
         this.gcVisible = true;   // always open by default
         this.gcBusy = false;
         this.gcMessages = [];
-        this.GC_MAX_MESSAGES = 5;
-        this.GC_FADE_DELAY = 8000;
+        // Sentences with their answers, kept as pairs; nothing fades (an answer read later must still be there).
+        this.GC_MAX_PAIRS = 8;
 
         // Show console immediately and shift voice panel up
         const gcEl = document.getElementById('game-console');
@@ -2642,7 +2642,7 @@ class MultiverseApp {
         this.gcBusy = true;
 
         // Show user message
-        const ask = this.addGcMessage(text, 'user', null, { fade: false });
+        const ask = this.addGcMessage(text, 'user');
         window.dispatchEvent(new CustomEvent('vibemind:sentence-sent'));
 
         // Show spinner, hide send button
@@ -2663,6 +2663,7 @@ class MultiverseApp {
             const accepted = !!response && response.ok !== false && (response.pending === true || response.status === 'angenommen');
             window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
                 text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
+                space: context && context.space ? context.space : this.currentSpace,
                 ...(accepted ? { accepted: true, space: this.currentSpace,
                     targets: Array.isArray(response.targets) ? response.targets.map(String) : [],
                     orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
@@ -2675,8 +2676,7 @@ class MultiverseApp {
             if (window.vibemind && window.vibemind.writeLog) window.vibemind.writeLog('warn', '[GameConsole] sentence failed', { error: String(err && err.message) });
             this.addGcMessage('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', ask);
         } finally {
-            ask.__waiting = false;
-            this._gcFadeLater(ask);   // the sentence fades with its answer
+            if (ask.__pair) ask.__pair.__waiting = false;
             this.gcInFlight = Math.max(0, (this.gcInFlight || 1) - 1);
             this.gcBusy = this.gcInFlight > 0;
             if (!this.gcBusy) {
@@ -2686,50 +2686,42 @@ class MultiverseApp {
         }
     }
 
-    /** A line of the console; with `ask` (the line of the sentence) it goes under that sentence. */
-    addGcMessage(text, type, ask = null, { fade = true } = {}) {
+    /**
+     * A line of the console. A sentence opens a pair (.gc-pair); its answers go into that pair, under
+     * the sentence, also when they come late or in another order than the sentences. Pairs stay;
+     * only the oldest go once there are more than GC_MAX_PAIRS, never one still waiting.
+     */
+    addGcMessage(text, type, ask = null) {
         const container = document.getElementById('gc-messages');
         const div = document.createElement('div');
         div.className = `gc-msg gc-${type}`;
         div.textContent = text;
-        if (ask && ask.parentNode === container) {
-            // after the sentence and the answers it already has, also when the answer is late
-            let after = ask;
-            while (after.nextSibling && after.nextSibling.__answerTo === ask) after = after.nextSibling;
-            div.__answerTo = ask;
-            container.insertBefore(div, after.nextSibling);
+        if (type === 'user') {
+            const pair = document.createElement('div');
+            pair.className = 'gc-pair';
+            pair.__waiting = true;
+            pair.appendChild(div);
+            div.__pair = pair;
+            container.appendChild(pair);
+            this.gcMessages.push(pair);
+        } else if (ask && ask.__pair && ask.__pair.parentNode === container) {
+            div.classList.add('gc-answer');
+            ask.__pair.appendChild(div);
         } else {
             container.appendChild(div);
+            this.gcMessages.push(div);
         }
 
-        this.gcMessages.push(div);
-
-        // Trim to max messages; a sentence still waiting for its answer stays
-        while (this.gcMessages.length > this.GC_MAX_MESSAGES) {
-            const at = this.gcMessages.findIndex((line) => !line.__waiting);
+        while (this.gcMessages.length > this.GC_MAX_PAIRS) {
+            const at = this.gcMessages.findIndex((unit) => !unit.__waiting);
             if (at < 0) break;
             const [old] = this.gcMessages.splice(at, 1);
             old.remove();
         }
 
-        // Auto-scroll
+        // Auto-scroll: the newest line in view
         container.scrollTop = container.scrollHeight;
-
-        // Auto-fade after delay; a sentence waiting for its answer stays until the answer is there
-        if (fade) this._gcFadeLater(div);
-        else div.__waiting = true;
         return div;
-    }
-
-    _gcFadeLater(div) {
-        setTimeout(() => {
-            div.classList.add('gc-fading');
-            setTimeout(() => {
-                div.remove();
-                const idx = this.gcMessages.indexOf(div);
-                if (idx !== -1) this.gcMessages.splice(idx, 1);
-            }, 500);
-        }, this.GC_FADE_DELAY);
     }
 
     updateGameConsoleAgent(spaceId) {
