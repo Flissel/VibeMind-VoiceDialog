@@ -136,6 +136,7 @@ test('a plan without a place in the app reports nothing', () => {
 test('resultText makes a short line out of a Python repr', () => {
     assert.equal(resultText("{'success': True, 'message': 'Bubble \"Marketing\" erstellt'}"), 'Bubble "Marketing" erstellt');
     assert.equal(resultText("'nur ein Satz'"), 'nur ein Satz');
+    assert.equal(resultText("'1 bubbles:\\n- Marketing (score=0)'"), '1 bubbles: - Marketing (score=0)', 'no backslash-n in the line (seen in the app on 2026-11-23)');
     assert.equal(resultText('None'), '');
     assert.equal(resultText(undefined), '');
     assert.equal(resultText('x'.repeat(600)).length, 240);

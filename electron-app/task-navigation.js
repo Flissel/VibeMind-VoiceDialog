@@ -95,8 +95,10 @@ function resultText(preview) {
   let text = preview.trim();
   if (!text || text === 'None') return '';
   const inner = /['"](?:message|result|summary|text)['"]:\s*(['"])((?:\\.|(?!\1).)*)\1/.exec(text);
-  if (inner && inner[2].trim()) text = inner[2].replace(/\\n/g, ' ').replace(/\\(['"\\])/g, '$1');
+  if (inner && inner[2].trim()) text = inner[2];
   else text = text.replace(/^(['"])([\s\S]*)\1$/, '$2');
+  // the repr writes a line break as backslash-n and escapes quotes
+  text = text.replace(/\\[nrt]/g, ' ').replace(/\\(['"\\])/g, '$1');
   text = text.replace(/\s+/g, ' ').trim();
   return text.length > RESULT_MAX ? text.slice(0, RESULT_MAX - 1) + '\u2026' : text;
 }
