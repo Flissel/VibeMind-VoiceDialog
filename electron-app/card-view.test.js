@@ -631,3 +631,20 @@ test('Kanban aus einer Notiz: die Zeile traegt den Titel der Karte nicht noch ei
     const other = { ...NOTE, content_json: { ...NOTE.content_json, columns: [{ name: 'Offen', cards: [{ title: 'Karte 70 bleibt' }] }] } };
     assert.deepEqual(cv.cardShort(other).zeilen, ['Offen (1): Karte 70 bleibt']);
 });
+
+// Lauf 15: "Offen (1): Offen: <text>". The note said "Offen: <text>"; its board put that card into the
+// column "Offen" (window log, node_updated: "<title> – Offen: <text>"). The status word once. Titles invented.
+test('Kanban: beginnt der Kartentext mit dem Namen seiner Spalte und Doppelpunkt, steht das Wort nur einmal', () => {
+    const NOTE = { id: 'k8', title: 'Karte 8', content: 'Karte 8 – Offen: Teile bestellen', metadata: { width: 200, height: 100 },
+        format_schema: { type: 'kanban' }, format_type: 'kanban',
+        content_json: { type: 'kanban', title: 'Karte 8', text: 'Karte 8 – Offen: Teile bestellen',
+            todo: [{ title: 'Karte 8 – Offen: Teile bestellen' }], doing: [], done: [],
+            columns: [{ name: 'Offen', cards: [{ id: 'k3', title: 'Karte 8 – Offen: Teile bestellen' }], color: '#6c757d' },
+                { name: 'In Arbeit', cards: [{ id: 'k4', title: 'Offen: noch zu klaeren' }], color: '#0d6efd' },
+                { name: 'Erledigt', cards: [{ id: 'k5', title: 'Offenheit zeigen' }], color: '#198754' }] } };
+    const kurz = cv.cardShort(NOTE);
+    assert.deepEqual(kurz.zeilen, ['Offen (1): Teile bestellen', 'In Arbeit (1): Offen: noch zu klaeren', 'Erledigt (1): Offenheit zeigen'],
+        'only the name of its own column goes; another word or a longer word stays');
+    const read = cv.cardRead(NOTE);
+    assert.ok(!JSON.stringify(read.abschnitte).includes('Offen: Teile'), 'the reading view drops it too');
+});

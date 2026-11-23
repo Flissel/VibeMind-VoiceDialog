@@ -309,6 +309,13 @@
         return rest ? rest[1] : line;
     }
 
+    /** A line without the name of its column and a colon in front ("Offen: Text" -> "Text"); the line otherwise. */
+    function withoutHead(line, head) {
+        if (typeof line !== 'string' || !head || !line.startsWith(head)) return line;
+        const rest = /^\s*:\s+(\S[\s\S]*)$/.exec(line.slice(head.length));
+        return rest ? rest[1] : line;
+    }
+
     /** [Format, Abschnitte, Umfang, ist Text] einer Karte; Abschnitte halten nur lesbare Zeilen. */
     function cardParts(row, limit) {
         const fmt = cardFormat(row);
@@ -319,6 +326,8 @@
         // A board made from one note: its card reads "<title of the note> – <text>"; on the card of that
         // note the title stands above already (Lauf 13: "Offen (1): <title> – …").
         if (fmt === 'kanban' && title) sections = sections.map(([head, found]) => [head, found.map((line) => withoutTitle(line, title))]);
+        // ... and its text may start with the column it stands in (Lauf 15: "Offen (1): Offen: <text>")
+        if (fmt === 'kanban') sections = sections.map(([head, found]) => [head, found.map((line) => withoutHead(line, head))]);
         if (sections.length) return [fmt, sections, said, false];
         sections = textSections(cardText(row), title, limit);
         if (!sections.some(([, found]) => found.length)) {
