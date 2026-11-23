@@ -608,3 +608,22 @@ test('a short answer of /stand stands whole, without "mehr an der Karte"', async
     w.advance(5000); await tick();
     assert.equal(w.chatLog()[1], '✓ fertig in 9 s — Die Karten stehen jetzt in 2 Gruppen.');
 });
+
+test('the jump is the same from every place to type: a sentence in an open bubble goes to the space of its result', () => {
+    // Abnahme point 4: the result lies in another space, the app goes there. From the console it
+    // did; from the chat of an open bubble (the one place to type there) the plan stayed a note.
+    const w = world();
+    const app = w.window.multiverseApp;
+    app.spaces.orders = {};
+    const went = [];
+    app.navigateToSpace = (space) => { went.push(space); };
+    w.window.vibemind.sendChatMessage = () => new Promise(() => {});   // the answer is still to come
+    w.send('Welche geplanten Aufgaben gibt es?');
+    assert.equal(w.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' }), 'navigate');
+    assert.deepEqual(went, ['orders']);
+
+    const quiet = world();                             // a plan nobody asked for in this bubble
+    quiet.window.multiverseApp.spaces.orders = {};
+    quiet.window.multiverseApp.navigateToSpace = () => { throw new Error('no jump'); };
+    assert.equal(quiet.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' }), 'note');
+});

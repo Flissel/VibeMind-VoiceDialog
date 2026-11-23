@@ -23,7 +23,7 @@
         ideas: ['Welche Bubbles gibt es?', 'Halte fest: … in der Bubble …'],
         thebrain: ['Woran denkt das Gehirn gerade?'],
         orders: ['Welche geplanten Aufgaben gibt es?'],
-        // since Lauf 8 the sentence stays in the Dashboard (before, it jumped to Aufträge)
+        // the sentence answers from the Dashboard too; its result lies in Aufträge, the app goes there
         clawport: ['Welche geplanten Aufgaben gibt es?'],
     };
     const MAX = 3;

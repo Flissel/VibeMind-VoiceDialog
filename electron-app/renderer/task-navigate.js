@@ -28,11 +28,14 @@
     const NO_JUMP = Object.freeze(['desktop']);
 
     /** What to do with a task that belongs to `space`. */
-    function decide({ space, currentSpace, knownSpaces, lastInputAt, now, insideBubble }) {
+    function decide({ space, currentSpace, knownSpaces, lastInputAt, now, insideBubble, asked = false }) {
         if (!space || !knownSpaces.includes(space)) return 'ignore';
         if (space === currentSpace) return 'ignore';
         if (NO_JUMP.includes(space)) return 'stay';
-        if (insideBubble) return 'note';                      // do not pull the user out of an open bubble
+        // Do not pull the user out of an open bubble, unless their own sentence asked for the task:
+        // the result is in another space, the app goes there (Abnahme point 4). Inside a bubble the
+        // chat of the bubble is the one place to type; its sentences stayed in the bubble.
+        if (insideBubble && !asked) return 'note';
         if (now - lastInputAt < BUSY_MS) return 'note';
         return 'navigate';
     }
@@ -711,6 +714,7 @@
                 lastInputAt,
                 now: Date.now(),
                 insideBubble: Boolean(app.isInsideBubble),
+                asked: awaiting,     // a sentence of the person is under way: its plan is what they asked for
             });
             // 'note' and 'stay' need nothing here: the status that follows says where the task runs.
             if (action === 'navigate') {

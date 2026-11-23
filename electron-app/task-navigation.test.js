@@ -173,6 +173,8 @@ test('the renderer follows a task, but not while the user is busy', () => {
     assert.equal(decide({ ...base, lastInputAt: 100000 - BUSY_MS + 1 }), 'note', 'input a moment ago');
     assert.equal(decide({ ...base, lastInputAt: 100000 - BUSY_MS }), 'navigate');
     assert.equal(decide({ ...base, lastInputAt: 0, insideBubble: true }), 'note', 'an open bubble is not left');
+    assert.equal(decide({ ...base, lastInputAt: 0, insideBubble: true, asked: true }), 'navigate',
+        'unless the sentence of the person asked for it: the result is in another space');
     assert.equal(decide({ ...base, lastInputAt: 0, currentSpace: 'video' }), 'ignore', 'already there');
     assert.equal(decide({ ...base, lastInputAt: 0, space: 'unbekannt' }), 'ignore');
 });

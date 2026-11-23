@@ -13,7 +13,7 @@ test('each space gets its own sentences first, then those from every tab, at mos
     assert.deepEqual(start.examplesFor('video'), start.EVERYWHERE, 'a space without a sentence of its own: the ones from every tab');
 });
 
-test('only the measured sentences, none for the Desktop space; the Dashboard gets the task sentence (no jump since Lauf 8)', () => {
+test('only the measured sentences, none for the Desktop space; the Dashboard gets the task sentence (its result is in Aufträge)', () => {
     const all = new Set([...start.EVERYWHERE, ...Object.values(start.OWN).flat()]);
     assert.deepEqual([...all].sort(), [
         'Halte fest: … in der Bubble …', 'Welche Bubbles gibt es?',
