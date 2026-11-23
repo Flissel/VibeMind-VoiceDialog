@@ -40,9 +40,10 @@ function world() {
     const UniverseCanvas = window.UniverseCanvas;
     const canvas = Object.create(UniverseCanvas.prototype);
     const shown = [];
-    canvas.loadNodes = (nodes) => { shown.push(nodes.map((n) => n.id).join(',')); };
+    const loadedFor = []; // the bubble the canvas names with each load (it goes with vibemind:canvas-loaded)
+    canvas.loadNodes = function (nodes) { shown.push(nodes.map((n) => n.id).join(',')); loadedFor.push(this.bubbleId); };
     return {
-        canvas, view, shown, fetched,
+        canvas, view, shown, fetched, loadedFor,
         /** Every timer fires, the 5-s poll three times; then the fetches settle. */
         async runAllTimers() {
             for (let round = 0; round < 3; round++) {
@@ -65,11 +66,14 @@ test('the app stays in the bubble the person clicked, whatever timers of the ear
     // the person clicks bubble B: its cards come with the entry (pending content), as in the app
     w.canvas.setBubble(B);
     w.canvas.loadNodes([{ id: 'card-of-' + B }]);
+    assert.equal(w.loadedFor[w.loadedFor.length - 1], B, 'the cards of the entry are reported as B');
     w.shown.length = 0;
+    w.loadedFor.length = 0;
 
     await w.runAllTimers();
     assert.ok(w.shown.length > 0, 'the poll keeps the open bubble up to date');
     assert.ok(w.shown.every((cards) => cards === 'card-of-' + B), `only B is shown, got ${w.shown}`);
+    assert.ok(w.loadedFor.every((id) => id === B), 'every load names B, so the chat sends the cards with B');
 });
 
 test('an answer for the earlier bubble that arrives after the switch is dropped', async () => {

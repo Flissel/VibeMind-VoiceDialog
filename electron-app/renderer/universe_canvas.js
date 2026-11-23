@@ -283,7 +283,8 @@ class UniverseCanvas {
         console.log('[UniverseCanvas] Loading nodes:', nodes?.length || 0, 'edges:', edges?.length || 0);
         // The rows as loaded, whatever draws them: the chat next to the canvas names them (ideas-chat.js).
         this.lastNodes = Array.isArray(nodes) ? nodes : [];
-        window.dispatchEvent(new CustomEvent('vibemind:canvas-loaded', { detail: { nodes: this.lastNodes } }));
+        // bubbleId: whose cards these are, so the chat never names cards of another bubble.
+        window.dispatchEvent(new CustomEvent('vibemind:canvas-loaded', { detail: { nodes: this.lastNodes, bubbleId: this.bubbleId || null } }));
         this._showBanner(`loadNodes: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`, '#666');
 
         if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {

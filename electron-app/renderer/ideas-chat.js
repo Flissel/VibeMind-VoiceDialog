@@ -69,14 +69,20 @@
         return Number.isFinite(value) ? value : null;
     }
 
-    function buildContext({ bubble, nodes, bubbles, newId, selection, lastId } = {}) {
+    function buildContext({ bubble, nodes, nodesBubbleId, bubbles, newId, selection, lastId } = {}) {
         const context = { space: 'ideas', bubble: null };
         if (bubble) {
             // The id is the database id of the bubble or null, never anything else: a wrong id made
             // every tool fail (the local number "1" was sent, measured 2026-11-23). With null and
             // the title the Brain can find the bubble or ask back.
             context.bubble = { id: isDbId(bubble.id) ? String(bubble.id) : null, title: String(bubble.title || '') };
-            const all = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
+            // Cards and bubble must be of the same bubble. Cards loaded for another one (the canvas
+            // kept the cards of "Bubble A" in "Bubble B", measured 2026-11-23) would make the
+            // Brain resolve names in the wrong bubble and write there: then no cards go at all.
+            const ownCards = nodesBubbleId === undefined
+                || (isDbId(String(nodesBubbleId)) && context.bubble.id === String(nodesBubbleId));
+            const all = (ownCards && Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
+            if (!ownCards && Array.isArray(nodes) && nodes.length) context.cards_withheld = true;
             context.cards = all.slice(0, MAX_CARDS)
                 .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node), score: cardScore(node) }));
             // Without the total a name looks unique that is not, once the list is cut.
@@ -230,6 +236,7 @@
         if (!view) return null;
         const store = createCardStore();
         let nodes = [];          // rows of the open bubble as the canvas last loaded them
+        let nodesBubbleId = null; // ... and the bubble the canvas loaded them for
         let lastId = null;       // the card last made or changed
         let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
         let planRuns = false;
@@ -373,13 +380,13 @@
 
         function openBubble() {
             const app = root.multiverseApp;
-            const canvas = root.spaceCanvas;
             const titleEl = doc.getElementById('space-title');
             const entered = root.__currentEvalBubble || {};
             // What the app knows about the open bubble, the database id first. __currentBubbleId is
-            // the local number of the Python part and canvas.bubbleId is often not set; they only
-            // serve to look the bubble up.
-            const candidates = [entered.dbId, app && app.selectedBubbleId, canvas && canvas.bubbleId,
+            // the local number of the Python part; it only serves to look the bubble up.
+            // canvas.bubbleId is not asked: the cards are checked against the bubble found here
+            // (buildContext), so it must come from elsewhere than the canvas that loaded them.
+            const candidates = [entered.dbId, app && app.selectedBubbleId,
                 root.__currentBubbleId, entered.localId];
             const lookup = (value) => (app && app.getBubbleById ? app.getBubbleById(value) : null);
             const raw = candidates.find((value) => value != null && value !== '');
@@ -404,7 +411,7 @@
             const canvas = root.spaceCanvas;
             // The canvas marks one card at a time; marking several in order is not there yet.
             const selection = canvas && canvas.selectedNode != null ? [canvas.selectedNode] : [];
-            return buildContext({ bubble: inside ? openBubble() : null, nodes, bubbles: overviewBubbles(), newId, selection, lastId });
+            return buildContext({ bubble: inside ? openBubble() : null, nodes, nodesBubbleId, bubbles: overviewBubbles(), newId, selection, lastId });
         }
 
         function showState() {
@@ -502,6 +509,7 @@
 
         root.addEventListener('vibemind:canvas-loaded', (event) => {
             nodes = (event.detail && Array.isArray(event.detail.nodes)) ? event.detail.nodes : [];
+            nodesBubbleId = event.detail && event.detail.bubbleId ? String(event.detail.bubbleId) : null;
             store.matchLoaded(nodes);
             showHistory(); // the bubble is known for certain once its rows are loaded
             renderReasons();
@@ -550,7 +558,7 @@
             doc.body.classList.toggle('ideas-chat-open', inside);
             const titleEl = doc.getElementById('space-title');
             headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
-            if (!inside) { nodes = []; lastId = null; }
+            if (!inside) { nodes = []; nodesBubbleId = null; lastId = null; }
             showHistory();
             renderReasons();
             renderCards();

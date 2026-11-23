@@ -46,6 +46,40 @@ test('with a bubble open whose id is not known, the list of bubbles lets the Bra
     assert.deepEqual(context.bubbles, [{ id: B1, title: 'Marketing' }]);
 });
 
+test('cards go to the Brain only with the bubble they were loaded for', () => {
+    const BUBBLE_A = '00000000-0000-4000-8000-00000000000a';
+    const BUBBLE_B = '0000000b';
+    const open = { id: BUBBLE_B, title: 'Bubble B' };
+    const cardOfA = [{ id: 'k1', title: 'Research' }];
+
+    // measured 2026-11-23: Bubble B open, the canvas held the one card of Bubble A
+    const wrong = buildContext({ bubble: open, nodes: cardOfA, nodesBubbleId: BUBBLE_A, selection: ['k1'], lastId: 'k1' });
+    assert.deepEqual(wrong.bubble, open);
+    assert.deepEqual(wrong.cards, []);
+    assert.equal(wrong.cards_withheld, true);
+    assert.deepEqual(wrong.selection, []);
+    assert.equal(wrong.last_id, undefined);
+
+    // the cards of the open bubble go as before
+    const right = buildContext({ bubble: open, nodes: [{ id: 'k9', title: 'Preise' }], nodesBubbleId: BUBBLE_B });
+    assert.deepEqual(right.cards.map((c) => c.id), ['k9']);
+    assert.equal(right.cards_withheld, undefined);
+
+    // a bubble or cards of unknown origin cannot be checked: no cards
+    assert.deepEqual(buildContext({ bubble: { id: '1', title: 'X' }, nodes: cardOfA, nodesBubbleId: BUBBLE_A }).cards, []);
+    assert.deepEqual(buildContext({ bubble: open, nodes: cardOfA, nodesBubbleId: null }).cards, []);
+});
+
+test('the chat checks the cards against a bubble it did not take from the canvas', () => {
+    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
+    const canvas = fs.readFileSync(path.join(__dirname, 'renderer', 'universe_canvas.js'), 'utf8');
+    assert.match(canvas, /'vibemind:canvas-loaded', \{ detail: \{ nodes: this\.lastNodes, bubbleId: this\.bubbleId \|\| null \} \}/);
+    assert.match(chat, /nodesBubbleId = event\.detail && event\.detail\.bubbleId \? String\(event\.detail\.bubbleId\) : null;/);
+    assert.match(chat, /buildContext\(\{ bubble: inside \? openBubble\(\) : null, nodes, nodesBubbleId,/);
+    const open = chat.slice(chat.indexOf('function openBubble()'), chat.indexOf('function overviewBubbles()'));
+    assert.doesNotMatch(open, /canvas\s*&&\s*canvas\.bubbleId/, 'the bubble on screen is not read from the canvas');
+});
+
 test('a sentence that takes something back or removes it loads the cards again', () => {
     for (const sentence of ['Nimm das zurück', 'zurueck', 'Mach das rückgängig', 'rueckgaengig bitte', 'undo', 'Lösche die Karte Preise', 'loesch das', 'Entferne Druckerei']) {
         assert.equal(reloadsCards(sentence), true, sentence);
