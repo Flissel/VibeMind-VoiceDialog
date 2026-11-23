@@ -4745,6 +4745,16 @@ class MultiverseApp {
      */
     enterCurrentSelection() {
         if (this.currentSpace === 'ideas' && this.selectedBubbleIndex >= 0) {
+            // The same way as the enter button (bubble-navigation.js). The camera move alone does
+            // not open the bubble: without the mark that the user wants in, the answer of the
+            // backend is taken for an automatic re-entry and dropped, and the canvas never appeared
+            // (Enter key and "enter selection" by voice, found 2026-11-23).
+            if (window.bubbleNavigation && window.bubbleNavigation.enterSpace && this.selectedBubbleId != null) {
+                const bubbleId = this.selectedBubbleId; // enterSpace clears the selection
+                if (window.vibemind) window.vibemind.enterBubble(bubbleId);
+                window.bubbleNavigation.enterSpace(bubbleId);
+                return;
+            }
             this.enterBubbleWithAnimation(this.selectedBubbleIndex, () => {
                 // Notify backend of entering bubble
                 if (window.vibemind) {

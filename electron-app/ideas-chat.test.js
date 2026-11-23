@@ -188,3 +188,11 @@ test('a changed bubble row reaches the chat with its metadata', () => {
     const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
     assert.match(html, /message\.table === 'ideas'\) \{\s*if \(window\.VibeIdeasChat && window\.VibeIdeasChat\.bubbleRow\)/);
 });
+
+test('the Enter key opens a bubble the same way as the enter button', () => {
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const enter = scene.slice(scene.indexOf('    enterCurrentSelection() {'), scene.indexOf('    getProjectById(projectId) {'));
+
+    // enterSpace sets the mark that the user wants in; the bare camera move does not open the canvas.
+    assert.match(enter, /window\.vibemind\.enterBubble\(bubbleId\);\s*window\.bubbleNavigation\.enterSpace\(bubbleId\);\s*return;/);
+});
