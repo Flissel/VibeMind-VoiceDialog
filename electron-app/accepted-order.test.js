@@ -109,7 +109,7 @@ test('accepted order in the plan: "arbeitet … (Auftrag angenommen)", never fai
     // the duration is the work on the order (2 min), not the 0,8 s the plan took to accept it
     assert.equal(w.line(), '✓ Ideas: fertig in 2 min — Ergebnis an der Karte „Karte 1“');
     assert.equal(w.statuses[w.statuses.length - 1], 'done');
-    assert.match(w.chatLog().join('\n'), /✓ fertig — Ergebnis an der Karte „Karte 1“/);
+    assert.match(w.chatLog().join('\n'), /✓ fertig in 2 min — Ergebnis an der Karte „Karte 1“/);
     assert.equal(w.chatState(), '');
 });
 
@@ -207,7 +207,8 @@ test('an assessment ends when the bubble gets a new reason: no card changes for 
     assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'another bubble does not count');
     bubbleRow(row(2));
     assert.match(w.line(), /^✓ Ideas: fertig.*Einschätzung an der Bubble$/);
-    assert.match(w.chatLog().join('\n'), /✓ fertig — Einschätzung an der Bubble/);
+    // Lauf 7: the "angenommen" line itself changes, no second line under it
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '✓ fertig in 0 s — Einschätzung an der Bubble']);
 });
 
 test('a hint or a question back is never "✕ fehlgeschlagen": calm, with ℹ or ?', async () => {
@@ -309,7 +310,8 @@ test('/stand fertig ends the line with the sentence of the Brain and its duratio
     w.advance(5000); await tick();
     assert.deepEqual(asked, [ORDER, ORDER], 'asked every 5 s with the number of the order');
     assert.equal(w.line(), '✓ Ideas: fertig in 42,0 s — Einschätzung liegt an der Bubble.');
-    assert.ok(w.chatLog().includes('✓ fertig — Einschätzung liegt an der Bubble.'));
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '✓ fertig in 42 s — Einschätzung liegt an der Bubble.'],
+        'the line "Auftrag angenommen" became the end, with the message and the duration of /stand');
     w.advance(60000); await tick();
     assert.equal(asked.length, 2, 'no more asking once it ended');
 });
@@ -436,4 +438,20 @@ test('a sentence of the console that fails reports it: the line does not wait 60
     assert.match(scene, /catch \(err\) \{[\s\S]{0,400}vibemind:sentence-answered[\s\S]{0,200}success: false, space: this\.currentSpace/);
     const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
     assert.match(chat, /catch \(error\) \{[\s\S]{0,400}vibemind:sentence-answered[\s\S]{0,200}success: false, space: 'ideas'/);
+});
+
+test('the chat says a long order in minutes and seconds, in the same line', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'fertig', meldung: 'Die Einschätzung steht an der Bubble.', dauer_s: 105 }]);
+    w.advance(5000); await tick();
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '✓ fertig in 1 min 45 s — Die Einschätzung steht an der Bubble.']);
+});
+
+test('no end for 3 minutes: the same line says "noch in Arbeit", then its end replaces that', async () => {
+    const stands = Array.from({ length: 36 }, () => ({ stand: 'laeuft' }));
+    stands.push({ stand: 'fehler', meldung: 'Das Modell hat nicht geantwortet.' });
+    const { w } = await acceptedWithStand(stands);
+    for (let i = 0; i < 36; i += 1) { w.advance(5000); await tick(); }
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '● noch in Arbeit, Nr. 0000abcd — das Ergebnis erscheint, sobald es da ist.']);
+    w.advance(5000); await tick();
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', '✕ Das Modell hat nicht geantwortet.']);
 });

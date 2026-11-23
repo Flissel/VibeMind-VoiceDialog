@@ -268,12 +268,23 @@
             addAnswer(key, ask, entry) {
                 const list = byBubble.get(key) || [];
                 let at = ask ? list.indexOf(ask) : -1;
-                if (at < 0) { this.add(key, entry); return; }
+                if (at < 0) { this.add(key, entry); return entry; }
                 at += 1;
                 while (at < list.length && list[at].answerTo === ask) at += 1;
-                list.splice(at, 0, { ...entry, answerTo: ask });
+                const stored = { ...entry, answerTo: ask };
+                list.splice(at, 0, stored);
                 if (list.length > HISTORY_MAX) list.splice(0, list.length - HISTORY_MAX);
                 byBubble.set(key, list);
+                return stored;
+            },
+            /** Put `next` where `old` stands (same sentence); null when `old` is no longer there. */
+            replace(key, old, next) {
+                const list = byBubble.get(key) || [];
+                const at = old ? list.indexOf(old) : -1;
+                if (at < 0) return null;
+                const stored = old.answerTo ? { ...next, answerTo: old.answerTo } : { ...next };
+                list[at] = stored;
+                return stored;
             },
         };
     }
@@ -289,7 +300,8 @@
         let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
         let planRuns = false;
         let inFlight = 0;        // sentences sent and not answered yet; several may run at once
-        const orderKeys = new Map(); // order id -> { key, ask }: its bubble and its sentence, until its end is said
+        const orderKeys = new Map(); // order id -> { key, ask, line }: its bubble, its sentence and its "angenommen" line
+        let acceptedLine = null;  // { key, line }: the "Auftrag angenommen" line of the last order; its end replaces it
         let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
         let staleKey = null;     // ... and the one whose "noch in Arbeit" the chat has already said
 
@@ -460,8 +472,8 @@
         /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
         /** Write a line; with `ask` (the entry of the sentence) the line is that sentence's answer. */
         function say(text, kind, key = bubbleKey(), answers = null, ask = null) {
-            const entry = answers ? { text, kind, answers } : { text, kind };
-            if (ask) history.addAnswer(key, ask, entry);
+            let entry = answers ? { text, kind, answers } : { text, kind };
+            if (ask) entry = history.addAnswer(key, ask, entry);
             else history.add(key, entry);
             if (key !== shownKey) return entry;
             if (ask) log.replaceChildren(...history.get(key).map(line));
@@ -626,10 +638,10 @@
                     if (entry && proposal.titel) entry.titel = String(proposal.titel);
                 } else if (accepted) {
                     acceptedKey = asked;
-                    const order = Array.isArray(response.orders) ? response.orders.find((id) => typeof id === 'string' && id) : '';
-                    if (order) orderKeys.set(String(order), { key: asked, ask });
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
-                    say(ACCEPTED_LINE + said, 'agent', asked, null, ask);
+                    acceptedLine = { key: asked, line: say(ACCEPTED_LINE + said, 'agent', asked, null, ask) };
+                    const order = Array.isArray(response.orders) ? response.orders.find((id) => typeof id === 'string' && id) : '';
+                    if (order) orderKeys.set(String(order), { key: asked, ask, line: acceptedLine.line });
                 } else {
                     say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked, null, ask);
                 }
@@ -701,13 +713,35 @@
             // Under the sentence that gave the order, also when later sentences stand below it.
             const known = order ? orderKeys.get(order) : null;
             const ask = known && known.key === key ? known.ask : null;
+            // the "Auftrag angenommen" line of this order: its end takes its place, not a second line
+            const old = known && known.key === key ? known.line : (acceptedLine && acceptedLine.key === key ? acceptedLine.line : null);
             if (order) orderKeys.delete(order);
+            if (acceptedLine && old === acceptedLine.line) acceptedLine = null;
             const choices = Array.isArray(status.saetze) && status.saetze.length ? status.saetze : null;
             const titel = choices ? cardTitle(status.targets) : '';
-            const said = (entry) => { if (entry && titel) entry.titel = titel; };
-            if (status.state === 'done') said(say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices, ask));
-            else if (status.state === 'note') said(say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices, ask));
-            else if (status.state === 'failed') said(say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices, ask));
+            const took = duration(status.elapsed_s);
+            const text = status.state === 'done' ? '✓ fertig' + (took ? ' in ' + took : '') + (status.result ? ' — ' + status.result : '')
+                : status.state === 'note' ? (status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis')
+                    : '✕ ' + (status.error || 'fehlgeschlagen');
+            const kind = status.state === 'note' && choices ? 'vorschlag' : 'agent';
+            const next = choices ? { text, kind, answers: choices } : { text, kind };
+            if (titel) next.titel = titel;
+            if (old && history.replace(key, old, next)) {
+                if (key === shownKey) log.replaceChildren(...history.get(key).map(line));
+                return;
+            }
+            const entry = say(text, kind, key, choices, ask);
+            if (entry && titel) entry.titel = titel;
+        }
+
+        /** How long an order took, as the chat says it: "42 s", "1 min 45 s", "3 min". */
+        function duration(value) {
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '';
+            const total = Math.round(value);
+            if (total < 60) return total + ' s';
+            const min = Math.floor(total / 60);
+            const sec = total % 60;
+            return min + ' min' + (sec ? ' ' + sec + ' s' : '');
         }
 
         // An order ended at /stand, also while a later sentence holds the line: said at its own sentence.
@@ -730,7 +764,14 @@
             if (status.state === 'accepted' && status.stale && acceptedKey !== null && staleKey !== acceptedKey) {
                 staleKey = acceptedKey;
                 const nr = Array.isArray(status.orders) && status.orders.length ? String(status.orders[0]).slice(0, 8) : '';
-                say('● noch in Arbeit' + (nr ? ', Nr. ' + nr : '') + ' — das Ergebnis erscheint, sobald es da ist.', 'agent', acceptedKey);
+                const text = '● noch in Arbeit' + (nr ? ', Nr. ' + nr : '') + ' — das Ergebnis erscheint, sobald es da ist.';
+                // the "angenommen" line says it; no second line
+                const stored = acceptedLine && acceptedLine.key === acceptedKey ? history.replace(acceptedKey, acceptedLine.line, { text, kind: 'agent' }) : null;
+                if (stored) {
+                    for (const known of orderKeys.values()) if (known.line === acceptedLine.line) known.line = stored;
+                    acceptedLine = { key: acceptedKey, line: stored };
+                    if (acceptedKey === shownKey) log.replaceChildren(...history.get(acceptedKey).map(line));
+                } else say(text, 'agent', acceptedKey);
             }
             // The result is at the card (task-navigate.js saw it arrive): the chat says so once.
             if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
