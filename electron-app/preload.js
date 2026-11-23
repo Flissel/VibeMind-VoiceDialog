@@ -54,8 +54,10 @@ contextBridge.exposeInMainWorld('vibemind', {
 
     // Inline game console chat (renderer → main → Python → process_intent)
     // context (optional): what is on screen, so names in the sentence can be resolved (renderer/ideas-chat.js)
-    sendChatMessage: (text, context) =>
-        ipcRenderer.invoke('renderer:chat-text-input', { text, context }),
+    // typed: true only when the person sent the sentence from a chat field (trusted key or click);
+    // the main process then marks it, see chat-input.js
+    sendChatMessage: (text, context, typed) =>
+        ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true }),
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {

@@ -64,6 +64,15 @@ def test_context_goes_into_the_body_unchanged(monkeypatch):
     assert body == {"intent": "verbinde Zielgruppe mit Kanaele", "context": UI_CONTEXT}
 
 
+def test_the_mark_typed_reaches_the_brain_only_when_the_app_set_it(monkeypatch):
+    # The main process of the app sets eingabe "getippt" for a sentence typed into a chat field
+    # (electron-app/chat-input.js); Python passes it on as it is and adds nothing of its own.
+    typed = {"space": "ideas", "eingabe": "getippt"}
+    assert _post(monkeypatch, "oeffne den Rechner", typed)[1]["context"]["eingabe"] == "getippt"
+    assert "eingabe" not in _post(monkeypatch, "oeffne den Rechner", {"space": "ideas"})[1]["context"]
+    assert "context" not in _post(monkeypatch, "oeffne den Rechner")[1]
+
+
 def test_without_context_the_body_is_as_before(monkeypatch):
     assert _post(monkeypatch, "zeig meine Bubbles")[1] == {"intent": "zeig meine Bubbles"}
     assert _post(monkeypatch, "zeig meine Bubbles", {})[1] == {"intent": "zeig meine Bubbles"}

@@ -159,9 +159,9 @@ test('the chat uses the existing way and is wired into the page', () => {
 
     assert.ok(html.includes('src="ideas-chat.js"'));
     assert.ok(css.includes("styles/ideas-chat.css"));
-    assert.match(preload, /sendChatMessage: \(text, context\) =>\s*ipcRenderer\.invoke\('renderer:chat-text-input', \{ text, context \}\)/);
-    assert.match(main, /message\.context = context/);
-    assert.match(chat, /vibemind\.sendChatMessage\(text, contextNow\(newId\)\)/);
+    assert.match(preload, /sendChatMessage: \(text, context, typed\) =>\s*ipcRenderer\.invoke\('renderer:chat-text-input', \{ text, context, typed: typed === true \}\)/);
+    assert.match(main, /const passed = chatContext\(context, typed\);\s*if \(passed\) message\.context = passed;/);
+    assert.match(chat, /vibemind\.sendChatMessage\(text, contextNow\(newId\), typed === true\)/);
     assert.doesNotMatch(chat, /fetch\(|WebSocket|XMLHttpRequest|EventSource/, 'no channel of its own');
     assert.match(canvas, /vibemind:canvas-loaded/);
     assert.match(canvas, /vibemind:canvas-node-added/);

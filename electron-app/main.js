@@ -81,6 +81,7 @@ const OpenFangManager = require('./openfang-manager');
 const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
 const { initBrainEventBridge } = require('./brain-event-bridge');
 const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
+const { chatContext } = require('./chat-input');
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -2593,11 +2594,13 @@ function setupIpcHandlers() {
     });
 
     // Game console chat overlay (renderer 3D view → same pipeline as voice)
-    ipcMain.handle('renderer:chat-text-input', async (_event, { text, context }) => {
+    ipcMain.handle('renderer:chat-text-input', async (_event, { text, context, typed }) => {
         try {
             const message = { type: 'chat_text_input', text };
-            // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js
-            if (context && typeof context === 'object') message.context = context;
+            // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js.
+            // Only here is the mark "typed by the person" set (chat-input.js); the Brain runs Desktop tasks only with it.
+            const passed = chatContext(context, typed);
+            if (passed) message.context = passed;
             return await sendToPythonAndWait(message, 'chat_response', 30000);
         } catch (e) {
             return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };

@@ -2585,14 +2585,15 @@ class MultiverseApp {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                this.sendGameConsoleMessage();
+                // isTrusted: a key pressed by the person, not one raised by a script
+                this.sendGameConsoleMessage({ typed: e.isTrusted === true });
             }
             // Stop propagation so Three.js keyboard controls don't fire
             e.stopPropagation();
         });
 
         // Send button click
-        sendBtn.addEventListener('click', () => this.sendGameConsoleMessage());
+        sendBtn.addEventListener('click', (e) => this.sendGameConsoleMessage({ typed: e.isTrusted === true }));
 
         console.log('[Multiverse] Game console initialized (press ` to toggle)');
     }
@@ -2614,7 +2615,8 @@ class MultiverseApp {
         }
     }
 
-    async sendGameConsoleMessage() {
+    /** `typed`: the person sent the sentence from this field (see chat-input.js); any other call leaves it false. */
+    async sendGameConsoleMessage({ typed = false } = {}) {
         const input = document.getElementById('gc-input');
         const text = input.value.trim();
         if (!text || this.gcBusy) return;
@@ -2634,7 +2636,7 @@ class MultiverseApp {
             // In the Ideas overview the sentence carries the bubbles on screen, so names can be resolved.
             const context = this.currentSpace === 'ideas' && window.VibeIdeasChat && window.VibeIdeasChat.contextNow
                 ? window.VibeIdeasChat.contextNow() : undefined;
-            const response = await window.vibemind.sendChatMessage(text, context);
+            const response = await window.vibemind.sendChatMessage(text, context, typed === true);
             const agentMsg = response?.message || 'No response';
             const isError = response?.success === false;
             window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: { text: response?.message || '', success: !isError } }));

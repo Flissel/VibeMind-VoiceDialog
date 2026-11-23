@@ -449,7 +449,11 @@
             });
         }
 
-        async function submit(text) {
+        /**
+         * Send a sentence. `typed` is true only when the person sent it from the chat field
+         * (a trusted submit); a call from code, a repeat or a follow-up leaves it false.
+         */
+        async function submit(text, { typed = false } = {}) {
             if (!text || busy) return;
             busy = true;
             panel.dataset.busy = 'true';
@@ -466,7 +470,7 @@
                 root.setTimeout(() => { store.expire(newId); renderCards(); }, SETTLE_MS);
             }
             try {
-                const response = await root.vibemind.sendChatMessage(text, contextNow(newId));
+                const response = await root.vibemind.sendChatMessage(text, contextNow(newId), typed === true);
                 const failed = !response || response.success === false;
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: { text: (response && response.message) || '', success: !failed } }));
@@ -492,7 +496,8 @@
             event.preventDefault();
             const text = input.value.trim();
             input.value = '';
-            submit(text);
+            // isTrusted: the browser itself raised the submit (Enter or click by the person), not a script.
+            submit(text, { typed: event.isTrusted === true });
         });
         // Keys typed here must not reach the shortcuts of the scene.
         input.addEventListener('keydown', (event) => event.stopPropagation());
