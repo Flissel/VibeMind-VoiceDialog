@@ -78,6 +78,7 @@
 
     const LINE_MAX = 240;
     const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
+    const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
 
     /** One line of at most 240 characters out of any text. */
@@ -220,7 +221,14 @@
             answer = detail.success === false ? '' : shorten(detail.text);
             // A tool refused or failed: the Brain's sentence says why, in words for the user.
             refusal = detail.success === false ? shorten(detail.text) : '';
-            if (current && current.waiting) clear(); // answered without a plan that had a place in the app
+            // Answered before any event of the plan: the events of the plan come on another way and
+            // often a moment later. Clearing now made the line vanish and come back a moment later
+            // as "fertig" (flicker at about 1 s, measured 2026-11-23). The neutral line stays a
+            // little; only an answer without a plan that has a place in the app removes it.
+            if (current && current.waiting) {
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(() => { if (current && current.waiting) clear(); }, ANSWER_GRACE_MS);
+            }
             if (answer && current && current.state === 'done') {
                 current.result = answer;
                 render();
@@ -289,7 +297,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS, WAITING_TEXT };
+    const api = { decide, describe, labelFor, shows, shorten, BUSY_MS, KEEP_MS, WAITING_TEXT, ANSWER_GRACE_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
