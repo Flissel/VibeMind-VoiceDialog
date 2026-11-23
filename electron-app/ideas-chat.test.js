@@ -196,3 +196,11 @@ test('the Enter key opens a bubble the same way as the enter button', () => {
     // enterSpace sets the mark that the user wants in; the bare camera move does not open the canvas.
     assert.match(enter, /window\.vibemind\.enterBubble\(bubbleId\);\s*window\.bubbleNavigation\.enterSpace\(bubbleId\);\s*return;/);
 });
+
+test('entering and leaving a bubble do not wait for animation frames', () => {
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const moves = scene.slice(scene.indexOf('    enterBubbleWithAnimation(bubbleIndex, onComplete) {'), scene.indexOf('    addBubble(bubbleData) {'));
+
+    assert.equal((moves.match(/this\._cameraStep\(updateCamera\)/g) || []).length, 2, 'entry and exit');
+    assert.doesNotMatch(moves, /requestAnimationFrame\(updateCamera\)/, 'a covered window gets no frames: the view would never open');
+});

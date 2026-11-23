@@ -4185,7 +4185,9 @@ class MultiverseApp {
             }
             
             if (progress < 1) {
-                requestAnimationFrame(updateCamera);
+                // _cameraStep: a covered window gets no animation frames; with requestAnimationFrame alone
+                // the bubble never opened there and the navigation stayed locked (measured 2026-11-23).
+                this._cameraStep(updateCamera);
             } else {
                 // Animation complete
                 this.isNavigating = false;
@@ -4242,7 +4244,9 @@ class MultiverseApp {
             this.controls.target.lerpVectors(startLookAt, spacePosition, eased);
             
             if (progress < 1) {
-                requestAnimationFrame(updateCamera);
+                // _cameraStep: a covered window gets no animation frames; with requestAnimationFrame alone
+                // the bubble never opened there and the navigation stayed locked (measured 2026-11-23).
+                this._cameraStep(updateCamera);
             } else {
                 // Animation complete
                 this.isNavigating = false;
