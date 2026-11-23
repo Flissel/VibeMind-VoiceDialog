@@ -85,6 +85,7 @@ class BrainMultihopBridge:
         intent_text: str,
         context: Any = None,                # v1: not forwarded; multihop builds its own state
         pre_classification: str = "",       # ignored — CapabilityRouter does its own matching
+        ui_context: Optional[Dict[str, Any]] = None,  # what is on screen in the app; sent on as given
     ) -> Optional[OrchestrationResult]:
         """POST /api/multihop/execute with the raw intent text.
 
@@ -100,7 +101,10 @@ class BrainMultihopBridge:
         if not text:
             return None
 
-        data = await self._post_multihop(text)
+        if isinstance(ui_context, dict) and ui_context:
+            data = await self._post_multihop(text, ui_context)
+        else:
+            data = await self._post_multihop(text)
         if data is None:
             return None
 
@@ -157,14 +161,24 @@ class BrainMultihopBridge:
     # Brain communication
     # ------------------------------------------------------------------
 
-    async def _post_multihop(self, intent_text: str) -> Optional[Dict[str, Any]]:
-        """POST /api/multihop/execute, return parsed JSON or None on any failure."""
+    async def _post_multihop(
+        self, intent_text: str, ui_context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """POST /api/multihop/execute, return parsed JSON or None on any failure.
+
+        `ui_context` is what the app has on screen (open bubble, visible cards; built in
+        electron-app/renderer/ideas-chat.js). It goes into the body unchanged as `context`,
+        next to `intent`; how names are resolved from it is the Brain's business.
+        """
+        body: Dict[str, Any] = {"intent": intent_text}
+        if isinstance(ui_context, dict) and ui_context:
+            body["context"] = ui_context
         try:
             timeout = aiohttp.ClientTimeout(total=self._request_timeout)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     f"{self._brain_url}/api/multihop/execute",
-                    json={"intent": intent_text},
+                    json=body,
                 ) as resp:
                     if resp.status != 200:
                         logger.debug(

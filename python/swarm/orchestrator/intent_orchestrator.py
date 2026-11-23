@@ -913,7 +913,11 @@ class IntentOrchestrator:
             # when VOICE_BRAIN_MULTIHOP=false (default).
             if self._multihop_bridge is not None:
                 try:
-                    mh_result = await self._multihop_bridge.execute(intent_text=intent_text)
+                    mh_result = await self._multihop_bridge.execute(
+                        intent_text=intent_text,
+                        # what the app has on screen, if the caller gave it (chat next to the canvas)
+                        ui_context=(context.metadata or {}).get("ui_context"),
+                    )
                     if mh_result and not mh_result.error:
                         asyncio.create_task(self._store_memory_for_intent(
                             intent_text, mh_result, context

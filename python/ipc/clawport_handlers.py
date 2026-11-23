@@ -184,7 +184,16 @@ class ClawPortHandlers:
                     "message": "Orchestrator not available",
                 })
                 return
-            result = await orchestrator.process_intent(text)
+            # What the app has on screen (open bubble, visible cards) travels with the sentence,
+            # unchanged, up to the request to the Brain.
+            ui_context = message.get("context")
+            if isinstance(ui_context, dict) and ui_context:
+                from swarm.event_team.task_seeder import TaskContext
+                result = await orchestrator.process_intent(
+                    text, context=TaskContext(metadata={"ui_context": ui_context})
+                )
+            else:
+                result = await orchestrator.process_intent(text)
 
             response_msg = result.response_hint if result else "OK"
             event_type = result.event_type if result else None
