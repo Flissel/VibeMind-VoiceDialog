@@ -38,10 +38,16 @@
 
     if (enterBtn) {
         enterBtn.onclick = function() {
-            // Use tooltip bubble ID (hovered) first, then fall back to selected
-            var tooltipId = window.multiverseApp ? window.multiverseApp.getTooltipBubbleId() : null;
-            var selectedId = window.multiverseApp ? window.multiverseApp.getSelectedBubbleId() : null;
-            var bubbleId = tooltipId || selectedId;
+            // The selected (clicked) bubble first; only with nothing selected the one in the tooltip,
+            // which the button names (enter-target.js). Was the other way round: the bubble under the
+            // mouse was opened instead of the selected one.
+            var app = window.multiverseApp;
+            var tooltipId = app ? app.getTooltipBubbleId() : null;
+            var selectedId = app ? app.getSelectedBubbleId() : null;
+            var state = { selectedIndex: app ? app.selectedBubbleIndex : -1, selectedId: selectedId, tooltipId: tooltipId };
+            var bubbleId = window.VibeEnterTarget
+                ? window.VibeEnterTarget.target(state)
+                : (state.selectedIndex >= 0 && selectedId != null ? selectedId : tooltipId);
             console.log('[Enter Button] Clicked, tooltipId:', tooltipId, 'selectedId:', selectedId, 'using:', bubbleId);
             if (bubbleId !== null && bubbleId !== undefined) {
                 console.log('[Enter Button] Entering bubble:', bubbleId);

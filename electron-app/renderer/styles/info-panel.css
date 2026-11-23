@@ -43,6 +43,11 @@
     transition: all 0.2s;
     display: block;
     margin: 4px auto 0;
+    /* the button names the bubble it opens; long titles are cut */
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #enter-btn:hover {

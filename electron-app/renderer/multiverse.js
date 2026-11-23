@@ -3859,7 +3859,17 @@ class MultiverseApp {
             );
             const intersects = raycaster.intersectObjects(bubbles);
 
-            if (intersects.length > 0) {
+            const rule = window.VibeEnterTarget;
+            const locked = rule
+                ? !rule.hoverMayReplace({ selectedIndex: this.selectedBubbleIndex, pinned: this.tooltipPinned })
+                : (this.selectedBubbleIndex >= 0 || this.tooltipPinned);
+            if (intersects.length > 0 && locked) {
+                // A selected or pinned tooltip stays: hovering another bubble never replaces it and
+                // never decides what the enter button opens (enter-target.js).
+                const bubble = intersects[0].object;
+                this.hoveredBubbleIndex = bubbles.indexOf(bubble);
+                if (bubble.userData && bubble.userData.id === this.tooltipBubbleId) this.positionTooltipAtBubble(bubble);
+            } else if (intersects.length > 0) {
                 const bubble = intersects[0].object;
                 const index = bubbles.indexOf(bubble);
                 if (index !== this.hoveredBubbleIndex) {
@@ -3894,7 +3904,13 @@ class MultiverseApp {
         if (data.node_count) stats.push(`${data.node_count} ideas`);
         if (data.numbered_title) stats.push(data.numbered_title);
         if (descEl) descEl.textContent = stats.length ? stats.join(' · ') : '';
-        if (enterBtn) enterBtn.classList.remove('hidden');
+        if (enterBtn) {
+            // the button says what it opens
+            enterBtn.textContent = window.VibeEnterTarget
+                ? window.VibeEnterTarget.label(bubble.userData.title)
+                : '▶ ' + (bubble.userData.title || 'Bubble');
+            enterBtn.classList.remove('hidden');
+        }
         if (bubbleInfo) bubbleInfo.classList.remove('hidden');
         if (infoPanel) infoPanel.classList.remove('hidden');
 
@@ -4883,9 +4899,14 @@ class MultiverseApp {
             const progress = project.userData.progress || 0;
             descEl.textContent = `Status: ${status} | Progress: ${progress}%`;
         }
-        if (enterBtn) enterBtn.classList.remove('hidden');
+        if (enterBtn) {
+            enterBtn.textContent = window.VibeEnterTarget
+                ? window.VibeEnterTarget.label(project.userData.title || 'Project')
+                : '▶';
+            enterBtn.classList.remove('hidden');
+        }
         if (infoPanel) infoPanel.classList.remove('hidden');
-        
+
         console.log('[Multiverse] Selected project:', project.userData.title, 'index:', index);
     }
     
