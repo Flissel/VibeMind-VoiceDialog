@@ -2521,7 +2521,7 @@ class MultiverseApp {
     animateCameraTo(targetPosition, lookAtPosition, onComplete) {
         const startPosition = this.camera.position.clone();
         const startLookAt = this.controls.target.clone();
-        const duration = 1500;
+        const duration = this._moveDuration(1500);
         const startTime = Date.now();
         
         const updateCamera = () => {
@@ -3285,6 +3285,15 @@ class MultiverseApp {
             }
         };
         this._cameraStep(zoomIn);
+    }
+
+    /**
+     * How long a camera move takes. Nobody sees a move in a hidden or covered window, and timers
+     * are slowed down there (to one a second, later one a minute): the move then ends at its next
+     * step instead of after many slow ones.
+     */
+    _moveDuration(ms) {
+        return document.visibilityState === 'hidden' ? 1 : ms;
     }
 
     /**
@@ -4183,7 +4192,7 @@ class MultiverseApp {
         // Animate camera zooming into the bubble
         const startPosition = this.camera.position.clone();
         const startLookAt = this.controls.target.clone();
-        const duration = 800; // ms
+        const duration = this._moveDuration(800); // ms
         const startTime = Date.now();
         
         const updateCamera = () => {
@@ -4249,7 +4258,7 @@ class MultiverseApp {
         // Animate camera zooming out
         const startPosition = this.camera.position.clone();
         const startLookAt = this.controls.target.clone();
-        const duration = 600; // ms
+        const duration = this._moveDuration(600); // ms
         const startTime = Date.now();
         
         const updateCamera = () => {
