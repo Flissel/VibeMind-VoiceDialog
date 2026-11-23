@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const THREE = require('./renderer/lib/three.min.js');
 const {
-    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, ExternalSpaceManager,
+    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, ExternalSpaceManager,
 } = require('./external-spaces');
 const { sceneEntry, buildGate } = require('./renderer/external-spaces');
 const { pickSpace } = require('./renderer/space-pick');
@@ -109,6 +109,41 @@ test('the manager shows one space at a time, each in its own session, and sends 
     manager.hideAll();
     assert.equal(electron.window.view, null);
     assert.equal(manager.getIsVisible(), false);
+});
+
+test('a path names a place inside the space and nothing else', () => {
+    const base = 'https://sales.example.test/';
+    assert.equal(pathTarget(base, '/freigaben#fg-12'), 'https://sales.example.test/freigaben#fg-12');
+    assert.equal(pathTarget(base, '/kontakte/42'), 'https://sales.example.test/kontakte/42');
+    assert.equal(pathTarget(base, '/'), base);
+    for (const bad of ['//evil.example/x', 'https://evil.example/', '/\\evil.example', 'freigaben', 'javascript:alert(1)', '', null, '/a b']) {
+        assert.equal(pathTarget(base, bad), '', String(bad));
+    }
+    assert.equal(pathTarget('', '/freigaben'), '', 'a space without an address has no paths');
+});
+
+test('an open space goes to a path in its own session; a closed one goes there when it is opened', () => {
+    const electron = fakeElectron();
+    const manager = new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} },
+        env: { SALES_UI_URL: 'https://sales.example.test/' },
+    });
+    const targets = [];
+    manager._load = (id) => { targets.push(manager._targets(manager.spaces.get(id))[0].url); manager.views.get(id).result = { ok: true }; };
+
+    assert.equal(manager.goTo('sales', '//evil.example/'), false);
+    assert.equal(manager.goTo('orders', '/x'), false, 'a local page has no paths');
+    assert.equal(manager.goTo('sales', '/freigaben'), true);
+    manager.show('sales');
+    assert.deepEqual(targets, ['https://sales.example.test/freigaben']);
+
+    const went = [];
+    electron.made[0].webContents.loadURL = (url) => went.push(url);
+    manager.goTo('sales', '/kontakte/42');
+    assert.deepEqual(went, ['https://sales.example.test/kontakte/42']);
+    assert.equal(electron.made[0].options.webPreferences.partition, 'persist:space-sales', 'same session, the sign-in stays');
+    manager.show('sales');
+    assert.equal(targets.length, 1, 'opening it again does not reload');
 });
 
 test('a space that showed a status card is checked again when it is opened next', () => {

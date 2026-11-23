@@ -93,6 +93,23 @@ function authFor(space, env = process.env) {
   return { urls, header: `Bearer ${key}` };
 }
 
+/**
+ * The address of a path inside a space, or '' when the text is not a plain path of that space.
+ * A task result names only the path ("/freigaben#fg-12"); the base address stays in the environment.
+ * Anything that could leave the space (a scheme, "//host", a backslash) is refused.
+ */
+function pathTarget(spaceUrl, pathText) {
+  const text = typeof pathText === 'string' ? pathText.trim() : '';
+  if (!spaceUrl || !/^\/(?![\/\\])[^\\\s]*$/.test(text) || text.length > 512) return '';
+  try {
+    const base = new URL(spaceUrl);
+    const target = new URL(text, base);
+    return target.origin === base.origin ? target.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 /** Adds the key unless the page already sent its own Authorization header. */
 function withAuthorization(requestHeaders, header) {
   const has = Object.keys(requestHeaders || {}).some((name) => name.toLowerCase() === 'authorization');
@@ -113,6 +130,7 @@ class ExternalSpaceManager {
       || { 'learning-huelle': require('./learning-access').learningAccessCookie };
     this._ready = new Map();  // id -> promise that settles once the first load was started
     this._issued = new Map(); // id -> access cookie set for this space (main process only)
+    this._pathOnOpen = new Map(); // id -> address inside the space to go to when it is opened next (goTo)
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -133,7 +151,9 @@ class ExternalSpaceManager {
   _targets(space) {
     if (space.file) return [{ kind: 'file', path: space.file }];
     if (!space.url) return [];
-    const target = { kind: 'url', url: space.url, expectTitle: space.expectTitle };
+    const onOpen = this._pathOnOpen.get(space.id);
+    this._pathOnOpen.delete(space.id);
+    const target = { kind: 'url', url: onOpen || space.url, expectTitle: space.expectTitle };
     // The check before loading runs in the main process, outside the view's session: without
     // the access cookie it would see the refusal (403) that the signed-in page never gets.
     const cookie = this._issued.get(space.id);
@@ -207,13 +227,32 @@ class ExternalSpaceManager {
     if (!entry) {
       this._create(id);
       entry = this.views.get(id);
-    } else if (entry.result && !entry.result.ok) {
-      this._load(id); // a status card: look again, the service may be up now
+    } else if ((entry.result && !entry.result.ok) || this._pathOnOpen.has(id)) {
+      this._load(id); // a status card: look again, the service may be up now; or a path is waiting
     }
     this.mainWindow.setBrowserView(entry.view);
     this.visibleId = id;
     this._updateBounds();
     this._log.log(`[ExternalSpaces] ${this.spaces.get(id).label} shown`);
+    return true;
+  }
+
+  /**
+   * Sends the page of a space to one of its own paths, in the same session (the sign-in stays).
+   * A space that is not open yet goes there when it is opened next. Returns whether the path was taken.
+   */
+  goTo(id, pathText) {
+    const space = this.spaces.get(id);
+    const target = space ? pathTarget(space.url, pathText) : '';
+    if (!target) return false;
+    const entry = this.views.get(id);
+    if (!entry) {
+      this._pathOnOpen.set(id, target);
+      return true;
+    }
+    // A status card means the service is not there; the next opening tries the path again.
+    if (entry.result && !entry.result.ok) this._pathOnOpen.set(id, target);
+    else entry.view.webContents.loadURL(target);
     return true;
   }
 
@@ -239,5 +278,5 @@ class ExternalSpaceManager {
 }
 
 module.exports = {
-  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, ExternalSpaceManager,
+  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, ExternalSpaceManager,
 };

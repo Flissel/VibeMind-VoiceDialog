@@ -2080,6 +2080,11 @@ function setupIpcHandlers() {
         externalSpaces.show(id);
     });
 
+    // A finished task names a path inside its space (task-navigate.js); the manager checks it.
+    ipcMain.on('external-space-path', (_event, id, pathText) => {
+        if (externalSpaces && externalSpaces.has(id)) externalSpaces.goTo(id, pathText);
+    });
+
     ipcMain.on('hide-external-spaces', () => {
         if (externalSpaces) externalSpaces.hideAll();
     });

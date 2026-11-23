@@ -162,6 +162,13 @@
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
             if (message.state === 'done' || message.state === 'failed') keepTimer = root.setTimeout(clear, KEEP_MS);
+            // A finished task of an external space may name a path of its page ("/freigaben"): the page goes there.
+            const app = root.multiverseApp;
+            const external = app && app.spaces && app.spaces[message.space] && app.spaces[message.space].external;
+            if (message.state === 'done' && external && typeof message.result_ref === 'string' && message.result_ref.startsWith('/')
+                && root.vibemind && root.vibemind.externalSpacePath) {
+                root.vibemind.externalSpacePath(message.space, message.result_ref);
+            }
             render();
             return message.state;
         }

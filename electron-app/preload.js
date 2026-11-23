@@ -347,6 +347,7 @@ contextBridge.exposeInMainWorld('vibemind', {
     getExternalSpaces: () => ipcRenderer.invoke('get-external-spaces'),
     showExternalSpace: (id) => ipcRenderer.send('show-external-space', id),
     hideExternalSpaces: () => ipcRenderer.send('hide-external-spaces'),
+    externalSpacePath: (id, path) => ipcRenderer.send('external-space-path', id, path),
 
     // Flowzen Diary (Blue Rose Journal) BrowserView Control
     showFlowzen: () => ipcRenderer.send('show-flowzen'),
