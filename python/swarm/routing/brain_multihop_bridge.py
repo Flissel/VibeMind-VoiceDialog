@@ -21,7 +21,8 @@ bit-for-bit when VOICE_BRAIN_MULTIHOP=false.
 Activation: env `VOICE_BRAIN_MULTIHOP=true`. Default off.
 
 Graceful degradation:
-- Brain down       → mark unavailable, 30s backoff, fall through
+- Brain down       → mark unavailable, 30s backoff; the sentence gets "nicht erreichbar" (a hint)
+- Brain timeout    → mark unavailable, 30s backoff, fall through
 - Timeout >6s      → fall through
 - HTTP non-2xx     → fall through
 - `ok: false`      → fall through (no cap matched, planner returned no plan)
@@ -45,6 +46,8 @@ logger = logging.getLogger(__name__)
 EVENT_DONE = "brain.multihop"
 EVENT_FAILED = "brain.multihop.failed"
 EVENT_QUESTION = "brain.multihop.question"
+UNREACHABLE_TEXT = ("Das Gehirn ist gerade nicht erreichbar. Versuch es in ein, zwei Minuten noch einmal; "
+                    "geändert habe ich nichts.")
 EVENT_HINT = "brain.multihop.hint"  # a hint of the Brain ("keine Spalten"): information, not a failure
 
 # A sentence a person typed into a chat field of the app (electron-app/chat-input.js sets
@@ -131,6 +134,9 @@ class BrainMultihopBridge:
         self._brain_url = brain_url.rstrip("/")
         self._backoff = backoff_seconds
         self._available = True
+        # Why the Brain is off: "unreachable" (no connection) or "timeout". Only "unreachable"
+        # answers the sentence itself; a timeout may be a slow miss and falls through as before.
+        self._down = ""
 
     # ------------------------------------------------------------------
     # Public API — matches BrainOpenFangBridge.execute() signature so the
@@ -152,7 +158,7 @@ class BrainMultihopBridge:
         Never raises.
         """
         if not self._available:
-            return None
+            return self._unreachable() if self._down == "unreachable" else None
 
         text = (intent_text or "").strip()
         if not text:
@@ -163,7 +169,9 @@ class BrainMultihopBridge:
         else:
             data = await self._post_multihop(text)
         if data is None:
-            return None
+            # No connection: the old path did not know the sentence either and answered
+            # "nicht verstanden" (measured 2026-11-23 during a restart of the Brain).
+            return self._unreachable() if not self._available and self._down == "unreachable" else None
 
         ok = bool(data.get("ok"))
         final_text = (data.get("final_text") or "").strip()
@@ -248,6 +256,19 @@ class BrainMultihopBridge:
         )
 
     @staticmethod
+    def _unreachable() -> OrchestrationResult:
+        """The Brain cannot be reached: said plainly, calmly (a hint, not a failure). The request
+        never reached it, so nothing was changed. No plan id: no plan of the Brain ran."""
+        return OrchestrationResult(
+            job_id="brain-multihop:unreachable",
+            event_type=EVENT_HINT,
+            stream="brain",
+            response_hint=UNREACHABLE_TEXT,
+            is_conversational=False,
+            tool_result=None,
+        )
+
+    @staticmethod
     def _proposal(data: Dict[str, Any]) -> Optional[Dict[str, str]]:
         """The proposal in an answer of the Brain: {} for `vorschlag: true`, else only the card
         id (`karte`) and its title (`titel`); None without a proposal. Nothing else passes."""
@@ -305,6 +326,7 @@ class BrainMultihopBridge:
             # the full 6s waiting for a Brain that won't answer.
             # Same 30s backoff pattern as BrainOpenFangBridge.
             self._available = False
+            self._down = "timeout" if isinstance(e, asyncio.TimeoutError) else "unreachable"
             try:
                 asyncio.get_event_loop().call_later(self._backoff, self._re_enable)
             except RuntimeError:
@@ -448,4 +470,5 @@ class BrainMultihopBridge:
     def _re_enable(self) -> None:
         """Re-enable bridge after backoff window expires."""
         self._available = True
+        self._down = ""
         logger.info("[MultihopBridge] re-enabled after backoff")

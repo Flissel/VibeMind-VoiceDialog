@@ -569,3 +569,18 @@ test('"Vorschlag verwerfen" answered without a plan: the line does not stay on "
     w.advance(60000); await tick();
     assert.doesNotMatch(w.line(), /arbeitet/);
 });
+
+// Restart of the Brain (2026-11-23): the bridge answers itself, as clawport_handlers passes a hint on.
+test('Brain not reachable: a calm ℹ with the sentence, chat and line end, no "arbeitet"', async () => {
+    const w = world();
+    w.answerWith({ type: 'chat_response', success: true, event_type: 'brain.multihop.hint', hinweis: true,
+        message: 'Das Gehirn ist gerade nicht erreichbar. Versuch es in ein, zwei Minuten noch einmal; geändert habe ich nichts.' });
+    await w.send('Gruppiere die Karten');
+    assert.equal(w.line(), 'ℹ Ideas: Das Gehirn ist gerade nicht erreichbar. Versuch es in ein, zwei Minuten noch einmal; geändert habe ich nichts.');
+    assert.ok(w.chatLog().some((t) => t.includes('Das Gehirn ist gerade nicht erreichbar.')));
+    assert.doesNotMatch(w.chatLog().join('\n'), /nicht ganz verstanden|fehlgeschlagen/);
+    assert.equal(w.chatState(), '');
+    assert.ok(!w.statuses.includes('failed'));
+    w.advance(60000); await tick();
+    assert.doesNotMatch(w.line(), /arbeitet/);
+});
