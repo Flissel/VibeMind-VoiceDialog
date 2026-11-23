@@ -113,7 +113,7 @@ test('one visible field per tab: the Ideas chat rests outside Ideas, the console
     // another tab closes the bubble: its view lay over every other tab
     const scene = read('renderer/multiverse.js');
     assert.match(scene, /this\.isNavigating = true;[\s\S]{0,400}this\._leaveOpenBubble\(targetSpace\);/);
-    assert.match(scene, /_leaveOpenBubble\(targetSpace\) \{\s*if \(targetSpace === 'ideas'\) return false;[\s\S]{0,300}nav\.exitSpace\(\)/);
+    assert.match(scene, /_leaveOpenBubble\(targetSpace\) \{\s*if \(targetSpace === 'ideas'\) return false;[\s\S]{0,700}nav\.exitSpace\(\)/);
     assert.match(scene, /const context = answers \? answers\.contextFor\(this\.currentSpace, ideas\) : ideas;/);
 });
 
@@ -210,4 +210,30 @@ test('both sentences named: "Vorschlag übernehmen", once confirmed, sends the w
     take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
     take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
     assert.deepEqual(w.sent.map((s) => s.text), ['Vorschlag trotzdem übernehmen']);
+});
+
+test('another tab while a bubble is open: the app no longer thinks itself inside a bubble, the overlay goes away', () => {
+    const scene = read('renderer/multiverse.js');
+    const method = (name) => {
+        const start = scene.indexOf(`\n    ${name}(`);
+        return scene.slice(start, scene.indexOf('\n    }\n', start) + 7);
+    };
+    const classes = (on) => ({
+        set: new Set(on),
+        contains(c) { return this.set.has(c); }, add(c) { this.set.add(c); }, remove(c) { this.set.delete(c); },
+    });
+    const view = { classList: classes([]) };
+    const overlay = { classList: classes([]) };
+    const sandbox = { console: { log() {} }, Date, Math };
+    sandbox.document = { getElementById: (id) => ({ 'space-view': view, 'transition-overlay': overlay })[id] || null };
+    sandbox.window = sandbox;
+    require('node:vm').runInNewContext(`class Scene {${method('_leaveOpenBubble')}${method('exitBubbleWithAnimation')}}
+        this.Scene = Scene;`, sandbox);
+    const app = new sandbox.Scene();
+    Object.assign(app, { isNavigating: true, isInsideBubble: true, currentSpace: 'ideas' });
+    // bubble-navigation.exitSpace: the overlay goes up, the view hides, the exit runs in the next frame
+    sandbox.bubbleNavigation = { exitSpace() { overlay.classList.add('active'); view.classList.add('hidden'); app.exitBubbleWithAnimation(); } };
+    assert.equal(app._leaveOpenBubble('rowboat'), true);
+    assert.equal(app.isInsideBubble, false, 'the move to Rowboat is running, so the exit animation never cleared the flag');
+    assert.equal(overlay.classList.contains('active'), false);
 });

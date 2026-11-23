@@ -2525,6 +2525,10 @@ class MultiverseApp {
     /** Close the open bubble when the target is not the Ideas space; true if one was open. */
     _leaveOpenBubble(targetSpace) {
         if (targetSpace === 'ideas') return false;
+        // The camera now flies to the other space. The bubble's own way out (exitBubbleWithAnimation)
+        // stops while that move runs, so the flag is cleared here. Left set, Ideas later showed its
+        // overview but thought itself inside a bubble that had no id (measured 2026-11-23).
+        this.isInsideBubble = false;
         const view = document.getElementById('space-view');
         if (!view || view.classList.contains('hidden')) return false;
         const nav = window.bubbleNavigation;
@@ -4308,6 +4312,9 @@ class MultiverseApp {
     exitBubbleWithAnimation(onComplete) {
         if (this.isNavigating || !this.isInsideBubble) {
             console.log('[Multiverse] Cannot exit - already navigating or not inside bubble');
+            // exitSpace put the overlay up before asking for this; nothing else takes it down.
+            const overlay = document.getElementById('transition-overlay');
+            if (overlay) overlay.classList.remove('active');
             if (onComplete) onComplete();
             return;
         }
