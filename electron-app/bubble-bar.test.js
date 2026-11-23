@@ -117,13 +117,16 @@ test('below the header, covering nothing: a row of its own, the view knows it', 
     assert.match(css, /#space-view\.with-bar #space-canvas \{\s*height: calc\(100% - 84px\);/);
     assert.match(css, /#space-view\.with-bar #ideas-chat \{\s*top: 84px;/);
     // the controls every view used to bring along are hidden inside a bubble: the bar works them
-    for (const old of ['.kv-bar', '.kv-back', '.mermaid-zoom-controls', '.canvas-toolbar', '.zoom-controls', '#summaries-toggle', '#whitepaper-toggle']) {
+    // and the old English result windows, which stayed open from one bubble to the next (empty bubble, 0d7d85f)
+    for (const old of ['.kv-bar', '.kv-back', '.mermaid-zoom-controls', '.canvas-toolbar', '.zoom-controls', '#summaries-toggle', '#whitepaper-toggle',
+        '#summaries-panel', '#whitepaper-panel', '.ideas-empty-hint']) {
         assert.ok(css.includes(`#space-view.with-bar ${old}`), old);
     }
     assert.ok(css.includes('body.bubble-open #eval-toggle') && css.includes('body.bubble-open #voice-panel'));
     const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
     assert.match(html, /<script defer src="bubble-bar\.js"><\/script>/);
     assert.doesNotMatch(html, /edge-bar\.js/);
+    assert.match(html, /<button id="back-btn">← Zurück<\/button>/, 'German in the header too');
     assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'styles.css'), 'utf8'), /styles\/bubble-bar\.css/);
 });
 

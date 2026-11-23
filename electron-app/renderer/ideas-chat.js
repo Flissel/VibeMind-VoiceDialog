@@ -38,8 +38,19 @@
         if (!node) return '';
         const content = node.content && typeof node.content === 'object' ? node.content : null;
         const title = String((content && content.title) || node.title || '').trim();
+        // A long sentence noted as a card is stored with a cut title (its first 80 characters and
+        // "…", by the Ideas server of the Brain) and the whole sentence as its text. Then the
+        // context names the card by that sentence (measured 2026-11-23: a title ending "… und…").
+        if (title.endsWith('…')) {
+            const stem = title.slice(0, -1).trimEnd();
+            const text = String((content && content.text) || (typeof node.content === 'string' ? node.content : '') || '').trim();
+            const first = text.split('\n')[0].trim();
+            if (stem && first.length > stem.length && first.startsWith(stem)) return first.slice(0, FULL_TITLE_MAX);
+        }
         return title || cardTitle(node);
     }
+
+    const FULL_TITLE_MAX = 500;   // a whole sentence, not a whole document
 
     function cardFormat(node) {
         return (node && ((node.content_json && node.content_json.type) || (node.format_schema && node.format_schema.type)

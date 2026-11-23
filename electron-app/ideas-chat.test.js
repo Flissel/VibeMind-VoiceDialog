@@ -142,6 +142,19 @@ test('titles in the context are whole, not cut', () => {
     assert.equal(fullTitle({ id: 'c', content: { text: 'x'.repeat(300) } }).length, 120, 'a card without title: the start of its text');
 });
 
+test('a title stored cut ("…", the start of a long noted sentence) is named by the whole sentence', () => {
+    const sentence = 'Karte 1 – der Code muss bei fehlendem Netz drei Tage lokal gespeichert und danach ohne Anmeldung pruefbar sein';
+    const cut = sentence.slice(0, 80).trimEnd() + '…';
+    // as the canvas loads it (content: { title, text }) and as the row comes (title, content text)
+    assert.equal(fullTitle({ id: 'a', content: { title: cut, text: sentence } }), sentence);
+    assert.equal(fullTitle({ id: 'a', title: cut, content: sentence + '\nmehr Text' }), sentence);
+    const context = buildContext({ bubble: { id: 1, title: 'B' }, nodes: [{ id: 'a', content: { title: cut, text: sentence } }] });
+    assert.equal(context.cards[0].title, sentence);
+    // a title that only happens to end with "…", or whose text says something else, stays as it is
+    assert.equal(fullTitle({ id: 'b', content: { title: 'Karte 2 …', text: 'ganz anderer Text' } }), 'Karte 2 …');
+    assert.equal(fullTitle({ id: 'c', content: { title: cut, text: 'x'.repeat(20) } }), cut);
+});
+
 test('noteText finds the note in a sentence that plainly asks to hold one', () => {
     assert.equal(noteText('Notiere: API Design'), 'API Design');
     assert.equal(noteText('halte fest, dass der Termin am Montag ist'), 'dass der Termin am Montag ist');

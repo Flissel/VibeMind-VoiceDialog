@@ -598,7 +598,7 @@
                 : (rows.length === 1 ? '1 Karte' : `${rows.length} Karten`);
             none.hidden = shown.length > 0;
             none.textContent = rows.length === 0
-                ? 'Noch keine Notizen in dieser Bubble.'
+                ? 'Noch keine Notizen in dieser Bubble. Tippe rechts im Chat, um die erste festzuhalten.'
                 : (query.trim() ? `Keine Karte mit „${query.trim()}“ im Titel` : '');
         }
 
