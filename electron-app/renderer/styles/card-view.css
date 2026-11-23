@@ -489,3 +489,41 @@
     opacity: 0.7;
     border-bottom-color: rgba(255, 255, 255, 0.18);
 }
+
+/* Kanban: columns side by side, on the card in the grid and in the reading view */
+.kv-spalten {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 6px;
+}
+
+.kv-spalte {
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.kv-spalte-kopf {
+    font-size: 11px;
+    font-weight: 600;
+    color: #f0f4ff;
+    margin-bottom: 3px;
+}
+
+.kv-spalte .kv-lines {
+    padding-left: 12px;
+}
+
+.kv-read-content.kv-kanban {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.kv-read-content.kv-kanban .kv-section + .kv-section {
+    margin-top: 0;
+}

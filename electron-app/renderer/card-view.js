@@ -353,10 +353,15 @@
             for (const [head, found] of sections) for (const line of found) shown.push(labelled && head ? `${head}: ${line}` : line);
             shown = shown.slice(0, CARD_LINES);
         }
+        // A Kanban shows its columns side by side, each with its first cards (Lauf 8: one list
+        // "In Arbeit: …", the columns were not to be seen).
+        const spalten = fmt === 'kanban' && !text
+            ? sections.map(([head, found]) => ({ name: head, zeilen: found.slice(0, CARD_LINES) })) : null;
         return {
             titel: cardTitle(row),
             art: FORMAT_NAMES[fmt] || 'Notiz',
             zeilen: shown,
+            ...(spalten ? { spalten } : {}),
             umfang: said,
             quelle: cardSource(row),
             leer: !shown.length,
@@ -679,7 +684,18 @@
             }
             card.append(top, el('h3', 'kv-title', short.titel));
             if (short.leer) card.append(el('p', 'kv-empty', 'Noch ohne Inhalt'));
-            else {
+            else if (short.spalten) {
+                const board = el('div', 'kv-spalten');
+                for (const column of short.spalten) {
+                    const box = el('div', 'kv-spalte');
+                    box.append(el('div', 'kv-spalte-kopf', column.name));
+                    const ul = el('ul', 'kv-lines');
+                    for (const line of column.zeilen) ul.append(el('li', null, line));
+                    box.append(ul);
+                    board.append(box);
+                }
+                card.append(board);
+            } else {
                 const ul = el('ul', 'kv-lines');
                 for (const line of short.zeilen) ul.append(el('li', null, line));
                 card.append(ul);
@@ -805,6 +821,8 @@
                 content.append(tableOf(row));
             } else {
                 for (const part of view.abschnitte) content.append(section(part.ueberschrift, part.zeilen));
+                // a Kanban: its columns next to each other, as on a board
+                if (cardFormat(row) === 'kanban') content.classList.add('kv-kanban');
             }
             if (view.quellen.length) {
                 const box = el('section', 'kv-section kv-links kv-quellen');
