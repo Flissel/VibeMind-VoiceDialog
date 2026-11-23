@@ -17,6 +17,60 @@
     gap: 4px;
 }
 
+/* The strip scrolls sideways when it does not fit (tab-scroll.js): every space stays reachable. */
+.space-tabs-frame {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 12px;
+}
+
+.space-tabs-frame .space-nav-tabs {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.space-tabs-frame .space-nav-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.space-tabs-frame .space-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.space-tabs-arrow {
+    display: none;
+    flex-shrink: 0;
+    width: 26px;
+    height: 30px;
+    border: 1px solid rgba(100, 150, 255, 0.25);
+    border-radius: 8px;
+    background: rgba(100, 150, 255, 0.08);
+    color: rgba(200, 220, 255, 0.9);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.space-tabs-frame.overflowing .space-tabs-arrow {
+    display: block;
+}
+
+.space-tabs-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.space-tabs-arrow:hover:not(:disabled) {
+    background: rgba(100, 150, 255, 0.2);
+}
+
 .space-tab {
     display: flex;
     align-items: center;
