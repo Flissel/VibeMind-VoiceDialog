@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildContext, reloadsCards, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
+const { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, FULL_CARDS, HISTORY_MAX, MAX_REASONS } = require('./renderer/ideas-chat');
 
 const B1 = '00000000-0000-4000-8000-00000000000d';
 const B2 = '0b1c2d3e-0000-4000-8000-123456789abc';
@@ -32,6 +32,7 @@ test('inside a bubble the context names the bubble and its cards', () => {
             { id: 'n2', title: 'Kanäle', format: 'table', score: null },
             { id: 'n3', title: 'nur Text', format: 'action_list', score: null },
         ],
+        cards_total: 3,
         selection: ['n2'],
         last_id: 'n3',
         bubbles: [{ id: B1, title: 'Marketing' }, { id: B2, title: 'Vertrieb' }],
@@ -105,14 +106,40 @@ test('in the overview the context names the bubbles instead', () => {
     assert.deepEqual(context, { space: 'ideas', bubble: null, bubbles: [{ id: B1, title: 'Marketing' }] });
 });
 
-test('the context is capped', () => {
-    const nodes = Array.from({ length: MAX_CARDS + 20 }, (_, i) => ({ id: i, title: 'K' + i }));
+test('the context is capped at 500 cards; beyond the first 100 only id and title', () => {
+    const nodes = Array.from({ length: MAX_CARDS + 20 }, (_, i) => ({ id: i, title: 'Karte ' + (i + 1), content_json: { type: 'swot' } }));
 
     const context = buildContext({ bubble: { id: 1, title: 'B' }, nodes });
-    assert.equal(MAX_CARDS, 100);
+    assert.equal(MAX_CARDS, 500);
+    assert.equal(FULL_CARDS, 100);
     assert.equal(context.cards.length, MAX_CARDS);
     assert.equal(context.cards_total, MAX_CARDS + 20, 'a cut list says how many cards there are');
-    assert.equal(buildContext({ bubble: { id: 1, title: 'B' }, nodes: nodes.slice(0, 3) }).cards_total, undefined);
+    assert.deepEqual(Object.keys(context.cards[99]).sort(), ['format', 'id', 'score', 'title']);
+    assert.deepEqual(context.cards[100], { id: '100', title: 'Karte 101' }, 'the 101st card can be named');
+    assert.deepEqual(context.cards[499], { id: '499', title: 'Karte 500' });
+});
+
+test('a bubble with 101 cards: every card is in the context, the total is there', () => {
+    const nodes = Array.from({ length: 101 }, (_, i) => ({ id: 'c' + i, title: 'Karte ' + (i + 1) }));
+    const context = buildContext({ bubble: { id: 1, title: 'B' }, nodes });
+    assert.equal(context.cards.length, 101);
+    assert.equal(context.cards[100].title, 'Karte 101');
+    assert.equal(context.cards_total, 101);
+});
+
+test('cards_total is always set, also for a short list and an empty bubble', () => {
+    const nodes = [{ id: 'a', title: 'Karte 1' }, { id: 'b', title: 'Karte 2' }, { id: 'c', title: 'Karte 3' }];
+    assert.equal(buildContext({ bubble: { id: 1, title: 'B' }, nodes }).cards_total, 3);
+    assert.equal(buildContext({ bubble: { id: 1, title: 'B' }, nodes: [] }).cards_total, 0);
+});
+
+test('titles in the context are whole, not cut', () => {
+    const long = 'Karte 1 ' + 'mit einem sehr langen Titel, '.repeat(8) + 'Ende';
+    assert.ok(long.length > 200);
+    const context = buildContext({ bubble: { id: 1, title: 'B' }, nodes: [{ id: 'a', title: long }, { id: 'b', content: { title: long } }] });
+    assert.equal(context.cards[0].title, long);
+    assert.equal(context.cards[1].title, long);
+    assert.equal(fullTitle({ id: 'c', content: { text: 'x'.repeat(300) } }).length, 120, 'a card without title: the start of its text');
 });
 
 test('noteText finds the note in a sentence that plainly asks to hold one', () => {

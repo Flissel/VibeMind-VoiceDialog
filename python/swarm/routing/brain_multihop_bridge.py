@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
@@ -193,6 +193,11 @@ class BrainMultihopBridge:
         except Exception as e:  # noqa: BLE001 — reward must never break voice
             logger.debug(f"[MultihopBridge] reward gating skipped: {e}")
 
+        # An order the Brain took and a model works on (ok true, pending true, status
+        # "angenommen"): its result comes later at the card. Never a failure.
+        accepted, targets = self._accepted(data, executed)
+        if not final_text and accepted:
+            final_text = "Auftrag angenommen"
         if not final_text and executed:
             final_text = self._summarize_executed(executed)
         if not final_text:
@@ -214,7 +219,7 @@ class BrainMultihopBridge:
         # `error` stays empty on purpose: the orchestrator falls through to the old path
         # on a result with `error`, and the Brain's own sentence would be lost again.
         # The outcome travels in the event type (see clawport_handlers).
-        if ok:
+        if ok or accepted:
             event_type = EVENT_DONE
         elif question:
             event_type = EVENT_QUESTION
@@ -227,6 +232,7 @@ class BrainMultihopBridge:
             stream="brain",
             response_hint=final_text,
             is_conversational=False,
+            tool_result={"pending": True, "status": "angenommen", "targets": targets} if accepted else None,
         )
 
     # ------------------------------------------------------------------
@@ -290,6 +296,49 @@ class BrainMultihopBridge:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _accepted(data: Dict[str, Any], executed: Dict[str, Any]):
+        """(accepted, targets): did the Brain take an order a model still works on?
+
+        Read from the answer itself or from a hop and its result. A hop that failed for
+        real (ok false without the mark) makes the plan no accepted order.
+        """
+        def marked(value: Any) -> bool:
+            return isinstance(value, dict) and value.get("ok") is not False and (
+                value.get("pending") is True or value.get("status") == "angenommen")
+
+        targets: List[str] = []
+
+        def collect(value: Any) -> None:
+            if not isinstance(value, dict):
+                return
+            listed = value.get("targets")
+            for item in listed if isinstance(listed, list) else []:
+                if isinstance(item, (str, int)) and str(item).strip():
+                    targets.append(str(item).strip())
+            for key in ("card_id", "target_id"):
+                item = value.get(key)
+                if isinstance(item, (str, int)) and str(item).strip():
+                    targets.append(str(item).strip())
+
+        accepted = marked(data)
+        if accepted:
+            collect(data)
+        failed = False
+        for hop in (executed or {}).values() if isinstance(executed, dict) else []:
+            if not isinstance(hop, dict):
+                continue
+            result = hop.get("result")
+            if marked(hop) or marked(result):
+                accepted = True
+                collect(hop)
+                collect(result)
+            elif hop.get("ok") is False:
+                failed = True
+        if failed:
+            return False, []
+        return accepted, list(dict.fromkeys(targets))
 
     @staticmethod
     def _summarize_executed(executed: Dict[str, Any]) -> str:

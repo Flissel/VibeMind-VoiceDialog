@@ -58,9 +58,13 @@
      * `away` = the task runs in another space than the one on screen.
      */
     function describe(message, label, away) {
-        const state = message.state === 'done' || message.state === 'failed' ? message.state : 'running';
+        const state = message.state === 'done' || message.state === 'failed' || message.state === 'accepted' ? message.state : 'running';
         const count = message.total > 1 ? ` (${Math.min(message.done + (state === 'running' ? 1 : 0), message.total)}/${message.total})` : '';
         const arrow = away ? ' →' : '';
+        // The Brain took the order, a model works on it; the result comes later at the card. Never "fehlgeschlagen".
+        if (state === 'accepted' || (state === 'running' && message.accepted)) {
+            return { state: 'accepted', text: `● ${label}: ${ACCEPTED_TEXT.slice(2)}${arrow}`, title: message.step || '' };
+        }
         if (state === 'running') {
             // A pipeline names its stage; it comes before the step.
             // With its position the short form of the pipelines: "Stufe 3 von 6, Requirements".
@@ -90,6 +94,35 @@
     const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
     const ANSWER_WAIT_MS = 5000;                 // plan done before the answer came: wait this long for it
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
+    const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
+    const ACCEPTED_MAX_MS = 20 * 60 * 1000;      // an accepted order whose result never shows: the line goes
+
+    /** What changes in a card row when a model writes its result into it. */
+    function cardPrint(node) {
+        if (!node || typeof node !== 'object') return '';
+        const content = node.content;
+        return JSON.stringify([node.updated_at || null, node.title || '', content && typeof content === 'object' ? content : String(content == null ? '' : content),
+            node.content_json || null, node.format_schema || null, node.summary || null]);
+    }
+
+    /** id -> fingerprint of every card in the list. */
+    function snapshot(nodes) {
+        const map = new Map();
+        for (const node of Array.isArray(nodes) ? nodes : []) if (node && node.id != null) map.set(String(node.id), cardPrint(node));
+        return map;
+    }
+
+    /**
+     * Has the result of an accepted order arrived? The id of the card it changed, or null.
+     * With `targets` (the cards the Brain named) only those count. Without them any card of the
+     * bubble that changed or came counts: the app cannot tell the order's card from another then.
+     */
+    function resultArrived(before, nodes, targets) {
+        const now = snapshot(nodes);
+        const base = before instanceof Map ? before : new Map();
+        const ids = Array.isArray(targets) && targets.length ? targets.map(String) : [...now.keys()];
+        return ids.find((id) => now.has(id) && base.get(id) !== now.get(id)) || null;
+    }
 
     /** One line of at most 240 characters out of any text. */
     function shorten(text) {
@@ -130,6 +163,8 @@
         let refusal = '';        // ... or the Brain's sentence on why it did not work
         let awaiting = false;    // a sentence of the app was sent and its answer is not there yet
         let answerTimer = null;  // ... how long a finished plan waits for that answer
+        let watch = null;        // an accepted order: { before, bubbleId } the cards as they were when it was taken
+        let acceptedTimer = null;
         for (const type of ['pointerdown', 'keydown', 'wheel']) {
             root.addEventListener(type, () => {
                 lastInputAt = Date.now();
@@ -266,6 +301,21 @@
             const detail = (event && event.detail) || {};
             awaiting = false;
             root.clearTimeout(answerTimer);
+            // The Brain took the order; a model works on it (answer { ok: true, pending: true }).
+            // The line says so until the result is at the card, never "fehlgeschlagen".
+            if (detail.accepted) {
+                answer = '';
+                refusal = '';
+                if (!current || current.waiting || current.state === 'accepted' || finished(current)) {
+                    current = { state: 'accepted', space: detail.space || (current && current.space) || 'ideas',
+                        step: '', done: 0, total: 0, targets: Array.isArray(detail.targets) ? detail.targets.map(String) : [] };
+                    root.clearTimeout(keepTimer);
+                    startAccepted();
+                    root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                }
+                render();
+                return;
+            }
             answer = detail.success === false ? '' : shorten(detail.text);
             // A tool refused or failed: the Brain's sentence says why, in words for the user.
             refusal = detail.success === false ? shorten(detail.text) : '';
@@ -287,12 +337,62 @@
             }
         });
 
+        /**
+         * An order was accepted: remember the cards as they are now. The 5-s reload of the canvas
+         * (vibemind:canvas-loaded) then shows when its result has arrived at the card.
+         */
+        function startAccepted() {
+            const canvas = root.spaceCanvas;
+            const nodes = canvas && Array.isArray(canvas.lastNodes) ? canvas.lastNodes : [];
+            if (!watch) watch = { before: nodes.length ? snapshot(nodes) : null, bubbleId: (canvas && canvas.bubbleId) || null };
+            root.clearTimeout(acceptedTimer);
+            acceptedTimer = root.setTimeout(() => {
+                if (current && current.state === 'accepted') { watch = null; clear(); }
+            }, ACCEPTED_MAX_MS);
+        }
+
+        function stopAccepted() {
+            watch = null;
+            root.clearTimeout(acceptedTimer);
+        }
+
+        /** The result is at the card: the line says so, the chat ends its "arbeitet". */
+        function finishAccepted(title) {
+            stopAccepted();
+            const result = title ? `Ergebnis an der Karte „${shorten(title)}“` : 'Ergebnis an der Karte';
+            current = { ...current, state: 'done', accepted: false, result, error: '' };
+            root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+            root.clearTimeout(keepTimer);
+            keepTimer = root.setTimeout(clear, KEEP_MS);
+            render();
+        }
+
+        root.addEventListener('vibemind:canvas-loaded', (event) => {
+            if (!current || current.state !== 'accepted' || !watch) return;
+            const detail = (event && event.detail) || {};
+            const nodes = Array.isArray(detail.nodes) ? detail.nodes : [];
+            const bubbleId = detail.bubbleId || null;
+            // No picture of the cards from the moment of the order, or the cards of another bubble:
+            // this load becomes the picture to compare with.
+            if (!watch.before || (bubbleId && watch.bubbleId && bubbleId !== watch.bubbleId)) {
+                watch = { before: snapshot(nodes), bubbleId };
+                return;
+            }
+            if (!watch.bubbleId) watch.bubbleId = bubbleId;
+            const id = resultArrived(watch.before, nodes, current.targets);
+            if (!id) return;
+            const node = nodes.find((item) => item && String(item.id) === id);
+            finishAccepted(node ? String(node.title || '') : '');
+        });
+
         function handleStatus(message) {
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
             if (message.state === 'done' && answer) message = { ...message, result: answer };
             if (message.state === 'failed' && refusal) message = { ...message, error: refusal };
             current = message;
+            if (message.state === 'accepted' || message.accepted) startAccepted();
+            else stopAccepted();
             root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
             if (message.state === 'done' || message.state === 'failed') keepTimer = root.setTimeout(clear, KEEP_MS);
@@ -350,7 +450,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ANSWER_GRACE_MS, ANSWER_WAIT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

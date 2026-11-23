@@ -107,14 +107,44 @@ function resultText(preview) {
 }
 
 /**
+ * A step whose work goes on after the plan: the Brain took the order and a model works on it
+ * ({ ok: true, pending: true, status: 'angenommen' }). Its result arrives later at the card,
+ * through the database. Read from the event itself or from the preview of its result.
+ */
+function acceptedOf(payload) {
+  if (!payload || payload.ok === false) return false;
+  if (payload.pending === true || payload.status === 'angenommen') return true;
+  const preview = typeof payload.result_preview === 'string' ? payload.result_preview : '';
+  return /['"]pending['"]\s*:\s*(?:True|true)\b/.test(preview) || /['"]status['"]\s*:\s*['"]angenommen['"]/.test(preview);
+}
+
+/** Ids of the cards an accepted order works on, when the step names them. */
+function targetsOf(payload) {
+  const ids = [];
+  const add = (value) => { if ((typeof value === 'string' || typeof value === 'number') && String(value).trim()) ids.push(String(value).trim()); };
+  if (payload && Array.isArray(payload.targets)) payload.targets.forEach(add);
+  if (payload) { add(payload.card_id); add(payload.target_id); }
+  const preview = payload && typeof payload.result_preview === 'string' ? payload.result_preview : '';
+  const list = /['"]targets['"]\s*:\s*\[([^\]]*)\]/.exec(preview);
+  if (list) for (const found of list[1].matchAll(/['"]([^'"]+)['"]/g)) add(found[1]);
+  for (const key of ['card_id', 'target_id']) {
+    const one = new RegExp(`['"]${key}['"]\\s*:\\s*['"]([^'"]+)['"]`).exec(preview);
+    if (one) add(one[1]);
+  }
+  return [...new Set(ids)];
+}
+
+/**
  * Turns plan events into messages for the renderer:
  *
  *   task_navigate  once per plan and space, at the first step that starts there. A plan that
  *                  moves on to another space (design, then coding) is followed; a space already
  *                  visited in this plan is not jumped to again, so nothing flips back and forth.
- *   task_status    where the plan stands: { state: 'running' | 'done' | 'failed', space, step,
- *                  done, total, result, error, elapsed_s, plan_id }. `space` is the app key of
+ *   task_status    where the plan stands: { state: 'running' | 'accepted' | 'done' | 'failed', space,
+ *                  step, done, total, result, error, elapsed_s, plan_id }. `space` is the app key of
  *                  the last step with a place in the app ('' when the plan has none).
+ *                  'accepted': the plan is over, but a model still works on an order it took;
+ *                  `targets` names the cards, when the Brain says which. Never shown as failed.
  *
  * @param {(message: object) => void} send
  */
@@ -124,6 +154,8 @@ function createTaskNavigator(send) {
   let done = 0;
   let visited = new Set();
   let last = null; // { space, registry_space, step, result, error }
+  let accepted = null; // { space, registry_space, step, targets } the step whose order a model still works on
+  let failedStep = false;
 
   const status = (state, extra = {}) => {
     const message = {
@@ -159,6 +191,8 @@ function createTaskNavigator(send) {
         done = 0;
         visited = new Set();
         last = null;
+        accepted = null;
+        failedStep = false;
         // A new plan: what the plan before ended with is no longer the news.
         const reset = { type: 'task_status', state: 'reset', plan_id: planId };
         send(reset);
@@ -195,22 +229,32 @@ function createTaskNavigator(send) {
       if (kind === 'hop_completed') {
         done += 1;
         const space = appKeyForSpace(payload.space);
+        const taken = acceptedOf(payload);
+        if (payload.ok === false) failedStep = true;
         if (!space) return null;
         last = {
           space,
           registry_space: payload.space,
           step: payload.description || payload.capability || '',
-          result: payload.ok === false ? '' : resultText(payload.result_preview),
+          // An accepted order has no result yet; its preview is the receipt of the Brain, not a sentence.
+          result: payload.ok === false || taken ? '' : resultText(payload.result_preview),
           error: payload.ok === false ? String(payload.error || 'fehlgeschlagen').slice(0, RESULT_MAX) : '',
           result_ref: text(payload.result_ref),
           ...stageOf(payload),
         };
-        return status('running', { step_ok: payload.ok !== false });
+        if (taken) accepted = { space, registry_space: payload.space, step: last.step, targets: targetsOf(payload) };
+        return status('running', { step_ok: payload.ok !== false, ...(taken ? { accepted: true, targets: accepted.targets } : {}) });
       }
       if (kind === 'plan_completed') {
         if (!last) return null; // nothing of this plan had a place in the app
         const seconds = Number(payload.elapsed_s);
-        return status(payload.ok === false ? 'failed' : 'done', { elapsed_s: Number.isFinite(seconds) ? seconds : null });
+        const elapsed = { elapsed_s: Number.isFinite(seconds) ? seconds : null };
+        // The plan is over, the order it gave is not: a model still works on it. Not failed, not done.
+        if (accepted && !failedStep) {
+          last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
+          return status('accepted', { ...elapsed, targets: accepted.targets });
+        }
+        return status(payload.ok === false ? 'failed' : 'done', elapsed);
       }
       return null;
     },
@@ -272,5 +316,5 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
-  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
+  SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };

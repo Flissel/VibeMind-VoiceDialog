@@ -19,7 +19,8 @@
 (function (root) {
     'use strict';
 
-    const MAX_CARDS = 100;      // the tools of the Ideas space work on up to 100 cards per bubble
+    const MAX_CARDS = 500;      // cards sent with a sentence; beyond FULL_CARDS only id and title
+    const FULL_CARDS = 100;     // the first cards go with format and score as well
     const SETTLE_MS = 15000;    // a pending card without an answer from the canvas goes after this
 
     /** Title of a canvas row as the canvas shows it. */
@@ -27,6 +28,17 @@
         if (!node) return '';
         const content = node.content && typeof node.content === 'object' ? node.content : null;
         return String((content && (content.title || content.text)) || node.title || '').trim().slice(0, 120);
+    }
+
+    /**
+     * The whole title, for the context: the Brain resolves names against it, and a cut title made
+     * two cards look alike. Only a card without any title falls back to the start of its text.
+     */
+    function fullTitle(node) {
+        if (!node) return '';
+        const content = node.content && typeof node.content === 'object' ? node.content : null;
+        const title = String((content && content.title) || node.title || '').trim();
+        return title || cardTitle(node);
     }
 
     function cardFormat(node) {
@@ -83,10 +95,13 @@
                 || (isDbId(String(nodesBubbleId)) && context.bubble.id === String(nodesBubbleId));
             const all = (ownCards && Array.isArray(nodes) ? nodes : []).filter((node) => node && node.id != null);
             if (!ownCards && Array.isArray(nodes) && nodes.length) context.cards_withheld = true;
-            context.cards = all.slice(0, MAX_CARDS)
-                .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node), score: cardScore(node) }));
-            // Without the total a name looks unique that is not, once the list is cut.
-            if (all.length > MAX_CARDS) context.cards_total = all.length;
+            // Every card up to MAX_CARDS can be named: beyond the first FULL_CARDS with id and title only
+            // (a bubble with 101 cards had its 101st out of reach).
+            context.cards = all.slice(0, MAX_CARDS).map((node, index) => (index < FULL_CARDS
+                ? { id: String(node.id), title: fullTitle(node), format: cardFormat(node), score: cardScore(node) }
+                : { id: String(node.id), title: fullTitle(node) }));
+            // Always: without the total a name looks unique that is not, once the list is cut.
+            context.cards_total = all.length;
             const known = new Set(all.map((node) => String(node.id)));
             // Marked cards in the order of marking ("verbinde die beiden"), and the card last made or changed ("mach das zur Tabelle").
             context.selection = (Array.isArray(selection) ? selection : []).map(String).filter((id) => known.has(id));
@@ -123,6 +138,13 @@
     }
 
     const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+    const ACCEPTED_LINE = '● arbeitet … (Auftrag angenommen)';
+
+    /** The Brain took the order and a model works on it: { ok: true, pending: true, status: 'angenommen' }. */
+    function isAccepted(response) {
+        return Boolean(response) && response.ok !== false && (response.pending === true || response.status === 'angenommen');
+    }
 
     /** The cards that are not stored yet, or still worked on. No DOM in here. */
     function createCardStore() {
@@ -241,6 +263,7 @@
         let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
         let planRuns = false;
         let busy = false;
+        let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
 
         const el = (tag, className, text) => {
             const node = doc.createElement(tag);
@@ -430,7 +453,7 @@
         }
 
         function showState() {
-            headState.textContent = waiting || planRuns ? 'arbeitet \u2026' : '';
+            headState.textContent = acceptedKey !== null ? ACCEPTED_LINE.slice(2) : (waiting || planRuns ? 'arbeitet \u2026' : '');
         }
 
         function titleOf(id) {
@@ -491,15 +514,27 @@
             }
             try {
                 const response = await root.vibemind.sendChatMessage(text, contextNow(newId), typed === true);
-                const failed = !response || response.success === false;
+                // The Brain took the order, a model works on it; the result comes later at the card.
+                const accepted = isAccepted(response);
+                const failed = !accepted && (!response || response.success === false || response.ok === false);
                 const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
-                root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: { text: (response && response.message) || '', success: !failed } }));
+                const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
+                root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
+                    text: (response && response.message) || '', success: !failed,
+                    ...(accepted ? { accepted: true, space: 'ideas', targets } : {}),
+                } }));
                 if (failed && newId) store.reject(newId, message);
                 // A question back stored nothing: the card noted in advance goes as well.
                 if (response && response.question && newId) store.settle(newId);
-                if (!failed) applyAnswer(response, newId, note);
+                if (!failed) applyAnswer(accepted ? { ...response, working: true } : response, newId, note);
                 if (!failed && reloadsCards(text)) reloadCards();
-                say(message, failed ? 'error' : 'agent', asked);
+                if (accepted) {
+                    acceptedKey = asked;
+                    const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
+                    say(ACCEPTED_LINE + said, 'agent', asked);
+                } else {
+                    say(message, failed ? 'error' : 'agent', asked);
+                }
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
                 say('Fehler: ' + error.message, 'error', asked);
@@ -559,7 +594,15 @@
         root.addEventListener('vibemind:task-status', (event) => {
             const status = event.detail || {};
             if (status.space !== 'ideas') return;
-            planRuns = status.state === 'running';
+            // An accepted order still runs after its plan: a model works on it.
+            planRuns = status.state === 'running' || status.state === 'accepted';
+            if (status.state === 'accepted' && acceptedKey === null) acceptedKey = bubbleKey();
+            // The result is at the card (task-navigate.js saw it arrive): the chat says so once.
+            if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
+                const key = acceptedKey;
+                acceptedKey = null;
+                if (status.state === 'done') say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key);
+            }
             showState();
             // The plan failed: nothing of it was stored. The cards noted in advance go, even when the
             // answer to the sentence is late or says something else; the chat names the reason.
@@ -586,7 +629,7 @@
         return { submit, contextNow, store, bubbleRow };
     }
 
-    const api = { buildContext, reloadsCards, noteText, cardTitle, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
+    const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

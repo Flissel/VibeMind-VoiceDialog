@@ -244,6 +244,13 @@ class ClawPortHandlers:
             }
             if event_type == "brain.multihop.question":
                 answer["question"] = True
+            # An order the Brain took; a model works on it, the result comes later at the card.
+            # The chat shows "arbeitet … (Auftrag angenommen)" for it, never a failure.
+            if isinstance(tool_result, dict) and tool_result.get("pending") is True:
+                answer["success"] = True
+                answer["pending"] = True
+                answer["status"] = "angenommen"
+                answer["targets"] = [str(t) for t in tool_result.get("targets") or [] if str(t).strip()]
             self.send_message(answer)
         except Exception as e:
             debug_log(f"Chat input error: {e}")

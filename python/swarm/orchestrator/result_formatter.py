@@ -21,6 +21,10 @@ class OrchestrationResult:
     response_hint: str
     is_conversational: bool = False
     error: Optional[str] = None
+    # What the tool reported beyond the sentence, when the caller needs it (read by
+    # ipc/clawport_handlers.py), e.g. an order the Brain accepted:
+    # {"pending": True, "status": "angenommen", "targets": [card id, ...]}
+    tool_result: Optional[Dict[str, Any]] = None
 
 
 def format_result_for_voice(event_type: str, result: Any) -> str:
