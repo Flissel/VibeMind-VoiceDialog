@@ -253,6 +253,9 @@ class UniverseCanvas {
 
     loadNodes(nodes, edges = []) {
         console.log('[UniverseCanvas] Loading nodes:', nodes?.length || 0, 'edges:', edges?.length || 0);
+        // The rows as loaded, whatever draws them: the chat next to the canvas names them (ideas-chat.js).
+        this.lastNodes = Array.isArray(nodes) ? nodes : [];
+        window.dispatchEvent(new CustomEvent('vibemind:canvas-loaded', { detail: { nodes: this.lastNodes } }));
         this._showBanner(`loadNodes: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`, '#666');
 
         if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
@@ -1422,6 +1425,7 @@ class UniverseCanvas {
     }
 
     onNodeAdded(node) {
+        window.dispatchEvent(new CustomEvent('vibemind:canvas-node-added', { detail: { node } }));
         // In Mermaid mode, re-render the whole diagram (cheap for small graphs)
         if (this._mermaidMode) { this._scheduleMermaidRefresh(); return; }
         // If we already have a temp node, replace it

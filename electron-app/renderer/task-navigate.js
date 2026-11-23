@@ -155,6 +155,7 @@
         function handleStatus(message) {
             if (!message || !message.space) return 'ignore';
             current = message;
+            root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: message }));
             root.clearTimeout(keepTimer);
             if (message.state === 'done' || message.state === 'failed') keepTimer = root.setTimeout(clear, KEEP_MS);
             render();

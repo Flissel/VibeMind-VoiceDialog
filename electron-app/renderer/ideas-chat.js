@@ -1,0 +1,290 @@
+/**
+ * Ideas space: a chat next to the canvas of the open bubble, and the states of its cards.
+ *
+ * Canvas on the left, chat on the right. What is typed goes the existing way
+ * (window.vibemind.sendChatMessage -> main -> Python -> process_intent); this file adds
+ * no channel of its own. With every sentence it sends the context the Brain needs to
+ * resolve names: the open bubble and the cards on screen (buildContext).
+ *
+ * Card states:
+ *   pending    the sentence was sent, nothing is stored yet: the card is there at once, pale
+ *   confirmed  the stored card arrived on the canvas: the pale one goes
+ *   rejected   the tool reported an error: the card goes, the chat names the reason
+ *   working    a model is still working on it: the card carries the mark "arbeitet"
+ *
+ * The canvas draws the stored cards itself (universe_canvas.js, at present as one diagram
+ * that cannot take single cards). Cards that are not stored yet therefore sit in a small
+ * stack above the canvas until the stored one arrives.
+ */
+(function (root) {
+    'use strict';
+
+    const MAX_CARDS = 50;
+    const SETTLE_MS = 15000;    // a pending card without an answer from the canvas goes after this
+
+    /** Title of a canvas row as the canvas shows it. */
+    function cardTitle(node) {
+        if (!node) return '';
+        const content = node.content && typeof node.content === 'object' ? node.content : null;
+        return String((content && (content.title || content.text)) || node.title || '').trim().slice(0, 120);
+    }
+
+    function cardFormat(node) {
+        return (node && ((node.content_json && node.content_json.type) || (node.format_schema && node.format_schema.type)
+            || node.format_type)) || 'note';
+    }
+
+    /**
+     * The context sent along with a sentence. Kept in one place: its form is agreed with
+     * the Ideas space and may still change.
+     */
+    function buildContext({ bubble, nodes, bubbles, newId } = {}) {
+        const context = { space: 'ideas', bubble: null };
+        if (bubble && bubble.id != null) {
+            context.bubble = { id: String(bubble.id), title: String(bubble.title || '') };
+            context.cards = (Array.isArray(nodes) ? nodes : []).slice(0, MAX_CARDS)
+                .filter((node) => node && node.id != null)
+                .map((node) => ({ id: String(node.id), title: cardTitle(node), format: cardFormat(node) }));
+        } else {
+            context.bubbles = (Array.isArray(bubbles) ? bubbles : []).slice(0, MAX_CARDS)
+                .filter((item) => item && item.id != null)
+                .map((item) => ({ id: String(item.id), title: String(item.title || '') }));
+        }
+        if (newId) context.new_id = newId;
+        return context;
+    }
+
+    const NOTE = /^\s*(?:notiere?|notiz|halte?\s+fest|festhalten|merke?(?:\s+dir)?|schreibe?\s+auf)\b\s*[:,\-]?\s*(.+)$/i;
+
+    /** The text of a note when the sentence plainly asks to hold one, otherwise null. */
+    function noteText(sentence) {
+        const found = NOTE.exec(typeof sentence === 'string' ? sentence : '');
+        const text = found ? found[1].trim() : '';
+        return text || null;
+    }
+
+    const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+    /** The cards that are not stored yet, or still worked on. No DOM in here. */
+    function createCardStore() {
+        const cards = new Map(); // id -> { id, title, state, reason }
+        const list = () => [...cards.values()];
+        return {
+            list,
+            pending(id, title) {
+                cards.set(id, { id, title, state: 'pending', reason: '' });
+                return list();
+            },
+            working(id, title) {
+                const card = cards.get(id);
+                cards.set(id, { id, title: title || (card ? card.title : ''), state: 'working', reason: '' });
+                return list();
+            },
+            /** The stored card is on the canvas (same id, or the same title): the pale one goes. */
+            confirm(idOrTitle) {
+                for (const card of list()) {
+                    if (card.id === idOrTitle || same(card.title, String(idOrTitle))) cards.delete(card.id);
+                }
+                return list();
+            },
+            reject(id, reason) {
+                const card = cards.get(id);
+                cards.delete(id);
+                return card ? { ...card, state: 'rejected', reason: reason || '' } : null;
+            },
+            /** After the canvas loaded its rows: everything that is stored now is confirmed. */
+            matchLoaded(nodes) {
+                for (const node of Array.isArray(nodes) ? nodes : []) {
+                    if (!node) continue;
+                    const title = cardTitle(node);
+                    for (const card of list()) {
+                        if (card.state !== 'pending') continue;
+                        if (card.id === String(node.id) || (title && same(card.title, title))) cards.delete(card.id);
+                    }
+                }
+                return list();
+            },
+            /** A pending card that never got an answer from the canvas goes; a working one stays. */
+            expire(id) {
+                const card = cards.get(id);
+                if (card && card.state === 'pending') cards.delete(id);
+                return list();
+            },
+            /** The model has finished (or failed): nothing is worked on any more. */
+            endWork() {
+                for (const card of list()) if (card.state === 'working') cards.delete(card.id);
+                return list();
+            },
+        };
+    }
+
+    function install() {
+        const doc = root.document;
+        const view = doc.getElementById('space-view');
+        if (!view) return null;
+        const store = createCardStore();
+        let nodes = [];          // rows of the open bubble as the canvas last loaded them
+        let busy = false;
+
+        const el = (tag, className, text) => {
+            const node = doc.createElement(tag);
+            if (className) node.className = className;
+            if (text != null) node.textContent = text;
+            return node;
+        };
+
+        const panel = el('aside');
+        panel.id = 'ideas-chat';
+        const head = el('div', 'ideas-chat-head');
+        const headTitle = el('span', 'ideas-chat-title', 'Chat');
+        const headState = el('span', 'ideas-chat-state');
+        head.append(headTitle, headState);
+        const log = el('div', 'ideas-chat-log');
+        log.id = 'ideas-chat-log';
+        const row = el('form', 'ideas-chat-row');
+        const input = el('input', 'ideas-chat-input');
+        input.id = 'ideas-chat-input';
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = 'Notiz festhalten, formatieren, ordnen …';
+        const send = el('button', 'ideas-chat-send', '▶');
+        send.type = 'submit';
+        row.append(input, send);
+        panel.append(head, log, row);
+
+        const stack = el('div');
+        stack.id = 'ideas-pending';
+        const hint = el('div', 'ideas-empty-hint', 'Tippe rechts, um die erste Notiz festzuhalten');
+        hint.id = 'ideas-empty-hint';
+        hint.hidden = true;
+        view.append(stack, hint, panel);
+        view.classList.add('with-chat');
+
+        function say(text, kind) {
+            const line = el('div', 'ideas-chat-msg ideas-chat-' + kind, text);
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+            return line;
+        }
+
+        function renderCards() {
+            const cards = store.list();
+            stack.replaceChildren(...cards.map((card) => {
+                const item = el('div', 'ideas-card');
+                item.dataset.cardId = card.id;
+                item.dataset.cardState = card.state;
+                item.append(el('span', 'ideas-card-title', card.title),
+                    el('span', 'ideas-card-mark', card.state === 'working' ? 'arbeitet' : 'vorgemerkt'));
+                return item;
+            }));
+            hint.hidden = !(nodes.length === 0 && cards.length === 0 && !view.classList.contains('hidden'));
+        }
+
+        function openBubble() {
+            const app = root.multiverseApp;
+            const canvas = root.spaceCanvas;
+            const titleEl = doc.getElementById('space-title');
+            const id = (canvas && canvas.bubbleId) || root.__currentBubbleId || (app && app.selectedBubbleId) || null;
+            return id == null ? null : { id, title: titleEl ? titleEl.textContent : '' };
+        }
+
+        function overviewBubbles() {
+            const app = root.multiverseApp;
+            const objects = (app && app.spaces && app.spaces.ideas && app.spaces.ideas.objects) || [];
+            return objects.filter((o) => o.userData && o.userData.type === 'bubble')
+                .map((o) => ({ id: o.userData.db_id || o.userData.id, title: o.userData.title }));
+        }
+
+        /** Context for a sentence typed anywhere in the Ideas space (also used by the console below the overview). */
+        function contextNow(newId) {
+            const inside = !view.classList.contains('hidden');
+            return buildContext({ bubble: inside ? openBubble() : null, nodes, bubbles: overviewBubbles(), newId });
+        }
+
+        async function submit(text) {
+            if (!text || busy) return;
+            busy = true;
+            panel.dataset.busy = 'true';
+            say(text, 'user');
+            const note = noteText(text);
+            const newId = note && root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
+            if (newId) {
+                store.pending(newId, note);
+                renderCards();
+                root.setTimeout(() => { store.expire(newId); renderCards(); }, SETTLE_MS);
+            }
+            try {
+                const response = await root.vibemind.sendChatMessage(text, contextNow(newId));
+                const failed = !response || response.success === false;
+                const message = (response && response.message) || (failed ? 'Keine Antwort' : 'OK');
+                if (failed && newId) store.reject(newId, message);
+                for (const change of (response && Array.isArray(response.changes)) ? response.changes : []) {
+                    if (change && change.id != null) store.confirm(String(change.id)); // the stored row is there
+                }
+                if (response && response.working && newId && !failed) store.working(newId, note);
+                say(message, failed ? 'error' : 'agent');
+            } catch (error) {
+                if (newId) store.reject(newId, error.message);
+                say('Fehler: ' + error.message, 'error');
+            } finally {
+                busy = false;
+                delete panel.dataset.busy;
+                renderCards();
+            }
+        }
+
+        row.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const text = input.value.trim();
+            input.value = '';
+            submit(text);
+        });
+        // Keys typed here must not reach the shortcuts of the scene.
+        input.addEventListener('keydown', (event) => event.stopPropagation());
+
+        root.addEventListener('vibemind:canvas-loaded', (event) => {
+            nodes = (event.detail && Array.isArray(event.detail.nodes)) ? event.detail.nodes : [];
+            store.matchLoaded(nodes);
+            renderCards();
+        });
+        root.addEventListener('vibemind:canvas-node-added', (event) => {
+            const node = event.detail && event.detail.node;
+            if (!node) return;
+            nodes = nodes.concat([node]);
+            store.matchLoaded([node]);
+            renderCards();
+        });
+        // A plan of the Brain that runs in this space: the chat says so.
+        root.addEventListener('vibemind:task-status', (event) => {
+            const status = event.detail || {};
+            if (status.space !== 'ideas') return;
+            headState.textContent = status.state === 'running' ? 'arbeitet …' : '';
+            if (status.state !== 'running') { store.endWork(); renderCards(); }
+        });
+
+        // While a bubble is open this chat is the one place to type; the console below the scene rests.
+        const sync = () => {
+            const inside = !view.classList.contains('hidden');
+            doc.body.classList.toggle('ideas-chat-open', inside);
+            const titleEl = doc.getElementById('space-title');
+            headTitle.textContent = inside && titleEl && titleEl.textContent ? 'Chat · ' + titleEl.textContent : 'Chat';
+            if (!inside) nodes = [];
+            renderCards();
+        };
+        new root.MutationObserver(sync).observe(view, { attributes: true, attributeFilter: ['class'] });
+        const titleEl = doc.getElementById('space-title');
+        if (titleEl) new root.MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
+        sync();
+
+        return { submit, contextNow, store };
+    }
+
+    const api = { buildContext, noteText, cardTitle, createCardStore, MAX_CARDS };
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    } else {
+        const start = () => { root.VibeIdeasChat = { ...api, ...(install() || {}) }; };
+        if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', start);
+        else start();
+    }
+})(typeof window !== 'undefined' ? window : globalThis);

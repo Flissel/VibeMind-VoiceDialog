@@ -2584,9 +2584,12 @@ function setupIpcHandlers() {
     });
 
     // Game console chat overlay (renderer 3D view → same pipeline as voice)
-    ipcMain.handle('renderer:chat-text-input', async (_event, { text }) => {
+    ipcMain.handle('renderer:chat-text-input', async (_event, { text, context }) => {
         try {
-            return await sendToPythonAndWait({ type: 'chat_text_input', text }, 'chat_response', 30000);
+            const message = { type: 'chat_text_input', text };
+            // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js
+            if (context && typeof context === 'object') message.context = context;
+            return await sendToPythonAndWait(message, 'chat_response', 30000);
         } catch (e) {
             return { type: 'chat_response', success: false, message: `Timeout: ${e.message}` };
         }

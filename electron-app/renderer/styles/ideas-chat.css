@@ -1,0 +1,183 @@
+/* Ideas space: chat next to the canvas of the open bubble (ideas-chat.js). */
+
+#space-view.with-chat #space-canvas {
+    width: calc(100% - 340px);
+}
+
+#ideas-chat {
+    position: absolute;
+    top: 44px;              /* below #space-header */
+    right: 0;
+    bottom: 0;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(14, 16, 28, 0.97);
+    border-left: 1px solid rgba(var(--space-accent-rgb), 0.25);
+    z-index: 150;
+    font: 13px system-ui, "Segoe UI", sans-serif;
+    color: #e6eeff;
+}
+
+.ideas-chat-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-weight: 600;
+}
+
+.ideas-chat-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ideas-chat-state {
+    flex-shrink: 0;
+    font-weight: 400;
+    font-size: 12px;
+    color: #9cc4ff;
+}
+
+.ideas-chat-log {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+}
+
+.ideas-chat-msg {
+    max-width: 90%;
+    padding: 7px 11px;
+    border-radius: 10px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ideas-chat-user {
+    align-self: flex-end;
+    background: rgba(var(--space-accent-rgb), 0.2);
+    border: 1px solid rgba(var(--space-accent-rgb), 0.35);
+}
+
+.ideas-chat-agent {
+    align-self: flex-start;
+    background: rgba(40, 44, 66, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ideas-chat-error {
+    align-self: flex-start;
+    background: rgba(255, 90, 110, 0.1);
+    border: 1px solid rgba(255, 90, 110, 0.35);
+    color: #ff8a98;
+}
+
+.ideas-chat-row {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ideas-chat-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.3);
+    background: rgba(8, 10, 18, 0.9);
+    color: #f0f4ff;
+    font: inherit;
+    outline: none;
+}
+
+.ideas-chat-input:focus {
+    border-color: rgba(var(--space-accent-rgb), 0.7);
+}
+
+.ideas-chat-send {
+    width: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.4);
+    background: rgba(var(--space-accent-rgb), 0.2);
+    color: #e6eeff;
+    cursor: pointer;
+}
+
+#ideas-chat[data-busy] .ideas-chat-send {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* Cards that are not stored yet, or still worked on: a stack above the canvas. */
+#ideas-pending {
+    position: absolute;
+    top: 56px;
+    left: 16px;
+    z-index: 140;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 260px;
+    pointer-events: none;
+}
+
+.ideas-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px dashed rgba(var(--space-accent-rgb), 0.6);
+    background: rgba(24, 28, 46, 0.92);
+    color: #e6eeff;
+    font: 13px system-ui, "Segoe UI", sans-serif;
+}
+
+.ideas-card[data-card-state="pending"] {
+    opacity: 0.55;
+}
+
+.ideas-card[data-card-state="working"] {
+    border-style: solid;
+}
+
+.ideas-card-mark {
+    font-size: 11px;
+    color: #9cc4ff;
+}
+
+.ideas-card[data-card-state="working"] .ideas-card-mark {
+    animation: task-pulse 1.1s ease-in-out infinite;
+}
+
+.ideas-empty-hint {
+    position: absolute;
+    top: 50%;
+    left: calc((100% - 340px) / 2);
+    transform: translate(-50%, -50%);
+    z-index: 130;
+    color: rgba(200, 215, 240, 0.6);
+    font: 14px system-ui, "Segoe UI", sans-serif;
+    pointer-events: none;
+}
+
+.ideas-empty-hint[hidden] {
+    display: none;
+}
+
+/* One place to type while a bubble is open. */
+body.ideas-chat-open #game-console {
+    display: none;
+}
+
+body.ideas-chat-open .zoom-controls {
+    right: 360px;
+}

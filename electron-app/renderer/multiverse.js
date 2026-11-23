@@ -2609,7 +2609,10 @@ class MultiverseApp {
         document.getElementById('gc-send-btn').classList.add('hidden');
 
         try {
-            const response = await window.vibemind.sendChatMessage(text);
+            // In the Ideas overview the sentence carries the bubbles on screen, so names can be resolved.
+            const context = this.currentSpace === 'ideas' && window.VibeIdeasChat && window.VibeIdeasChat.contextNow
+                ? window.VibeIdeasChat.contextNow() : undefined;
+            const response = await window.vibemind.sendChatMessage(text, context);
             const agentMsg = response?.message || 'No response';
             const isError = response?.success === false;
             this.addGcMessage(agentMsg, isError ? 'error' : 'agent');

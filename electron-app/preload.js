@@ -53,8 +53,9 @@ contextBridge.exposeInMainWorld('vibemind', {
     writeLog: (level, ...args) => ipcRenderer.send('renderer-log', { level, args }),
 
     // Inline game console chat (renderer → main → Python → process_intent)
-    sendChatMessage: (text) =>
-        ipcRenderer.invoke('renderer:chat-text-input', { text }),
+    // context (optional): what is on screen, so names in the sentence can be resolved (renderer/ideas-chat.js)
+    sendChatMessage: (text, context) =>
+        ipcRenderer.invoke('renderer:chat-text-input', { text, context }),
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {
