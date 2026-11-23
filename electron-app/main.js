@@ -82,8 +82,12 @@ const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./s
 const { initBrainEventBridge } = require('./brain-event-bridge');
 const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
 const { chatMessage, withoutTypedMark, withProof } = require('./chat-input');
+// How long a chat field waits for its answer. Longer than the limit of the Brain bridge in Python
+// (VOICE_BRAIN_MULTIHOP_TIMEOUT_S, 45 s in operation): with 30 s an answer after 33 s (first call
+// after an OpenFang restart, measured) was lost, and the bridge's own sentence came too late as well.
+const CHAT_ANSWER_MS = 60000;
 // What a chat field shows when Python gives no answer in time; the technical reason goes to the log.
-const NO_ANSWER_IN_TIME = 'Keine Antwort in 30 Sekunden. Bitte noch einmal versuchen.';
+const NO_ANSWER_IN_TIME = 'Keine Antwort in 60 Sekunden. Bitte noch einmal versuchen.';
 
 // Agent Farm Integration
 const AgentFarmManager = require('./agentfarm-manager');
@@ -2616,7 +2620,7 @@ function setupIpcHandlers() {
         try {
             // The chat of the Dashboard tab: its sentences name that space, like every chat field of the app.
             // Only the space, never the mark of the person: this page has no proof of a send by them.
-            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', 30000, { perRequest: true });
+            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] clawport: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };
@@ -2630,7 +2634,7 @@ function setupIpcHandlers() {
             // Only here is the mark "typed by the person" set, with the proof of this main process
             // (chat-input.js); the Brain runs Desktop tasks only with it.
             const message = chatMessage(text, context, typed);
-            return await sendToPythonAndWait(message, 'chat_response', 30000, { perRequest: true });
+            return await sendToPythonAndWait(message, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] renderer: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };

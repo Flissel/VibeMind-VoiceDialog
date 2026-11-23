@@ -131,8 +131,10 @@ test('two sentences at once, answers in swapped order: each answer stands under 
 
 test('the main process waits per sentence: an answer names its request, a late one finds its own', () => {
     const main = read('main.js');
-    assert.match(main, /sendToPythonAndWait\(message, 'chat_response', 30000, \{ perRequest: true \}\)/);
-    assert.match(main, /context: \{ space: 'clawport' \} \}, 'chat_response', 30000, \{ perRequest: true \}\)/);
+    assert.match(main, /sendToPythonAndWait\(message, 'chat_response', CHAT_ANSWER_MS, \{ perRequest: true \}\)/);
+    assert.match(main, /context: \{ space: 'clawport' \} \}, 'chat_response', CHAT_ANSWER_MS, \{ perRequest: true \}\)/);
+    // longer than the bridge's limit in operation (45 s): its answer, or its own "nicht rechtzeitig", arrives
+    assert.match(main, /const CHAT_ANSWER_MS = 60000;/);
     assert.match(main, /message = \{ \.\.\.message, request_id: /);
     assert.match(main, /const waiterKey = message\.type && message\.request_id != null\s*\? responseKey\(message\.type, message\.request_id\) : message\.type;/);
     const python = read('../python/ipc/clawport_handlers.py');
