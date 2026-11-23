@@ -527,3 +527,11 @@
 .kv-read-content.kv-kanban .kv-section + .kv-section {
     margin-top: 0;
 }
+
+/* the card a result was written to (result-target.js): a ring for a few seconds */
+.kv-card.kv-ziel {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+    box-shadow: 0 0 18px rgba(245, 158, 11, 0.45);
+    transition: outline-color 0.3s, box-shadow 0.3s;
+}

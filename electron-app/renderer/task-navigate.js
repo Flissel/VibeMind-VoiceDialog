@@ -220,6 +220,24 @@
         let refusal = '';        // ... or the Brain's sentence on why it did not work
         let awaiting = false;    // a sentence of the app was sent and its answer is not there yet
         let sentTrace = '';      // the trace of the last sentence sent; the Brain puts it on the events of its run
+        let follower = null;     // the way to a result the Brain names (result-target.js)
+
+        /**
+         * The Brain names where a result lies (ziel): the app goes there, into the bubble, and marks
+         * the card. Asked by a sentence of the person (its answer, the end of its plan): always. The
+         * end of an order at /stand comes minutes later: not while the person works here, and not out
+         * of another open bubble; the card is marked when its bubble is the one on screen.
+         */
+        function followZiel(ziel, asked) {
+            if (!ziel || !root.VibeResultTarget) return;
+            if (!follower) follower = root.VibeResultTarget.create(root, doc);
+            if (!asked) {
+                const app = root.multiverseApp;
+                if (clock() - lastInputAt < BUSY_MS && !follower.opens(ziel)) return;
+                if (app && app.isInsideBubble && !follower.opens(ziel)) return;
+            }
+            follower.follow(ziel);
+        }
         let answerTimer = null;  // ... how long a finished plan waits for that answer
         let watch = null;        // an accepted order: { before, bubbleId } the cards as they were when it was taken
         let acceptedTimer = null;
@@ -367,6 +385,7 @@
         // Answer and end of the plan arrive in either order.
         root.addEventListener('vibemind:sentence-answered', (event) => {
             const detail = (event && event.detail) || {};
+            if (detail.ziel) followZiel(detail.ziel, true);
             awaiting = false;
             root.clearTimeout(answerTimer);
             // The Brain took the order; a model works on it (answer { ok: true, pending: true }).
@@ -580,6 +599,7 @@
             }
             // The chat says it at the sentence that gave the order, whatever runs now.
             root.dispatchEvent(new root.CustomEvent('vibemind:order-ended', { detail: ended }));
+            if (stand && stand.ziel && ended.state === 'done') followZiel(stand.ziel, false);
             // The line: its own order, or no line or a finished one. A running task keeps the line.
             if (mine || !current || finished(current)) {
                 current = ended;
@@ -671,6 +691,8 @@
 
         function handleStatus(message) {
             if (message && message.plan_id) lastPlanId = message.plan_id;
+            // the end of a plan that wrote: only plans of a sentence carry it, never foreign ones
+            if (message && message.ziel) followZiel(message.ziel, true);
             if (message && message.state === 'reset') { fresh(); return 'reset'; }
             if (!message || !message.space) return 'ignore';
             // The plan that took an order ends with "done": that is the acceptance, not the result.

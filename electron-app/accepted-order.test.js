@@ -652,3 +652,42 @@ test('an event is told to its sentence by the trace, not by its plan: overlappin
     w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p1', trace_id: '00000000-0000-4000-8000-000000000099', step: 'Notiz ändern', done: 1, total: 1, result: 'erledigt' });
     assert.match(w.line(), /^✓ Ideas: fertig/);
 });
+
+test('ziel: the answer and the end of the plan lead there at once; /stand only when the person is not busy elsewhere', async () => {
+    const ZIEL = { space: 'ideas', bubble_id: BUBBLE, node_id: CARD_1 };
+    const followed = [];
+    let open = false;
+    const stub = { create: () => ({ follow: (z) => { followed.push(z); return true; }, opens: () => open }) };
+
+    // a sentence that wrote: its answer names the place
+    const w = world();
+    w.window.VibeResultTarget = stub;
+    w.answerWith({ success: true, message: 'Notiz „Karte 1“ festgehalten.', ziel: ZIEL });
+    await w.send('Halt fest: Karte 1');
+    assert.deepEqual(followed, [ZIEL]);
+    // the end of its plan names it as well (the follower does not start anew for the same place)
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p1', step: 'Notiz anlegen', done: 1, total: 1, result: 'erledigt', ziel: ZIEL });
+    assert.deepEqual(followed, [ZIEL, ZIEL]);
+
+    // an order that ends at /stand while the person sits in another open bubble: no pulling out
+    const inside = await acceptedWithStand([{ stand: 'fertig', meldung: 'Fertig.', dauer_s: 9, ziel: ZIEL }]);
+    inside.w.window.VibeResultTarget = stub;
+    followed.length = 0;
+    inside.w.advance(5000); await tick();
+    assert.deepEqual(followed, [], 'world: an open bubble that is not the one of the result');
+
+    // the same, with the bubble of the result open: the card is marked
+    open = true;
+    const there = await acceptedWithStand([{ stand: 'fertig', meldung: 'Fertig.', dauer_s: 9, ziel: ZIEL }]);
+    there.w.window.VibeResultTarget = stub;
+    there.w.advance(5000); await tick();
+    assert.deepEqual(followed, [ZIEL]);
+
+    // without ziel nothing is followed
+    open = false;
+    followed.length = 0;
+    const plain = await acceptedWithStand([{ stand: 'fertig', meldung: 'Fertig.', dauer_s: 9 }]);
+    plain.w.window.VibeResultTarget = stub;
+    plain.w.advance(5000); await tick();
+    assert.deepEqual(followed, []);
+});

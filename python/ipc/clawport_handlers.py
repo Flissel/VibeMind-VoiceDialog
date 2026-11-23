@@ -272,6 +272,9 @@ class ClawPortHandlers:
             if isinstance(tool_result, dict) and isinstance(tool_result.get("vorschlag"), dict):
                 answer["success"] = True
                 answer["vorschlag"] = dict(tool_result["vorschlag"])
+            # Where the result lies (checked by the bridge): the app goes there and marks the card.
+            if isinstance(tool_result, dict) and isinstance(tool_result.get("ziel"), dict):
+                answer["ziel"] = dict(tool_result["ziel"])
             reply(answer)
         except Exception as e:
             # The raw error goes to the log; the chat gets a German sentence.

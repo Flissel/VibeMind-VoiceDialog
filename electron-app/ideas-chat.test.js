@@ -381,3 +381,12 @@ test('database ids come in three forms and are passed on unchanged', () => {
     assert.deepEqual(cards.selection, [long]);
     assert.equal(cards.last_id, short);
 });
+
+test('a closed bubble sends neither cards nor selection nor last_id: the Brain does not count them then', () => {
+    const card = '00000000-0000-4000-8000-000000000001';
+    const context = buildContext({ bubble: null, nodes: [{ id: card, title: 'Karte 1' }], nodesBubbleId: B1,
+        selection: [card], lastId: card, bubbles: [] });
+    for (const field of ['cards', 'cards_total', 'cards_withheld', 'selection', 'last_id']) {
+        assert.equal(field in context, false, field);
+    }
+});

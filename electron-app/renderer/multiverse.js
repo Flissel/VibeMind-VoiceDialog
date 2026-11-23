@@ -2679,7 +2679,7 @@ class MultiverseApp {
             // The Brain took an order a model works on: the status line says "arbeitet" until it is finished.
             const accepted = !!response && response.ok !== false && (response.pending === true || response.status === 'angenommen');
             window.dispatchEvent(new CustomEvent('vibemind:sentence-answered', { detail: {
-                trace_id: trace, text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
+                trace_id: trace, ziel: response && response.ziel ? response.ziel : null, text: shown.text, success: shown.kind !== 'fehler', note: shown.kind === 'rueckfrage' || shown.kind === 'hinweis' ? shown.kind : '',
                 space: context && context.space ? context.space : this.currentSpace,
                 ...(accepted ? { accepted: true, space: this.currentSpace,
                     targets: Array.isArray(response.targets) ? response.targets.map(String) : [],

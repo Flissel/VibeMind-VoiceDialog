@@ -420,3 +420,26 @@ test('the trace of the sentence goes on in every message of its run, also on a l
     navigator.handle('plan_started', { plan_id: 'p10', hops: [{}], trace_id: '../x y' });
     assert.equal(sent.at(-1).trace_id, undefined, 'only a plain id passes');
 });
+
+test('ziel of the Brain: on the end of a plan that wrote and at /stand, plain ids only', () => {
+    const { zielOf, standOf } = require('./task-navigation');
+    const ZIEL = { space: 'ideas', bubble_id: '00000000-0000-4000-8000-00000000000b', node_id: '00000000-0000-4000-8000-000000000001' };
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+    navigator.handle('plan_started', { plan_id: 'p11', hops: [{}], space: 'ideas', intent: 'Halt fest: Karte 1' });
+    navigator.handle('hop_started', { space: 'ideas', capability: 'idea_create', description: 'Notiz anlegen' });
+    navigator.handle('hop_completed', { space: 'ideas', ok: true, result_preview: "'erledigt'" });
+    navigator.handle('plan_completed', { plan_id: 'p11', ok: true, elapsed_s: 2.1, ziel: ZIEL });
+    assert.equal(sent.at(-1).state, 'done');
+    assert.deepEqual(sent.at(-1).ziel, ZIEL);
+
+    navigator.handle('plan_started', { plan_id: 'p12', hops: [{}], space: 'ideas', intent: 'Welche Bubbles gibt es?' });
+    navigator.handle('hop_started', { space: 'ideas', capability: 'bubble_list', description: 'Lesen' });
+    navigator.handle('plan_completed', { plan_id: 'p12', ok: true, elapsed_s: 0.4 });
+    assert.equal(sent.at(-1).ziel, undefined, 'reading carries no ziel');
+
+    assert.deepEqual(zielOf({ ...ZIEL, node_id: null }), { ...ZIEL, node_id: null }, 'a bubble as a whole');
+    assert.equal(zielOf({ space: 'ideas', bubble_id: '../x', node_id: null }), null);
+    assert.deepEqual(standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: ZIEL }).ziel, ZIEL);
+    assert.equal('ziel' in standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: { space: 'ideas' } }), false);
+});

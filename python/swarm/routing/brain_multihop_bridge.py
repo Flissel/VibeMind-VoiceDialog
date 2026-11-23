@@ -112,6 +112,32 @@ def typed_request(
 
 
 TRACE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+PLAIN_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+PLAIN_SPACE = re.compile(r"^[a-z_]{1,32}$")
+
+
+def ziel_of(value: Any) -> Optional[Dict[str, Any]]:
+    """Where the result of a writing call lies: {space, bubble_id, node_id} or None.
+
+    The Brain names it in the answer of /api/multihop/execute (and in plan_completed and
+    /stand). Only plain ids pass; node_id may be None (a bubble as a whole, e.g. rated).
+    """
+    if not isinstance(value, dict):
+        return None
+    space = value.get("space")
+    bubble = value.get("bubble_id")
+    node = value.get("node_id")
+    if not isinstance(space, str) or not PLAIN_SPACE.match(space):
+        return None
+    if isinstance(bubble, int) and not isinstance(bubble, bool):
+        bubble = str(bubble)
+    if not isinstance(bubble, str) or not PLAIN_ID.match(bubble):
+        return None
+    if isinstance(node, int) and not isinstance(node, bool):
+        node = str(node)
+    if node is not None and (not isinstance(node, str) or not PLAIN_ID.match(node)):
+        node = None
+    return {"space": space, "bubble_id": bubble, "node_id": node}
 
 
 def trace_of(
@@ -278,6 +304,10 @@ class BrainMultihopBridge:
                        "orders": self._orders(data, executed)} if accepted else None
         if proposal is not None:
             tool_result = {**(tool_result or {}), "vorschlag": proposal}
+        # The place of the result: the app goes there, into the bubble, and marks the card.
+        ziel = ziel_of(data.get("ziel"))
+        if ziel is not None:
+            tool_result = {**(tool_result or {}), "ziel": ziel}
         return OrchestrationResult(
             job_id=job_id,
             event_type=event_type,

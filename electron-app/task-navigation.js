@@ -190,6 +190,24 @@ function traceOf(payload) {
   return typeof value === 'string' && TRACE_ID.test(value) ? value : '';
 }
 
+/** A plain id of the Brain (bubble or card); anything else is never passed on. */
+const PLAIN_ID = /^[A-Za-z0-9-]{1,64}$/;
+
+/**
+ * Where the result of a writing call lies, as the Brain names it: { space, bubble_id, node_id } or
+ * null. node_id may be null (a bubble as a whole, e.g. rated or arranged).
+ */
+function zielOf(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const id = (x) => (typeof x === 'number' && Number.isInteger(x) ? String(x) : x);
+  const space = value.space;
+  const bubble = id(value.bubble_id);
+  const node = id(value.node_id);
+  if (typeof space !== 'string' || !/^[a-z_]{1,32}$/.test(space)) return null;
+  if (typeof bubble !== 'string' || !PLAIN_ID.test(bubble)) return null;
+  return { space, bubble_id: bubble, node_id: typeof node === 'string' && PLAIN_ID.test(node) ? node : null };
+}
+
 function createTaskNavigator(send) {
   let planId = '';
   let total = 0;
@@ -309,6 +327,9 @@ function createTaskNavigator(send) {
       }
       if (kind === 'plan_completed') {
         if (!last) return null; // nothing of this plan had a place in the app
+        // Where the result of a writing call lies (Brain: ziel): the app goes there and marks the card.
+        const ziel = zielOf(payload.ziel);
+        const end = (state, extra = {}) => status(state, ziel ? { ...extra, ziel } : extra);
         const seconds = Number(payload.elapsed_s);
         // berichtigt: true (new Brain): a second end of the same plan replaces the first, e.g. a
         // result found unreadable afterwards (ok: false, nicht_lesbar: true). It is judged afresh.
@@ -327,7 +348,7 @@ function createTaskNavigator(send) {
         if (accepted && !failedStep) {
           last = { ...last, space: accepted.space, registry_space: accepted.registry_space, step: accepted.step, result: '', error: '' };
           // No duration: the time it took to accept the order is not the time of its result.
-          return status('accepted', { elapsed_s: null, targets: accepted.targets, ...(corrected ? { berichtigt: true } : {}) });
+          return end('accepted', { elapsed_s: null, targets: accepted.targets, ...(corrected ? { berichtigt: true } : {}) });
         }
         // A hint or a question back ends the plan calmly: neither ✓ nor ✕.
         const calm = noteOf(payload);
@@ -335,14 +356,14 @@ function createTaskNavigator(send) {
           const kind = calm || note.kind;
           const said = text(payload.final_text) || (note && note.text) || '';
           last = { ...last, result: said, error: '' };
-          return status('note', { ...elapsed, note: kind });
+          return end('note', { ...elapsed, note: kind });
         }
         // A step without a usable answer (ok: false) gets no ✓, even when the plan as a whole says ok.
         if (payload.ok === false || failedStep) {
           if (payload.ok === false && !last.error) last = { ...last, error: errorText(payload) };
-          return status('failed', elapsed);
+          return end('failed', elapsed);
         }
-        return status('done', elapsed);
+        return end('done', elapsed);
       }
       return null;
     },
@@ -375,6 +396,8 @@ function standOf(body) {
     dauer_s: body.dauer_s != null && Number.isFinite(seconds) && seconds >= 0 ? seconds : null,
     hinweis: body.hinweis === true,
     saetze,
+    // where the result of the order lies, once the Brain names it at /stand
+    ...(zielOf(body.ziel) ? { ziel: zielOf(body.ziel) } : {}),
   };
 }
 
@@ -460,5 +483,5 @@ function closeTaskNavigation() {
 
 module.exports = {
   plainError, standOf, readOrderStand, ORDER_STANDS,
-  traceOf, SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
+  traceOf, zielOf, SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };

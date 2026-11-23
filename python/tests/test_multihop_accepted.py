@@ -117,3 +117,40 @@ def test_a_step_that_really_failed_still_is_one():
     result = _execute({"ok": False, "plan_id": "p8", "state": {}, "final_text": "Das hat nicht geklappt.",
                        "executed": {"s1": {"ok": False, "error": "Der Dienst ist gerade nicht erreichbar."}}})
     assert result.tool_result is None
+
+
+BUBBLE = "00000000-0000-4000-8000-00000000000b"
+
+
+def test_the_place_of_a_written_result_travels_to_the_app(monkeypatch):
+    # The Brain names where a writing call put its result (ziel); the app goes there.
+    ziel = {"space": "ideas", "bubble_id": BUBBLE, "node_id": CARD}
+    result = _execute({"ok": True, "plan_id": "p9", "state": {}, "final_text": "Notiz festgehalten.",
+                       "executed": {}, "ziel": ziel})
+    assert result.tool_result == {"ziel": ziel}
+
+    rated = _execute({"ok": True, "plan_id": "p10", "state": {}, "final_text": "Bewertet.",
+                      "executed": {}, "ziel": {"space": "ideas", "bubble_id": BUBBLE, "node_id": None}})
+    assert rated.tool_result == {"ziel": {"space": "ideas", "bubble_id": BUBBLE, "node_id": None}}
+
+    bad = _execute({"ok": True, "plan_id": "p11", "state": {}, "final_text": "fertig", "executed": {},
+                    "ziel": {"space": "ideas", "bubble_id": "../x", "node_id": CARD}})
+    assert bad.tool_result is None, "only plain ids pass"
+
+    import swarm.orchestrator as orchestrator_module
+    from ipc.clawport_handlers import ClawPortHandlers
+    from swarm.orchestrator.result_formatter import OrchestrationResult
+
+    class _Orchestrator:
+        async def process_intent(self, text, context=None):
+            return OrchestrationResult(job_id="p9", event_type="brain.multihop", stream="brain",
+                                       response_hint="Notiz festgehalten.", tool_result={"ziel": ziel})
+
+    monkeypatch.setattr(orchestrator_module, "get_orchestrator", lambda: _Orchestrator())
+    handlers = ClawPortHandlers.__new__(ClawPortHandlers)
+    sent = []
+    handlers.send_message = sent.append
+    asyncio.run(handlers.handle_chat_text_input({"type": "chat_text_input", "text": "Halt fest: Karte 1",
+                                                 "request_id": "r9"}))
+    assert sent[0]["ziel"] == ziel
+    assert "pending" not in sent[0]

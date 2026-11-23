@@ -628,7 +628,7 @@
                 const message = (response && (response.message || response.final_text)) || (failed ? 'Keine Antwort' : asks ? 'Wie meinst du das?' : 'OK');
                 const targets = accepted && Array.isArray(response.targets) ? response.targets.map(String) : [];
                 root.dispatchEvent(new root.CustomEvent('vibemind:sentence-answered', { detail: {
-                    trace_id: trace, text: (response && response.message) || '', success: !failed, space: 'ideas', note: asks ? 'rueckfrage' : hint || proposes ? 'hinweis' : '',
+                    trace_id: trace, ziel: response && response.ziel ? response.ziel : null, text: (response && response.message) || '', success: !failed, space: 'ideas', note: asks ? 'rueckfrage' : hint || proposes ? 'hinweis' : '',
                     ...(accepted ? { accepted: true, space: 'ideas', targets, orders: Array.isArray(response.orders) ? response.orders.map(String) : [] } : {}),
                 } }));
                 if (failed && newId) store.reject(newId, message);
