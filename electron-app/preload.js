@@ -18,6 +18,15 @@ const supabaseConfig = ipcRenderer.sendSync('vibemind:supabase-config') || {};
 const SUPABASE_URL = supabaseConfig.url;
 const SUPABASE_ANON_KEY = supabaseConfig.anonKey;
 
+/** A real key press or click of the person in the last seconds (transient user activation of the browser). */
+function personActedJustNow() {
+    try {
+        return Boolean(globalThis.navigator && navigator.userActivation && navigator.userActivation.isActive);
+    } catch (e) {
+        return false;
+    }
+}
+
 // Expose protected methods to the renderer
 contextBridge.exposeInMainWorld('vibemind', {
     // Window controls
@@ -55,9 +64,11 @@ contextBridge.exposeInMainWorld('vibemind', {
     // Inline game console chat (renderer → main → Python → process_intent)
     // context (optional): what is on screen, so names in the sentence can be resolved (renderer/ideas-chat.js)
     // typed: true only when the person sent the sentence from a chat field (trusted key or click);
-    // the main process then marks it, see chat-input.js
+    // the main process then marks it, see chat-input.js. A script of the page could pass true as
+    // well, so the preload (isolated world, contextIsolation) also asks the browser for a real
+    // gesture of the person in the last seconds; a script cannot raise that itself.
     sendChatMessage: (text, context, typed) =>
-        ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true }),
+        ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && personActedJustNow() }),
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {

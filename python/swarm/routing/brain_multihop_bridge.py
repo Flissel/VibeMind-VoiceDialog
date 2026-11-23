@@ -46,6 +46,57 @@ EVENT_DONE = "brain.multihop"
 EVENT_FAILED = "brain.multihop.failed"
 EVENT_QUESTION = "brain.multihop.question"
 
+# A sentence a person typed into a chat field of the app (electron-app/chat-input.js sets
+# eingabe "getippt" in the main process). The field alone does not count for the Brain: the
+# app proves it for exactly this sentence with a signature over time and text, made with a
+# key shared with the Brain. The key is read here only, never passed on and never logged.
+TYPED = "getippt"
+HEADER_TYPED = "X-Vibemind-Eingabe"
+KEY_NAME = "VIBEMIND_EINGABE_SCHLUESSEL"
+KEY_MIN_LENGTH = 32
+
+
+def eingabe_zeichen(schluessel: str, satz: str, zeit: int) -> str:
+    """Signature for exactly this sentence at exactly this time: "<zeit>.<hmac-sha256 hex>".
+
+    Same as eingabe_zeichen() in brain/the_brain/core/desktop_tagesrest.py of the Brain.
+    """
+    import hashlib
+    import hmac
+
+    stoff = f"{int(zeit)}\n{satz}".encode("utf-8")
+    return f"{int(zeit)}." + hmac.new(schluessel.encode("utf-8"), stoff, hashlib.sha256).hexdigest()
+
+
+def typed_request(
+    intent_text: str,
+    ui_context: Optional[Dict[str, Any]],
+    *,
+    environ: Optional[Dict[str, str]] = None,
+    now: Optional[float] = None,
+) -> "tuple[Optional[Dict[str, Any]], Dict[str, str]]":
+    """Context and headers for the request to the Brain.
+
+    eingabe "getippt" goes on, with its signature in the header, only when the app marked the
+    sentence as typed AND the key is there. Without the key neither field nor header go; any
+    other value of eingabe is dropped. The context of the caller is not changed in place.
+    """
+    import time
+
+    if not isinstance(ui_context, dict) or not ui_context:
+        return None, {}
+    context = dict(ui_context)
+    marked = context.pop("eingabe", None) == TYPED
+    headers: Dict[str, str] = {}
+    if marked:
+        key = (os.environ if environ is None else environ).get(KEY_NAME) or ""
+        sentence = (intent_text or "").strip()
+        if len(key) >= KEY_MIN_LENGTH and sentence:
+            zeit = int(time.time() if now is None else now)
+            headers[HEADER_TYPED] = eingabe_zeichen(key, sentence, zeit)
+            context["eingabe"] = TYPED
+    return (context or None), headers
+
 
 class BrainMultihopBridge:
     """Phase -2 voice→brain→cap bridge. POSTs to /api/multihop/execute."""
@@ -188,18 +239,22 @@ class BrainMultihopBridge:
         """POST /api/multihop/execute, return parsed JSON or None on any failure.
 
         `ui_context` is what the app has on screen (open bubble, visible cards; built in
-        electron-app/renderer/ideas-chat.js). It goes into the body unchanged as `context`,
-        next to `intent`; how names are resolved from it is the Brain's business.
+        electron-app/renderer/ideas-chat.js). It goes into the body as `context`, next to
+        `intent`; how names are resolved from it is the Brain's business. Only `eingabe` is
+        checked here: it stays only with its signature in the header (typed_request).
         """
         body: Dict[str, Any] = {"intent": intent_text}
-        if isinstance(ui_context, dict) and ui_context:
-            body["context"] = ui_context
+        # A typed sentence carries its signature in the header (typed_request); never logged.
+        context, headers = typed_request(intent_text, ui_context)
+        if context:
+            body["context"] = context
         try:
             timeout = aiohttp.ClientTimeout(total=self._request_timeout)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     f"{self._brain_url}/api/multihop/execute",
                     json=body,
+                    headers=headers or None,
                 ) as resp:
                     if resp.status != 200:
                         logger.debug(

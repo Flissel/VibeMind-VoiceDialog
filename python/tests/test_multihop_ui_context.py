@@ -45,13 +45,15 @@ class _FakeSession:
     async def __aexit__(self, *exc):
         return False
 
-    def post(self, url, json=None):
+    def post(self, url, json=None, headers=None):
         _FakeSession.posted.append((url, json))
+        _FakeSession.headers.append(headers)
         return _FakeResponse()
 
 
 def _post(monkeypatch, *args):
     _FakeSession.posted = []
+    _FakeSession.headers = []
     monkeypatch.setattr(bridge_module.aiohttp, "ClientSession", _FakeSession)
     asyncio.run(BrainMultihopBridge()._post_multihop(*args))
     return _FakeSession.posted[0]
@@ -64,13 +66,64 @@ def test_context_goes_into_the_body_unchanged(monkeypatch):
     assert body == {"intent": "verbinde Zielgruppe mit Kanaele", "context": UI_CONTEXT}
 
 
-def test_the_mark_typed_reaches_the_brain_only_when_the_app_set_it(monkeypatch):
-    # The main process of the app sets eingabe "getippt" for a sentence typed into a chat field
-    # (electron-app/chat-input.js); Python passes it on as it is and adds nothing of its own.
-    typed = {"space": "ideas", "eingabe": "getippt"}
-    assert _post(monkeypatch, "oeffne den Rechner", typed)[1]["context"]["eingabe"] == "getippt"
-    assert "eingabe" not in _post(monkeypatch, "oeffne den Rechner", {"space": "ideas"})[1]["context"]
-    assert "context" not in _post(monkeypatch, "oeffne den Rechner")[1]
+KEY = "k" * 32
+# Computed with eingabe_zeichen() of the Brain (vibemind-os a60cafc7,
+# brain/the_brain/core/desktop_tagesrest.py) for KEY, this sentence and this time.
+TEMPLATE_SIGNATURE = "1763900000.44a19a1c2893fd048a9f38df56c0ebe5b32c45bf839ad9b5be2ee0e29c02229b"
+
+
+def test_the_signature_matches_the_template_of_the_brain():
+    assert bridge_module.eingabe_zeichen(KEY, "Öffne den Rechner", 1763900000) == TEMPLATE_SIGNATURE
+
+
+def test_a_typed_sentence_is_signed_for_exactly_its_text_and_time():
+    context, headers = bridge_module.typed_request(
+        "  Öffne den Rechner \n", {"space": "desktop", "eingabe": "getippt"},
+        environ={"VIBEMIND_EINGABE_SCHLUESSEL": KEY}, now=1763900000.7,
+    )
+    assert context == {"space": "desktop", "eingabe": "getippt"}
+    assert headers == {"X-Vibemind-Eingabe": TEMPLATE_SIGNATURE}
+
+
+def test_without_the_key_neither_field_nor_header_go():
+    for env in ({}, {"VIBEMIND_EINGABE_SCHLUESSEL": "zu-kurz"}):
+        context, headers = bridge_module.typed_request(
+            "Öffne den Rechner", {"space": "desktop", "eingabe": "getippt"}, environ=env, now=1763900000,
+        )
+        assert context == {"space": "desktop"}
+        assert headers == {}
+    context, headers = bridge_module.typed_request(
+        "Öffne den Rechner", {"eingabe": "getippt"}, environ={}, now=1763900000,
+    )
+    assert (context, headers) == (None, {})
+
+
+def test_automatic_sentences_get_no_signature():
+    env = {"VIBEMIND_EINGABE_SCHLUESSEL": KEY}
+    # no context (voice, eyeTerm, MCP), a context without the mark, a mark with another value
+    assert bridge_module.typed_request("Öffne den Rechner", None, environ=env) == (None, {})
+    assert bridge_module.typed_request("Öffne den Rechner", {"space": "ideas"}, environ=env) == ({"space": "ideas"}, {})
+    assert bridge_module.typed_request("x", {"space": "ideas", "eingabe": "stimme"}, environ=env) == ({"space": "ideas"}, {})
+    given = {"space": "ideas", "eingabe": "getippt"}
+    bridge_module.typed_request("x", given, environ={})
+    assert given == {"space": "ideas", "eingabe": "getippt"}, "the context of the caller is not changed"
+
+
+def test_the_request_carries_the_header_only_for_a_typed_sentence(monkeypatch):
+    monkeypatch.setenv("VIBEMIND_EINGABE_SCHLUESSEL", KEY)
+    body = _post(monkeypatch, "Öffne den Rechner", {"space": "desktop", "eingabe": "getippt"})[1]
+    assert body["context"]["eingabe"] == "getippt"
+    header = _FakeSession.headers[0]["X-Vibemind-Eingabe"]
+    zeit = int(header.split(".")[0])
+    assert header == bridge_module.eingabe_zeichen(KEY, "Öffne den Rechner", zeit)
+
+    body = _post(monkeypatch, "Öffne den Rechner", {"space": "desktop"})[1]
+    assert "eingabe" not in body["context"] and _FakeSession.headers[0] is None
+    assert "context" not in _post(monkeypatch, "Öffne den Rechner")[1] and _FakeSession.headers[0] is None
+
+    monkeypatch.delenv("VIBEMIND_EINGABE_SCHLUESSEL")
+    body = _post(monkeypatch, "Öffne den Rechner", {"space": "desktop", "eingabe": "getippt"})[1]
+    assert "eingabe" not in body["context"] and _FakeSession.headers[0] is None
 
 
 def test_without_context_the_body_is_as_before(monkeypatch):
