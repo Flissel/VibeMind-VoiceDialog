@@ -584,3 +584,27 @@ test('Brain not reachable: a calm ℹ with the sentence, chat and line end, no "
     w.advance(60000); await tick();
     assert.doesNotMatch(w.line(), /arbeitet/);
 });
+
+test('a judgement: its new card does not end the order; /stand brings the answer, short, the rest at the card', async () => {
+    // Lauf 9: the order wrote a new card "Einschätzung: …" before /stand said fertig; the chat said
+    // only "Ergebnis an der Karte". The answer of /stand is a long text: shown cut, with where the rest is.
+    const answer = 'Es fehlen ein Zeitplan, die Verantwortlichen und die Kosten. Offen sind auch die Mengen und die Fragen zur Zahlung. '
+        + 'Dazu kommt, dass noch kein Termin für den Versuch steht und niemand die Bestellung der Teile übernommen hat, '
+        + 'was den Beginn verschiebt.';
+    const { w } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'laeuft' }, { stand: 'fertig', meldung: answer, dauer_s: 85 }]);
+    w.advance(5000); await tick();
+    w.loaded(cards().concat([{ id: '00000000-0000-4000-8000-000000000003', title: 'Einschätzung: Was fehlt noch?', content: 'lang' }]));
+    assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'the new card is no end: /stand says it');
+    w.advance(5000); await tick();
+    w.advance(5000); await tick();
+    const end = '✓ fertig in 1 min 25 s — Es fehlen ein Zeitplan, die Verantwortlichen und die Kosten. '
+        + 'Offen sind auch die Mengen und die Fragen zur Zahlung. … mehr an der Karte';
+    assert.deepEqual(w.chatLog(), ['Was hältst du von Karte 1?', end]);
+    assert.doesNotMatch(w.chatLog().join('\n'), /Ergebnis an der Karte/);
+});
+
+test('a short answer of /stand stands whole, without "mehr an der Karte"', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'fertig', meldung: 'Die Karten stehen jetzt in 2 Gruppen.', dauer_s: 9 }]);
+    w.advance(5000); await tick();
+    assert.equal(w.chatLog()[1], '✓ fertig in 9 s — Die Karten stehen jetzt in 2 Gruppen.');
+});

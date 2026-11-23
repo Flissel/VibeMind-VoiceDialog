@@ -109,6 +109,7 @@
     }
 
     const LINE_MAX = 240;
+    const REPORT_MAX = 200;                      // the answer of an order in the chat; the rest at the card
     const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
     const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
     const ANSWER_WAIT_MS = 5000;                 // plan done before the answer came: wait this long for it
@@ -168,6 +169,19 @@
     function shorten(text) {
         const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
         return line.length > LINE_MAX ? line.slice(0, LINE_MAX - 1) + '…' : line;
+    }
+
+    /**
+     * The answer of the Brain in the chat, short: a judgement comes back as a long text, its whole
+     * wording stands at the card it wrote. Cut after a sentence (else a word) and say where the rest is.
+     */
+    function brief(text) {
+        const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+        if (line.length <= REPORT_MAX) return line;
+        const head = line.slice(0, REPORT_MAX);
+        const sentence = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '), head.lastIndexOf(': '));
+        const cut = sentence >= REPORT_MAX / 2 ? head.slice(0, sentence + 1) : head.slice(0, Math.max(head.lastIndexOf(' '), REPORT_MAX / 2));
+        return cut.replace(/[\s,;:–-]+$/, '') + ' … mehr an der Karte';
     }
 
     /** Data of a tool rather than a sentence for a person: a dict, list or call, or its meta field. */
@@ -544,7 +558,7 @@
                     result: 'Keine Rückmeldung zum Auftrag' + (nr ? ' Nr. ' + nr : '') + '.', error: '' };
             } else if (stand.stand === 'fertig' || stand.stand === 'uebernommen') {
                 // uebernommen: the proposal is written now; no sentences to choose any more
-                ended = { ...base, state: 'done', result: said || (stand.stand === 'uebernommen' ? 'Der Vorschlag ist übernommen.' : 'Ergebnis an der Karte'), error: '',
+                ended = { ...base, state: 'done', result: brief(said) || (stand.stand === 'uebernommen' ? 'Der Vorschlag ist übernommen.' : 'Ergebnis an der Karte'), error: '',
                     saetze: stand.stand === 'uebernommen' ? [] : saetze };
             } else if (stand.stand === 'fehler') {
                 ended = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
