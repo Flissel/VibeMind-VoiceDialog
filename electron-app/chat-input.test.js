@@ -59,16 +59,9 @@ test('the generic to-python channel cannot claim a typed sentence', () => {
     assert.doesNotMatch(clawport, /eingabe|typed|chatMessage/);
 });
 
-test('only the trusted send of the two chat fields says "typed"; code calls do not', () => {
-    const chat = fs.readFileSync(path.join(__dirname, 'renderer', 'ideas-chat.js'), 'utf8');
-    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
-    assert.match(chat, /submit\(text, \{ typed: event\.isTrusted === true \}\)/);
-    assert.match(chat, /async function submit\(text, \{ typed = false \} = \{\}\)/, 'a call from code is not typed');
-    assert.match(scene, /this\.sendGameConsoleMessage\(\{ typed: e\.isTrusted === true \}\);/);
-    assert.match(scene, /sendBtn\.addEventListener\('click', \(e\) => this\.sendGameConsoleMessage\(\{ typed: e\.isTrusted === true \}\)\)/);
-    assert.match(scene, /async sendGameConsoleMessage\(\{ typed = false \} = \{\}\)/);
-    assert.equal((scene.match(/sendGameConsoleMessage\(/g) || []).length, 3);
-});
+// Which sends of the two chat fields claim "typed" (trusted Enter / click yes; direct calls,
+// dispatchEvent, .click(), Shift+Enter and the "?" buttons no) is tested in behaviour in
+// chat-typed.test.js, with the real code of both fields. Here the second layer: the preload.
 
 // The preload in a stand-in for its isolated world: which sends count as typed.
 function preload() {
@@ -115,8 +108,35 @@ function preload() {
             fire('click', { isTrusted: trusted, target: button });
         },
         get sentences() { return exposed.bubbleSentences; },
+        fire,
     };
 }
+
+// The fields are textareas (5a510ef): a sentence may have lines. The record of the preload keeps them.
+test('the preload: a trusted Enter in the textarea counts for exactly its lines; Shift+Enter and the "?" of the form do not', () => {
+    const p = preload();
+    p.fields['ideas-chat-input'].value = 'Ergänze bei Karte 1:\nerste Zeile\n';
+    p.enter('ideas-chat-input');
+    assert.equal(p.send('Ergänze bei Karte 1:\nerste Zeile', true), true, 'the lines as they stood in the field');
+    p.enter('ideas-chat-input');
+    assert.equal(p.send('Ergänze bei Karte 1: erste Zeile', true), false, 'the same words in one line are another text');
+
+    p.fields['gc-input'].value = 'Öffne den Rechner';
+    p.fire('keydown', { isTrusted: true, key: 'Enter', shiftKey: true, target: p.fields['gc-input'] });
+    assert.equal(p.send('Öffne den Rechner', true), false, 'Shift+Enter is a new line, no send');
+
+    // the "?" of the bubble chat: a button of type "button" inside the form of the chat
+    const form = { closest: (sel) => (sel === 'form.ideas-chat-row' ? form : null) };
+    const help = { id: 'ideas-chat-help', type: 'button', closest: (sel) => (sel === 'button' ? help : form.closest(sel)) };
+    p.fields['ideas-chat-input'].value = 'Öffne den Rechner';
+    p.fire('click', { isTrusted: true, target: help });
+    assert.equal(p.send('Öffne den Rechner', true), false, 'a click on "?" is no send');
+    // the console "?" has no place among the send buttons either
+    const consoleHelp = { id: 'gc-help-btn', type: 'button', closest: (sel) => (sel === 'button' ? consoleHelp : null) };
+    p.fields['gc-input'].value = 'Öffne den Rechner';
+    p.fire('click', { isTrusted: true, target: consoleHelp });
+    assert.equal(p.send('Öffne den Rechner', true), false);
+});
 
 test('the sentence buttons of a bubble: a trusted click counts for exactly their fixed sentence', () => {
     const p = preload();
