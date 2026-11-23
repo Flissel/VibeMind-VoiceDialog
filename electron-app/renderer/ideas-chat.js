@@ -407,7 +407,8 @@
         let shownKey = null;     // the bubble whose history is in the log
 
         /** An answer that replaces the content of a card: asks once before it is sent. */
-        const REPLACES = /^Vorschlag übernehmen$/i;
+        // the new Brain names the writing sentence "Vorschlag trotzdem übernehmen" (it warns on the plain one)
+        const REPLACES = /^Vorschlag (?:trotzdem )?übernehmen$/i;
 
         /** The title of the first card an order named (its targets), from the cards on the canvas. */
         function cardTitle(targets) {
@@ -440,7 +441,10 @@
                     }
                     entry.used = true;
                     for (const other of choices.children) other.disabled = true;
-                    submit(answer, { typed: event.isTrusted === true });
+                    // Confirmed here already: when the Brain names the writing sentence, that one goes,
+                    // so the Brain does not warn a second time.
+                    const writes = REPLACES.test(answer) ? entry.answers.find((x) => /^Vorschlag trotzdem übernehmen$/i.test(x)) : null;
+                    submit(writes || answer, { typed: event.isTrusted === true });
                 });
                 choices.append(button);
             }

@@ -179,3 +179,35 @@ test('"Vorschlag übernehmen" says first what it replaces, the second click take
     const show = found.find((b) => b.textContent === 'Vorschlag zeigen');
     assert.equal(show.disabled, true, 'after one answer the others rest');
 });
+
+test('the new Brain names "Vorschlag trotzdem übernehmen": that button asks first too and sends the sentence itself', () => {
+    const w = world({ space: 'ideas', bubbleOpen: true });
+    w.win.spaceCanvas = { lastNodes: [{ id: '00000000-0000-4000-8000-000000000001', title: 'Karte 1' }] };
+    const status = (detail) => w.win.dispatchEvent(new w.win.CustomEvent('vibemind:task-status', { detail: { space: 'ideas', targets: ['00000000-0000-4000-8000-000000000001'], ...detail } }));
+    status({ state: 'accepted' });
+    status({ state: 'note', note: 'hinweis', result: 'Ein Vorschlag liegt vor.', saetze: ['Vorschlag zeigen', 'Vorschlag trotzdem übernehmen', 'Vorschlag verwerfen'] });
+    const found = [];
+    const walk = (n) => { if (n && n.className === 'ideas-chat-answer') found.push(n); (n && n.children || []).forEach(walk); };
+    walk(w.view);
+    const take = found.find((b) => b.textContent === 'Vorschlag trotzdem übernehmen');
+    const click = () => take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
+    click();
+    assert.equal(w.sent.length, 0);
+    click();
+    assert.deepEqual(w.sent.map((s) => s.text), ['Vorschlag trotzdem übernehmen'], 'one step at the Brain, not three');
+});
+
+test('both sentences named: "Vorschlag übernehmen", once confirmed, sends the writing one', () => {
+    const w = world({ space: 'ideas', bubbleOpen: true });
+    w.win.spaceCanvas = { lastNodes: [] };
+    const status = (detail) => w.win.dispatchEvent(new w.win.CustomEvent('vibemind:task-status', { detail: { space: 'ideas', targets: [], ...detail } }));
+    status({ state: 'accepted' });
+    status({ state: 'note', note: 'hinweis', result: 'Ein Vorschlag liegt vor.', saetze: ['Vorschlag übernehmen', 'Vorschlag trotzdem übernehmen'] });
+    const found = [];
+    const walk = (n) => { if (n && n.className === 'ideas-chat-answer') found.push(n); (n && n.children || []).forEach(walk); };
+    walk(w.view);
+    const take = found.find((b) => b.textContent === 'Vorschlag übernehmen');
+    take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
+    take.listeners.click.forEach((fn) => fn({ isTrusted: true }));
+    assert.deepEqual(w.sent.map((s) => s.text), ['Vorschlag trotzdem übernehmen']);
+});
