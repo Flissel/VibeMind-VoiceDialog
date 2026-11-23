@@ -441,66 +441,87 @@
             pollStand();
         }
 
-        /** The first order of the accepted task, as the receipt of the Brain named it. */
-        function firstOrder() {
-            const orders = current && Array.isArray(current.orders) ? current.orders : [];
+        /** The first order of a task, as the receipt of the Brain named it. */
+        function firstOrder(task = current) {
+            const orders = task && Array.isArray(task.orders) ? task.orders : [];
             return orders.find((id) => typeof id === 'string' && id.trim()) || '';
         }
 
         /**
-         * Every STAND_MS the Brain is asked how the order stands (GET /api/agent-auftraege/{id}/stand,
-         * through the main process). Its answer ends the line even when no card changes: an
+         * Orders still open, each asked at /stand on its own: id -> { since, space, targets, plan_id }.
+         * A new sentence takes the line, not the order: its end still comes (e.g. a proposal at a
+         * card the person changed meanwhile).
+         */
+        const openOrders = new Map();
+
+        /**
+         * Every STAND_MS the Brain is asked how each open order stands (GET /api/agent-auftraege/{id}/stand,
+         * through the main process). Its answer ends an order even when no card changes: an
          * assessment, a proposal, a stopped White Paper.
          */
         function pollStand() {
-            root.clearTimeout(standTimer);
-            const api = root.vibemind;
             const id = firstOrder();
-            if (!api || typeof api.orderStand !== 'function' || !id || !current || current.state !== 'accepted') return;
+            if (id && current && current.state === 'accepted' && !openOrders.has(id)) {
+                openOrders.set(id, { since: (watch && watch.since) || clock(), space: current.space,
+                    targets: Array.isArray(current.targets) ? current.targets : [], plan_id: current.plan_id });
+            }
+            const api = root.vibemind;
+            if (standTimer || !openOrders.size || !api || typeof api.orderStand !== 'function') return;
             standTimer = root.setTimeout(() => {
-                if (!current || current.state !== 'accepted' || firstOrder() !== id) return;
-                Promise.resolve(api.orderStand(id))
-                    .then((stand) => { if (!applyStand(stand, id)) pollStand(); }, () => pollStand());
+                standTimer = null;
+                const asked = [...openOrders.keys()].map((oid) => Promise.resolve(api.orderStand(oid))
+                    .then((stand) => applyStand(stand, oid), () => false));
+                Promise.all(asked).then(pollStand, pollStand);
             }, STAND_MS);
         }
 
-        /** The stand of an order ends the accepted line, or not yet (false). */
+        /** The stand of an open order: ends it (true) or not yet (false). */
         function applyStand(stand, id) {
-            if (!current || current.state !== 'accepted' || firstOrder() !== id) return true;
-            const since = watch && watch.since;
-            // The Brain does not know the order (e.g. it refused it): after STAND_UNKNOWN_MS the line
-            // says so plainly instead of "arbeitet …" for twenty minutes.
-            const silent = stand && stand.stand === 'unbekannt' && typeof since === 'number' && clock() - since >= STAND_UNKNOWN_MS;
+            const order = openOrders.get(id);
+            if (!order) return true;
+            const since = order.since;
+            if (clock() - since >= ACCEPTED_MAX_MS) { openOrders.delete(id); return true; }
+            // The Brain does not know the order (e.g. it refused it): after STAND_UNKNOWN_MS it is
+            // said plainly instead of "arbeitet …" for twenty minutes.
+            const silent = Boolean(stand) && stand.stand === 'unbekannt' && clock() - since >= STAND_UNKNOWN_MS;
             if (!silent && (!stand || !STAND_ENDS.includes(stand.stand))) return false;
-            stopAccepted();
-            const elapsed = typeof stand.dauer_s === 'number' ? stand.dauer_s
-                : typeof since === 'number' ? Math.max(0, (clock() - since) / 1000) : null;
+            openOrders.delete(id);
+            const mine = Boolean(current) && current.state === 'accepted' && firstOrder() === id;
+            if (mine) stopAccepted();
+            const elapsed = typeof stand.dauer_s === 'number' ? stand.dauer_s : Math.max(0, (clock() - since) / 1000);
             const saetze = Array.isArray(stand.saetze) ? stand.saetze : [];
             const said = typeof stand.meldung === 'string' ? stand.meldung : '';
-            const base = { ...current, accepted: false, stale: false, elapsed_s: elapsed, saetze };
+            const base = { ...(mine ? current : { space: order.space, step: '', done: 0, total: 0, plan_id: order.plan_id }),
+                targets: order.targets, orders: [id], accepted: false, stale: false, elapsed_s: elapsed, saetze };
+            let ended;
             if (silent) {
-                const nr = orderNumber(current.orders);
-                current = { ...base, state: 'note', note: 'hinweis', elapsed_s: null,
+                const nr = orderNumber([id]);
+                ended = { ...base, state: 'note', note: 'hinweis', elapsed_s: null,
                     result: 'Keine Rückmeldung zum Auftrag' + (nr ? ' Nr. ' + nr : '') + '.', error: '' };
             } else if (stand.stand === 'fertig') {
-                current = { ...base, state: 'done', result: said || 'Ergebnis an der Karte', error: '' };
+                ended = { ...base, state: 'done', result: said || 'Ergebnis an der Karte', error: '' };
             } else if (stand.stand === 'fehler') {
-                current = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
+                ended = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };
             } else {
                 // A proposal or a stopped order: calm, an info sign, never red.
                 const fallback = stand.stand === 'vorschlag' ? 'Ein Vorschlag liegt vor.' : 'Der Auftrag wurde abgebrochen.';
-                current = { ...base, state: 'note', note: 'hinweis', result: said || fallback, error: '' };
+                ended = { ...base, state: 'note', note: 'hinweis', result: said || fallback, error: '' };
             }
-            root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
-            root.clearTimeout(keepTimer);
-            keepTimer = root.setTimeout(clear, KEEP_MS);
-            render();
+            // The chat says it at the sentence that gave the order, whatever runs now.
+            root.dispatchEvent(new root.CustomEvent('vibemind:order-ended', { detail: ended }));
+            // The line: its own order, or no line or a finished one. A running task keeps the line.
+            if (mine || !current || finished(current)) {
+                current = ended;
+                root.dispatchEvent(new root.CustomEvent('vibemind:task-status', { detail: current }));
+                root.clearTimeout(keepTimer);
+                keepTimer = root.setTimeout(clear, KEEP_MS);
+                render();
+            }
             return true;
         }
 
         function stopAccepted() {
             watch = null;
-            root.clearTimeout(standTimer);
             root.clearTimeout(acceptedTimer);
             root.clearTimeout(staleTimer);
         }
@@ -510,6 +531,7 @@
             // The duration is the work on the order, from its acceptance to its result; the time
             // the plan took to accept it says nothing (it showed "fertig in 2,0 s").
             const since = watch && watch.since;
+            openOrders.delete(firstOrder());     // its result is at the card: no need to ask /stand
             stopAccepted();
             const result = where === 'bubble' ? 'Einschätzung an der Bubble'
                 : title ? `Ergebnis an der Karte „${shorten(title)}“` : 'Ergebnis an der Karte';

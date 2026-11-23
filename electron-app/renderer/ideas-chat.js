@@ -289,6 +289,7 @@
         let waiting = false;     // a sentence is on its way that made no card: the chat says "arbeitet"
         let planRuns = false;
         let inFlight = 0;        // sentences sent and not answered yet; several may run at once
+        const orderKeys = new Map(); // order id -> { key, ask }: its bubble and its sentence, until its end is said
         let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
         let staleKey = null;     // ... and the one whose "noch in Arbeit" the chat has already said
 
@@ -621,6 +622,8 @@
                     if (entry && proposal.titel) entry.titel = String(proposal.titel);
                 } else if (accepted) {
                     acceptedKey = asked;
+                    const order = Array.isArray(response.orders) ? response.orders.find((id) => typeof id === 'string' && id) : '';
+                    if (order) orderKeys.set(String(order), { key: asked, ask });
                     const said = response.message && response.message !== 'OK' ? ' — ' + response.message : '';
                     say(ACCEPTED_LINE + said, 'agent', asked, null, ask);
                 } else {
@@ -685,6 +688,32 @@
             renderCards();
         });
         // A plan of the Brain that runs in this space: the chat says so.
+        /** The end of an accepted order, said once at its sentence; the Brain's sentences become buttons. */
+        function sayEnd(status, key) {
+            const order = Array.isArray(status.orders) && status.orders.length ? String(status.orders[0]) : '';
+            if (status.state !== 'done' && status.state !== 'note' && status.state !== 'failed') return;
+            // Under the sentence that gave the order, also when later sentences stand below it.
+            const known = order ? orderKeys.get(order) : null;
+            const ask = known && known.key === key ? known.ask : null;
+            if (order) orderKeys.delete(order);
+            const choices = Array.isArray(status.saetze) && status.saetze.length ? status.saetze : null;
+            const titel = choices ? cardTitle(status.targets) : '';
+            const said = (entry) => { if (entry && titel) entry.titel = titel; };
+            if (status.state === 'done') said(say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices, ask));
+            else if (status.state === 'note') said(say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices, ask));
+            else if (status.state === 'failed') said(say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices, ask));
+        }
+
+        // An order ended at /stand, also while a later sentence holds the line: said at its own sentence.
+        root.addEventListener('vibemind:order-ended', (event) => {
+            const status = event.detail || {};
+            const order = Array.isArray(status.orders) && status.orders.length ? String(status.orders[0]) : '';
+            if (!order || !orderKeys.has(order)) return;
+            const key = orderKeys.get(order).key;
+            if (acceptedKey === key) acceptedKey = null;   // its task-status that follows says nothing more
+            sayEnd(status, key);
+        });
+
         root.addEventListener('vibemind:task-status', (event) => {
             const status = event.detail || {};
             if (status.space !== 'ideas') return;
@@ -701,13 +730,7 @@
             if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
                 const key = acceptedKey;
                 acceptedKey = null;
-                // The sentence of the Brain on the order (/stand meldung) and its fixed sentences as buttons.
-                const choices = Array.isArray(status.saetze) && status.saetze.length ? status.saetze : null;
-                const titel = choices ? cardTitle(status.targets) : '';
-                const said = (entry) => { if (entry && titel) entry.titel = titel; };
-                if (status.state === 'done') said(say('✓ fertig' + (status.result ? ' — ' + status.result : ''), 'agent', key, choices));
-                else if (status.state === 'note') said(say((status.note === 'hinweis' ? 'ℹ ' : '? ') + (status.result || 'Hinweis'), choices ? 'vorschlag' : 'agent', key, choices));
-                else if (status.state === 'failed') said(say('✕ ' + (status.error || 'fehlgeschlagen'), 'agent', key, choices));
+                sayEnd(status, key);
             }
             showState();
             // The plan failed: nothing of it was stored. The cards noted in advance go, even when the

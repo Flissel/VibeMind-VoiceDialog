@@ -296,6 +296,8 @@ async function acceptedWithStand(stands) {
     const asked = [];
     w.window.vibemind.orderStand = async (id) => { asked.push(id); return stands.shift() || { stand: 'laeuft' }; };
     w.answerWith({ success: true, ok: true, pending: true, status: 'angenommen', message: 'Auftrag angenommen', orders: [ORDER] });
+    // as in the app: the plan of the sentence runs before its answer comes
+    w.handle({ type: 'task_status', state: 'running', space: 'ideas', plan_id: 'p1', step: 'Einschätzen', done: 0, total: 1 });
     await w.send('Was hältst du von Karte 1?');
     return { w, asked };
 }
@@ -351,4 +353,35 @@ test('/stand unbekannt for 5 minutes: the line says plainly that no answer came'
     assert.equal(w.line(), 'ℹ Ideas: Keine Rückmeldung zum Auftrag Nr. 0000abcd.');
     assert.ok(!w.statuses.includes('failed'));
     assert.ok(w.chatLog().includes('ℹ Keine Rückmeldung zum Auftrag Nr. 0000abcd.'));
+});
+
+// Lauf 5: "Formuliere … aus", 6 s spaeter von Hand "Ergaenze …". Der neue Satz nimmt die Zeile, nicht
+// den Auftrag: dessen Vorschlag kommt trotzdem, im Chat bei seinem Satz.
+test('a later sentence does not lose an open order: its proposal still comes, at its own sentence', async () => {
+    const { w, asked } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'vorschlag', meldung: 'Ein Vorschlag für Karte 1 liegt vor.',
+        saetze: ['Vorschlag zeigen', 'Vorschlag übernehmen', 'Vorschlag verwerfen'] }]);
+    w.advance(5000); await tick();
+    w.answerWith({ success: true, ok: true, message: 'Ergänzt bei Karte 1.' });
+    await w.send('Ergänze bei Karte 1: eine Zeile');
+    w.handle({ type: 'task_status', state: 'running', space: 'ideas', plan_id: 'p2', step: 'Ergänzen', done: 0, total: 1 });
+    assert.match(w.line(), /^● Ideas/);
+    w.advance(5000); await tick();
+    assert.deepEqual(asked, [ORDER, ORDER], 'still asked after the new sentence');
+    const log = w.chatLog();
+    const at = log.indexOf('ℹ Ein Vorschlag für Karte 1 liegt vor.');
+    assert.ok(at > -1, 'the chat says the proposal');
+    assert.ok(at < log.indexOf('Ergänze bei Karte 1: eine Zeile'), 'at the sentence that gave the order, not under the new one');
+    assert.match(w.line(), /^● Ideas/, 'the running task keeps the line');
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p2', result: 'Ergänzt bei Karte 1.' });
+    assert.equal(log.filter((t) => t.startsWith('ℹ Ein Vorschlag')).length, 1, 'said once');
+});
+
+test('an open order ending while nothing else runs takes the line', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'fertig', meldung: 'Fertig.', dauer_s: 9 }]);
+    w.advance(5000); await tick();
+    w.answerWith({ success: true, ok: true, message: 'Ergänzt.' });
+    await w.send('Ergänze bei Karte 2: eine Zeile');
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p3', result: 'Ergänzt.' });
+    w.advance(5000); await tick();
+    assert.equal(w.line(), '✓ Ideas: fertig in 9,0 s — Fertig.');
 });
