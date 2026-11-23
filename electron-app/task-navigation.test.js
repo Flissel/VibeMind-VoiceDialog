@@ -84,7 +84,7 @@ test('a plan reports where it stands and how it ended', () => {
     navigator.handle('hop_started', { space: 'sales', capability: 'sales_draft', description: 'Angebot entwerfen' });
     assert.deepEqual(states()[0], {
         type: 'task_status', state: 'running', plan_id: 'p7', space: 'sales', registry_space: 'sales',
-        step: 'Angebot entwerfen', done: 0, total: 2, result: '', error: '',
+        step: 'Angebot entwerfen', done: 0, total: 2, result: '', error: '', stage: '', result_ref: '',
     });
 
     navigator.handle('hop_completed', {
@@ -199,4 +199,20 @@ test('every arrival moves the tabs, and a change of space does not wait for anim
     assert.match(navigator, /syncSpace: syncSpace/);
     const sync = navigator.slice(navigator.indexOf('function syncSpace'), navigator.indexOf('function updateAgentDisplay'));
     assert.doesNotMatch(sync, /hideFlowzen\(|showFlowzen\(/, 'syncSpace runs after the page of the space was shown and must not hide it');
+});
+
+test('stage and result pointer are passed on and shown once the Brain sends them', () => {
+    const sent = [];
+    const navigator = createTaskNavigator((m) => sent.push(m));
+
+    navigator.handle('plan_started', { plan_id: 'p10', hops: [{}] });
+    navigator.handle('hop_started', { space: 'swedesign', description: 'Anforderungen sammeln', stage: 'Requirements' });
+    assert.equal(sent.at(-1).stage, 'Requirements');
+    navigator.handle('hop_completed', { space: 'swedesign', ok: true, stage: 'Requirements', result_ref: 'shuttle:42', result_preview: "'12 Anforderungen'" });
+    assert.equal(sent.at(-1).result_ref, 'shuttle:42');
+
+    const line = describe({ state: 'running', stage: 'Requirements', step: 'Anforderungen sammeln', done: 0, total: 1 }, 'SWE Design', false);
+    assert.equal(line.text, '● SWE Design: Requirements · Anforderungen sammeln');
+    const done = describe({ state: 'done', result: '12 Anforderungen', result_ref: 'shuttle:42' }, 'SWE Design', false);
+    assert.equal(done.title, '12 Anforderungen\nshuttle:42');
 });

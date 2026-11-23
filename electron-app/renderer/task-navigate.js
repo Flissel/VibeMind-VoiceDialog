@@ -54,7 +54,9 @@
         const count = message.total > 1 ? ` (${Math.min(message.done + (state === 'running' ? 1 : 0), message.total)}/${message.total})` : '';
         const arrow = away ? ' →' : '';
         if (state === 'running') {
-            const step = message.step ? `: ${message.step}` : '';
+            // A pipeline names its stage; it comes before the step.
+            const what = [message.stage, message.step].filter(Boolean).join(' · ');
+            const step = what ? `: ${what}` : '';
             return { state, text: `● ${label}${step}${count}${arrow}`, title: message.result || message.step || '' };
         }
         const took = seconds(message.elapsed_s);
@@ -66,7 +68,7 @@
         return {
             state,
             text: `✓ ${label}: fertig${took ? ' in ' + took : ''}${result}${arrow}`,
-            title: message.result || '',
+            title: [message.result, message.result_ref].filter(Boolean).join('\n'),
         };
     }
 

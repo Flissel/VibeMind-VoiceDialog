@@ -72,6 +72,8 @@ function parseSse(buffer) {
 
 const RESULT_MAX = 240;
 
+const text = (value) => (typeof value === 'string' ? value.trim().slice(0, RESULT_MAX) : '');
+
 /**
  * A short readable text from `result_preview` (a Python repr, cut at 500 characters).
  * A `message`/`result`/`summary` entry inside is preferred over the raw repr.
@@ -118,6 +120,9 @@ function createTaskNavigator(send) {
       total,
       result: last ? last.result : '',
       error: last ? last.error : '',
+      // Announced by the Brain, names provisional: the stage of a pipeline and a pointer to the result.
+      stage: last ? last.stage : '',
+      result_ref: last ? last.result_ref : '',
       ...extra,
     };
     send(message);
@@ -138,7 +143,7 @@ function createTaskNavigator(send) {
       if (kind === 'hop_started') {
         const space = appKeyForSpace(payload.space);
         if (!space) return null; // a general step, or a space without a place in the app
-        last = { space, registry_space: payload.space, step: payload.description || payload.capability || '', result: '', error: '' };
+        last = { space, registry_space: payload.space, step: payload.description || payload.capability || '', result: '', error: '', stage: text(payload.stage), result_ref: '' };
         let navigation = null;
         if (!visited.has(space)) {
           visited.add(space);
@@ -164,6 +169,8 @@ function createTaskNavigator(send) {
           step: payload.description || payload.capability || '',
           result: payload.ok === false ? '' : resultText(payload.result_preview),
           error: payload.ok === false ? String(payload.error || 'fehlgeschlagen').slice(0, RESULT_MAX) : '',
+          stage: text(payload.stage),
+          result_ref: text(payload.result_ref),
         };
         return status('running', { step_ok: payload.ok !== false });
       }
