@@ -23,6 +23,8 @@ const EXTERNAL_SPACES = Object.freeze([
   {
     id: 'sales', label: 'Sales', icon: '\u{1F91D}', color: 0x4fc3f7, position: [26, 0, 2],
     urlEnv: 'SALES_UI_URL',
+    // Pages a finished task may send this space to (goTo). Anything else is refused.
+    paths: ['/', '/freigaben', '/kontakte', '/posteingang', '/post/aufraeumen'],
     agent: { name: 'Sales', slug: 'sales', role: 'Kontakte, Post, Termine' },
   },
   {
@@ -97,14 +99,23 @@ function authFor(space, env = process.env) {
  * The address of a path inside a space, or '' when the text is not a plain path of that space.
  * A task result names only the path ("/freigaben#fg-12"); the base address stays in the environment.
  * Anything that could leave the space (a scheme, "//host", a backslash) is refused.
+ *
+ * The path comes out of a task result, which an agent wrote: it is not trusted. The page is
+ * signed in, so loading an arbitrary address of it could act in the user's name. Therefore only
+ * the pages listed for the space (llowed, a page or anything below it) are taken, without a
+ * query, without ".." and without escapes; a fragment ("#fg-12") may follow.
  */
-function pathTarget(spaceUrl, pathText) {
+function pathTarget(spaceUrl, pathText, allowed) {
   const text = typeof pathText === 'string' ? pathText.trim() : '';
-  if (!spaceUrl || !/^\/(?![\/\\])[^\\\s]*$/.test(text) || text.length > 512) return '';
+  if (!spaceUrl || !Array.isArray(allowed) || !allowed.length) return '';
+  if (!/^\/(?![\/\\])[A-Za-z0-9_\-.~\/]*(#[A-Za-z0-9_\-]*)?$/.test(text) || text.length > 256) return '';
+  const page = text.split('#')[0];
+  if (page.split('/').includes('..')) return '';
+  if (!allowed.some((entry) => page === entry || (entry !== '/' && page.startsWith(entry + '/')))) return '';
   try {
     const base = new URL(spaceUrl);
     const target = new URL(text, base);
-    return target.origin === base.origin ? target.href : '';
+    return target.origin === base.origin && target.pathname === page ? target.href : '';
   } catch (_) {
     return '';
   }
@@ -243,7 +254,7 @@ class ExternalSpaceManager {
    */
   goTo(id, pathText) {
     const space = this.spaces.get(id);
-    const target = space ? pathTarget(space.url, pathText) : '';
+    const target = space ? pathTarget(space.url, pathText, space.paths) : '';
     if (!target) return false;
     const entry = this.views.get(id);
     if (!entry) {

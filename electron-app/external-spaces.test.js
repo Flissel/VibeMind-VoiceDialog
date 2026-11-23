@@ -113,13 +113,17 @@ test('the manager shows one space at a time, each in its own session, and sends 
 
 test('a path names a place inside the space and nothing else', () => {
     const base = 'https://sales.example.test/';
-    assert.equal(pathTarget(base, '/freigaben#fg-12'), 'https://sales.example.test/freigaben#fg-12');
-    assert.equal(pathTarget(base, '/kontakte/42'), 'https://sales.example.test/kontakte/42');
-    assert.equal(pathTarget(base, '/'), base);
-    for (const bad of ['//evil.example/x', 'https://evil.example/', '/\\evil.example', 'freigaben', 'javascript:alert(1)', '', null, '/a b']) {
-        assert.equal(pathTarget(base, bad), '', String(bad));
+    const pages = ['/', '/freigaben', '/kontakte'];
+    assert.equal(pathTarget(base, '/freigaben#fg-12', pages), 'https://sales.example.test/freigaben#fg-12');
+    assert.equal(pathTarget(base, '/kontakte/42', pages), 'https://sales.example.test/kontakte/42');
+    assert.equal(pathTarget(base, '/', pages), base);
+    for (const bad of ['//evil.example/x', 'https://evil.example/', '/\\evil.example', 'freigaben', 'javascript:alert(1)', '', null, '/a b',
+        '/logout', '/api/senden', '/freigaben?senden=1', '/kontakte/../logout', '/kontakte/%2e%2e/logout', '/kontakteX', '/freigaben/./x/../../logout']) {
+        assert.equal(pathTarget(base, bad, pages), '', String(bad));
     }
-    assert.equal(pathTarget('', '/freigaben'), '', 'a space without an address has no paths');
+    assert.equal(pathTarget('', '/freigaben', pages), '', 'a space without an address has no paths');
+    assert.equal(pathTarget(base, '/freigaben'), '', 'a space without listed pages takes none');
+    assert.equal(pathTarget(base, '/freigaben', []), '');
 });
 
 test('an open space goes to a path in its own session; a closed one goes there when it is opened', () => {
@@ -133,6 +137,8 @@ test('an open space goes to a path in its own session; a closed one goes there w
 
     assert.equal(manager.goTo('sales', '//evil.example/'), false);
     assert.equal(manager.goTo('orders', '/x'), false, 'a local page has no paths');
+    assert.equal(manager.goTo('sales', '/logout'), false, 'only the listed pages of the space');
+    assert.equal(manager.goTo('marketing', '/freigaben'), false, 'a space without listed pages takes none');
     assert.equal(manager.goTo('sales', '/freigaben'), true);
     manager.show('sales');
     assert.deepEqual(targets, ['https://sales.example.test/freigaben']);
