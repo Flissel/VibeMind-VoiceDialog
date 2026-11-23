@@ -176,15 +176,16 @@
 
     /**
      * The answer of the Brain in the chat, short: a judgement comes back as a long text, its whole
-     * wording stands at the card it wrote. Cut after a sentence (else a word) and say where the rest is.
+     * wording stands at the card it wrote. Cut after a sentence (else a word); "mehr an der Karte" only
+     * when the Brain names that card (ziel with node_id): a grouping writes no card of its own (Lauf 15).
      */
-    function brief(text) {
+    function brief(text, atCard) {
         const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
         if (line.length <= REPORT_MAX) return line;
         const head = line.slice(0, REPORT_MAX);
         const sentence = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '), head.lastIndexOf(': '));
         const cut = sentence >= REPORT_MAX / 2 ? head.slice(0, sentence + 1) : head.slice(0, Math.max(head.lastIndexOf(' '), REPORT_MAX / 2));
-        return cut.replace(/[\s,;:–-]+$/, '') + ' … mehr an der Karte';
+        return cut.replace(/[\s,;:–-]+$/, '') + (atCard ? ' … mehr an der Karte' : ' …');
     }
 
     /** Data of a tool rather than a sentence for a person: a dict, list or call, or its meta field. */
@@ -590,7 +591,8 @@
                     result: 'Keine Rückmeldung zum Auftrag' + (nr ? ' Nr. ' + nr : '') + '.', error: '' };
             } else if (stand.stand === 'fertig' || stand.stand === 'uebernommen') {
                 // uebernommen: the proposal is written now; no sentences to choose any more
-                ended = { ...base, state: 'done', result: brief(said) || (stand.stand === 'uebernommen' ? 'Der Vorschlag ist übernommen.' : 'Ergebnis an der Karte'), error: '',
+                const atCard = Boolean(stand.ziel && typeof stand.ziel === 'object' && stand.ziel.node_id);
+                ended = { ...base, state: 'done', result: brief(said, atCard) || (stand.stand === 'uebernommen' ? 'Der Vorschlag ist übernommen.' : 'Ergebnis an der Karte'), error: '',
                     saetze: stand.stand === 'uebernommen' ? [] : saetze };
             } else if (stand.stand === 'fehler') {
                 ended = { ...base, state: 'failed', result: '', error: said || 'Der Auftrag hat nicht geklappt.' };

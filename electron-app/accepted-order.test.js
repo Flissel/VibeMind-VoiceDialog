@@ -591,7 +591,9 @@ test('a judgement: its new card does not end the order; /stand brings the answer
     const answer = 'Es fehlen ein Zeitplan, die Verantwortlichen und die Kosten. Offen sind auch die Mengen und die Fragen zur Zahlung. '
         + 'Dazu kommt, dass noch kein Termin für den Versuch steht und niemand die Bestellung der Teile übernommen hat, '
         + 'was den Beginn verschiebt.';
-    const { w } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'laeuft' }, { stand: 'fertig', meldung: answer, dauer_s: 85 }]);
+    // /stand of a judgement names the card it wrote (Lauf 11: ziel with node_id)
+    const ziel = { space: 'ideas', bubble_id: BUBBLE, node_id: '00000000-0000-4000-8000-000000000003' };
+    const { w } = await acceptedWithStand([{ stand: 'laeuft' }, { stand: 'laeuft' }, { stand: 'fertig', meldung: answer, dauer_s: 85, ziel }]);
     w.advance(5000); await tick();
     w.loaded(cards().concat([{ id: '00000000-0000-4000-8000-000000000003', title: 'Einschätzung: Was fehlt noch?', content: 'lang' }]));
     assert.equal(w.line(), '● Ideas: arbeitet … (Auftrag angenommen)', 'the new card is no end: /stand says it');
@@ -607,6 +609,21 @@ test('a short answer of /stand stands whole, without "mehr an der Karte"', async
     const { w } = await acceptedWithStand([{ stand: 'fertig', meldung: 'Die Karten stehen jetzt in 2 Gruppen.', dauer_s: 9 }]);
     w.advance(5000); await tick();
     assert.equal(w.chatLog()[1], '✓ fertig in 9 s — Die Karten stehen jetzt in 2 Gruppen.');
+});
+
+// Lauf 15: the grouping line in the chat ended with "… mehr an der Karte"; a grouping writes no card of
+// its own, its ziel names the bubble only (node_id null, as in the window log). Titles invented.
+test('a long answer without a card in ziel: cut, but no "mehr an der Karte"', async () => {
+    const answer = 'Die Karten stehen jetzt in 3 Gruppen. Gruppe A: Karte 1, Karte 2 und Karte 3. '
+        + 'Gruppe B: Karte 4 und Karte 5, dazu Karte 6, die zu beiden passt. Gruppe C: Karte 7, Karte 8 und Karte 9, '
+        + 'die noch keine Überschrift hatten.';
+    for (const ziel of [{ space: 'ideas', bubble_id: BUBBLE, node_id: null }, undefined]) {
+        const { w } = await acceptedWithStand([{ stand: 'fertig', meldung: answer, dauer_s: 9, ziel }]);
+        w.advance(5000); await tick();
+        const line = w.chatLog()[1];
+        assert.match(line, /^✓ fertig in 9 s — Die Karten stehen jetzt in 3 Gruppen\. .* …$/, String(ziel && 'node_id null'));
+        assert.doesNotMatch(line, /mehr an der Karte/);
+    }
 });
 
 test('the jump is the same from every place to type: a sentence in an open bubble goes to the space of its result', () => {
