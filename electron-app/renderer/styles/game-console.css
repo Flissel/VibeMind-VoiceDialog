@@ -210,6 +210,31 @@
     display: none;
 }
 
+/* asked for again with "?" at the input: shown also below a list */
+.gc-messages:has(.gc-msg) > .gc-start.gc-start-shown {
+    display: flex;
+    border-top: 1px solid rgba(var(--space-accent-rgb), 0.15);
+    padding-top: 6px;
+}
+
+.gc-help-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--space-accent-rgb), 0.35);
+    background: transparent;
+    color: rgba(var(--space-accent-rgb), 1);
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.gc-help-btn:hover,
+.gc-help-btn[aria-expanded="true"] {
+    background: rgba(var(--space-accent-rgb), 0.22);
+}
+
 .gc-start-example {
     font: inherit;
     padding: 4px 10px;

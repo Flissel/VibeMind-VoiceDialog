@@ -6,6 +6,9 @@
  * of its own shows the ones that work from every tab. None of them leads to the Desktop space: that
  * stays no navigation target. A sentence ending in "…" is a start: the click puts it into the field
  * and the person writes the rest; every click only fills the field, the person sends.
+ *
+ * Later the "?" button at the input shows the sentences again, at the end of the list (Lauf 9: the
+ * list was never empty, so they could not be seen); a click on a sentence or on "?" hides them.
  */
 (function (root, factory) {
     const api = factory();
@@ -24,6 +27,7 @@
         clawport: ['Welche geplanten Aufgaben gibt es?'],
     };
     const MAX = 3;
+    const SHOWN = 'gc-start-shown';
 
     /** The sentences for a space: its own first, then those from every tab, without repeats. */
     function examplesFor(space) {
@@ -56,9 +60,21 @@
                 if (!input) return;
                 input.value = fieldText(sentence);
                 input.focus();
+                show(doc, box, false);
             });
             box.appendChild(button);
         }
+    }
+
+    /** The sentences asked for by "?": on or off, at the end of the list where the person reads. */
+    function show(doc, box, on) {
+        box.classList.toggle(SHOWN, on);
+        const help = doc.getElementById('gc-help-btn');
+        if (help) help.setAttribute('aria-expanded', on ? 'true' : 'false');
+        const messages = box.parentNode;
+        if (!on || !messages) return;
+        messages.appendChild(box);
+        messages.scrollTop = messages.scrollHeight;
     }
 
     function mount(win, doc) {
@@ -70,6 +86,18 @@
             messages.insertBefore(box, messages.firstChild);
             const app = win.multiverseApp;
             render(doc, box, app && app.currentSpace ? app.currentSpace : 'ideas');
+            const send = doc.getElementById('gc-send-btn');
+            if (send && send.parentNode) {
+                const help = doc.createElement('button');
+                help.type = 'button';
+                help.id = 'gc-help-btn';
+                help.className = 'gc-help-btn';
+                help.textContent = '?';
+                help.title = 'Beispielsätze zeigen';
+                help.setAttribute('aria-expanded', 'false');
+                help.addEventListener('click', () => show(doc, box, !box.classList.contains(SHOWN)));
+                send.parentNode.insertBefore(help, send);
+            }
             win.addEventListener('vibemind:space-arrived', (event) => {
                 render(doc, box, event && event.detail ? event.detail.space : 'ideas');
             });
