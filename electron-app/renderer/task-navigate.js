@@ -647,7 +647,10 @@
         }
 
         root.addEventListener('vibemind:canvas-loaded', (event) => {
-            if (!current || current.state !== 'accepted' || !watch || endsByStand()) return;
+            // Not before the answer to the sentence: only it says whether the order has a number (then
+            // /stand ends it). Lauf 10: the plan reported "accepted" 5 ms before the answer, a reload of
+            // the cards in between ended it at once ("fertig in 0 s — Ergebnis an der Karte").
+            if (!current || current.state !== 'accepted' || !watch || awaiting || endsByStand()) return;
             const detail = (event && event.detail) || {};
             const nodes = Array.isArray(detail.nodes) ? detail.nodes : [];
             const bubbleId = detail.bubbleId || null;
@@ -670,7 +673,7 @@
             const row = event && event.detail ? event.detail.row : null;
             if (!row || row.id == null) return;
             lastRow = row;
-            if (!current || current.state !== 'accepted' || !watch || endsByStand()) return;
+            if (!current || current.state !== 'accepted' || !watch || awaiting || endsByStand()) return;
             if (watch.bubbleId && String(watch.bubbleId) !== String(row.id)) return;
             const count = reasonCount(row);
             if (count === null) return;

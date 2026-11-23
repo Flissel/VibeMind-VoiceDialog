@@ -691,3 +691,30 @@ test('ziel: the answer and the end of the plan lead there at once; /stand only w
     plain.w.advance(5000); await tick();
     assert.deepEqual(followed, []);
 });
+
+// Lauf 10, "Gruppiere die Karten": the plan reports "accepted" 5 ms before the answer that names the order;
+// a reload of the cards in between ended it at once ("✓ fertig in 0 s — Ergebnis an der Karte", and it stayed).
+test('grouping: a card reload before the answer does not end the order; /stand ends it later', async () => {
+    const w = world();
+    const replies = [];
+    const stands = [{ stand: 'laeuft' }, { stand: 'fertig', meldung: '2 Gruppen angelegt.' }];
+    w.window.vibemind.orderStand = async () => stands.shift() || { stand: 'fertig', meldung: '2 Gruppen angelegt.' };
+    w.window.vibemind.sendChatMessage = () => new Promise((resolve) => replies.push(resolve));
+    const status = (fields) => w.handle({ type: 'task_status', space: 'ideas', registry_space: 'ideas', result: '', error: '', ...fields });
+    w.loaded(cards());
+    status({ state: 'reset', plan_id: 'ideen_G' });
+    const sent = w.send('Gruppiere die Karten');
+    status({ state: 'running', plan_id: 'ideen_G', step: 'Nach Thema gruppieren', done: 0, total: 1 });
+    w.advance(1900);
+    status({ state: 'running', plan_id: 'ideen_G', step: 'Nach Thema gruppieren', done: 1, total: 1, step_ok: true, accepted: true });
+    status({ state: 'accepted', plan_id: 'ideen_G', step: 'Nach Thema gruppieren', done: 1, total: 1, elapsed_s: null, targets: [] });
+    w.loaded(cards().concat([{ id: '00000000-0000-4000-8000-000000000009', title: 'Gruppe A', content: '' }]));
+    replies[0]({ type: 'chat_response', success: true, message: 'Auftrag angenommen, Nr. 0000abcd – zuständig: brain-ideas.',
+        event_type: 'brain.multihop', plan_id: 'ideen_G', pending: true, status: 'angenommen', targets: [], orders: [ORDER] });
+    await sent;
+    assert.ok(!w.chatLog().some((l) => /fertig in 0 s/.test(l)), 'no second end line');
+    assert.match(w.line(), /^● Ideas: arbeitet/);
+    for (let i = 0; i < 12 && !/^✓/.test(w.line()); i++) { w.advance(5000); await tick(); }
+    assert.match(w.line(), /^✓ Ideas: fertig/);
+    assert.equal(w.chatLog().filter((l) => /fertig/.test(l)).length, 1, 'one end line, from /stand');
+});
