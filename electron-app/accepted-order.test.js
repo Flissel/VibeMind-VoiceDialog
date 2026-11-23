@@ -626,6 +626,28 @@ test('a long answer without a card in ziel: cut, but no "mehr an der Karte"', as
     }
 });
 
+// Lauf 17: the grouping line was cut at its end and lost the sentence on how to undo it. That sentence
+// stays whole, the groups before it are cut. Titles invented.
+test('a long answer that ends with "Zurück …": that sentence stays, the text before it is cut', async () => {
+    const groups = 'Die Karten stehen jetzt in 3 Gruppen. Gruppe A: Karte 1, Karte 2 und Karte 3. '
+        + 'Gruppe B: Karte 4 und Karte 5, dazu Karte 6, die zu beiden passt. Gruppe C: Karte 7, Karte 8 und Karte 9, '
+        + 'die noch keine Überschrift hatten.';
+    const undo = 'Zurück nimmt das als Ganzes zurück.';
+    const ziel = { space: 'ideas', bubble_id: BUBBLE, node_id: null };
+    const { w } = await acceptedWithStand([{ stand: 'fertig', meldung: groups + ' ' + undo, dauer_s: 9, ziel }]);
+    w.advance(5000); await tick();
+    const line = w.chatLog()[1];
+    assert.ok(line.startsWith('✓ fertig in 9 s — Die Karten stehen jetzt in 3 Gruppen. '), line);
+    assert.ok(line.endsWith(' … ' + undo), line);
+    assert.ok(line.length - '✓ fertig in 9 s — '.length <= 200, 'no longer than before');
+    assert.doesNotMatch(line, /Karte 9/, 'the middle is cut');
+
+    // a sentence that only starts with another word stays cut as before
+    const other = await acceptedWithStand([{ stand: 'fertig', meldung: groups + ' Danach zurück in die Bubble.', dauer_s: 9, ziel }]);
+    other.w.advance(5000); await tick();
+    assert.doesNotMatch(other.w.chatLog()[1], /Danach zurück/);
+});
+
 test('the jump is the same from every place to type: a sentence in an open bubble goes to the space of its result', () => {
     // Abnahme point 4: the result lies in another space, the app goes there. From the console it
     // did; from the chat of an open bubble (the one place to type there) the plan stayed a note.

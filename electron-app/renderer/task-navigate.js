@@ -178,14 +178,27 @@
      * The answer of the Brain in the chat, short: a judgement comes back as a long text, its whole
      * wording stands at the card it wrote. Cut after a sentence (else a word); "mehr an der Karte" only
      * when the Brain names that card (ziel with node_id): a grouping writes no card of its own (Lauf 15).
+     * A last sentence on how to undo it ("Zurück nimmt …") is what the person needs next: it stays
+     * whole and the text before it is cut (Lauf 17: the grouping line lost it).
      */
     function brief(text, atCard) {
         const line = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
         if (line.length <= REPORT_MAX) return line;
-        const head = line.slice(0, REPORT_MAX);
+        const more = atCard ? ' … mehr an der Karte' : ' …';
+        const undo = /[.!?] (Zurück\b[^.!?]*[.!?]?)$/.exec(line);
+        if (undo && undo[1].length <= REPORT_MAX / 2) {
+            const body = line.slice(0, undo.index + 1);
+            return cutAt(body, REPORT_MAX - undo[1].length - 2) + ' … ' + undo[1] + (atCard ? ' Mehr an der Karte.' : '');
+        }
+        return cutAt(line, REPORT_MAX) + more;
+    }
+
+    /** The text cut to at most max characters: after a sentence in its second half, else after a word. */
+    function cutAt(text, max) {
+        const head = text.slice(0, max);
         const sentence = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '), head.lastIndexOf(': '));
-        const cut = sentence >= REPORT_MAX / 2 ? head.slice(0, sentence + 1) : head.slice(0, Math.max(head.lastIndexOf(' '), REPORT_MAX / 2));
-        return cut.replace(/[\s,;:–-]+$/, '') + (atCard ? ' … mehr an der Karte' : ' …');
+        const cut = sentence >= max / 2 ? head.slice(0, sentence + 1) : head.slice(0, Math.max(head.lastIndexOf(' '), max / 2));
+        return cut.replace(/[\s,;:–-]+$/, '');
     }
 
     /** Data of a tool rather than a sentence for a person: a dict, list or call, or its meta field. */
