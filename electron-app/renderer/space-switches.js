@@ -18,6 +18,9 @@
             if (tab) {
                 tab.hidden = true;
                 tab.setAttribute('aria-hidden', 'true');
+                // `hidden` alone loses against `.space-tab { display: flex }`; an inline important
+                // display wins against every stylesheet rule.
+                tab.style.setProperty('display', 'none', 'important');
             }
             done.push(id);
         }

@@ -85,6 +85,11 @@
     transition: all 0.2s ease;
 }
 
+/* A tab switched off (space-switches.js) stays in the page but is not shown. */
+.space-tab[hidden] {
+    display: none !important;
+}
+
 .space-tab:hover {
     background: rgba(var(--space-accent-rgb), 0.10);
     color: rgba(200, 220, 255, 0.9);
