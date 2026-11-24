@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { ExternalSpaceManager, barState, BAR_HEIGHT } = require('./external-spaces');
+const { ExternalSpaceManager, barState, backTarget, BAR_HEIGHT } = require('./external-spaces');
 const { view } = require('./renderer/space-bar');
 
 // The Sales case from the app: signed in at the start, then through inbox and post to the
@@ -25,7 +25,9 @@ function fakeElectron() {
                 on(name, handler) { handlers[name] = handler; },
                 getURL: () => (index >= 0 ? history[index] : ''),
                 canGoBack: () => index > 0,
+                getActiveIndex: () => index,
                 goBack() { index -= 1; handlers['did-navigate'] && handlers['did-navigate']({}, history[index]); },
+                goToIndex(i) { index = i; handlers['did-navigate'] && handlers['did-navigate']({}, history[index]); },
                 // what the page does when a link is followed
                 follow(url, inPage = false) {
                     history.splice(index + 1);
@@ -102,6 +104,39 @@ test('Sales: follow links to the course notes, the bar appears; back and start b
     assert.equal(m.home('sales'), true);
     assert.deepEqual(loads, ['sales', 'sales'], 'start = the first opening again (check, sign-in)');
     assert.equal(bars().at(-1).verlassen, false);
+});
+
+test('"Zurück" skips entries with the same address: one press always shows another page', () => {
+    // pure rule: index -> place, the index on screen
+    const P = (p) => `https://sales.example.test:8445${p}`;
+    assert.equal(backTarget([P(''), P('/post'), P('/mitschriften/kurs'), P('/mitschriften/kurs')], 3), 1);
+    assert.equal(backTarget([P(''), P('/post')], 1), 0);
+    assert.equal(backTarget([P('/x'), P('/x'), P('/x')], 2), -1, 'nothing different behind: no way back');
+    assert.equal(backTarget([P(''), undefined, P('/post')], 2), 1, 'an entry not known counts as different');
+    assert.equal(backTarget([], 0), -1);
+
+    // the case from the app: the course notes were reached through a detour that left a second
+    // entry of the same page (sign-in redirect); the first press used to change nothing
+    const { m, electron, bars } = manager();
+    m.show('sales');
+    const page = electron.made[0].webContents;
+    page.follow('https://sales.example.test:8445/posteingang');
+    page.follow('https://sales.example.test:8445/mitschriften/kurs?id=7');
+    page.follow('https://sales.example.test:8445/mitschriften/kurs?id=7&angemeldet=1');
+    assert.equal(bars().at(-1).zurueck, true);
+    assert.equal(m.back('sales'), true);
+    assert.equal(page.getURL(), 'https://sales.example.test:8445/posteingang', 'the first press leaves the course notes');
+    assert.equal(m.back('sales'), true);
+    assert.equal(bars().at(-1).verlassen, false, 'the second reaches the start');
+
+    // only repeats of the same page behind it: the bar offers no "Zurück"
+    const two = manager();
+    two.m.show('sales');
+    const again = two.electron.made[0].webContents;
+    again.follow('https://sales.example.test:8445/post', true);
+    assert.equal(two.bars().at(-1).zurueck, true);
+    again.follow('https://sales.example.test:8445/post?neu=1', true);
+    assert.equal(two.bars().at(-1).zurueck, true, 'the start is still behind, a different page');
 });
 
 test('a link inside the page (only the fragment or history.pushState) counts too', () => {

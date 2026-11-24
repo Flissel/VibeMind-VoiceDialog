@@ -162,6 +162,20 @@ function barState(startUrl, currentUrl, canGoBack, card) {
   return { verlassen, zurueck: verlassen && Boolean(canGoBack) };
 }
 
+/**
+ * Where "Zurück" leads: the nearest earlier history entry that shows a different page. Entries
+ * with the same address (a sign-in detour, a redirect, a reload) are skipped, so one press always
+ * changes what is on screen. An entry whose address is not known counts as different.
+ * places: index -> place (see placeOf), active: the index on screen. Returns the index, or -1.
+ */
+function backTarget(places, active) {
+  const here = places[active];
+  for (let i = active - 1; i >= 0; i--) {
+    if (!places[i] || places[i] !== here) return i;
+  }
+  return -1;
+}
+
 /** Adds the key unless the page already sent its own Authorization header. */
 function withAuthorization(requestHeaders, header) {
   const has = Object.keys(requestHeaders || {}).some((name) => name.toLowerCase() === 'authorization');
@@ -184,6 +198,7 @@ class ExternalSpaceManager {
     this._issued = new Map(); // id -> access cookie set for this space (main process only)
     this._pathOnOpen = new Map(); // id -> address inside the space to go to when it is opened next (goTo)
     this._wanted = new Map();     // id -> { target, detour } a path on its way, see _navigated
+    this._places = new Map();     // id -> [place per history index], see _remember and backTarget
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -244,8 +259,8 @@ class ExternalSpaceManager {
         });
       }
     });
-    view.webContents.on('did-navigate', (_event, url) => { this._navigated(id, url); this._reportBar(id); });
-    view.webContents.on('did-navigate-in-page', () => this._reportBar(id));
+    view.webContents.on('did-navigate', (_event, url) => { this._remember(id); this._navigated(id, url); this._reportBar(id); });
+    view.webContents.on('did-navigate-in-page', () => { this._remember(id); this._reportBar(id); });
     this.views.set(id, { view, result: null });
     if (space.access && space.url) {
       this._ready.set(id, this._signIn(space, view).then(() => { this._load(id); }));
@@ -305,7 +320,7 @@ class ExternalSpaceManager {
     const space = this.spaces.get(id);
     const contents = entry && entry.view.webContents;
     const state = contents && typeof contents.getURL === 'function'
-      ? barState(this._startUrl(space), contents.getURL(), contents.canGoBack && contents.canGoBack(), Boolean(entry.result && !entry.result.ok))
+      ? barState(this._startUrl(space), contents.getURL(), this._backIndex(id) >= 0, Boolean(entry.result && !entry.result.ok))
       : { verlassen: false, zurueck: false };
     this.barShown = state.verlassen;
     this._updateBounds();
@@ -318,12 +333,34 @@ class ExternalSpaceManager {
     }
   }
 
-  /** "Zurück": one step back in the page's own history. */
+  /** Notes the address of the history entry now on screen (Electron 28 cannot list them). */
+  _remember(id) {
+    const entry = this.views.get(id);
+    const contents = entry && entry.view.webContents;
+    if (!contents || typeof contents.getActiveIndex !== 'function') return;
+    if (!this._places.has(id)) this._places.set(id, []);
+    this._places.get(id)[contents.getActiveIndex()] = placeOf(contents.getURL());
+  }
+
+  /** The history index "Zurück" goes to, or -1 (see backTarget); plain canGoBack where indexes are missing. */
+  _backIndex(id) {
+    const entry = this.views.get(id);
+    const contents = entry && entry.view.webContents;
+    if (!contents || !contents.canGoBack || !contents.canGoBack()) return -1;
+    if (typeof contents.getActiveIndex !== 'function' || typeof contents.goToIndex !== 'function') {
+      return Number.MAX_SAFE_INTEGER;    // unknown: one plain step back
+    }
+    return backTarget(this._places.get(id) || [], contents.getActiveIndex());
+  }
+
+  /** "Zurück": to the previous page that looks different, skipping entries with the same address. */
   back(id) {
     const entry = id === this.visibleId && this.views.get(id);
     const contents = entry && entry.view.webContents;
-    if (!contents || !contents.canGoBack || !contents.canGoBack()) return false;
-    contents.goBack();
+    const target = entry ? this._backIndex(id) : -1;
+    if (target < 0) return false;
+    if (target === Number.MAX_SAFE_INTEGER) contents.goBack();
+    else contents.goToIndex(target);
     return true;
   }
 
@@ -408,5 +445,5 @@ class ExternalSpaceManager {
 
 module.exports = {
   EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
-  barState, BAR_HEIGHT,
+  barState, backTarget, BAR_HEIGHT,
 };
