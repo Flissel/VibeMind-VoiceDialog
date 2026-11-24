@@ -124,13 +124,16 @@
         for (const space of list) {
             if (app.spaces[space.id]) continue;
             const entry = sceneEntry(THREE, space);
-            const gate = buildGate(THREE, space);
-            entry.group = gate.group;
+            // A space with its own base model (space-models.js) shows it; the others keep the gate.
+            const model = root.VibeSpaceModels ? root.VibeSpaceModels.build(THREE, space) : null;
+            const gate = model ? null : buildGate(THREE, space);
+            entry.group = model ? model.group : gate.group;
             entry.gate = gate;
-            entry.objects.push(gate.group);
+            entry.model = model;
+            entry.objects.push(entry.group);
             app.spaces[space.id] = entry;
-            app.scene.add(gate.group);
-            if (root.VibeSceneKit) root.VibeSceneKit.polishObject(THREE, gate.group);
+            app.scene.add(entry.group);
+            if (root.VibeSceneKit) root.VibeSceneKit.polishObject(THREE, entry.group);
             addTab(root.document, space, () => {
                 if (root.spaceNavigator) root.spaceNavigator.switchSpace(space.id);
                 else app.navigateToSpace(space.id);
@@ -141,8 +144,10 @@
             root.requestAnimationFrame(turn);
             const t = app.clock ? app.clock.elapsedTime : 0;
             for (const space of list) {
-                const gate = app.spaces[space.id] && app.spaces[space.id].gate;
+                const entry = app.spaces[space.id];
+                const gate = entry && entry.gate;
                 if (gate) gate.ring.rotation.y = gate.sign.rotation.y = Math.sin(t * 0.25 + space.position[0]) * 0.5;
+                else if (entry && entry.model) entry.model.tick(t);
             }
         };
         turn();
