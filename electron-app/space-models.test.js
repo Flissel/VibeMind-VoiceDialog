@@ -47,9 +47,39 @@ const EXPECT = {
         state: (g) => [...g.getObjectByName('buehne-wimpel').instanceMatrix.array.slice(0, 2),
             ...g.getObjectByName('buehne-spots').children.map((b) => b.rotation.z)],
     },
+    klemmbrett: {
+        space: 'orders',
+        parts: ['klemmbrett-brett', 'klemmbrett-klammer', 'klemmbrett-zeilen', 'klemmbrett-haken', 'klemmbrett-staffelei'],
+        triangles: [600, 900],
+        state: (g) => g.getObjectByName('klemmbrett-haken').children.map((bars) => bars.count),
+    },
 };
 
 const GATE_TRIANGLES = 3572;   // what the gate with its emoji sign costs after the polish
+
+test('the clipboard ticks its five lines one after the other, then starts again', () => {
+    const model = build(THREE, space('orders'));
+    const shown = (t) => { model.tick(t); return model.group.getObjectByName('klemmbrett-haken').children.map((bars) => bars.count); };
+    assert.deepEqual(shown(0), [0, 0]);
+    assert.deepEqual(shown(2 / 0.6), [2, 2]);
+    assert.deepEqual(shown(5.5 / 0.6), [5, 5]);
+    assert.deepEqual(shown(6.5 / 0.6), [5, 5], 'a pause with all ticked');
+    assert.deepEqual(shown(7.5 / 0.6), [0, 0], 'and again');
+});
+
+test('Auftraege stands clear of Video and of every other space: at least 8 units apart', () => {
+    // the built-in spaces, as multiverse.js places them
+    const builtIn = [...read('renderer', 'multiverse.js').matchAll(/position: new THREE\.Vector3\((-?[\d.]+), 0, (-?[\d.]+)\)/g)]
+        .map((m) => [Number(m[1]), Number(m[2])]);
+    assert.ok(builtIn.length >= 11, `built-in spaces ${builtIn.length}`);
+    assert.ok(builtIn.some(([x, z]) => x === -10 && z === 24), 'Video is among them');
+    const others = [...builtIn, ...spaces().filter((s) => s.id !== 'orders').map((s) => [s.position[0], s.position[2]])];
+    const [x, , z] = space('orders').position;
+    for (const [ox, oz] of others) {
+        const d = Math.hypot(x - ox, z - oz);
+        assert.ok(d >= 8, `Auftraege (${x}, ${z}) is ${d.toFixed(1)} from (${ox}, ${oz})`);
+    }
+});
 
 test('the table names a figure file for every space in it, and only for known spaces', () => {
     const known = spaces().map((s) => s.id);

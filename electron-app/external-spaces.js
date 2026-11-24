@@ -48,7 +48,8 @@ const EXTERNAL_SPACES = Object.freeze([
   },
   {
     // Schedule, Research and Minibook have no page of their own; this local page shows all three.
-    id: 'orders', label: 'Aufträge', icon: '\u{1F4CB}', color: 0xb39ddb, position: [-8, 0, 26],
+    // Placed clear of Video (-10, 0, 24): at least 8 units from every space (space-models.test.js).
+    id: 'orders', label: 'Aufträge', icon: '\u{1F4CB}', color: 0xb39ddb, position: [-3, 0, 29],
     localPage: 'auftraege/index.html', preload: 'auftraege-preload.js',
     agent: { name: 'Aufträge', slug: 'orders', role: 'Termine, Recherche, Minibook' },
   },
