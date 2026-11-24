@@ -27,6 +27,13 @@ const EXPECT = {
         state: (g) => [g.getObjectByName('disco-kugel').rotation.y, g.getObjectByName('disco-strahlen').rotation.y,
             ...g.getObjectByName('disco-tanzflaeche').children.map((s) => s.material.emissiveIntensity)],
     },
+    leuchtturm: {
+        space: 'marketing',
+        parts: ['leuchtturm-fels', 'leuchtturm-turm', 'leuchtturm-lampe', 'leuchtturm-strahl', 'leuchtturm-wellen'],
+        triangles: [1600, 1800],
+        state: (g) => [g.getObjectByName('leuchtturm-strahl').rotation.y, g.getObjectByName('leuchtturm-lampe').material.emissiveIntensity,
+            ...g.getObjectByName('leuchtturm-wellen').instanceMatrix.array.slice(0, 1)],
+    },
 };
 
 const GATE_TRIANGLES = 3572;   // what the gate with its emoji sign costs after the polish
