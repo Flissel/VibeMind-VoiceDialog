@@ -148,7 +148,7 @@
 
         // Update agent display based on space
         if (mvSpaceInfo && mvSpaceInfo.agent) {
-            updateAgentDisplay(mvSpaceInfo.agent.slug);
+            updateAgentDisplay(mvSpaceInfo.agent.slug, mvSpaceInfo.agent.name);
         }
 
         // Hide/show appropriate info panels
@@ -163,10 +163,11 @@
         // on arrival and on leaving; doing it here as well would hide the page just shown.
     }
 
-    function updateAgentDisplay(agentName) {
+    /** slug: the agent's key (also its colour class); shownName: what the user reads, e.g. "Aufträge". */
+    function updateAgentDisplay(agentName, shownName) {
         window.currentAgent = agentName;
         if (agentNameDisplay) {
-            agentNameDisplay.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+            agentNameDisplay.textContent = displayName(agentName, shownName);
         }
         // Update indicator color based on agent
         var indicator = document.querySelector('.agent-indicator');
@@ -175,10 +176,17 @@
         }
     }
 
+    /** The name the indicator shows: the space's own name when given, else the key with a capital. */
+    function displayName(slug, shownName) {
+        if (typeof shownName === 'string' && shownName.trim()) return shownName.trim();
+        return slug.charAt(0).toUpperCase() + slug.slice(1);
+    }
+
     // Public API
     window.spaceNavigator = {
         switchSpace: switchSpace,
         syncSpace: syncSpace,
-        updateAgentDisplay: updateAgentDisplay
+        updateAgentDisplay: updateAgentDisplay,
+        displayName: displayName
     };
 })();
