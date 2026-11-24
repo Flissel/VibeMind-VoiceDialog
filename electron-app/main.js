@@ -2732,10 +2732,11 @@ function setupIpcHandlers() {
     let n8nWindow = null;
     ipcMain.handle('clawport:open-n8n-editor', async (_event, opts) => {
         const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
+        const editor = require('./n8n-editor');
         const workflowId = opts?.workflowId;
         if (n8nWindow && !n8nWindow.isDestroyed()) {
             if (workflowId) {
-                n8nWindow.loadURL(`${n8nUrl}/workflow/${workflowId}`);
+                n8nWindow.loadURL(`${n8nUrl}${editor.targetPath(workflowId)}`);
             }
             n8nWindow.focus();
             return { success: true };
@@ -2747,50 +2748,12 @@ function setupIpcHandlers() {
             webPreferences: { nodeIntegration: false, contextIsolation: true },
         });
         n8nWindow.on('closed', () => { n8nWindow = null; });
-
-        // Sign-in only with the account from the environment (N8N_UI_EMAIL, N8N_UI_PASSWORD), as the
-        // Agent Farm does; never with a value written into the code. Without one the editor opens at
-        // its sign-in page and the user signs in there.
-        const targetPath = workflowId ? `/workflow/${workflowId}` : '/';
-        const email = typeof process.env.N8N_UI_EMAIL === 'string' ? process.env.N8N_UI_EMAIL.trim() : '';
-        const password = typeof process.env.N8N_UI_PASSWORD === 'string' ? process.env.N8N_UI_PASSWORD : '';
-        n8nWindow.loadURL(`${n8nUrl}/signin`);
-        if (!email || !password) {
-            console.log('[n8n] Editor ohne automatische Anmeldung geoeffnet (N8N_UI_EMAIL/N8N_UI_PASSWORD nicht gesetzt)');
-            return { success: true, autoLogin: false, message: 'n8n-Editor ist offen. Bitte dort anmelden – fuer die automatische Anmeldung fehlen N8N_UI_EMAIL und N8N_UI_PASSWORD.' };
-        }
-        const login = JSON.stringify({ emailOrLdapLoginId: email, password });
-        // The account only goes into n8n's own sign-in page: same origin as n8nUrl, path /signin.
-        // A page that merely has "/signin" somewhere in its address gets nothing.
-        const isN8nSignin = (address) => {
-            try {
-                const at = new URL(address);
-                return at.origin === new URL(n8nUrl).origin && at.pathname.replace(/\/+$/, '') === '/signin';
-            } catch (_) {
-                return false;
-            }
-        };
-        n8nWindow.webContents.on('did-navigate', (_event, url) => {
-            if (!n8nWindow || n8nWindow.isDestroyed()) return;
-            if (!isN8nSignin(url)) return;
-            console.log('[Main] n8n signin detected, auto-login → ' + targetPath);
-            setTimeout(() => {
-                if (!n8nWindow || n8nWindow.isDestroyed()) return;
-                if (!isN8nSignin(n8nWindow.webContents.getURL())) return;   // it may have moved on meanwhile
-                // The account goes in as a JSON literal, so no quote in it can break the script.
-                n8nWindow.webContents.executeJavaScript(`
-                    fetch('${n8nUrl}/rest/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify(${login})
-                    }).then(r => {
-                        if (r.ok) window.location.href = ${JSON.stringify(targetPath)};
-                    }).catch(() => {});
-                `).catch(() => {});
-            }, 1500);
+        // Sign-in in the main process with the account from the environment only; the window
+        // stays on n8n (see n8n-editor.js). The account never enters the page.
+        return editor.openEditor({
+            win: n8nWindow, base: n8nUrl, workflowId, env: process.env, net, shell,
+            log: (line) => console.log(line),
         });
-        return { success: true, autoLogin: true };
     });
 
     // ── n8n Workflow Builder ──
