@@ -227,11 +227,11 @@ test('while the bar is shown the space sign top right moves below it, and back w
     const { doc, body } = fakePage();
     const made = create(doc, { externalSpaceBack() {}, externalSpaceHome() {} }, (id) => ({ events: 'Events' }[id] || id));
     const style = doc.head.children[0].textContent;
-    const top = (rule) => Number((style.match(new RegExp(rule + '\s*\{[^}]*top:\s*(\d+)px')) || [])[1]);
+    const top = (rule) => Number((style.match(new RegExp(rule + String.raw`\s*\{[^}]*top:\s*(\d+)px`)) || [])[1]);
     const indicatorTop = Number(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'space-nav.css'), 'utf8')
         .match(/#space-indicator \{[^}]*top: (\d+)px/)[1]);
     assert.ok(top('#space-bar') + BAR_HEIGHT > indicatorTop, 'without the move the bar would cover the sign (the case seen)');
-    assert.ok(top('body\.space-bar-open #space-indicator') >= top('#space-bar') + BAR_HEIGHT, 'moved: below the bar');
+    assert.ok(top(String.raw`body\.space-bar-open #space-indicator`) >= top('#space-bar') + BAR_HEIGHT, 'moved: below the bar');
 
     made.render({ space: 'events', verlassen: true, zurueck: false });
     assert.equal(body.classList.contains('space-bar-open'), true);
