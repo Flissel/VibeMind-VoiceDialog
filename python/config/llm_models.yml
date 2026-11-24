@@ -29,7 +29,8 @@ providers:
     # OpenAI-compatible endpoint of OpenFang; the model names the agent ("openfang:<agent>").
     # Runs on the subscription through the agent's claude-code model and its budget watcher.
     # Never falls back to OpenRouter (llm_config._resolve_credentials).
-    base_url: "http://localhost:4200/v1"
+    # 127.0.0.1, not localhost: on this PC the name costs ~2 s per connection (measured 24.11.)
+    base_url: "http://127.0.0.1:4200/v1"
     api_key_env: "OPENFANG_API_KEY"
 
 models:

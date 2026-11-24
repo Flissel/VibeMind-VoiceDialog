@@ -17,6 +17,31 @@ from typing import Any, Callable, Dict, Optional
 logger = logging.getLogger(__name__)
 
 
+# The spaces as the person sees them in the tab bar (for the sentence below).
+SPACE_NAMES = {
+    "ideas": "Ideen", "projects": "Projekte", "desktop": "Desktop", "swedesign": "SWE Design",
+    "roarboot": "Rowboat", "clawport": "Dashboard", "video": "Video", "agentfarm": "Agent Farm",
+    "thebrain": "Brain", "flowzen": "Blue Rose", "mirofish": "MiroFish", "sales": "Sales",
+    "marketing": "Marketing", "learning": "Lernen", "events": "Events", "orders": "Aufträge",
+}
+
+
+def unknown_message(params) -> str:
+    """The answer to a sentence the old path could not place.
+
+    When the classifier itself was out of reach (no key, no agent in OpenFang yet, no answer:
+    yaml_classifier.NO_CLASSIFIER), that is said calmly and honestly, with the space on screen;
+    never an error. Otherwise the sentence as before.
+    """
+    params = params if isinstance(params, dict) else {}
+    if not params.get("_einordner_fehlt"):
+        return "Ich habe dich nicht ganz verstanden. Kannst du das anders formulieren?"
+    space = params.get("bereich")
+    name = SPACE_NAMES.get(space, space) if isinstance(space, str) and space.strip() else ""
+    where = f" (Bereich {name})" if name else ""
+    return f"Das habe ich nicht verstanden{where}. Sag es bitte anders oder nimm einen Satz unter „?“."
+
+
 def _run_async(coro):
     """Run async coroutine synchronously. Used by tools that wrap async functions."""
     try:
@@ -868,12 +893,13 @@ class ToolRegistry:
                 "Code-Projekte verwalten, und vieles mehr. "
                 "Sag einfach was du brauchst!"
             )},
-            "conversation.unknown": lambda p: {"message": "Ich habe dich nicht ganz verstanden. Kannst du das anders formulieren?"},
+            "conversation.unknown": lambda p: {"message": unknown_message(p)},
+            "conversation.thanks": lambda p: {"message": "Gern geschehen!"},
             "conversation.listening": lambda p: {"message": "Ich hoere zu..."},
             "evaluation.correct": lambda p: {"message": "Super, freut mich dass es passt!"},
             "evaluation.incorrect": lambda p: {"message": "OK, ich versuche es anders."},
         })
-        self._logger.info("Loaded conversation tools for sync fallback (7 tools)")
+        self._logger.info("Loaded conversation tools for sync fallback (8 tools)")
 
     def _load_status_stubs(self):
         """Status-check stubs for spaces that don't have dedicated sync tools yet."""

@@ -48,13 +48,25 @@ GREETING = re.compile(
     re.IGNORECASE,
 )
 GREETING_HINT = "Hallo! Wie kann ich dir helfen?"
+THANKS = re.compile(
+    r"^\s*(?:danke(?:\s*sch(?:ö|oe)n)?|dankesch(?:ö|oe)n|vielen\s+dank|merci)(?:\s+rachel)?\s*[!.,]*\s*$",
+    re.IGNORECASE,
+)
+THANKS_HINT = "Gern geschehen!"
+# Marks an "unknown" that comes from a classifier out of reach (no key, no agent, no answer), not
+# from the sentence: the answer says so calmly (tool_registry, conversation.unknown).
+NO_CLASSIFIER = "_einordner_fehlt"
 
 
 def fixed_rule(intent_text: str) -> Optional[Dict[str, Any]]:
-    """A greeting alone ("hi", "Hallo!") is answered by a fixed rule, without a model; None otherwise."""
-    if not isinstance(intent_text, str) or not GREETING.match(intent_text):
+    """A greeting or a thanks alone ("hi", "Danke!") is answered by a fixed rule, without a model."""
+    if not isinstance(intent_text, str):
         return None
-    return {"event_type": "conversation.greeting", "payload": {}, "parameters": {}, "response_hint": GREETING_HINT}
+    for pattern, event_type, hint in ((GREETING, "conversation.greeting", GREETING_HINT),
+                                      (THANKS, "conversation.thanks", THANKS_HINT)):
+        if pattern.match(intent_text):
+            return {"event_type": event_type, "payload": {}, "parameters": {}, "response_hint": hint}
+    return None
 
 
 class YamlClassifier:
@@ -68,7 +80,8 @@ class YamlClassifier:
         role = classifier_role()
         self._model = get_model(role)
         # The retries were for openrouter/free and its flaky providers; OpenFang gets one call.
-        self._retries = 1 if get_provider(role) == "openfang" else MAX_RETRIES
+        self._openfang = get_provider(role) == "openfang"
+        self._retries = 1 if self._openfang else MAX_RETRIES
         try:
             self._own_client = get_client(role)
             logger.info(f"YamlClassifier using {self._model}")
@@ -101,13 +114,14 @@ class YamlClassifier:
             logger.info(f"[YamlClassifier] {fixed['event_type']} by fixed rule")
             return fixed
         if self._own_client is None:
-            return self._fallback(intent_text, "no client")
+            return self._fallback(intent_text, "no client", unreachable=True)
         prompt = PROMPT_TEMPLATE.replace("$EVENT_BLOCK$", self._event_block).replace("$INTENT$", intent_text)
 
         logger.debug(f"[YamlClassifier] prompt size: {len(prompt)} chars")
 
         retries = getattr(self, "_retries", MAX_RETRIES)
         last_error: Optional[str] = None
+        unreachable = False   # OpenFang gave no answer at all (no agent, refused, timeout)
         for attempt in range(1, retries + 1):
             # --- LLM call ---
             try:
@@ -122,6 +136,7 @@ class YamlClassifier:
                 logger.debug(f"[YamlClassifier] raw response (try {attempt}): {content[:200]}")
             except Exception as e:
                 last_error = f"LLM error: {e}"
+                unreachable = getattr(self, "_openfang", False)
                 logger.warning(f"[YamlClassifier] try {attempt}/{retries} LLM call failed: {e}")
                 if attempt < retries:
                     await asyncio.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
@@ -157,7 +172,7 @@ class YamlClassifier:
 
         # All retries exhausted
         logger.warning(f"[YamlClassifier] exhausted {retries} retries: {last_error}")
-        return self._fallback(intent_text, last_error or "unknown error")
+        return self._fallback(intent_text, last_error or "unknown error", unreachable=unreachable)
 
     @staticmethod
     def _extract_json(content: str) -> str:
@@ -185,8 +200,10 @@ class YamlClassifier:
         return content
 
     @staticmethod
-    def _fallback(intent_text: str, reason: str) -> Dict[str, Any]:
+    def _fallback(intent_text: str, reason: str, unreachable: bool = False) -> Dict[str, Any]:
         pl = {"original_text": intent_text, "_fallback_reason": reason}
+        if unreachable:
+            pl[NO_CLASSIFIER] = True
         return {
             "event_type": "conversation.unknown",
             "payload": pl,

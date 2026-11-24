@@ -71,7 +71,8 @@ def test_a_sentence_goes_to_openfang_once_and_its_answer_is_read(wire):
     assert result["event_type"] == "idea.list"
     assert len(requests) == 1
     sent = requests[0]
-    assert str(sent.url) == "http://localhost:4200/v1/chat/completions"
+    # 127.0.0.1: "localhost" costs ~2 s per connection on this PC
+    assert str(sent.url) == "http://127.0.0.1:4200/v1/chat/completions"
     assert sent.headers["authorization"] == f"Bearer {KEY}"
     body = json.loads(sent.content)
     assert body["model"] == "openfang:voice-einordnung"
@@ -86,6 +87,38 @@ def test_a_refusal_of_openfang_is_one_call_then_not_understood(wire):
 
     assert result["event_type"] == "conversation.unknown"
     assert len(requests) == 1, "no retries on OpenFang (they were for openrouter/free)"
+    assert result["payload"][yc.NO_CLASSIFIER] is True
+
+
+# Until the agent is created, OpenFang knows no model "openfang:voice-einordnung". The old path
+# must end cleanly then: one call, an honest calm sentence, no error, no second classifier.
+def test_without_the_agent_the_old_path_ends_with_a_calm_honest_sentence(wire):
+    from swarm.orchestrator.tool_registry import unknown_message
+    requests, answer = wire
+    answer["status"], answer["body"] = 404, {"error": {"message": "model 'openfang:voice-einordnung' not found"}}
+
+    result = _classify("Zeige meine Ideen")
+
+    assert len(requests) == 1
+    assert result["event_type"] == "conversation.unknown"
+    payload = result["payload"]
+    assert payload[yc.NO_CLASSIFIER] is True, "marks it: the orchestrator calls no second classifier"
+    payload["bereich"] = "ideas"   # the orchestrator adds the space on screen
+    said = unknown_message(payload)
+    assert said == "Das habe ich nicht verstanden (Bereich Ideen). Sag es bitte anders oder nimm einen Satz unter „?“."
+    assert not any(word in said.lower() for word in ("fehler", "404", "openfang", "error"))
+    # without a space on screen: the same sentence without it
+    assert unknown_message({yc.NO_CLASSIFIER: True}).startswith("Das habe ich nicht verstanden. ")
+    # a sentence the model did not place keeps the answer it had
+    assert unknown_message({"original_text": "x"}) == "Ich habe dich nicht ganz verstanden. Kannst du das anders formulieren?"
+
+
+def test_an_answer_that_is_no_json_is_the_sentence_not_the_classifier(wire):
+    requests, answer = wire
+    answer["body"] = _completion("Das weiß ich nicht.")
+    result = _classify("Zeige meine Ideen")
+    assert result["event_type"] == "conversation.unknown"
+    assert yc.NO_CLASSIFIER not in result["payload"], "the agent answered: an ordinary unknown"
 
 
 def test_without_the_openfang_key_nothing_is_sent_and_never_openrouter(wire, monkeypatch):
@@ -98,16 +131,28 @@ def test_without_the_openfang_key_nothing_is_sent_and_never_openrouter(wire, mon
     result = _classify("Zeige meine Ideen")
 
     assert result["event_type"] == "conversation.unknown"
+    assert result["payload"][yc.NO_CLASSIFIER] is True
     assert requests == [], "no call at all, also not to OpenRouter"
 
 
-def test_a_greeting_needs_no_model(wire):
+def test_a_greeting_or_a_thanks_needs_no_model(wire):
+    from swarm.orchestrator.tool_registry import ToolRegistry
     requests, _ = wire
     for text in ("hi", "Hallo!", "guten Morgen", "Hey Rachel"):
         result = _classify(text)
         assert result["event_type"] == "conversation.greeting", text
         assert result["response_hint"] == "Hallo! Wie kann ich dir helfen?"
+    for text in ("Danke", "danke schön!", "Dankeschön", "Vielen Dank."):
+        result = _classify(text)
+        assert result["event_type"] == "conversation.thanks", text
     assert requests == []
+    # the answer of the old path to it
+    registry = ToolRegistry()
+    registry._executors = {}
+    registry._load_conversation_tools()
+    assert registry._executors["conversation.thanks"]({})["message"] == "Gern geschehen!"
+    assert _classify("Danke, und zeige meine Ideen")["event_type"] == "idea.list"
+    requests.clear()
     # a sentence that only starts with a greeting goes on to the model
     assert _classify("Hallo, zeige meine Ideen")["event_type"] == "idea.list"
     assert len(requests) == 1

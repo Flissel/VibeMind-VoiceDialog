@@ -1262,7 +1262,15 @@ class IntentOrchestrator:
                                 _pre_event_type = _classification.get("event_type", "") if _classification else ""
                                 # YAML only covers Ideas-Space — if it returned unknown,
                                 # retry with legacy classifier which covers all 131 events.
-                                if _pre_event_type == "conversation.unknown":
+                                # Not when the classifier itself was out of reach (no key, no
+                                # agent in OpenFang yet): the second call would fail the same way;
+                                # the answer says so calmly, with the space on screen.
+                                _unplaced = (_classification or {}).get("payload") or {}
+                                if _unplaced.get("_einordner_fehlt"):
+                                    _ui = ((getattr(context, "metadata", None) or {}).get("ui_context") or {}) if context else {}
+                                    if isinstance(_ui, dict) and _ui.get("space"):
+                                        _unplaced["bereich"] = _ui.get("space")
+                                elif _pre_event_type == "conversation.unknown":
                                     logger.info(f"[YamlClassifier] unknown, falling back to legacy")
                                     from swarm.orchestrator.intent_classifier import IntentClassifier
                                     _legacy = IntentClassifier()
