@@ -895,11 +895,13 @@ class ToolRegistry:
             )},
             "conversation.unknown": lambda p: {"message": unknown_message(p)},
             "conversation.thanks": lambda p: {"message": "Gern geschehen!"},
+            # a bare yes/no/ok on the old path: acknowledged, nothing done (fixed rule, no model)
+            "conversation.ack": lambda p: {"message": "In Ordnung." if (p or {}).get("antwort") == "nein" else "Alles klar."},
             "conversation.listening": lambda p: {"message": "Ich hoere zu..."},
             "evaluation.correct": lambda p: {"message": "Super, freut mich dass es passt!"},
             "evaluation.incorrect": lambda p: {"message": "OK, ich versuche es anders."},
         })
-        self._logger.info("Loaded conversation tools for sync fallback (8 tools)")
+        self._logger.info("Loaded conversation tools for sync fallback (9 tools)")
 
     def _load_status_stubs(self):
         """Status-check stubs for spaces that don't have dedicated sync tools yet."""

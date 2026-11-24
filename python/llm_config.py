@@ -264,7 +264,7 @@ def list_roles() -> List[str]:
 # The old path of the app (classifier after the Brain): over OpenFang and the subscription by
 # default; ALTER_WEG_ANBIETER=openrouter brings back the OpenRouter way as it was.
 ALTER_WEG_ENV = "ALTER_WEG_ANBIETER"
-OPENFANG_TIMEOUT_S = 20.0
+OPENFANG_TIMEOUT_S = 30.0
 
 
 def classifier_role() -> str:

@@ -77,6 +77,13 @@ def test_a_sentence_goes_to_openfang_once_and_its_answer_is_read(wire):
     body = json.loads(sent.content)
     assert body["model"] == "openfang:voice-einordnung"
     assert "openrouter" not in str(sent.url)
+    # The agent's own system text only says "answer with the JSON asked for": the allowed events
+    # and the form travel in the one message, together with the sentence.
+    assert len(body["messages"]) == 1 and body["messages"][0]["role"] == "user"
+    said = body["messages"][0]["content"]
+    assert '"Zeige meine Ideen"' in said
+    assert '{"event_type": "<exakter Name>", "payload": {<params>}}' in said
+    assert "idea.list" in said and "conversation.unknown" in said
 
 
 def test_a_refusal_of_openfang_is_one_call_then_not_understood(wire):
@@ -156,6 +163,53 @@ def test_a_greeting_or_a_thanks_needs_no_model(wire):
     # a sentence that only starts with a greeting goes on to the model
     assert _classify("Hallo, zeige meine Ideen")["event_type"] == "idea.list"
     assert len(requests) == 1
+
+
+def test_a_bare_yes_no_ok_or_nothing_needs_no_model(wire):
+    from swarm.orchestrator.tool_registry import ToolRegistry
+    requests, _ = wire
+    registry = ToolRegistry()
+    registry._executors = {}
+    registry._load_conversation_tools()
+    for text in ("ja", "Ja.", "jo", "genau!", "ok", "Okay", "alles klar", "passt", "ja Rachel"):
+        result = _classify(text)
+        assert (result["event_type"], result["payload"]) == ("conversation.ack", {"antwort": "ja"}), text
+        assert registry._executors["conversation.ack"](result["parameters"])["message"] == "Alles klar."
+    for text in ("nein", "Nein!", "nee", "nö", "noe"):
+        result = _classify(text)
+        assert (result["event_type"], result["payload"]) == ("conversation.ack", {"antwort": "nein"}), text
+        assert registry._executors["conversation.ack"](result["parameters"])["message"] == "In Ordnung."
+    for text in ("", "   ", "...", "?", None):
+        result = _classify(text)
+        assert result["event_type"] == "conversation.listening", repr(text)
+        assert registry._executors["conversation.listening"]({})["message"] == "Ich hoere zu..."
+    assert requests == []
+    # a yes with an order, or a word that only starts like one, goes on to the model
+    for text in ("ja, zeige meine Ideen", "okay zeig mir die Bubbles", "jahresplan anlegen", "Nein, die andere Karte"):
+        _classify(text)
+    assert len(requests) == 4
+
+
+# OpenFang took 21.4 s for its first (cold) call and 9.3 s for the next (2026-11-24).
+def test_openfang_waits_30_s_and_that_fits_in_the_working_line(wire):
+    import pathlib
+    import re
+    from swarm.routing.brain_multihop_bridge import BrainMultihopBridge
+    creds = llm_config._resolve_credentials("classifier_openfang")
+    assert creds["timeout"] == llm_config.OPENFANG_TIMEOUT_S == 30.0
+    assert creds["max_retries"] == 0
+    assert yc.YamlClassifier().client.timeout == 30.0
+    # While the sentence waits, the status line says "● arbeitet …" (task-navigate.js, from the send
+    # until the answer or WAIT_MS) and the chat waits CHAT_ANSWER_MS (main.js). The Brain's worst
+    # case before the old path plus the 30 s fit in both, with room for the rest of the old path.
+    app = pathlib.Path(__file__).resolve().parents[2] / "electron-app"
+    line_ms = int(re.search(r"const WAIT_MS = (\d+);", (app / "renderer" / "task-navigate.js").read_text("utf-8")).group(1))
+    chat_ms = int(re.search(r"const CHAT_ANSWER_MS = (\d+);", (app / "main.js").read_text("utf-8")).group(1))
+    import inspect
+    brain_s = inspect.signature(BrainMultihopBridge.__init__).parameters["request_timeout_s"].default
+    assert brain_s == 6.0
+    worst_ms = (brain_s + llm_config.OPENFANG_TIMEOUT_S + 10) * 1000
+    assert worst_ms <= min(line_ms, chat_ms), (worst_ms, line_ms, chat_ms)
 
 
 def test_switched_back_to_openrouter_it_runs_as_before(wire, monkeypatch):

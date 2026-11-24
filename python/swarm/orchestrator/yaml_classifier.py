@@ -53,19 +53,40 @@ THANKS = re.compile(
     re.IGNORECASE,
 )
 THANKS_HINT = "Gern geschehen!"
+# A bare yes, no or ok. The old path only runs when the Brain gave no sentence, so there is no
+# question of the Brain open that it answers: it is acknowledged calmly and nothing is done.
+YES = re.compile(
+    r"^\s*(?:ja|jo|jap|jep|jawohl|genau|ok|okay|okey|alles\s+klar|passt)(?:\s+rachel)?\s*[!.,]*\s*$",
+    re.IGNORECASE,
+)
+NO = re.compile(r"^\s*(?:nein|nee|n(?:ö|oe))(?:\s+rachel)?\s*[!.,]*\s*$", re.IGNORECASE)
+YES_HINT = "Alles klar."
+NO_HINT = "In Ordnung."
+# Nothing to read: empty, blanks or only punctuation.
+EMPTY = re.compile(r"^[\s\W_]*$")
+EMPTY_HINT = "Ich hoere zu..."
 # Marks an "unknown" that comes from a classifier out of reach (no key, no agent, no answer), not
 # from the sentence: the answer says so calmly (tool_registry, conversation.unknown).
 NO_CLASSIFIER = "_einordner_fehlt"
 
 
 def fixed_rule(intent_text: str) -> Optional[Dict[str, Any]]:
-    """A greeting or a thanks alone ("hi", "Danke!") is answered by a fixed rule, without a model."""
+    """What is safe to answer without a model (a call to OpenFang takes 9 to 21 s): a greeting,
+    a thanks, a bare yes/no/ok ("ja", "Nein.", "okay") and an empty input."""
+    if intent_text is None:
+        intent_text = ""
     if not isinstance(intent_text, str):
         return None
-    for pattern, event_type, hint in ((GREETING, "conversation.greeting", GREETING_HINT),
-                                      (THANKS, "conversation.thanks", THANKS_HINT)):
+    rules = (
+        (EMPTY, "conversation.listening", {}, EMPTY_HINT),
+        (GREETING, "conversation.greeting", {}, GREETING_HINT),
+        (THANKS, "conversation.thanks", {}, THANKS_HINT),
+        (YES, "conversation.ack", {"antwort": "ja"}, YES_HINT),
+        (NO, "conversation.ack", {"antwort": "nein"}, NO_HINT),
+    )
+    for pattern, event_type, payload, hint in rules:
         if pattern.match(intent_text):
-            return {"event_type": event_type, "payload": {}, "parameters": {}, "response_hint": hint}
+            return {"event_type": event_type, "payload": dict(payload), "parameters": dict(payload), "response_hint": hint}
     return None
 
 
