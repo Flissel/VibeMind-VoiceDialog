@@ -113,14 +113,16 @@ def typed_request(
 
 TRACE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 PLAIN_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-PLAIN_SPACE = re.compile(r"^[a-z_]{1,32}$")
+PLAIN_SPACE = re.compile(r"^[a-z0-9_]{1,32}$")
 
 
 def ziel_of(value: Any) -> Optional[Dict[str, Any]]:
-    """Where the result of a writing call lies: {space, bubble_id, node_id} or None.
+    """Where the result of an answer lies: {space, bubble_id, node_id} or None.
 
     The Brain names it in the answer of /api/multihop/execute (and in plan_completed and
     /stand). Only plain ids pass; node_id may be None (a bubble as a whole, e.g. rated).
+    A space alone (no bubble_id, e.g. {"space": "desktop"}) is a ziel too: the app goes to
+    that space. A bubble_id that is there but not plain drops the whole ziel.
     """
     if not isinstance(value, dict):
         return None
@@ -129,6 +131,8 @@ def ziel_of(value: Any) -> Optional[Dict[str, Any]]:
     node = value.get("node_id")
     if not isinstance(space, str) or not PLAIN_SPACE.match(space):
         return None
+    if bubble is None or bubble == "":
+        return {"space": space, "bubble_id": None, "node_id": None}
     if isinstance(bubble, int) and not isinstance(bubble, bool):
         bubble = str(bubble)
     if not isinstance(bubble, str) or not PLAIN_ID.match(bubble):

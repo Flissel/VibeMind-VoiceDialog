@@ -860,3 +860,22 @@ test('a ziel in a space the app cannot go to: a calm sentence, once, no jump', a
     const said = consoleSaid.concat(w.chatLog()).filter((t) => t.includes(sentence));
     assert.equal(said.length, 1, 'said once, though answer and end of the plan both name it: ' + JSON.stringify(said));
 });
+
+// Befund 24.11.: Desktop ("Welche Fenster sind offen?") and Project Space ("Wie ist der Stand im
+// Project Space?") did not jump. The Brain names only the space in its answer (no bubble); the
+// app goes there from the console, as Rowboat and Aufträge did over task_navigate.
+test('a direct answer naming only a space: the app goes there (desktop, coding is projects)', async () => {
+    const w = world();
+    w.window.VibeResultTarget = require('./renderer/result-target');
+    const app = w.window.multiverseApp;
+    app.spaces = { ideas: {}, desktop: { name: 'Desktop' }, projects: { name: 'Project Space' }, clawport: {} };
+    app.currentSpace = 'clawport';
+    app.isInsideBubble = false;
+    const went = [];
+    app.navigateToSpace = (space) => { went.push(space); app.currentSpace = space; };
+    const answered = (detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
+    answered({ text: 'Offen sind zwei Fenster.', success: true, space: 'clawport', ziel: { space: 'desktop', bubble_id: null, node_id: null } });
+    assert.deepEqual(went, ['desktop']);
+    answered({ text: 'Zwei Projekte laufen.', success: true, space: 'desktop', ziel: { space: 'coding', bubble_id: null, node_id: null } });
+    assert.deepEqual(went, ['desktop', 'projects']);
+});

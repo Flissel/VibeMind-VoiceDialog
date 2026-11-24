@@ -154,3 +154,36 @@ def test_the_place_of_a_written_result_travels_to_the_app(monkeypatch):
                                                  "request_id": "r9"}))
     assert sent[0]["ziel"] == ziel
     assert "pending" not in sent[0]
+
+
+def test_a_direct_answer_naming_only_a_space_carries_its_ziel_to_the_app(monkeypatch):
+    # Befund 24.11.: "Welche Fenster sind offen?" — the Brain answers at once with ziel
+    # {"space": "desktop"} (no bubble). The bridge dropped it, so the app never jumped.
+    desktop = _execute({"ok": True, "plan_id": "p20", "state": {}, "final_text": "Offen sind zwei Fenster.",
+                        "executed": {}, "ziel": {"space": "desktop"}})
+    assert desktop.tool_result == {"ziel": {"space": "desktop", "bubble_id": None, "node_id": None}}
+    coding = _execute({"ok": True, "plan_id": "p21", "state": {}, "final_text": "Zwei Projekte laufen.",
+                       "executed": {}, "ziel": {"space": "coding", "bubble_id": None}})
+    assert coding.tool_result == {"ziel": {"space": "coding", "bubble_id": None, "node_id": None}}
+    for odd in ({"space": "Desktop!"}, {"space": "desktop", "bubble_id": "../x"}, {"bubble_id": BUBBLE}, "desktop"):
+        assert _execute({"ok": True, "plan_id": "p22", "state": {}, "final_text": "fertig", "executed": {},
+                         "ziel": odd}).tool_result is None, odd
+
+    # ... and the chat answer the app gets carries it, as the renderer reads it (response.ziel).
+    import swarm.orchestrator as orchestrator_module
+    from ipc.clawport_handlers import ClawPortHandlers
+
+    class _Orchestrator:
+        async def process_intent(self, text, context=None):
+            return desktop
+
+    monkeypatch.setattr(orchestrator_module, "get_orchestrator", lambda: _Orchestrator())
+    handlers = ClawPortHandlers.__new__(ClawPortHandlers)
+    sent = []
+    handlers.send_message = sent.append
+    asyncio.run(handlers.handle_chat_text_input({"type": "chat_text_input", "text": "Welche Fenster sind offen?",
+                                                 "request_id": "r20"}))
+    assert sent[0]["type"] == "chat_response"
+    assert sent[0]["success"] is True
+    assert sent[0]["message"] == "Offen sind zwei Fenster."
+    assert sent[0]["ziel"] == {"space": "desktop", "bubble_id": None, "node_id": None}

@@ -70,6 +70,8 @@ function consoleWorld() {
     row.appendChild(input); row.appendChild(send);
     add('gc-spinner');
     const sent = [];
+    let answer = { success: true, message: 'ok' };
+    const heard = [];
     const docListeners = {};
     const document = {
         readyState: 'complete', activeElement: input,
@@ -79,9 +81,9 @@ function consoleWorld() {
     };
     const window = {
         crypto: { randomUUID: () => '00000000-0000-4000-8000-0000000000ff' },
-        vibemind: { sendChatMessage: async (text, context, typed) => { sent.push({ text, typed }); return { success: true, message: 'ok' }; } },
+        vibemind: { sendChatMessage: async (text, context, typed) => { sent.push({ text, typed }); return answer; } },
         VibeSentenceAnswer: require('./renderer/sentence-answer'),
-        addEventListener() {}, dispatchEvent() { return true; },
+        addEventListener() {}, dispatchEvent(event) { for (const fn of heard) fn(event); return true; },
     };
     const context = vm.createContext({ window, document, console: { log() {}, warn() {}, error() {} },
         CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } } });
@@ -92,7 +94,8 @@ function consoleWorld() {
     window.multiverseApp = app;
     // the "?" of the console, as the page mounts it
     vm.runInNewContext(read('start-examples.js'), { window, document, self: window, module: undefined });
-    return { app, input, send, sent, byId, messages };
+    return { app, input, send, sent, byId, messages,
+        setAnswer: (value) => { answer = value; }, onEvent: (fn) => heard.push(fn) };
 }
 
 /** The bubble chat of ideas-chat.js as it is, with start-examples.js loaded first (as in index.html). */
@@ -186,4 +189,22 @@ test('bubble chat "?": a button that never submits its form; a click on a senten
     await tick();
     assert.notEqual(w.input.value, '', 'the field is filled');
     assert.deepEqual(w.sent, [], 'nothing sent');
+});
+
+// Befund 24.11.: "Welche Fenster sind offen?" in the console. The Brain answers at once with ziel
+// {space: 'desktop'}, no bubble. The console passes it on to the status line as it came.
+test('console: a direct answer with a ziel of a space alone goes on to the status line unchanged', async () => {
+    const w = consoleWorld();
+    const ziel = { space: 'desktop', bubble_id: null, node_id: null };
+    const events = [];
+    w.app.currentSpace = 'clawport';
+    w.input.value = 'Welche Fenster sind offen?';
+    const answered = [];
+    w.setAnswer({ success: true, message: 'Offen sind zwei Fenster.', ziel });
+    w.onEvent((event) => { events.push(event.type); if (event.type === 'vibemind:sentence-answered') answered.push(event.detail); });
+    w.send.fire('click', click(true));
+    await tick(); await tick();
+    assert.deepEqual(events, ['vibemind:sentence-sent', 'vibemind:sentence-answered']);
+    assert.deepEqual(answered[0].ziel, ziel);
+    assert.equal(answered[0].success, true);
 });
