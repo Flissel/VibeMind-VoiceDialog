@@ -2631,7 +2631,9 @@ function setupIpcHandlers() {
         try {
             // The chat of the Dashboard tab: its sentences name that space, like every chat field of the app.
             // Only the space, never the mark of the person: this page has no proof of a send by them.
-            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport' } }, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
+            // Its own trace per sentence, as the chat fields of the window send one (routing 24.11.).
+            const trace = require('crypto').randomUUID();
+            return await sendToPythonAndWait({ type: 'chat_text_input', text, context: { space: 'clawport', trace_id: trace } }, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] clawport: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };

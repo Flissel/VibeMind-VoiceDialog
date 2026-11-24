@@ -47,7 +47,7 @@ test('in the Ideas overview the context of the Ideas chat goes along, still nami
 
 test('the Dashboard chat names its space too, and never carries the mark of the person', () => {
     const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
-    assert.match(main, /\{ type: 'chat_text_input', text, context: \{ space: 'clawport' \} \}/);
+    assert.match(main, /\{ type: 'chat_text_input', text, context: \{ space: 'clawport', trace_id: trace \} \}/);
 });
 
 test('not understood is a calm question back; an error shows the German sentence, never the raw one', () => {

@@ -15,6 +15,19 @@ from typing import Dict
 from electron_backend import debug_log
 
 
+def voice_context():
+    """The context of one spoken sentence: its own trace id, as the chat fields of the app send one.
+
+    The Brain puts the trace on every event of the run and on its answer, so the trace of each
+    sentence stays its own, also for voice (routing 24.11.). The same form as the text path
+    (clawport_handlers: TaskContext with ui_context); nothing on screen is claimed here.
+    """
+    import uuid
+    from swarm.event_team.task_seeder import TaskContext
+
+    return TaskContext(metadata={"ui_context": {"trace_id": "sprache-" + uuid.uuid4().hex}})
+
+
 class VoiceManager:
     """Handles all voice dialog lifecycle for the Electron backend."""
 
@@ -677,7 +690,7 @@ class VoiceManager:
         asyncio.set_event_loop(new_loop)
         try:
             result = new_loop.run_until_complete(
-                orchestrator.process_intent(user_request)
+                orchestrator.process_intent(user_request, context=voice_context())
             )
             return result
         except Exception as e:

@@ -55,7 +55,9 @@ test('the generic to-python channel cannot claim a typed sentence', () => {
     // the ClawPort channel carries only its space, never the mark
     const start = main.indexOf("ipcMain.handle('clawport:chat-text-input'");
     const clawport = main.slice(start, main.indexOf('ipcMain.handle(', start + 10));
-    assert.match(clawport, /\{ type: 'chat_text_input', text, context: \{ space: 'clawport' \} \}/);
+    assert.match(clawport, /\{ type: 'chat_text_input', text, context: \{ space: 'clawport', trace_id: trace \} \}/);
+    // its own trace per sentence (routing 24.11.): a fresh one each time, never the mark of the person
+    assert.match(clawport, /const trace = require\('crypto'\)\.randomUUID\(\);/);
     assert.doesNotMatch(clawport, /eingabe|typed|chatMessage/);
 });
 
