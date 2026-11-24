@@ -317,9 +317,26 @@
             if (tab) tab.dataset.task = state;
         }
 
+        /**
+         * An error end once shown in the line stays there KEEP_MS, also when a new sentence comes;
+         * the new sentence waits for its line until then. Lauf 23: the stop of a White Paper stood in
+         * the line 2.6 s, then the next sentence swept it away. Success ends may go as before.
+         */
+        let failedHold = null;   // { status, until }
+        let holdTimer = null;
+        function heldFailure() {
+            if (!failedHold) return null;
+            if (failedHold.status === current) return null;
+            // over, or a newer error is the news now (it gets its own hold)
+            if (clock() >= failedHold.until || (current && current.state === 'failed')) { failedHold = null; return null; }
+            return failedHold.status;
+        }
+
         function render() {
             const el = statusElement();
             if (!el) return;
+            const held = heldFailure();
+            if (held) { paint(el, held); return; }
             if (current && current.waiting) {
                 el.textContent = WAITING_TEXT;
                 el.title = '';
@@ -339,12 +356,6 @@
                 markTab('', '');
                 return;
             }
-            const app = root.multiverseApp;
-            // While the app is on its way into the space of the task, that space counts as on
-            // screen: a result arriving during the camera move was hidden until the arrival
-            // (line empty for 0.5 to 0.7 s, measured 2026-11-23).
-            const arriving = followed !== '' && followed === current.space;
-            const onScreen = arriving || !app ? current.space : app.currentSpace;
             // The plan is done but the answer to the sentence is not there yet: its last step only
             // has raw data of a tool. The neutral line stays until the sentence for the person comes.
             if (current.state === 'done' && awaiting && !answer) {
@@ -356,14 +367,31 @@
                 markTab(current.space, 'running');
                 return;
             }
-            const line = describe(current, labelFor(current.space, app && app.spaces), onScreen !== current.space);
+            paint(el, current);
+            // An error end the user has in front of them now: held KEEP_MS from here.
+            if (!el.hidden && current.state === 'failed' && (!failedHold || failedHold.status !== current)) {
+                failedHold = { status: current, until: clock() + KEEP_MS };
+                root.clearTimeout(holdTimer);
+                holdTimer = root.setTimeout(render, KEEP_MS);
+            }
+        }
+
+        /** The line for one task (the current one, or an error end still held). */
+        function paint(el, task) {
+            const app = root.multiverseApp;
+            // While the app is on its way into the space of the task, that space counts as on
+            // screen: a result arriving during the camera move was hidden until the arrival
+            // (line empty for 0.5 to 0.7 s, measured 2026-11-23).
+            const arriving = followed !== '' && followed === task.space;
+            const onScreen = arriving || !app ? task.space : app.currentSpace;
+            const line = describe(task, labelFor(task.space, app && app.spaces), onScreen !== task.space);
             el.textContent = line.text;
             el.title = line.title;
             el.dataset.state = line.state;
-            el.dataset.space = current.space;
-            el.hidden = shows(current, onScreen) !== 'line';
-            if (!el.hidden && finished(current)) current.seen = true; // the user had it in front of them
-            markTab(current.space, line.state);
+            el.dataset.space = task.space;
+            el.hidden = shows(task, onScreen) !== 'line';
+            if (!el.hidden && finished(task)) task.seen = true; // the user had it in front of them
+            markTab(task.space, line.state);
         }
 
         function clear() {

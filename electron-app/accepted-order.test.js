@@ -812,3 +812,34 @@ test('an order that never reports: after 20 minutes the chat says so calmly inst
     assert.equal(w.chatState(), '');
     assert.ok(!w.statuses.includes('failed'));
 });
+
+// Lauf 23, decided by coordination: an error end stays in the line until it has stood 30 s, also when a
+// new sentence comes; the new sentence waits for the line. A success end may go at once, as before.
+test('an error end stays in the line 30 s; a new sentence takes the line only after that', async () => {
+    const w = world();
+    plan(w, { ok: false, error: 'Das White Paper ließ sich nicht schreiben.' });
+    const error = '✕ Ideas: fehlgeschlagen — Das White Paper ließ sich nicht schreiben.';
+    assert.equal(w.line(), error);
+    w.advance(2600);
+    w.answerWith({ success: true, ok: true, message: 'Ergänzt.' });
+    const next = w.send('Ergänze bei Karte 2: eine Zeile');
+    w.handle({ type: 'task_status', state: 'running', space: 'ideas', plan_id: 'p2', step: 'Ergänzen', done: 0, total: 1 });
+    await next;
+    assert.equal(w.line(), error, 'the new sentence does not sweep the error away');
+    w.advance(30000 - 2600 - 1);
+    assert.equal(w.line(), error, 'still there just before 30 s');
+    w.advance(1);
+    // the new sentence ran meanwhile (its answer ends it after 15 s): its line, running or done
+    assert.match(w.line(), /^(●|✓) Ideas/, 'after 30 s the new sentence has the line');
+});
+
+test('a success end still gives way to the next sentence at once', async () => {
+    const w = world();
+    plan(w, { ok: true, result: 'Karte 1 ergänzt.' });
+    assert.match(w.line(), /^✓ Ideas/);
+    w.answerWith({ success: true, ok: true, message: 'Ergänzt.' });
+    const next = w.send('Ergänze bei Karte 2: eine Zeile');
+    w.handle({ type: 'task_status', state: 'running', space: 'ideas', plan_id: 'p2', step: 'Ergänzen', done: 0, total: 1 });
+    await next;
+    assert.match(w.line(), /^● Ideas/);
+});
