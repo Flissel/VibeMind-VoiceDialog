@@ -410,6 +410,14 @@ contextBridge.exposeInMainWorld('vibemind', {
     showExternalSpace: (id) => ipcRenderer.send('show-external-space', id),
     hideExternalSpaces: () => ipcRenderer.send('hide-external-spaces'),
     externalSpacePath: (id, path) => ipcRenderer.send('external-space-path', id, path),
+    externalSpaceBack: (id) => ipcRenderer.send('external-space-back', id),
+    externalSpaceHome: (id) => ipcRenderer.send('external-space-home', id),
+    // { space, verlassen, zurueck } of the embedded page on screen (space null: none on screen)
+    onExternalSpaceNav: (callback) => {
+        ipcRenderer.on('python-message', (_event, message) => {
+            if (message && message.type === 'external_space_nav') callback(message);
+        });
+    },
 
     // Flowzen Diary (Blue Rose Journal) BrowserView Control
     showFlowzen: () => ipcRenderer.send('show-flowzen'),

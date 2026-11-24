@@ -2125,6 +2125,14 @@ function setupIpcHandlers() {
         if (externalSpaces) externalSpaces.hideAll();
     });
 
+    // The bar above an embedded page (renderer/space-bar.js): one step back, or its start address.
+    ipcMain.on('external-space-back', (_event, id) => {
+        if (externalSpaces && externalSpaces.has(id)) externalSpaces.back(id);
+    });
+    ipcMain.on('external-space-home', (_event, id) => {
+        if (externalSpaces && externalSpaces.has(id)) externalSpaces.home(id);
+    });
+
     // ========================================
     // FLOWZEN DIARY (BLUE ROSE JOURNAL) VIEW CONTROL
     // ========================================

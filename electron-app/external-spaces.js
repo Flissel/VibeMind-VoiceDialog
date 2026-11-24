@@ -134,6 +134,33 @@ function pathTarget(spaceUrl, pathText, allowed) {
   }
 }
 
+/** Height of the bar with "Zurück" and "Start" above an embedded page (renderer/space-bar.js). */
+const BAR_HEIGHT = 28;
+
+/** Where an address points, without query and fragment: "https://host:port/pfad" (no trailing slash). */
+function placeOf(text) {
+  try {
+    const url = new URL(text);
+    if (!['http:', 'https:', 'file:'].includes(url.protocol)) return '';
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}`;
+  } catch (_) {
+    return '';
+  }
+}
+
+/**
+ * The bar of the space on screen: shown once the page has left its start address, with "Zurück"
+ * when its history allows it. At the start address there is no bar: going back from there only
+ * leads into the sign-in detour the page came through. A status card (service not there) gets
+ * none either. Only yes/no reach the renderer, never an address.
+ */
+function barState(startUrl, currentUrl, canGoBack, card) {
+  const here = placeOf(currentUrl);
+  const start = placeOf(startUrl);
+  const verlassen = Boolean(!card && here && start && here !== start);
+  return { verlassen, zurueck: verlassen && Boolean(canGoBack) };
+}
+
 /** Adds the key unless the page already sent its own Authorization header. */
 function withAuthorization(requestHeaders, header) {
   const has = Object.keys(requestHeaders || {}).some((name) => name.toLowerCase() === 'authorization');
@@ -216,7 +243,8 @@ class ExternalSpaceManager {
         });
       }
     });
-    view.webContents.on('did-navigate', (_event, url) => this._navigated(id, url));
+    view.webContents.on('did-navigate', (_event, url) => { this._navigated(id, url); this._reportBar(id); });
+    view.webContents.on('did-navigate-in-page', () => this._reportBar(id));
     this.views.set(id, { view, result: null });
     if (space.access && space.url) {
       this._ready.set(id, this._signIn(space, view).then(() => { this._load(id); }));
@@ -258,8 +286,52 @@ class ExternalSpaceManager {
     }
     this.mainWindow.setBrowserView(entry.view);
     this.visibleId = id;
-    this._updateBounds();
+    this._reportBar(id);
     this._log.log(`[ExternalSpaces] ${this.spaces.get(id).label} shown`);
+    return true;
+  }
+
+  /** The start address of a space: its configured address, or its page shipped with the app. */
+  _startUrl(space) {
+    if (space.url) return space.url;
+    return space.file ? require('node:url').pathToFileURL(space.file).href : '';
+  }
+
+  /** Works out the bar for the space on screen, moves the page below it and tells the renderer. */
+  _reportBar(id) {
+    if (id !== this.visibleId) return;
+    const entry = this.views.get(id);
+    const space = this.spaces.get(id);
+    const contents = entry && entry.view.webContents;
+    const state = contents && typeof contents.getURL === 'function'
+      ? barState(this._startUrl(space), contents.getURL(), contents.canGoBack && contents.canGoBack(), Boolean(entry.result && !entry.result.ok))
+      : { verlassen: false, zurueck: false };
+    this.barShown = state.verlassen;
+    this._updateBounds();
+    this._sendBar({ space: id, ...state });
+  }
+
+  _sendBar(state) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('python-message', { type: 'external_space_nav', ...state });
+    }
+  }
+
+  /** "Zurück": one step back in the page's own history. */
+  back(id) {
+    const entry = id === this.visibleId && this.views.get(id);
+    const contents = entry && entry.view.webContents;
+    if (!contents || !contents.canGoBack || !contents.canGoBack()) return false;
+    contents.goBack();
+    return true;
+  }
+
+  /** "Start": the start address of the space again, with its check and sign-in as on first opening. */
+  home(id) {
+    if (id !== this.visibleId || !this.views.has(id)) return false;
+    this._pathOnOpen.delete(id);
+    this._wanted.delete(id);
+    this._load(id);
     return true;
   }
 
@@ -313,6 +385,8 @@ class ExternalSpaceManager {
     if (!this.visibleId) return;
     if (this.mainWindow) this.mainWindow.setBrowserView(null);
     this.visibleId = null;
+    this.barShown = false;
+    this._sendBar({ space: null, verlassen: false, zurueck: false });
   }
 
   getIsVisible() { return Boolean(this.visibleId); }
@@ -321,7 +395,8 @@ class ExternalSpaceManager {
     const entry = this.visibleId && this.views.get(this.visibleId);
     if (!entry || !this.mainWindow) return;
     const bounds = this.mainWindow.getContentBounds();
-    entry.view.setBounds({ x: 0, y: this.topOffset, width: bounds.width, height: bounds.height - this.topOffset });
+    const top = this.topOffset + (this.barShown ? BAR_HEIGHT : 0);
+    entry.view.setBounds({ x: 0, y: top, width: bounds.width, height: bounds.height - top });
   }
 
   destroy() {
@@ -332,4 +407,5 @@ class ExternalSpaceManager {
 
 module.exports = {
   EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
+  barState, BAR_HEIGHT,
 };
