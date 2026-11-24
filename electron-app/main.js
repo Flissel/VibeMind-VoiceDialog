@@ -2099,6 +2099,9 @@ function setupIpcHandlers() {
 
     ipcMain.handle('get-external-spaces', () => describeForRenderer(process.env));
 
+    // Spaces switched off (space-switches.js): their ids only.
+    ipcMain.handle('get-space-switches', () => require('./space-switches').hiddenSpaces(process.env));
+
     // The local page "Auftraege" reads Schedule, Research and Minibook through the brain.
     ipcMain.handle('orders:read', () => require('./orders-data').readOrders());
 

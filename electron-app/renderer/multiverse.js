@@ -2264,6 +2264,10 @@ class MultiverseApp {
         if (this.isNavigating || targetSpace === this.currentSpace) {
             return false;
         }
+        // A space switched off (space-switches.js) is not entered, by no way (tab, voice, agent, keys).
+        if (this.spaces[targetSpace] && this.spaces[targetSpace].hidden) {
+            return false;
+        }
 
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
@@ -2881,7 +2885,7 @@ class MultiverseApp {
     _navigateToPreviousSpace() {
         if (this.isNavigating) return;
         
-        const spaceKeys = Object.keys(this.spaces);
+        const spaceKeys = Object.keys(this.spaces).filter((key) => !this.spaces[key].hidden || key === this.currentSpace);
         const currentIndex = spaceKeys.indexOf(this.currentSpace);
         const prevIndex = (currentIndex - 1 + spaceKeys.length) % spaceKeys.length;
         const prevSpace = spaceKeys[prevIndex];
@@ -2895,7 +2899,7 @@ class MultiverseApp {
     _navigateToNextSpace() {
         if (this.isNavigating) return;
         
-        const spaceKeys = Object.keys(this.spaces);
+        const spaceKeys = Object.keys(this.spaces).filter((key) => !this.spaces[key].hidden || key === this.currentSpace);
         const currentIndex = spaceKeys.indexOf(this.currentSpace);
         const nextIndex = (currentIndex + 1) % spaceKeys.length;
         const nextSpace = spaceKeys[nextIndex];

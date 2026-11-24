@@ -39,7 +39,7 @@
         let bestDistance = Infinity;
         for (const target of TARGETS) {
             const space = spaces[target.key];
-            if (!space || target.key === currentSpace) continue;
+            if (!space || space.hidden || target.key === currentSpace) continue;
             const objects = target.objects(space);
             if (!objects || !objects.length) continue;
             const hits = raycaster.intersectObjects(objects, Boolean(target.recursive));
@@ -50,7 +50,7 @@
         }
         // External spaces are added at runtime (external-spaces.js); their gate is the click target.
         for (const [key, space] of Object.entries(spaces)) {
-            if (!space || !space.external || key === currentSpace || !space.group) continue;
+            if (!space || space.hidden || !space.external || key === currentSpace || !space.group) continue;
             const hits = raycaster.intersectObjects(directMeshes(space.group), false);
             if (hits.length && hits[0].distance < bestDistance) {
                 best = key;

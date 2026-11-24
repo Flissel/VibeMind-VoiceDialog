@@ -407,6 +407,7 @@ contextBridge.exposeInMainWorld('vibemind', {
 
     // External spaces (Sales, Marketing, Lernen, Events): one overlay manager for all
     getExternalSpaces: () => ipcRenderer.invoke('get-external-spaces'),
+    getSpaceSwitches: () => ipcRenderer.invoke('get-space-switches'),
     showExternalSpace: (id) => ipcRenderer.send('show-external-space', id),
     hideExternalSpaces: () => ipcRenderer.send('hide-external-spaces'),
     externalSpacePath: (id, path) => ipcRenderer.send('external-space-path', id, path),
