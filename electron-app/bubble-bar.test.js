@@ -301,3 +301,11 @@ test('the bar does not jump: "Bewerten" keeps its width with or without a count'
     // measured in Chromium at 12px: "Bewerten" 71 px, "Bewerten · 47" 94 px, "Bewerten · 999" 100 px
     assert.match(css, /#bubble-bar #bubble-eval-btn \{\s*min-width: 104px;\s*font-variant-numeric: tabular-nums;/);
 });
+
+test('a sentence button opens a folded chat: its answer is seen, the press does not seem lost (Lauf 23)', () => {
+    const p = page({ cards: threeCards });
+    p.calls.folded = true;
+    p.btn('bubble-whitepaper-btn').fire('click', { isTrusted: true });
+    assert.equal(p.calls.folded, false);
+    assert.deepEqual(p.calls.sent, [[SENTENCES.whitepaper, true]]);
+});

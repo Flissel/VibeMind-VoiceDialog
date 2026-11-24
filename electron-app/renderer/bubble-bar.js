@@ -152,6 +152,8 @@
                 const sentence = win.vibemind && win.vibemind.bubbleSentences && win.vibemind.bubbleSentences[key];
                 const c = chat();
                 if (!sentence || !c || typeof c.submit !== 'function' || e.currentTarget.disabled) return;
+                // the answer comes in the chat: a folded chat opens, or the press seems to do nothing (Lauf 23)
+                if (typeof c.folded === 'function' && c.folded() && typeof c.fold === 'function') { c.fold(false); render(); }
                 // typed: only a click of the person; the preload checks it against what it saw
                 c.submit(sentence, { typed: e.isTrusted === true });
             };
