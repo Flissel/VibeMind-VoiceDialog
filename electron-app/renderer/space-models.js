@@ -15,7 +15,7 @@
     'use strict';
 
     /** Space -> figure. A figure is the file renderer/space-figures/<name>.js. */
-    const FIGURES = { sales: 'disco', marketing: 'leuchtturm', learning: 'buch' };
+    const FIGURES = { sales: 'disco', marketing: 'leuchtturm', learning: 'buch', events: 'buehne' };
 
     const COLORS = {
         CYAN: 0x4fc3f7, PINK: 0xff7eb6, VIOLET: 0x8866ff, ORANGE: 0xff9f43, GOLD: 0xffc857, GREEN: 0x9ccc65,

@@ -40,6 +40,13 @@ const EXPECT = {
         triangles: [1900, 2100],
         state: (g) => [...g.getObjectByName('buch-lichtpunkte').instanceMatrix.array.slice(12, 15)],
     },
+    buehne: {
+        space: 'events',
+        parts: ['buehne-boden', 'buehne-dach', 'buehne-wimpel', 'buehne-spots'],
+        triangles: [600, 800],
+        state: (g) => [...g.getObjectByName('buehne-wimpel').instanceMatrix.array.slice(0, 2),
+            ...g.getObjectByName('buehne-spots').children.map((b) => b.rotation.z)],
+    },
 };
 
 const GATE_TRIANGLES = 3572;   // what the gate with its emoji sign costs after the polish
