@@ -26,6 +26,8 @@
      * Brain, not a place to look at (2026-11-23).
      */
     const NO_JUMP = Object.freeze(['desktop']);
+    /** A jump a sentence of the person asked for: the short flight, and the way back (jump-back.js). */
+    const ASKED = Object.freeze({ quick: true, back: true });
 
     /** What to do with a task that belongs to `space`. */
     function decide({ space, currentSpace, knownSpaces, lastInputAt, now, insideBubble, asked = false }) {
@@ -231,6 +233,10 @@
         let keepTimer = null;
         let pending = null;      // { space, tries } a jump waiting for a camera move to end
         let followed = '';       // the space the app is jumping to because of a task
+        // The space a plan of the sentence under way named (task_navigate). The answer decides where
+        // the app goes: its ziel, else this space. One jump, not two (Lauf 26: task_navigate jumped,
+        // the answer jumped again).
+        let deferred = '';
         let answer = '';         // the answer to the sentence last sent, once it is there
         let refusal = '';        // ... or the Brain's sentence on why it did not work
         let awaiting = false;    // a sentence of the app was sent and its answer is not there yet
@@ -262,7 +268,7 @@
                 if (clock() - lastInputAt < BUSY_MS && !follower.opens(ziel)) return;
                 if (app && app.isInsideBubble && !follower.opens(ziel)) return;
             }
-            follower.follow(ziel);
+            follower.follow(ziel, asked ? ASKED : undefined);
         }
         /** A calm sentence where the person reads now: the chat of the open bubble, else the console. */
         function tellCalmly(text) {
@@ -294,22 +300,22 @@
             }, { capture: true, passive: true });
         }
 
-        function go(space) {
+        function go(space, options) {
             const app = root.multiverseApp;
             if (!app) return false;
             if (app.currentSpace === space) return true;
             if (app.isNavigating) return false;
-            if (root.spaceNavigator && root.spaceNavigator.switchSpace) root.spaceNavigator.switchSpace(space);
-            else app.navigateToSpace(space);
+            if (root.spaceNavigator && root.spaceNavigator.switchSpace) root.spaceNavigator.switchSpace(space, options);
+            else app.navigateToSpace(space, options);
             return true;
         }
 
         /** Jump now, or as soon as the running camera move has ended. */
-        function jump(space) {
+        function jump(space, options) {
             pending = { space, tries: 0 };
             const attempt = () => {
                 if (!pending || pending.space !== space) return; // a newer jump took over
-                if (go(space) || ++pending.tries >= RETRY_LIMIT) { pending = null; return; }
+                if (go(space, options) || ++pending.tries >= RETRY_LIMIT) { pending = null; return; }
                 root.setTimeout(attempt, RETRY_MS);
             };
             attempt();
@@ -428,6 +434,7 @@
             if (finished(current)) clear();
         }
         root.addEventListener('vibemind:sentence-sent', (event) => {
+            deferred = '';
             const sent = event && event.detail && typeof event.detail.trace_id === 'string' ? event.detail.trace_id : '';
             if (sent) sentTrace = sent;
             // The key or click that sent the sentence is no sign that the user works here: they asked
@@ -456,7 +463,10 @@
         // Answer and end of the plan arrive in either order.
         root.addEventListener('vibemind:sentence-answered', (event) => {
             const detail = (event && event.detail) || {};
+            const planned = deferred;
+            deferred = '';
             if (detail.ziel) followZiel(detail.ziel, true);
+            else if (planned && detail.success !== false) { followed = planned; jump(planned, ASKED); }
             awaiting = false;
             root.clearTimeout(answerTimer);
             // The Brain took the order; a model works on it (answer { ok: true, pending: true }).
@@ -833,6 +843,11 @@
                 asked: awaiting,     // a sentence of the person is under way: its plan is what they asked for
             });
             // 'note' and 'stay' need nothing here: the status that follows says where the task runs.
+            // A sentence of the person under way: its answer decides (its ziel, else this space).
+            if (action === 'navigate' && awaiting) {
+                deferred = message.space;
+                return 'wait';
+            }
             if (action === 'navigate') {
                 followed = message.space;
                 jump(message.space);

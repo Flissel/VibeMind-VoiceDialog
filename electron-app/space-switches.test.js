@@ -139,7 +139,7 @@ test('switched off: no tab, out of the scene, objects kept, not clickable', () =
 
 test('the scene does not enter a space switched off, by any way; key cycling skips it', () => {
     const scene = read('renderer', 'multiverse.js');
-    assert.match(scene, /navigateToSpace\(targetSpace\) \{\s*if \(this\.isNavigating \|\| targetSpace === this\.currentSpace\) \{\s*return false;\s*\}\s*\/\/[^\n]*\n\s*if \(this\.spaces\[targetSpace\] && this\.spaces\[targetSpace\]\.hidden\) \{\s*return false;/);
+    assert.match(scene, /navigateToSpace\(targetSpace, options = \{\}\) \{\s*if \(this\.isNavigating \|\| targetSpace === this\.currentSpace\) \{\s*return false;\s*\}\s*\/\/[^\n]*\n\s*if \(this\.spaces\[targetSpace\] && this\.spaces\[targetSpace\]\.hidden\) \{\s*return false;/);
     const cycling = scene.match(/const spaceKeys = Object\.keys\(this\.spaces\)\.filter\(\(key\) => !this\.spaces\[key\]\.hidden \|\| key === this\.currentSpace\);/g);
     assert.equal(cycling && cycling.length, 2, 'previous and next');
 });

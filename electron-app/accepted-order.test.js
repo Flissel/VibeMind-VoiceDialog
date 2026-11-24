@@ -649,18 +649,23 @@ test('a long answer that ends with "Zurück …": that sentence stays, the text 
     assert.doesNotMatch(other.w.chatLog()[1], /Danach zurück/);
 });
 
-test('the jump is the same from every place to type: a sentence in an open bubble goes to the space of its result', () => {
+test('the jump is the same from every place to type: a sentence in an open bubble goes to the space of its result', async () => {
     // Abnahme point 4: the result lies in another space, the app goes there. From the console it
     // did; from the chat of an open bubble (the one place to type there) the plan stayed a note.
+    // Lauf 26: the plan names the space, the answer of the sentence decides: one jump, with it.
     const w = world();
     const app = w.window.multiverseApp;
     app.spaces.orders = {};
     const went = [];
-    app.navigateToSpace = (space) => { went.push(space); };
-    w.window.vibemind.sendChatMessage = () => new Promise(() => {});   // the answer is still to come
+    app.navigateToSpace = (space, options) => { went.push([space, options && options.quick]); };
+    let answerNow = null;
+    w.window.vibemind.sendChatMessage = () => new Promise((resolve) => { answerNow = resolve; });
     w.send('Welche geplanten Aufgaben gibt es?');
-    assert.equal(w.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' }), 'navigate');
-    assert.deepEqual(went, ['orders']);
+    assert.equal(w.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' }), 'wait');
+    assert.deepEqual(went, [], 'the answer is still to come');
+    answerNow({ success: true, message: 'Es sind keine geplanten Aufgaben eingetragen.' });
+    await tick(); await tick();
+    assert.deepEqual(went, [['orders', true]], 'one jump, the short flight');
 
     const quiet = world();                             // a plan nobody asked for in this bubble
     quiet.window.multiverseApp.spaces.orders = {};
@@ -872,10 +877,12 @@ test('a direct answer naming only a space: the app goes there (desktop, coding i
     app.currentSpace = 'clawport';
     app.isInsideBubble = false;
     const went = [];
-    app.navigateToSpace = (space) => { went.push(space); app.currentSpace = space; };
+    const how = [];
+    app.navigateToSpace = (space, options) => { went.push(space); how.push(options); app.currentSpace = space; };
     const answered = (detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
     answered({ text: 'Offen sind zwei Fenster.', success: true, space: 'clawport', ziel: { space: 'desktop', bubble_id: null, node_id: null } });
     assert.deepEqual(went, ['desktop']);
+    assert.deepEqual({ ...how[0] }, { quick: true, back: true }, 'Lauf 26: the short flight, and the way back');
     answered({ text: 'Zwei Projekte laufen.', success: true, space: 'desktop', ziel: { space: 'coding', bubble_id: null, node_id: null } });
     assert.deepEqual(went, ['desktop', 'projects']);
 });

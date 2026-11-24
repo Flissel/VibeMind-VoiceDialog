@@ -95,7 +95,7 @@ test('a move nobody can see ends at its next step', () => {
     const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
 
     assert.match(scene, /_moveDuration\(ms\) \{\s*return document\.visibilityState === 'hidden' \? 1 : ms;/);
-    assert.match(scene, /const duration = this\._moveDuration\(1500\);/, 'change of space');
+    assert.match(scene, /animateCameraTo\(targetPosition, lookAtPosition, onComplete, ms = 1500\) \{[\s\S]{0,200}const duration = this\._moveDuration\(ms\);/, 'change of space');
     assert.match(scene, /const duration = this\._moveDuration\(800\);/, 'entering a bubble');
     assert.match(scene, /const duration = this\._moveDuration\(600\);/, 'leaving a bubble');
 });

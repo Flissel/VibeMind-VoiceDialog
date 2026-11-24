@@ -157,7 +157,33 @@ test('an Ideas sentence still jumps (the list of spaces without jump names only 
     const b = brain(s, 'ideas', 'idea_list');
     typedSentence(s);
     b.started();
+    // Lauf 26: the plan names its space, the answer decides; one jump, with the answer
+    assert.equal(s.app.currentSpace, 'roarboot', 'not yet: the answer of the sentence is under way');
+    s.emit('vibemind:sentence-answered', { text: 'Drei Ideen.', success: true });
     assert.equal(s.app.currentSpace, 'ideas');
+});
+
+// Lauf 26: Rowboat and Aufträge flickered: task_navigate jumped, the answer jumped again. While the
+// answer of the sentence is under way, the space of the plan waits for it; the answer decides.
+test('a sentence under way: task_navigate waits, the answer jumps once (its ziel, else the space of the plan)', () => {
+    const s = scene({ currentSpace: 'ideas' });
+    s.app.spaces = { ...s.app.spaces, orders: {}, video: {} };
+    s.emit('vibemind:sentence-sent');
+    assert.equal(s.handle({ type: 'task_navigate', space: 'roarboot', registry_space: 'rowboat', description: '' }), 'wait');
+    assert.equal(s.app.currentSpace, 'ideas', 'no jump before the answer');
+    // the answer names no ziel: the space of the plan
+    s.emit('vibemind:sentence-answered', { text: 'Dreizehn Spaces.', success: true });
+    assert.equal(s.app.currentSpace, 'roarboot');
+
+    // a failed answer: no jump at all
+    s.emit('vibemind:sentence-sent');
+    s.handle({ type: 'task_navigate', space: 'orders', registry_space: 'schedule', description: '' });
+    s.emit('vibemind:sentence-answered', { text: 'Das hat nicht geklappt.', success: false });
+    assert.equal(s.app.currentSpace, 'roarboot');
+
+    // no sentence under way (a plan of its own): task_navigate jumps as before
+    assert.equal(s.handle({ type: 'task_navigate', space: 'video', registry_space: 'video', description: '' }), 'navigate');
+    assert.equal(s.app.currentSpace, 'video');
 });
 
 test('raw data of a tool is never shown: the neutral line stays until the sentence comes', () => {

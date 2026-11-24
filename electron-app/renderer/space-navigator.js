@@ -50,6 +50,7 @@
     // without this a click during a move was lost (measured 2026-11-23: of five switches 0.4 s
     // apart every second one did not arrive). The last wish wins and is carried out on arrival.
     var wanted = null;
+    var wantedOptions = null;
 
     var wantedTimer = null;
 
@@ -62,16 +63,23 @@
             if (!wanted) return;
             if (app && app.isNavigating && triesLeft > 0) { followWanted(triesLeft - 1); return; }
             var next = wanted;
+            var nextOptions = wantedOptions;
             wanted = null;
+            wantedOptions = null;
             if (app && app.isNavigating) { syncSpace(app.currentSpace); return; } // still stuck: tabs back to the truth
-            switchSpace(next);
+            switchSpace(next, nextOptions);
         }, 100);
     }
 
-    async function switchSpace(spaceId) {
+    /**
+     * options (a jump a sentence of the person asked for, task-navigate.js / result-target.js):
+     *   quick – the short flight; back – offer the way back to the space it started in (jump-back.js).
+     */
+    async function switchSpace(spaceId, options) {
         var app = window.multiverseApp;
         if (app && app.isNavigating) {
             wanted = spaceId;
+            wantedOptions = options || null;
             syncSpace(spaceId);   // the tab answers at once; the scene follows after the running move
             followWanted(60);
             return;
@@ -86,8 +94,10 @@
 
         // Navigate via MultiverseApp (visual navigation with camera animation)
         if (app) {
+            var from = app.currentSpace;
             // Nothing started (unknown space): the tabs must not claim the new space.
-            if (app.navigateToSpace(spaceId) === false) return;
+            if (app.navigateToSpace(spaceId, { quick: Boolean(options && options.quick) }) === false) return;
+            if (window.VibeJumpBack) window.VibeJumpBack.jumped(options && options.back ? from : '', spaceId);
         }
         syncSpace(spaceId);
 

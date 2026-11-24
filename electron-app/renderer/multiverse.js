@@ -9,6 +9,9 @@
  * - IPC integration with Python backend
  */
 
+/** The flight to a space a sentence of the person asked for (navigateToSpace options.quick). */
+const QUICK_MOVE_MS = 400;
+
 /** A text field as high as its lines, at most FIELD_MAX_PX; then it scrolls. */
 const FIELD_MAX_PX = 120;
 function fitLines(field) {
@@ -2259,8 +2262,12 @@ class MultiverseApp {
         window.dispatchEvent(new CustomEvent('vibemind:navigation-stuck', { detail: state }));
     }
 
-    /** Starts the move to a space. Returns false when nothing was started (already there, or a move is running). */
-    navigateToSpace(targetSpace) {
+    /**
+     * Starts the move to a space. Returns false when nothing was started (already there, or a move is running).
+     * options.quick: a short flight (QUICK_MOVE_MS), for a jump a sentence of the person asked for: the
+     * result is there within half a second of the answer, not after the 1.5 s flight (Lauf 26).
+     */
+    navigateToSpace(targetSpace, options = {}) {
         if (this.isNavigating || targetSpace === this.currentSpace) {
             return false;
         }
@@ -2271,6 +2278,11 @@ class MultiverseApp {
 
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
+        // Each move has its number: the failsafe of a move ends only that move. Lauf 26: the 3 s
+        // failsafe of an earlier move to Ideas fired during the next move (to Rowboat) and "arrived"
+        // in Ideas; the app flickered there and back.
+        const move = (this._moveRun || 0) + 1;
+        this._moveRun = move;
         // Another tab while a bubble is open: the bubble closes. Its view lay over every other tab, with
         // the Ideas chat as the only field to type in, so sentences from Rowboat or Video went off as
         // Ideas (measured: 9 of 16 sentences from other tabs went to the planner).
@@ -2282,7 +2294,7 @@ class MultiverseApp {
         // rAF), still run the full arrival path so the space's BrowserView is
         // shown — otherwise the camera "arrives" but the space never appears.
         setTimeout(() => {
-            if (this.isNavigating) {
+            if (this.isNavigating && this._moveRun === move) {
                 console.warn('[Multiverse] Navigation failsafe triggered for:', targetSpace);
                 this._arriveAtSpace(targetSpace, this.spaces[targetSpace]);
             }
@@ -2421,7 +2433,7 @@ class MultiverseApp {
         // animation callback never fires (slow frame / throttled rAF).
         this.animateCameraTo(targetPos, space.position, () => {
             this._arriveAtSpace(targetSpace, space);
-        });
+        }, options && options.quick ? QUICK_MOVE_MS : 1500);
         return true;
     }
 
@@ -2549,10 +2561,10 @@ class MultiverseApp {
         return true;
     }
 
-    animateCameraTo(targetPosition, lookAtPosition, onComplete) {
+    animateCameraTo(targetPosition, lookAtPosition, onComplete, ms = 1500) {
         const startPosition = this.camera.position.clone();
         const startLookAt = this.controls.target.clone();
-        const duration = this._moveDuration(1500);
+        const duration = this._moveDuration(ms);
         const startTime = Date.now();
         
         const updateCamera = () => {

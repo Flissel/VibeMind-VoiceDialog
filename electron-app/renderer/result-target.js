@@ -88,8 +88,9 @@
             const app = win.multiverseApp;
             if (!app || app.isNavigating || win.isEnteringBubble) return false;
             if (app.currentSpace !== ziel.space) {
-                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(ziel.space);
-                else app.navigateToSpace(ziel.space);
+                const how = target && target.options ? target.options : undefined;
+                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(ziel.space, how);
+                else app.navigateToSpace(ziel.space, how);
                 return false;
             }
             if (ziel.space !== 'ideas' || !ziel.bubble_id) return true;   // only Ideas has bubbles to enter
@@ -114,14 +115,17 @@
             timer = win.setTimeout(look, STEP_MS);
         }
 
-        /** Go to the place of a result. `value` is a ziel of the Brain; anything else is ignored. */
-        function follow(value) {
+        /**
+         * Go to the place of a result. `value` is a ziel of the Brain; anything else is ignored.
+         * `options` go with the switch of space (space-navigator.js: quick, back).
+         */
+        function follow(value, options) {
             const ziel = zielOf(value);
             if (!ziel || !reachable(ziel)) return false;
             if (target && target.ziel.space === ziel.space && target.ziel.bubble_id === ziel.bubble_id
                 && target.ziel.node_id === ziel.node_id) return true;
             if (timer) win.clearTimeout(timer);
-            target = { ziel, tries: 0 };
+            target = { ziel, tries: 0, options: options || null };
             look();
             return true;
         }
