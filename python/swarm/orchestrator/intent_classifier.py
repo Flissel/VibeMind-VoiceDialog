@@ -752,7 +752,9 @@ class IntentClassifier:
             model: Model override (default: Claude Haiku for speed)
         """
         self._client = model_client
-        self._model = model or get_model("classifier")
+        from llm_config import classifier_role
+        self._role = classifier_role()   # OpenFang by default, OpenRouter with ALTER_WEG_ANBIETER=openrouter
+        self._model = model or get_model(self._role)
         self._own_client = None
 
     def _post_process_classification(self, result: Dict[str, Any], user_input: str) -> Dict[str, Any]:
@@ -1638,7 +1640,7 @@ class IntentClassifier:
         if self._own_client is None:
             try:
                 from llm_config import get_client
-                self._own_client = get_client("classifier")
+                self._own_client = get_client(getattr(self, "_role", "classifier"))
                 logger.info(f"IntentClassifier using {self._model}")
             except Exception as e:
                 logger.error(f"Failed to create classifier client: {e}")

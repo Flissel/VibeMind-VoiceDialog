@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from typing import Any, Dict, Optional
 
@@ -42,6 +43,20 @@ Benutzer-Input: "$INTENT$"
 JSON:"""
 
 
+GREETING = re.compile(
+    r"^\s*(?:hallo|hi|hey|moin|servus|guten\s+(?:morgen|tag|abend))(?:\s+rachel)?\s*[!.,]*\s*$",
+    re.IGNORECASE,
+)
+GREETING_HINT = "Hallo! Wie kann ich dir helfen?"
+
+
+def fixed_rule(intent_text: str) -> Optional[Dict[str, Any]]:
+    """A greeting alone ("hi", "Hallo!") is answered by a fixed rule, without a model; None otherwise."""
+    if not isinstance(intent_text, str) or not GREETING.match(intent_text):
+        return None
+    return {"event_type": "conversation.greeting", "payload": {}, "parameters": {}, "response_hint": GREETING_HINT}
+
+
 class YamlClassifier:
     """Classifier driven by tool_schemas.yml for Ideas-Space events."""
 
@@ -49,14 +64,20 @@ class YamlClassifier:
         self._own_client = None
         self._model = None
         # Reuse same provider/model as legacy IntentClassifier
+        from llm_config import classifier_role, get_client, get_model, get_provider
+        role = classifier_role()
+        self._model = get_model(role)
+        # The retries were for openrouter/free and its flaky providers; OpenFang gets one call.
+        self._retries = 1 if get_provider(role) == "openfang" else MAX_RETRIES
         try:
-            from llm_config import get_client, get_model
-            self._own_client = get_client("classifier")
-            self._model = get_model("classifier")
+            self._own_client = get_client(role)
             logger.info(f"YamlClassifier using {self._model}")
         except Exception as e:
-            logger.error(f"YamlClassifier init failed: {e}")
-            raise
+            if get_provider(role) != "openfang":
+                logger.error(f"YamlClassifier init failed: {e}")
+                raise
+            # no OpenFang key: no call at all, "nicht verstanden" at once (never OpenRouter)
+            logger.warning(f"YamlClassifier: {e}; the old path sends nothing")
 
         # Pre-render the event block once (schemas cached in schema_loader)
         self._event_block = render_ideas_space_block(max_examples=3)
@@ -74,12 +95,20 @@ class YamlClassifier:
         return 404/malformed responses, a retry often hits a working provider.
         """
         start = time.perf_counter()
+        # A greeting needs no model (fixed rule, same form as an answer of the model)
+        fixed = fixed_rule(intent_text)
+        if fixed is not None:
+            logger.info(f"[YamlClassifier] {fixed['event_type']} by fixed rule")
+            return fixed
+        if self._own_client is None:
+            return self._fallback(intent_text, "no client")
         prompt = PROMPT_TEMPLATE.replace("$EVENT_BLOCK$", self._event_block).replace("$INTENT$", intent_text)
 
         logger.debug(f"[YamlClassifier] prompt size: {len(prompt)} chars")
 
+        retries = getattr(self, "_retries", MAX_RETRIES)
         last_error: Optional[str] = None
-        for attempt in range(1, MAX_RETRIES + 1):
+        for attempt in range(1, retries + 1):
             # --- LLM call ---
             try:
                 from llm_config import token_kwargs
@@ -93,8 +122,8 @@ class YamlClassifier:
                 logger.debug(f"[YamlClassifier] raw response (try {attempt}): {content[:200]}")
             except Exception as e:
                 last_error = f"LLM error: {e}"
-                logger.warning(f"[YamlClassifier] try {attempt}/{MAX_RETRIES} LLM call failed: {e}")
-                if attempt < MAX_RETRIES:
+                logger.warning(f"[YamlClassifier] try {attempt}/{retries} LLM call failed: {e}")
+                if attempt < retries:
                     await asyncio.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
                 continue
 
@@ -104,8 +133,8 @@ class YamlClassifier:
                 result = json.loads(extracted)
             except json.JSONDecodeError as e:
                 last_error = f"parse error: {e}"
-                logger.warning(f"[YamlClassifier] try {attempt}/{MAX_RETRIES} JSON parse failed: {e} / content={content[:200]}")
-                if attempt < MAX_RETRIES:
+                logger.warning(f"[YamlClassifier] try {attempt}/{retries} JSON parse failed: {e} / content={content[:200]}")
+                if attempt < retries:
                     await asyncio.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
                 continue
 
@@ -127,7 +156,7 @@ class YamlClassifier:
             }
 
         # All retries exhausted
-        logger.warning(f"[YamlClassifier] exhausted {MAX_RETRIES} retries: {last_error}")
+        logger.warning(f"[YamlClassifier] exhausted {retries} retries: {last_error}")
         return self._fallback(intent_text, last_error or "unknown error")
 
     @staticmethod

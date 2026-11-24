@@ -261,8 +261,41 @@ def list_roles() -> List[str]:
     return sorted(config.get("models", {}).keys())
 
 
+# The old path of the app (classifier after the Brain): over OpenFang and the subscription by
+# default; ALTER_WEG_ANBIETER=openrouter brings back the OpenRouter way as it was.
+ALTER_WEG_ENV = "ALTER_WEG_ANBIETER"
+OPENFANG_TIMEOUT_S = 20.0
+
+
+def classifier_role() -> str:
+    """The role the classifiers of the old path use: 'classifier_openfang' or 'classifier'."""
+    choice = (os.environ.get(ALTER_WEG_ENV) or "openfang").strip().lower()
+    return "classifier" if choice == "openrouter" else "classifier_openfang"
+
+
+def _openfang_key() -> Optional[str]:
+    """OPENFANG_API_KEY from the environment, else from the .env of the repo root (as the
+    Brain bridge reads it). Never logged."""
+    key = (os.environ.get("OPENFANG_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from swarm.routing.brain_openfang_bridge import _openfang_auth_headers
+        header = _openfang_auth_headers().get("Authorization", "")
+        return header[len("Bearer "):] or None if header.startswith("Bearer ") else None
+    except Exception:  # noqa: BLE001 — no key is a plain answer, not a crash
+        return None
+
+
 def _resolve_credentials(role: str):
     """Resolve api_key, base_url for a role (shared by sync and async clients)."""
+    if get_provider(role) == "openfang":
+        # No silent way to OpenRouter: without the OpenFang key nothing is sent at all.
+        key = _openfang_key()
+        if not key:
+            raise ValueError(f"No OPENFANG_API_KEY for role '{role}'")
+        return {"api_key": key, "base_url": get_base_url(role), "timeout": OPENFANG_TIMEOUT_S, "max_retries": 0}
+
     api_key = get_api_key(role)
     base_url = get_base_url(role)
 

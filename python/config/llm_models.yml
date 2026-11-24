@@ -25,6 +25,12 @@ providers:
   ollama:
     base_url: "http://localhost:11434"
     api_key_env: null
+  openfang:
+    # OpenAI-compatible endpoint of OpenFang; the model names the agent ("openfang:<agent>").
+    # Runs on the subscription through the agent's claude-code model and its budget watcher.
+    # Never falls back to OpenRouter (llm_config._resolve_credentials).
+    base_url: "http://localhost:4200/v1"
+    api_key_env: "OPENFANG_API_KEY"
 
 models:
   # --- Core Orchestrator ---
@@ -32,7 +38,13 @@ models:
     provider: "openrouter"
     model: "openrouter/free"
     max_tokens: 2048
-    description: "Intent classification — free fallback (Brain handles most events)"
+    description: "Intent classification — free fallback (Brain handles most events); only with ALTER_WEG_ANBIETER=openrouter"
+
+  classifier_openfang:
+    provider: "openfang"
+    model: "openfang:voice-einordnung"
+    max_tokens: 2048
+    description: "Intent classification of the old path over the subscription (default; llm_config.classifier_role)"
 
   rag_classifier:
     provider: "openrouter"
