@@ -165,10 +165,9 @@ test('every space the Brain can name: the app goes there, or says calmly where t
     assert.deepEqual(went, {
         ideas: 'ideas', bubbles: 'ideas', desktop: 'desktop', rowboat: 'roarboot', sales: 'sales', marketing: 'marketing',
         learning: 'learning', coding: 'projects', events: 'events', orders: 'orders', mirofish: 'mirofish', agentfarm: 'agentfarm',
-        research: 'ideas', recherche: 'ideas', thebrain: 'thebrain', video: 'video', flowzen: 'flowzen', minibook: null, schedule: null,
+        research: 'ideas', recherche: 'ideas', thebrain: 'thebrain', video: 'video', flowzen: 'flowzen', minibook: null, schedule: 'orders',
     });
     assert.equal(told.minibook, 'Das Ergebnis liegt im Bereich „Minibook“. Dorthin kann die App nicht springen.');
-    assert.equal(told.schedule, 'Das Ergebnis liegt im Bereich „Zeitplan“. Dorthin kann die App nicht springen.');
 });
 
 test('a ziel outside Ideas ends in its space; a switched-off space is said calmly, not jumped to', () => {

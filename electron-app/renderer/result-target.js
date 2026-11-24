@@ -23,9 +23,9 @@
      * The names of the Brain (config/space_agent_registry.yml) where the app calls the space otherwise.
      * Bubbles and the research of the Brain write into bubbles of Ideas.
      */
-    const ALIASES = Object.freeze({ rowboat: 'roarboot', coding: 'projects', bubbles: 'ideas', research: 'ideas', recherche: 'ideas' });
+    const ALIASES = Object.freeze({ rowboat: 'roarboot', coding: 'projects', bubbles: 'ideas', research: 'ideas', recherche: 'ideas', schedule: 'orders' });
     /** How the chat names a space the app has no place for. */
-    const NAMES = Object.freeze({ schedule: 'Zeitplan', minibook: 'Minibook', n8n: 'n8n' });
+    const NAMES = Object.freeze({ minibook: 'Minibook', n8n: 'n8n' });
 
     /**
      * A ziel as the app uses it, or null: plain ids only. `space` is the space of the app, `named`

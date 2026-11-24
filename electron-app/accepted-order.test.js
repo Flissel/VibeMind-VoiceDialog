@@ -844,7 +844,7 @@ test('a success end still gives way to the next sentence at once', async () => {
     assert.match(w.line(), /^● Ideas/);
 });
 
-// Routing (24.11.): the Brain names a space the app has no place for (Minibook, Zeitplan) or one switched
+// Routing (24.11.): the Brain names a space the app has no place for (Minibook) or one switched
 // off: the app says so calmly where the person reads, once, instead of doing nothing.
 test('a ziel in a space the app cannot go to: a calm sentence, once, no jump', async () => {
     const w = world();
@@ -853,9 +853,9 @@ test('a ziel in a space the app cannot go to: a calm sentence, once, no jump', a
     w.window.multiverseApp.addGcMessage = (text, kind) => consoleSaid.push(kind + ': ' + text);
     w.window.multiverseApp.navigateToSpace = () => { throw new Error('no jump'); };
     const answered = (detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
-    answered({ text: 'Termin eingetragen.', success: true, space: 'ideas', ziel: { space: 'schedule' } });
-    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p_zeit', result: '…', ziel: { space: 'schedule' } });
-    const sentence = 'Das Ergebnis liegt im Bereich „Zeitplan“. Dorthin kann die App nicht springen.';
+    answered({ text: 'Notiz im Minibook.', success: true, space: 'ideas', ziel: { space: 'minibook' } });
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p_mini', result: '…', ziel: { space: 'minibook' } });
+    const sentence = 'Das Ergebnis liegt im Bereich „Minibook“. Dorthin kann die App nicht springen.';
     const said = consoleSaid.concat(w.chatLog()).filter((t) => t.includes(sentence));
     assert.equal(said.length, 1, 'said once, though answer and end of the plan both name it: ' + JSON.stringify(said));
 });
