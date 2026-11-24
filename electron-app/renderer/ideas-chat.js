@@ -306,6 +306,7 @@
         let acceptedLine = null;  // { key, line }: the "Auftrag angenommen" line of the last order; its end replaces it
         let acceptedKey = null;  // an order the Brain took and a model works on: the bubble it was asked in
         let staleKey = null;     // ... and the one whose "noch in Arbeit" the chat has already said
+        const gone = new Set();  // keys of open bubbles deleted meanwhile (bubbleRemoved)
 
         const el = (tag, className, text) => {
             const node = doc.createElement(tag);
@@ -477,6 +478,7 @@
         /** Each bubble has its own history; an answer goes to the bubble it was asked in. */
         /** Write a line; with `ask` (the entry of the sentence) the line is that sentence's answer. */
         function say(text, kind, key = bubbleKey(), answers = null, ask = null) {
+            if (gone.has(key) && kind !== 'user') mirror(text, kind);
             let entry = answers ? { text, kind, answers } : { text, kind };
             if (ask) entry = history.addAnswer(key, ask, entry);
             else history.add(key, entry);
@@ -487,8 +489,35 @@
             return entry;
         }
 
+        /**
+         * Lauf 24: "Lösche diese Bubble" → "Ja, löschen": the bubble left the database, but its open
+         * view kept showing every card and its link. Now the app leaves a deleted open bubble for
+         * the overview of Ideas. Its answer ("… Mit „Zurück“ holst du alles wieder.") comes some
+         * 400 ms after the deletion, into the history of the bubble, which is no longer on screen:
+         * the console of the overview says it too, so "zurück" stays readable.
+         */
+        function mirror(text, kind) {
+            const app = root.multiverseApp;
+            if (!app || typeof app.addGcMessage !== 'function') return;
+            const shown = kind === 'error' ? 'error' : kind === 'rueckfrage' || kind === 'hinweis' ? kind : 'agent';
+            app.addGcMessage(String(text), shown);
+        }
+        function bubbleRemoved(id) {
+            if (id == null || id === '' || view.classList.contains('hidden')) return false;
+            const bubble = openBubble();
+            if (!bubble || (String(bubble.id) !== String(id) && bubble.key !== String(id))) return false;
+            gone.add(bubble.key);
+            const list = history.get(bubble.key);
+            const last = list[list.length - 1];
+            if (last && last.kind !== 'user') mirror(last.text, last.kind);   // the answer came first
+            const nav = root.bubbleNavigation;
+            if (nav && typeof nav.exitSpace === 'function') nav.exitSpace();
+            return true;
+        }
+
         function showHistory() {
             const key = bubbleKey();
+            gone.delete(key);          // back again ("zurück" restored it): its chat is its own again
             if (key === shownKey) return;
             shownKey = key;
             log.replaceChildren(...history.get(key).map(line));
@@ -883,7 +912,7 @@
         sync();
 
         // fold / folded: the button "Chat" of the fixed bar of the bubble (bubble-bar.js)
-        return { submit, contextNow, store, bubbleRow, fold: setFolded, folded: () => view.classList.contains('chat-folded') };
+        return { submit, contextNow, store, bubbleRow, bubbleRemoved, fold: setFolded, folded: () => view.classList.contains('chat-folded') };
     }
 
     const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };

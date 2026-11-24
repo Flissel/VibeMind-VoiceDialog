@@ -262,3 +262,38 @@ test('the voice panel stands above the console, however many pairs its list hold
     assert.match(scene, /new ResizeObserver\(\(\) => this\._placeVoicePanel\(\)\)\.observe\(gcEl\)/, 'each new pair moves it again');
     assert.doesNotMatch(scene, /voicePanel\.style\.bottom = '90px'/);
 });
+
+// Lauf 24: "Lösche diese Bubble" → "Ja, löschen". The database lost the bubble, the open view kept every
+// card and its link. The answer came 390 ms after the deletion (window log). Now the app leaves the
+// deleted bubble for the overview, and the console there says the answer, "zurück" included.
+test('the open bubble is deleted: the app leaves it, the answer with "zurück" stays readable in the console', async () => {
+    const w = world({ space: 'ideas', bubbleOpen: true });
+    const BUBBLE = '00000000-0000-4000-8000-00000000000a';
+    const consoleSaid = [];
+    const exits = [];
+    w.win.multiverseApp.addGcMessage = (text, kind) => consoleSaid.push([kind, text]);
+    w.win.bubbleNavigation = { exitSpace: () => { exits.push('exit'); w.view.classList.add('hidden'); } };
+
+    assert.equal(w.chat.bubbleRemoved('00000000-0000-4000-8000-0000000000ee'), false, 'another bubble: nothing');
+    assert.deepEqual(exits, []);
+
+    const asked = w.chat.submit('Lösche diese Bubble');
+    w.sent[0].resolve({ success: true, question: true, message: 'Soll ich die Bubble „Bubble A“ löschen? Sag „Ja, löschen“.' });
+    await asked;
+    const yes = w.chat.submit('Ja, löschen');
+    assert.equal(w.chat.bubbleRemoved(BUBBLE), true, 'the realtime row of the bubble is gone, before the answer');
+    assert.deepEqual(exits, ['exit'], 'back to the overview of Ideas');
+    assert.deepEqual(consoleSaid, [], 'nothing to say yet: the answer is not there');
+    const answer = 'Die Bubble „Bubble A“ ist gelöscht, mit ihren Karten. Mit „Zurück“ holst du alles wieder.';
+    w.sent[1].resolve({ success: true, message: answer });
+    await yes;
+    assert.deepEqual(consoleSaid, [['agent', answer]], 'the console of the overview says it');
+});
+
+test('the realtime deletion asks the chat before the scene forgets which bubble was open', () => {
+    const html = read('renderer/index.html');
+    const at = html.indexOf("case 'node_removed':");
+    const chat = html.indexOf('window.VibeIdeasChat.bubbleRemoved(message.node_id)', at);
+    const scene = html.indexOf('window.multiverseApp.removeBubble(message.node_id)', at);
+    assert.ok(at > -1 && chat > at && scene > chat);
+});

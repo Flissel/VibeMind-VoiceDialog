@@ -1254,6 +1254,9 @@
                     // Sent by Supabase Realtime for deleted rows. An ideas row is a bubble of the
                     // overview; anything else is a node inside a bubble.
                     if (message.table === 'ideas') {
+                        // The open bubble itself is gone: leave it for the overview (Lauf 24). First,
+                        // while the app still knows which bubble is open; removeBubble clears that.
+                        if (window.VibeIdeasChat && window.VibeIdeasChat.bubbleRemoved) window.VibeIdeasChat.bubbleRemoved(message.node_id);
                         if (window.multiverseApp) window.multiverseApp.removeBubble(message.node_id);
                     } else if (window.spaceCanvas) {
                         window.spaceCanvas.onNodeDeleted(message.node_id);
