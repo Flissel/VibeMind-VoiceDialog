@@ -349,7 +349,8 @@ test('/stand: the main process reads only, checks the id and lets only known fie
         { stand: 'fehler', meldung: 'Der Dienst ist gerade nicht erreichbar.', ok: false, dauer_s: null, hinweis: false, saetze: [] });
     const main = fs.readFileSync(path.join(__dirname, 'task-navigation.js'), 'utf8');
     assert.match(main, /const ORDER_ID = \/\^\[A-Za-z0-9-\]\{4,64\}\$\/;/);
-    assert.match(main, /path: '\/api\/agent-auftraege\/' \+ encodeURIComponent\(id\) \+ '\/stand'/);
+    assert.match(main, /readJson\('\/api\/agent-auftraege\/' \+ encodeURIComponent\(id\) \+ '\/stand', options\)/);
+    assert.match(main, /function readJson\(path, [^)]*\) \{\n  return new Promise\(\(resolve\) => \{\n    const request = http\.get\(/, 'only reading');
     assert.match(fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8'), /initTaskNavigation\(mainWindow, \{ ipcMain \}\);/);
     assert.match(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), /orderStand: \(id\) => ipcRenderer\.invoke\('task:order-stand', String\(id\)\)/);
 });

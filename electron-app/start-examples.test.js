@@ -200,3 +200,103 @@ test('in the order of index.html the bubble chat gets its "?"', () => {
     assert.ok(row.children.some((c) => c.id === 'ideas-chat-help'), 'the "?" is in the row');
     assert.equal(row.children.filter((c) => c.id === 'ideas-chat-help').length, 1, 'once');
 });
+
+// Routing (24.11.): the Brain names its own sentences per space (GET /api/beispielsaetze). They stand
+// behind "?" instead of the built-in ones; none, or no Brain, leaves the built-in ones.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const shown = (box) => box.children.slice(1).map((b) => b.textContent);
+
+test('"?" shows the sentences of the Brain for the space; an empty list or no Brain keeps the built-in ones', async () => {
+    const listeners = {};
+    const asked = [];
+    const answers = {
+        sales: ['Welche Angebote sind offen?', 'Zeig die neuesten Kontakte'],
+        marketing: [],
+    };
+    const { doc, messages, input } = page();
+    const win = {
+        multiverseApp: { currentSpace: 'sales' },
+        addEventListener: (type, fn) => { listeners[type] = fn; },
+        vibemind: { examples: (space) => { asked.push(space); if (space === 'video') return Promise.reject(new Error('away')); return Promise.resolve(answers[space] || []); } },
+    };
+    start.mount(win, doc);
+    const box = messages.children[0];
+    assert.deepEqual(shown(box), start.examplesFor('sales').map((s) => '„' + s + '“'), 'the built-in ones at once');
+    await settle();
+    assert.deepEqual(shown(box), ['„Welche Angebote sind offen?“', '„Zeig die neuesten Kontakte“']);
+    box.children[1].on.click();
+    assert.equal(input.value, 'Welche Angebote sind offen?', 'a click fills, as with the built-in ones');
+
+    listeners['vibemind:space-arrived']({ detail: { space: 'marketing' } });
+    await settle();
+    assert.deepEqual(shown(box), start.examplesFor('marketing').map((s) => '„' + s + '“'), 'an empty list: the built-in ones');
+
+    listeners['vibemind:space-arrived']({ detail: { space: 'video' } });
+    await settle();
+    assert.deepEqual(shown(box), start.examplesFor('video').map((s) => '„' + s + '“'), 'no Brain: the built-in ones');
+    assert.deepEqual(asked, ['sales', 'marketing', 'video']);
+});
+
+test('an answer for a space the console has left is dropped; "?" asks again while the built-in ones stand', async () => {
+    const listeners = {};
+    const pending = [];
+    const { doc, messages, row, send } = page();
+    const win = {
+        multiverseApp: { currentSpace: 'sales' },
+        addEventListener: (type, fn) => { listeners[type] = fn; },
+        vibemind: { examples: (space) => new Promise((resolve) => pending.push({ space, resolve })) },
+    };
+    start.mount(win, doc);
+    const box = messages.children[0];
+    listeners['vibemind:space-arrived']({ detail: { space: 'thebrain' } });
+    await settle();
+    pending[0].resolve(['Ein Satz aus Sales']);                     // late, the console is in thebrain now
+    await settle();
+    assert.deepEqual(shown(box), ['„Woran denkt das Gehirn gerade?“', '„Welche Bubbles gibt es?“']);
+
+    pending[1].resolve([]);                                            // the Brain has none for thebrain yet
+    await settle();
+    const help = row.children[row.children.indexOf(send) - 1];
+    help.on.click();                                                   // later: "?" asks once more
+    await settle();
+    assert.equal(pending.length, 3);
+    assert.equal(pending[2].space, 'thebrain');
+    pending[2].resolve(['Was denkt das Gehirn über Bubbles?']);
+    await settle();
+    assert.deepEqual(shown(box), ['„Was denkt das Gehirn über Bubbles?“']);
+    help.on.click();
+    help.on.click();
+    await settle();
+    assert.equal(pending.length, 3, 'sentences of the Brain stand: "?" does not ask again');
+});
+
+test('the main process reads /api/beispielsaetze under the name of the Brain, plain sentences only', async () => {
+    const http = require('node:http');
+    const { examplesOf, readExamples } = require('./task-navigation');
+    assert.deepEqual(examplesOf({ space: 'sales', saetze: [' Satz eins ', 'Satz eins', 7, '', 'x'.repeat(121), 'a\u0000b', 'c', 'd', 'e', 'f'] }),
+        ['Satz eins', 'a b', 'c', 'd', 'e'], 'trimmed, no repeats, no long or odd ones, at most five');
+    assert.deepEqual(examplesOf({ saetze: 'Satz' }), []);
+    assert.deepEqual(examplesOf(null), []);
+
+    const paths = [];
+    const server = http.createServer((req, res) => {
+        paths.push(req.url);
+        if (req.url.endsWith('=coding')) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ space: 'coding', saetze: ['Wie steht das Projekt?'] })); return; }
+        if (req.url.endsWith('=video')) { res.writeHead(200); res.end('kein json'); return; }
+        res.writeHead(404); res.end();
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const options = { host: '127.0.0.1', port: server.address().port };
+    try {
+        assert.deepEqual(await readExamples('projects', options), ['Wie steht das Projekt?'], 'projects is coding in the Brain');
+        assert.deepEqual(await readExamples('video', options), []);
+        assert.deepEqual(await readExamples('swedesign', options), []);
+        assert.deepEqual(await readExamples('../x', options), [], 'an odd name never goes into a path');
+        assert.deepEqual(paths, ['/api/beispielsaetze?space=coding', '/api/beispielsaetze?space=video', '/api/beispielsaetze?space=swedesign']);
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
+    assert.deepEqual(await readExamples('sales', options), [], 'no Brain: []');
+    assert.match(read('preload.js'), /examples: \(space\) => ipcRenderer\.invoke\('task:examples', String\(space\)\)/);
+    assert.match(read('task-navigation.js'), /ipcMain\.handle\('task:examples', \(_event, space\) => readExamples\(space, \{ host, port \}\)\)/);
+});

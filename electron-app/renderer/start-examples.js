@@ -9,6 +9,10 @@
  *
  * Later the "?" button at the input shows the sentences again, at the end of the list (Lauf 9: the
  * list was never empty, so they could not be seen); a click on a sentence or on "?" hides them.
+ *
+ * The Brain names its own sentences per space (GET /api/beispielsaetze, read by the main process,
+ * window.vibemind.examples). They replace the built-in ones of that space; an empty list or a Brain
+ * that does not answer leaves the built-in ones.
  */
 (function (root, factory) {
     const api = factory();
@@ -30,6 +34,7 @@
     // of a model (those cost the budget of the Brain).
     const BUBBLE = ['Wie viele Karten hat diese Bubble?', 'Halte fest: …'];
     const MAX = 3;
+    const BRAIN_MAX = 5;
     const SHOWN = 'gc-start-shown';
 
     /** The sentences for a space: its own first, then those from every tab, without repeats. */
@@ -47,13 +52,23 @@
         return gap < 0 ? sentence : sentence.slice(0, gap);
     }
 
-    function render(doc, box, space) {
+    /** The sentences of the Brain for a space, as the main process gives them; [] on any trouble. */
+    function brainExamples(win, space) {
+        const api = win && win.vibemind;
+        if (!api || typeof api.examples !== 'function') return Promise.resolve([]);
+        return Promise.resolve()
+            .then(() => api.examples(space))
+            .then((list) => (Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.trim()).slice(0, BRAIN_MAX) : []))
+            .catch(() => []);
+    }
+
+    function render(doc, box, sentences) {
         box.replaceChildren();
         const label = doc.createElement('span');
         label.className = 'gc-start-label';
         label.textContent = 'Sag zum Beispiel:';
         box.appendChild(label);
-        for (const sentence of examplesFor(space)) {
+        for (const sentence of sentences) {
             const button = doc.createElement('button');
             button.type = 'button';
             button.className = 'gc-start-example';
@@ -88,7 +103,25 @@
             box.className = 'gc-start';
             messages.insertBefore(box, messages.firstChild);
             const app = win.multiverseApp;
-            render(doc, box, app && app.currentSpace ? app.currentSpace : 'ideas');
+            // The built-in sentences at once; those of the Brain when it names some for the space
+            // the console still stands in. "?" asks again while the built-in ones stand.
+            let space = null;
+            let fromBrain = false;
+            const paint = (next) => {
+                space = next;
+                fromBrain = false;
+                render(doc, box, examplesFor(next));
+                ask();
+            };
+            const ask = () => {
+                const asked = space;
+                brainExamples(win, asked).then((list) => {
+                    if (asked !== space || !list.length) return;
+                    fromBrain = true;
+                    render(doc, box, list);
+                });
+            };
+            paint(app && app.currentSpace ? app.currentSpace : 'ideas');
             const send = doc.getElementById('gc-send-btn');
             if (send && send.parentNode) {
                 const help = doc.createElement('button');
@@ -98,7 +131,11 @@
                 help.textContent = '?';
                 help.title = 'Beispielsätze zeigen';
                 help.setAttribute('aria-expanded', 'false');
-                help.addEventListener('click', () => show(doc, box, !box.classList.contains(SHOWN)));
+                help.addEventListener('click', () => {
+                    const on = !box.classList.contains(SHOWN);
+                    if (on && !fromBrain) ask();
+                    show(doc, box, on);
+                });
                 send.parentNode.insertBefore(help, send);
             }
             // A bubble chat built before this script (another order of the scripts): its "?" now.
@@ -109,7 +146,7 @@
                     log: doc.getElementById('ideas-chat-log') });
             }
             win.addEventListener('vibemind:space-arrived', (event) => {
-                render(doc, box, event && event.detail ? event.detail.space : 'ideas');
+                paint(event && event.detail ? event.detail.space : 'ideas');
             });
         };
         if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start);
@@ -160,5 +197,5 @@
         return { help, box };
     }
 
-    return { examplesFor, fieldText, mount, attachChat, EVERYWHERE, OWN, BUBBLE };
+    return { examplesFor, fieldText, mount, attachChat, brainExamples, EVERYWHERE, OWN, BUBBLE, BRAIN_MAX };
 });

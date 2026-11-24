@@ -403,24 +403,52 @@ function standOf(body) {
   };
 }
 
-/** Read the stand of one order from the Brain (only reading). Resolves null on any trouble. */
-function readOrderStand(id, { host = '127.0.0.1', port = 5000, timeoutMs = 4000 } = {}) {
+/** GET a JSON body from the Brain (only reading). Resolves null on any trouble. */
+function readJson(path, { host = '127.0.0.1', port = 5000, timeoutMs = 4000 } = {}) {
   return new Promise((resolve) => {
-    if (typeof id !== 'string' || !ORDER_ID.test(id)) { resolve(null); return; }
-    const request = http.get({ host, port, path: '/api/agent-auftraege/' + encodeURIComponent(id) + '/stand',
-      headers: { Accept: 'application/json' }, timeout: timeoutMs }, (res) => {
+    const request = http.get({ host, port, path, headers: { Accept: 'application/json' }, timeout: timeoutMs }, (res) => {
       let raw = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { if (raw.length < 65536) raw += chunk; });
       res.on('end', () => {
         if (res.statusCode !== 200) { resolve(null); return; }
-        try { resolve(standOf(JSON.parse(raw))); } catch { resolve(null); }
+        try { resolve(JSON.parse(raw)); } catch { resolve(null); }
       });
       res.on('error', () => resolve(null));
     });
     request.on('timeout', () => request.destroy());
     request.on('error', () => resolve(null));
   });
+}
+
+/** Read the stand of one order from the Brain (only reading). Resolves null on any trouble. */
+function readOrderStand(id, options = {}) {
+  if (typeof id !== 'string' || !ORDER_ID.test(id)) return Promise.resolve(null);
+  return readJson('/api/agent-auftraege/' + encodeURIComponent(id) + '/stand', options).then(standOf);
+}
+
+/** The name the Brain knows a space of the app by, where the two differ (see SPACE_TO_APP). */
+const BRAIN_NAME_OF = Object.freeze({ projects: 'coding', roarboot: 'rowboat' });
+/** At most this many example sentences per space, as GET /api/beispielsaetze gives them. */
+const EXAMPLES_MAX = 5;
+
+/** The sentences of an answer of /api/beispielsaetze: plain, short strings, no repeats; else []. */
+function examplesOf(body) {
+  if (!body || typeof body !== 'object' || !Array.isArray(body.saetze)) return [];
+  const list = [];
+  for (const x of body.saetze) {
+    if (typeof x !== 'string') continue;
+    const sentence = x.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+    if (sentence && sentence.length <= 120 && !list.includes(sentence)) list.push(sentence);
+  }
+  return list.slice(0, EXAMPLES_MAX);
+}
+
+/** The example sentences of the Brain for a space of the app (only reading). [] on any trouble. */
+function readExamples(space, options = {}) {
+  if (typeof space !== 'string' || !/^[a-z0-9_]{1,32}$/.test(space)) return Promise.resolve([]);
+  const named = BRAIN_NAME_OF[space] || space;
+  return readJson('/api/beispielsaetze?space=' + encodeURIComponent(named), { timeoutMs: 3000, ...options }).then(examplesOf);
 }
 
 let _request = null;
@@ -445,6 +473,8 @@ function initTaskNavigation(mainWindow, options = {}) {
   if (options.ipcMain && !_standHandled) {
     _standHandled = true;
     options.ipcMain.handle('task:order-stand', (_event, id) => readOrderStand(id, { host, port }));
+    // the sentences behind "?" of the console, from the Brain; [] lets the renderer keep its own
+    options.ipcMain.handle('task:examples', (_event, space) => readExamples(space, { host, port }));
   }
 
   const reconnect = (ms) => {
@@ -484,6 +514,6 @@ function closeTaskNavigation() {
 }
 
 module.exports = {
-  plainError, standOf, readOrderStand, ORDER_STANDS,
+  plainError, standOf, readOrderStand, ORDER_STANDS, examplesOf, readExamples, BRAIN_NAME_OF,
   traceOf, zielOf, SPACE_TO_APP, appKeyForSpace, parseSse, resultText, acceptedOf, targetsOf, noteOf, createTaskNavigator, initTaskNavigation, closeTaskNavigation,
 };
