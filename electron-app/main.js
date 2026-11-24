@@ -2748,31 +2748,38 @@ function setupIpcHandlers() {
         });
         n8nWindow.on('closed', () => { n8nWindow = null; });
 
-        // Auto-login: load signin, inject fetch login, redirect to target page
+        // Sign-in only with the account from the environment (N8N_UI_EMAIL, N8N_UI_PASSWORD), as the
+        // Agent Farm does; never with a value written into the code. Without one the editor opens at
+        // its sign-in page and the user signs in there.
         const targetPath = workflowId ? `/workflow/${workflowId}` : '/';
+        const email = typeof process.env.N8N_UI_EMAIL === 'string' ? process.env.N8N_UI_EMAIL.trim() : '';
+        const password = typeof process.env.N8N_UI_PASSWORD === 'string' ? process.env.N8N_UI_PASSWORD : '';
         n8nWindow.loadURL(`${n8nUrl}/signin`);
+        if (!email || !password) {
+            console.log('[n8n] Editor ohne automatische Anmeldung geoeffnet (N8N_UI_EMAIL/N8N_UI_PASSWORD nicht gesetzt)');
+            return { success: true, autoLogin: false, message: 'n8n-Editor ist offen. Bitte dort anmelden – fuer die automatische Anmeldung fehlen N8N_UI_EMAIL und N8N_UI_PASSWORD.' };
+        }
+        const login = JSON.stringify({ emailOrLdapLoginId: email, password });
         n8nWindow.webContents.on('did-navigate', (_event, url) => {
             if (!n8nWindow || n8nWindow.isDestroyed()) return;
             if (!url.includes('/signin')) return;
             console.log('[Main] n8n signin detected, auto-login → ' + targetPath);
             setTimeout(() => {
                 if (!n8nWindow || n8nWindow.isDestroyed()) return;
+                // The account goes in as a JSON literal, so no quote in it can break the script.
                 n8nWindow.webContents.executeJavaScript(`
                     fetch('${n8nUrl}/rest/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
-                        body: JSON.stringify({
-                            emailOrLdapLoginId: 'admin@vibemind.local',
-                            password: 'Vibemind1'
-                        })
+                        body: JSON.stringify(${login})
                     }).then(r => {
-                        if (r.ok) window.location.href = '${targetPath}';
+                        if (r.ok) window.location.href = ${JSON.stringify(targetPath)};
                     }).catch(() => {});
                 `).catch(() => {});
             }, 1500);
         });
-        return { success: true };
+        return { success: true, autoLogin: true };
     });
 
     // ── n8n Workflow Builder ──
