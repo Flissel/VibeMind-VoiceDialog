@@ -2760,12 +2760,23 @@ function setupIpcHandlers() {
             return { success: true, autoLogin: false, message: 'n8n-Editor ist offen. Bitte dort anmelden – fuer die automatische Anmeldung fehlen N8N_UI_EMAIL und N8N_UI_PASSWORD.' };
         }
         const login = JSON.stringify({ emailOrLdapLoginId: email, password });
+        // The account only goes into n8n's own sign-in page: same origin as n8nUrl, path /signin.
+        // A page that merely has "/signin" somewhere in its address gets nothing.
+        const isN8nSignin = (address) => {
+            try {
+                const at = new URL(address);
+                return at.origin === new URL(n8nUrl).origin && at.pathname.replace(/\/+$/, '') === '/signin';
+            } catch (_) {
+                return false;
+            }
+        };
         n8nWindow.webContents.on('did-navigate', (_event, url) => {
             if (!n8nWindow || n8nWindow.isDestroyed()) return;
-            if (!url.includes('/signin')) return;
+            if (!isN8nSignin(url)) return;
             console.log('[Main] n8n signin detected, auto-login → ' + targetPath);
             setTimeout(() => {
                 if (!n8nWindow || n8nWindow.isDestroyed()) return;
+                if (!isN8nSignin(n8nWindow.webContents.getURL())) return;   // it may have moved on meanwhile
                 // The account goes in as a JSON literal, so no quote in it can break the script.
                 n8nWindow.webContents.executeJavaScript(`
                     fetch('${n8nUrl}/rest/login', {

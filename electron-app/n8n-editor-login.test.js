@@ -29,6 +29,15 @@ test('the n8n editor signs in only with N8N_UI_EMAIL and N8N_UI_PASSWORD from th
     assert.doesNotMatch(body, /emailOrLdapLoginId:\s*['"`]/);
 });
 
+test('the account goes only into n8n\'s own sign-in page: same origin, path /signin, checked again before sending', () => {
+    const body = handler('clawport:open-n8n-editor');
+    assert.match(body, /at\.origin === new URL\(n8nUrl\)\.origin && at\.pathname\.replace\(\/\\\/\+\$\/, ''\) === '\/signin'/);
+    assert.doesNotMatch(body, /url\.includes\('\/signin'\)/, 'a part of the address is not enough');
+    const send = body.indexOf('executeJavaScript(');
+    const recheck = body.lastIndexOf('isN8nSignin(n8nWindow.webContents.getURL())', send);
+    assert.ok(recheck > 0 && recheck < send, 'the page is checked again right before the account is sent');
+});
+
 test('without the two values the editor opens at its sign-in page and says so calmly, no sign-in attempt', () => {
     const body = handler('clawport:open-n8n-editor');
     const missing = body.indexOf('if (!email || !password)');
