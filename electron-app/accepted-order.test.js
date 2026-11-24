@@ -815,9 +815,9 @@ test('an order that never reports: after 20 minutes the chat says so calmly inst
 
 // Lauf 23, decided by coordination: an error end stays in the line until it has stood 30 s, also when a
 // new sentence comes; the new sentence waits for the line. A success end may go at once, as before.
-test('an error end stays in the line 30 s; a new sentence takes the line only after that', async () => {
-    const w = world();
-    plan(w, { ok: false, error: 'Das White Paper ließ sich nicht schreiben.' });
+test('the error end of an order stays in the line 30 s; a new sentence takes the line only after that', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'fehler', ok: false, meldung: 'Das White Paper ließ sich nicht schreiben.' }]);
+    w.advance(5000); await tick();                    // /stand: fehler
     const error = '✕ Ideas: fehlgeschlagen — Das White Paper ließ sich nicht schreiben.';
     assert.equal(w.line(), error);
     w.advance(2600);

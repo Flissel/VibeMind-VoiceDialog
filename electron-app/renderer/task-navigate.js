@@ -368,8 +368,10 @@
                 return;
             }
             paint(el, current);
-            // An error end the user has in front of them now: held KEEP_MS from here.
-            if (!el.hidden && current.state === 'failed' && (!failedHold || failedHold.status !== current)) {
+            // The error end of an order (it has a number) the user has in front of them now: held
+            // KEEP_MS from here. A failed plan whose own sentence is answered later (e.g. with a question
+            // back) is no end of an order: its answer takes the line at once, as before.
+            if (!el.hidden && current.state === 'failed' && firstOrder(current) && (!failedHold || failedHold.status !== current)) {
                 failedHold = { status: current, until: clock() + KEEP_MS };
                 root.clearTimeout(holdTimer);
                 holdTimer = root.setTimeout(render, KEEP_MS);
