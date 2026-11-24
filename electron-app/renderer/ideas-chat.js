@@ -597,11 +597,35 @@
          * Send a sentence. `typed` is true only when the person sent it from the chat field
          * (a trusted submit); a call from code, a repeat or a follow-up leaves it false.
          */
+        /**
+         * The same sentence again while the one before is still unanswered, or while its question back
+         * is the last thing in the chat: nothing new to ask. Lauf 23: the White Paper button, pressed four
+         * times in 3.4 s with the chat folded, put four identical pairs into the chat and pushed the
+         * running order out of sight. The chat opens and shows the question that waits instead.
+         */
+        const same = (a, b) => String(a).trim().replace(/[.!?\s]+$/, '').toLowerCase()
+            === String(b).trim().replace(/[.!?\s]+$/, '').toLowerCase();
+        const unanswered = new Map();   // bubble key -> sentences sent and not answered yet
+        function stillOpen(key, text) {
+            if ((unanswered.get(key) || []).some((sent) => same(sent, text))) return true;
+            const list = history.get(key);
+            const last = list[list.length - 1];
+            return Boolean(last) && last.kind === 'rueckfrage' && Boolean(last.answerTo)
+                && last.answerTo.kind === 'user' && same(last.answerTo.text, text);
+        }
+
         async function submit(text, { typed = false } = {}) {
             if (!text) return;
+            const asked = bubbleKey();
+            if (stillOpen(asked, text)) {
+                setFolded(false);
+                log.scrollTop = log.scrollHeight;
+                if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('info', '[IdeasChat] same sentence again while its question is open: not sent');
+                return;
+            }
+            unanswered.set(asked, [...(unanswered.get(asked) || []), text]);
             inFlight += 1;
             panel.dataset.busy = 'true';
-            const asked = bubbleKey();
             // One trace per sentence, back on every event of its run (task-navigate.js tells overlapping sentences apart by it).
             const trace = root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : '';
             root.dispatchEvent(new root.CustomEvent('vibemind:sentence-sent', { detail: { trace_id: trace } }));
@@ -660,6 +684,10 @@
                     trace_id: trace, text: 'Das hat nicht geklappt. Bitte noch einmal versuchen.', success: false, space: 'ideas' } }));
                 say('Das hat nicht geklappt. Bitte noch einmal versuchen.', 'error', asked, null, ask);
             } finally {
+                const rest = unanswered.get(asked) || [];
+                const at = rest.indexOf(text);
+                if (at >= 0) rest.splice(at, 1);
+                if (!rest.length) unanswered.delete(asked);
                 inFlight = Math.max(0, inFlight - 1);
                 if (!inFlight) waiting = false;
                 showState();
@@ -751,12 +779,33 @@
             const kind = status.state === 'note' && choices ? 'vorschlag' : 'agent';
             const next = choices ? { text, kind, answers: choices } : { text, kind };
             if (titel) next.titel = titel;
+            // The end stands at the sentence that gave the order (Lauf 5). Later sentences below it: the
+            // bottom of the chat, where the eye is, says it as well, with the number, without buttons.
+            // Lauf 23: a stopped White Paper ended above four later pairs, and nobody saw it.
+            const below = !endsInPlace(key, old, ask);
             if (old && history.replace(key, old, next)) {
                 if (key === shownKey) log.replaceChildren(...history.get(key).map(line));
-                return;
+            } else {
+                const entry = say(text, kind, key, choices, ask);
+                if (entry && titel) entry.titel = titel;
             }
-            const entry = say(text, kind, key, choices, ask);
-            if (entry && titel) entry.titel = titel;
+            if (below) say('Auftrag' + (order ? ' Nr. ' + order.slice(0, 8) : '') + ' beendet: ' + text, 'agent', key);
+        }
+
+        /** Nothing but the order's own lines after its sentence: its end can stand where it was asked. */
+        function endsInPlace(key, old, ask) {
+            const list = history.get(key);
+            if (old && list.includes(old)) return list.indexOf(old) === list.length - 1;
+            const at = ask ? list.indexOf(ask) : -1;
+            if (at < 0) return true;   // its sentence is gone: say() puts the end at the bottom anyway
+            return list.slice(at + 1).every((entry) => entry.answerTo === ask);
+        }
+
+        /** A numbered order of this bubble still open, other than those the status names: only its own end ends its line. */
+        function openOrderOf(key, status) {
+            const named = Array.isArray(status.orders) ? status.orders.map(String) : [];
+            for (const [order, known] of orderKeys) if (known.key === key && !named.includes(order)) return order;
+            return '';
         }
 
         /** How long an order took, as the chat says it: "42 s", "1 min 45 s", "3 min". */
@@ -799,7 +848,10 @@
                 } else say(text, 'agent', acceptedKey);
             }
             // The result is at the card (task-navigate.js saw it arrive): the chat says so once.
-            if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)) {
+            // A numbered order ends by its own end (vibemind:order-ended) only: the status of a later
+            // sentence (Lauf 23: a question back) took its "angenommen" line and the order vanished.
+            if (acceptedKey !== null && status.state !== 'accepted' && !(status.state === 'running' && status.accepted)
+                && !openOrderOf(acceptedKey, status)) {
                 const key = acceptedKey;
                 acceptedKey = null;
                 sayEnd(status, key);

@@ -581,10 +581,12 @@
             const order = openOrders.get(id);
             if (!order) return true;
             const since = order.since;
-            if (clock() - since >= ACCEPTED_MAX_MS) { openOrders.delete(id); return true; }
+            // No end after ACCEPTED_MAX_MS: said calmly like an unknown order, so the chat does not keep
+            // "arbeitet" for an order that will not report any more.
+            const overdue = clock() - since >= ACCEPTED_MAX_MS;
             // The Brain does not know the order (e.g. it refused it): after STAND_UNKNOWN_MS it is
             // said plainly instead of "arbeitet …" for twenty minutes.
-            const silent = Boolean(stand) && stand.stand === 'unbekannt' && clock() - since >= STAND_UNKNOWN_MS;
+            const silent = overdue || (Boolean(stand) && stand.stand === 'unbekannt' && clock() - since >= STAND_UNKNOWN_MS);
             // a state the app does not know, but with a sentence of the Brain: that sentence, calmly, and the end
             const strange = Boolean(stand) && !STAND_ENDS.includes(stand.stand) && !STAND_OPEN.includes(stand.stand)
                 && typeof stand.meldung === 'string' && stand.meldung.trim() !== '';
@@ -592,9 +594,9 @@
             openOrders.delete(id);
             const mine = Boolean(current) && current.state === 'accepted' && firstOrder() === id;
             if (mine) stopAccepted();
-            const elapsed = typeof stand.dauer_s === 'number' ? stand.dauer_s : Math.max(0, (clock() - since) / 1000);
-            const saetze = Array.isArray(stand.saetze) ? stand.saetze : [];
-            const said = typeof stand.meldung === 'string' ? stand.meldung : '';
+            const elapsed = stand && typeof stand.dauer_s === 'number' ? stand.dauer_s : Math.max(0, (clock() - since) / 1000);
+            const saetze = stand && Array.isArray(stand.saetze) ? stand.saetze : [];
+            const said = stand && typeof stand.meldung === 'string' ? stand.meldung : '';
             const base = { ...(mine ? current : { space: order.space, step: '', done: 0, total: 0, plan_id: order.plan_id }),
                 targets: order.targets, orders: [id], accepted: false, stale: false, elapsed_s: elapsed, saetze };
             let ended;

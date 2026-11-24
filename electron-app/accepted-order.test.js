@@ -757,3 +757,58 @@ test('grouping: a card reload before the answer does not end the order; /stand e
     assert.match(w.line(), /^✓ Ideas: fertig/);
     assert.equal(w.chatLog().filter((l) => /fertig/.test(l)).length, 1, 'one end line, from /stand');
 });
+
+// Lauf 23: White Paper accepted, then the button "White Paper" pressed four times in 3.4 s with the chat
+// folded; each press got the same question back (answer form as in the window log:
+// event_type brain.multihop.question, question: true). Then /stand said fehler with a meldung.
+// Before: the first question took the "angenommen" line, the three repeats made three more pairs, and
+// the end of the order went in above them, out of sight.
+test('a stopped order after repeated questions: one question, the order kept, its error said where it is seen', async () => {
+    const { w } = await acceptedWithStand([{ stand: 'laeuft' },
+        { stand: 'fehler', ok: false, meldung: 'White Paper angehalten bei Abschnitt 1 von 3: zu wenig lesbarer Text.' }]);
+    w.advance(5000); await tick();
+    const sent = [];
+    const question = { type: 'chat_response', success: true, event_type: 'brain.multihop.question', question: true,
+        message: 'Das White Paper für „Bubble B“ braucht etwa 3 Läufe. Sag „Ja, erstellen“, dann beginne ich.' };
+    w.window.vibemind.sendChatMessage = async (text) => { sent.push(text); return question; };
+    const SENTENCE = 'Erstelle ein White Paper aus dieser Bubble';
+    await w.send(SENTENCE);
+    // the plan of the question ends: its status is calm and belongs to another sentence
+    w.handle({ type: 'task_status', state: 'done', space: 'ideas', plan_id: 'p_frage', result: '…' });
+    for (let i = 0; i < 3; i += 1) await w.send(SENTENCE);
+    assert.deepEqual(sent, [SENTENCE], 'the same sentence is not sent again while its question is open');
+    const before = w.chatLog();
+    assert.equal(before.filter((t) => t === SENTENCE).length, 1, 'one pair, not four');
+    assert.ok(before.includes(ACCEPTED_LINE + ' — Auftrag angenommen'), 'the question did not take the "angenommen" line');
+    assert.equal(w.chatState(), 'arbeitet … (Auftrag angenommen)', 'the head still says the order works');
+
+    w.advance(5000); await tick();                    // /stand: fehler
+    assert.deepEqual(sent, [SENTENCE], 'the error sends nothing again: no retry');
+    const log = w.chatLog();
+    const end = '✕ White Paper angehalten bei Abschnitt 1 von 3: zu wenig lesbarer Text.';
+    assert.ok(log.indexOf(end) > -1 && log.indexOf(end) < log.indexOf(SENTENCE), 'the end stands at its own sentence');
+    assert.equal(log[log.length - 1], 'Auftrag Nr. 0000abcd beendet: ' + end, 'and at the bottom, with its number');
+    assert.ok(!log.includes(ACCEPTED_LINE + ' — Auftrag angenommen'));
+    assert.equal(w.line(), '✕ Ideas: fehlgeschlagen — White Paper angehalten bei Abschnitt 1 von 3: zu wenig lesbarer Text.');
+    assert.equal(w.chatState(), '');
+});
+
+test('the same sentence after its question is answered, or a different one, is sent as usual', async () => {
+    const w = world();
+    const sent = [];
+    const replies = [{ success: true, question: true, message: 'Welche Karte meinst du?' }, { success: true, message: 'Karte 1 ergänzt.' },
+        { success: true, question: true, message: 'Welche Karte meinst du?' }];
+    w.window.vibemind.sendChatMessage = async (text) => { sent.push(text); return replies.shift(); };
+    await w.send('Ergänze eine Zeile.');
+    await w.send('Karte 1');                          // the answer to the question
+    await w.send('Ergänze eine Zeile');               // asked again later: a new sentence
+    assert.deepEqual(sent, ['Ergänze eine Zeile.', 'Karte 1', 'Ergänze eine Zeile']);
+});
+
+test('an order that never reports: after 20 minutes the chat says so calmly instead of "arbeitet"', async () => {
+    const { w } = await acceptedWithStand([]);
+    for (let i = 0; i < 241; i += 1) { w.advance(5000); await tick(); }
+    assert.ok(w.chatLog().includes('ℹ Keine Rückmeldung zum Auftrag Nr. 0000abcd.'), w.chatLog().join(' | '));
+    assert.equal(w.chatState(), '');
+    assert.ok(!w.statuses.includes('failed'));
+});
