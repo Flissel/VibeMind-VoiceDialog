@@ -9,7 +9,7 @@ const CARD = '00000000-0000-4000-8000-000000000001';
 
 test('a ziel of the Brain passes with plain ids only; node_id may be null', () => {
     assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD }), { space: 'ideas', named: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD });
-    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: 7, node_id: null }), { space: 'ideas', bubble_id: '7', node_id: null });
+    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: 7, node_id: null }), { space: 'ideas', named: 'ideas', bubble_id: '7', node_id: null });
     assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: '"] x' }), { space: 'ideas', named: 'ideas', bubble_id: BUBBLE_DB, node_id: null });
     assert.equal(target.zielOf({ space: 'ideas', bubble_id: '../x' }), null);
     assert.equal(target.zielOf({ space: 'Ideas!', bubble_id: BUBBLE_DB }), null);

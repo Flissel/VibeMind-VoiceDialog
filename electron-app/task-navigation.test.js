@@ -441,5 +441,6 @@ test('ziel of the Brain: on the end of a plan that wrote and at /stand, plain id
     assert.deepEqual(zielOf({ ...ZIEL, node_id: null }), { ...ZIEL, node_id: null }, 'a bubble as a whole');
     assert.equal(zielOf({ space: 'ideas', bubble_id: '../x', node_id: null }), null);
     assert.deepEqual(standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: ZIEL }).ziel, ZIEL);
-    assert.equal('ziel' in standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: { space: 'ideas' } }), false);
+    assert.deepEqual(standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: { space: 'sales' } }).ziel, { space: 'sales', bubble_id: null, node_id: null }, 'a space alone is a ziel too');
+    assert.equal('ziel' in standOf({ stand: 'fertig', meldung: 'Fertig.', ziel: { space: 'Sales!' } }), false);
 });
