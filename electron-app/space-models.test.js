@@ -34,6 +34,12 @@ const EXPECT = {
         state: (g) => [g.getObjectByName('leuchtturm-strahl').rotation.y, g.getObjectByName('leuchtturm-lampe').material.emissiveIntensity,
             ...g.getObjectByName('leuchtturm-wellen').instanceMatrix.array.slice(0, 1)],
     },
+    buch: {
+        space: 'learning',
+        parts: ['buch-aufgeschlagen', 'buch-zeilen', 'buch-lichtpunkte'],
+        triangles: [1900, 2100],
+        state: (g) => [...g.getObjectByName('buch-lichtpunkte').instanceMatrix.array.slice(12, 15)],
+    },
 };
 
 const GATE_TRIANGLES = 3572;   // what the gate with its emoji sign costs after the polish
