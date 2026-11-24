@@ -8,9 +8,9 @@ const BUBBLE_DB = '00000000-0000-4000-8000-00000000000b';
 const CARD = '00000000-0000-4000-8000-000000000001';
 
 test('a ziel of the Brain passes with plain ids only; node_id may be null', () => {
-    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD }), { space: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD });
+    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD }), { space: 'ideas', named: 'ideas', bubble_id: BUBBLE_DB, node_id: CARD });
     assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: 7, node_id: null }), { space: 'ideas', bubble_id: '7', node_id: null });
-    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: '"] x' }), { space: 'ideas', bubble_id: BUBBLE_DB, node_id: null });
+    assert.deepEqual(target.zielOf({ space: 'ideas', bubble_id: BUBBLE_DB, node_id: '"] x' }), { space: 'ideas', named: 'ideas', bubble_id: BUBBLE_DB, node_id: null });
     assert.equal(target.zielOf({ space: 'ideas', bubble_id: '../x' }), null);
     assert.equal(target.zielOf({ space: 'Ideas!', bubble_id: BUBBLE_DB }), null);
     assert.equal(target.zielOf(null), null);
@@ -29,6 +29,7 @@ function scene() {
     let cardsShown = false;
     const app = {
         currentSpace: 'video', isNavigating: false, isInsideBubble: false,
+        spaces: { ideas: { name: 'Ideas' }, video: { name: 'Video' }, sales: { name: 'Sales', external: true }, roarboot: { name: 'Rowboat' }, projects: { name: 'Projects' }, marketing: { name: 'Marketing', hidden: true } },
         // the overview: local id 3, database id BUBBLE_DB
         getBubbleById: (id) => (id === 3 || id === '3' || id === BUBBLE_DB ? { userData: { id: 3, db_id: BUBBLE_DB } } : null),
         navigateToSpace: (space) => calls.push('navigate ' + space),
@@ -114,7 +115,7 @@ test('the same ziel twice (answer and end of the plan) does not start anew; with
     s.follower.follow({ ...ziel });
     assert.deepEqual(s.calls, ['switch ideas']);
     assert.equal(s.follower.follow(null), false);
-    assert.equal(s.follower.follow({ space: 'ideas' }), false);
+    assert.equal(s.follower.follow({ space: 'ideas', bubble_id: '../x' }), false);
 });
 
 test('a bubble the overview never shows: it gives up quietly', () => {
@@ -132,4 +133,53 @@ test('the page loads it before the status line, and the ring has its style', () 
     assert.ok(html.indexOf('src="result-target.js"') < html.indexOf('src="task-navigate.js"'));
     const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'card-view.css'), 'utf8');
     assert.match(css, /\.kv-card\.kv-ziel \{/);
+});
+
+// Routing (24.11.): every space the Brain can name as ziel.space. The names of the Brain are those of
+// config/space_agent_registry.yml (state 2026-11-24) and those the coordination named; the spaces of the
+// app are read from the page (tabs) and from the external spaces, as the scene has them.
+const BRAIN_SPACES = ['ideas', 'bubbles', 'desktop', 'rowboat', 'sales', 'marketing', 'learning', 'coding', 'events', 'orders',
+    'mirofish', 'agentfarm', 'research', 'recherche', 'thebrain', 'video', 'flowzen', 'minibook', 'schedule'];
+function appSpaces() {
+    const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+    const { EXTERNAL_SPACES } = require('./external-spaces');
+    const spaces = {};
+    for (const m of html.matchAll(/class="space-tab[^"]*"[^>]*data-space="([^"]+)"/g)) spaces[m[1]] = { name: m[1] };
+    for (const s of EXTERNAL_SPACES) spaces[s.id] = { name: s.label, external: true };
+    return spaces;
+}
+
+test('every space the Brain can name: the app goes there, or says calmly where the result is', () => {
+    const spaces = appSpaces();
+    const went = {};
+    const told = {};
+    for (const name of BRAIN_SPACES) {
+        const s = scene();
+        s.app.spaces = spaces;
+        s.app.currentSpace = 'clawport';
+        const followed = s.follower.follow({ space: name });
+        went[name] = followed ? s.calls.filter((c) => c.startsWith('switch ')).map((c) => c.slice(7))[0] : null;
+        told[name] = s.follower.unreachable({ space: name });
+        assert.equal(Boolean(followed), told[name] === '', `${name}: either it goes, or it says why not`);
+    }
+    assert.deepEqual(went, {
+        ideas: 'ideas', bubbles: 'ideas', desktop: 'desktop', rowboat: 'roarboot', sales: 'sales', marketing: 'marketing',
+        learning: 'learning', coding: 'projects', events: 'events', orders: 'orders', mirofish: 'mirofish', agentfarm: 'agentfarm',
+        research: 'ideas', recherche: 'ideas', thebrain: 'thebrain', video: 'video', flowzen: 'flowzen', minibook: null, schedule: null,
+    });
+    assert.equal(told.minibook, 'Das Ergebnis liegt im Bereich „Minibook“. Dorthin kann die App nicht springen.');
+    assert.equal(told.schedule, 'Das Ergebnis liegt im Bereich „Zeitplan“. Dorthin kann die App nicht springen.');
+});
+
+test('a ziel outside Ideas ends in its space; a switched-off space is said calmly, not jumped to', () => {
+    const s = scene();
+    assert.equal(s.follower.follow({ space: 'sales' }), true);
+    assert.deepEqual(s.calls, ['switch sales']);
+    s.app.currentSpace = 'sales';
+    s.advance(target.STEP_MS);
+    assert.equal(s.follower.pending(), null, 'there: no bubble to enter');
+    assert.deepEqual(s.calls, ['switch sales']);
+    assert.equal(s.follower.follow({ space: 'marketing' }), false);
+    assert.equal(s.follower.unreachable({ space: 'marketing' }), 'Das Ergebnis liegt im Bereich „Marketing“. Dorthin kann die App nicht springen.');
+    assert.equal(s.follower.unreachable({ space: 'rowboat' }), '', 'Rowboat is roarboot in the app');
 });

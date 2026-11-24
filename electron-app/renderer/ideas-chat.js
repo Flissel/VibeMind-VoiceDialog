@@ -912,7 +912,7 @@
         sync();
 
         // fold / folded: the button "Chat" of the fixed bar of the bubble (bubble-bar.js)
-        return { submit, contextNow, store, bubbleRow, bubbleRemoved, fold: setFolded, folded: () => view.classList.contains('chat-folded') };
+        return { submit, contextNow, store, bubbleRow, bubbleRemoved, note: (text) => say(String(text), 'hinweis'), fold: setFolded, folded: () => view.classList.contains('chat-folded') };
     }
 
     const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };

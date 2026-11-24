@@ -19,15 +19,36 @@
     const MARK = 'kv-ziel';
     const PLAIN_ID = /^[A-Za-z0-9-]{1,64}$/;
 
-    /** A ziel as the app uses it, or null: plain ids only, node_id may be null. */
+    /**
+     * The names of the Brain (config/space_agent_registry.yml) where the app calls the space otherwise.
+     * Bubbles and the research of the Brain write into bubbles of Ideas.
+     */
+    const ALIASES = Object.freeze({ rowboat: 'roarboot', coding: 'projects', bubbles: 'ideas', research: 'ideas', recherche: 'ideas' });
+    /** How the chat names a space the app has no place for. */
+    const NAMES = Object.freeze({ schedule: 'Zeitplan', minibook: 'Minibook', n8n: 'n8n' });
+
+    /**
+     * A ziel as the app uses it, or null: plain ids only. `space` is the space of the app, `named`
+     * the name the Brain sent. A bubble is needed only to open one: without it the app goes to the
+     * space (Sales, Rowboat, …), where the result is shown.
+     */
     function zielOf(value) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
         const id = (x) => (typeof x === 'number' && Number.isInteger(x) ? String(x) : x);
         const bubble = id(value.bubble_id);
         const node = id(value.node_id);
-        if (typeof value.space !== 'string' || !/^[a-z_]{1,32}$/.test(value.space)) return null;
-        if (typeof bubble !== 'string' || !PLAIN_ID.test(bubble)) return null;
-        return { space: value.space, bubble_id: bubble, node_id: typeof node === 'string' && PLAIN_ID.test(node) ? node : null };
+        if (typeof value.space !== 'string' || !/^[a-z0-9_]{1,32}$/.test(value.space)) return null;
+        if (bubble != null && bubble !== '' && (typeof bubble !== 'string' || !PLAIN_ID.test(bubble))) return null;
+        const hasBubble = typeof bubble === 'string' && bubble !== '';
+        return { space: ALIASES[value.space] || value.space, named: value.space, bubble_id: hasBubble ? bubble : null,
+            node_id: hasBubble && typeof node === 'string' && PLAIN_ID.test(node) ? node : null };
+    }
+
+    /** The space as the chat names it: its label in the scene, else a plain name of the Brain's word. */
+    function nameOf(ziel, app) {
+        const space = app && app.spaces && app.spaces[ziel.space];
+        if (space && typeof space.name === 'string' && space.name) return space.name;
+        return NAMES[ziel.named] || ziel.named.charAt(0).toUpperCase() + ziel.named.slice(1);
     }
 
     function create(win, doc) {
@@ -71,7 +92,7 @@
                 else app.navigateToSpace(ziel.space);
                 return false;
             }
-            if (ziel.space !== 'ideas') return true;          // only Ideas has bubbles to enter
+            if (ziel.space !== 'ideas' || !ziel.bubble_id) return true;   // only Ideas has bubbles to enter
             if (!insideTarget(app, ziel)) {
                 const nav = win.bubbleNavigation;
                 if (!nav) return true;
@@ -96,8 +117,9 @@
         /** Go to the place of a result. `value` is a ziel of the Brain; anything else is ignored. */
         function follow(value) {
             const ziel = zielOf(value);
-            if (!ziel) return false;
-            if (target && target.ziel.bubble_id === ziel.bubble_id && target.ziel.node_id === ziel.node_id) return true;
+            if (!ziel || !reachable(ziel)) return false;
+            if (target && target.ziel.space === ziel.space && target.ziel.bubble_id === ziel.bubble_id
+                && target.ziel.node_id === ziel.node_id) return true;
             if (timer) win.clearTimeout(timer);
             target = { ziel, tries: 0 };
             look();
@@ -108,11 +130,28 @@
         function opens(value) {
             const ziel = zielOf(value);
             const app = win.multiverseApp;
-            return !!ziel && !!app && insideTarget(app, ziel);
+            return !!ziel && !!ziel.bubble_id && !!app && insideTarget(app, ziel);
         }
 
-        return { follow, opens, pending: () => (target ? target.ziel : null) };
+        /** The app has this space and it is switched on. */
+        function reachable(ziel) {
+            const app = win.multiverseApp;
+            const space = app && app.spaces ? app.spaces[ziel.space] : null;
+            return !!space && !space.hidden;
+        }
+
+        /**
+         * A ziel the app cannot go to (a space it does not have, or one switched off): the sentence
+         * the chat says instead, calmly. '' for a ziel the app can follow or for no ziel at all.
+         */
+        function unreachable(value) {
+            const ziel = zielOf(value);
+            if (!ziel || reachable(ziel)) return '';
+            return `Das Ergebnis liegt im Bereich „${nameOf(ziel, win.multiverseApp)}“. Dorthin kann die App nicht springen.`;
+        }
+
+        return { follow, opens, unreachable, pending: () => (target ? target.ziel : null) };
     }
 
-    return { zielOf, create, STEP_MS, TRIES, MARK_MS, MARK };
+    return { zielOf, create, ALIASES, STEP_MS, TRIES, MARK_MS, MARK };
 });

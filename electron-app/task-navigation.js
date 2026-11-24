@@ -203,7 +203,9 @@ function zielOf(value) {
   const space = value.space;
   const bubble = id(value.bubble_id);
   const node = id(value.node_id);
-  if (typeof space !== 'string' || !/^[a-z_]{1,32}$/.test(space)) return null;
+  if (typeof space !== 'string' || !/^[a-z0-9_]{1,32}$/.test(space)) return null;
+  // A bubble only for a result in a bubble of Ideas; a result in Sales, Rowboat, … names its space alone.
+  if (bubble == null || bubble === '') return { space, bubble_id: null, node_id: null };
   if (typeof bubble !== 'string' || !PLAIN_ID.test(bubble)) return null;
   return { space, bubble_id: bubble, node_id: typeof node === 'string' && PLAIN_ID.test(node) ? node : null };
 }

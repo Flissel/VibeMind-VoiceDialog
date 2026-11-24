@@ -117,6 +117,7 @@
     const ANSWER_GRACE_MS = 2000;                // answered before the plan reported: wait this long for it
     const ANSWER_WAIT_MS = 5000;                 // plan done before the answer came: wait this long for it
     const RUN_AFTER_ANSWER_MS = 15000;           // answered, but the plan never reported its end: the answer ends it
+    const UNREACHABLE_ONCE_MS = 10000;          // answer and end of plan name the same unreachable ziel: said once
     const BLIND_ACCEPT_MS = 10000;               // accepted outside Ideas without an order number: nothing to watch
     const WAITING_TEXT = '\u25CF arbeitet \u2026';
     const ACCEPTED_TEXT = '\u25CF arbeitet \u2026 (Auftrag angenommen)';
@@ -242,15 +243,36 @@
          * end of an order at /stand comes minutes later: not while the person works here, and not out
          * of another open bubble; the card is marked when its bubble is the one on screen.
          */
+        let toldUnreachable = { key: '', at: 0 };
         function followZiel(ziel, asked) {
             if (!ziel || !root.VibeResultTarget) return;
             if (!follower) follower = root.VibeResultTarget.create(root, doc);
+            // A space the app has no place for: said calmly, once (answer and end of the plan both name it).
+            const away = typeof follower.unreachable === 'function' ? follower.unreachable(ziel) : '';
+            if (away) {
+                const key = String(ziel.space) + '|' + String(ziel.bubble_id || '');
+                if (toldUnreachable.key !== key || clock() - toldUnreachable.at > UNREACHABLE_ONCE_MS) {
+                    toldUnreachable = { key, at: clock() };
+                    tellCalmly(away);
+                }
+                return;
+            }
             if (!asked) {
                 const app = root.multiverseApp;
                 if (clock() - lastInputAt < BUSY_MS && !follower.opens(ziel)) return;
                 if (app && app.isInsideBubble && !follower.opens(ziel)) return;
             }
             follower.follow(ziel);
+        }
+        /** A calm sentence where the person reads now: the chat of the open bubble, else the console. */
+        function tellCalmly(text) {
+            const chat = root.VibeIdeasChat;
+            if (doc.body && doc.body.classList && doc.body.classList.contains('ideas-chat-open') && chat && typeof chat.note === 'function') {
+                chat.note(text);
+                return;
+            }
+            const app = root.multiverseApp;
+            if (app && typeof app.addGcMessage === 'function') app.addGcMessage(text, 'hinweis');
         }
         let answerTimer = null;  // ... how long a finished plan waits for that answer
         let watch = null;        // an accepted order: { before, bubbleId } the cards as they were when it was taken
