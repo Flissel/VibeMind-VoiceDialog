@@ -2346,12 +2346,9 @@ class MultiverseApp {
             }
         }
 
-        // Hide SWE Design BrowserView when leaving swedesign space
+        // Leaving Software Design: its wizard view goes (swe-wizard-tab.js)
         if (this.currentSpace === 'swedesign' && targetSpace !== 'swedesign') {
-            if (window.vibemind && window.vibemind.hideSweDesign) {
-                window.vibemind.hideSweDesign();
-                console.log('[Multiverse] Hiding SWE Design BrowserView');
-            }
+            if (window.VibeSweWizard) window.VibeSweWizard.hide();
         }
 
         // Hide ClawPort Dashboard BrowserView when leaving clawport space
@@ -2467,12 +2464,10 @@ class MultiverseApp {
             }
         }
 
-        // Show SWE Design BrowserView when entering swedesign space
+        // Software Design shows the wizard of the promoted project (swe-wizard-tab.js), not the
+        // stage view of the space on 8162
         if (targetSpace === 'swedesign') {
-            if (window.vibemind && window.vibemind.showSweDesign) {
-                window.vibemind.showSweDesign();
-                console.log('[Multiverse] Showing SWE Design BrowserView');
-            }
+            if (window.VibeSweWizard) window.VibeSweWizard.show();
         }
 
         // Show ClawPort Dashboard BrowserView when entering clawport space

@@ -1176,6 +1176,21 @@ class ElectronBackend:
             result = handler.init_from_bubble(shuttle_id, bubble_id)
             self.send_message({"type": "wizard_initialized", "shuttle_id": shuttle_id, **result})
 
+        elif msg_type == "wizard_init_from_project":
+            # A promoted project: the wizard starts from its fixed stand (no model, no MiroFish).
+            # shuttle_id may be missing; the space takes the project's shuttle or makes one.
+            shuttle_id = message.get("shuttle_id") or None
+            projekt_id = message.get("projekt_id") or ""
+            debug_log(f"Wizard init from project: {shuttle_id} / {projekt_id}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            try:
+                result = handler.init_from_project(shuttle_id, projekt_id)
+            except Exception as exc:  # an older space without this step, or the database away
+                debug_log(f"Wizard init from project failed: {type(exc).__name__}")
+                result = {"success": False, "error": "lesen_fehlgeschlagen", "projekt_id": projekt_id}
+            self.send_message({"type": "wizard_initialized", "quelle": "projekt", **result})
+
         elif msg_type == "wizard_submit_step":
             shuttle_id = message.get("shuttle_id")
             step = message.get("step")

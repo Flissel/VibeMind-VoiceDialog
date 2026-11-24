@@ -1086,3 +1086,63 @@
     color: #e8ddf5;
     font-weight: 600;
 }
+
+/* Software Design tab: the wizard of a promoted project below the title bar and the space tabs
+   (32 + 43 px, as the BrowserViews), so the tabs and "← zurück zu Ideen" stay usable.
+   The parts of a flying shuttle (exit, pipeline, score) are not part of the tab. */
+#shuttle-interior-view.im-reiter {
+    top: 75px;
+    z-index: 900;
+}
+#shuttle-interior-view.im-reiter #shuttle-exit-btn,
+#shuttle-interior-view.im-reiter .shuttle-stage-badge,
+#shuttle-interior-view.im-reiter .shuttle-pipeline,
+#shuttle-interior-view.im-reiter .shuttle-summary,
+#shuttle-interior-view.ohne-projekt .checkpoint-tabs,
+#shuttle-interior-view.ohne-projekt .checkpoint-panels {
+    display: none;
+}
+.swe-wizard-leer {
+    padding: 18px 24px;
+    color: rgba(200, 215, 240, 0.85);
+    font-size: 14px;
+}
+
+/* The verdict of the sense check above the project panel (shuttle-wizard.js) */
+.wizard-sinnpruefung {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    background: rgba(102, 187, 106, 0.14);
+    border: 1px solid rgba(102, 187, 106, 0.45);
+    color: #cfe9d0;
+}
+.wizard-sinnpruefung.nicht-bestanden {
+    background: rgba(255, 193, 7, 0.14);
+    border-color: rgba(255, 193, 7, 0.55);
+    color: #ffe7a3;
+}
+.wizard-sinnpruefung ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}
+.wizard-sinnpruefung-gruende {
+    margin-top: 4px;
+    opacity: 0.9;
+}
+.wizard-sinnpruefung-falsch {
+    margin-top: 4px;
+    color: #ff8a80;
+}
+.req-kandidat,
+.req-gruppe {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.req-kandidat {
+    color: #ffe7a3;
+}

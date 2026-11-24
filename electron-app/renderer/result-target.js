@@ -40,8 +40,12 @@
         if (typeof value.space !== 'string' || !/^[a-z0-9_]{1,32}$/.test(value.space)) return null;
         if (bubble != null && bubble !== '' && (typeof bubble !== 'string' || !PLAIN_ID.test(bubble))) return null;
         const hasBubble = typeof bubble === 'string' && bubble !== '';
-        return { space: ALIASES[value.space] || value.space, named: value.space, bubble_id: hasBubble ? bubble : null,
+        const ziel = { space: ALIASES[value.space] || value.space, named: value.space, bubble_id: hasBubble ? bubble : null,
             node_id: hasBubble && typeof node === 'string' && PLAIN_ID.test(node) ? node : null };
+        // a promoted project (Software Design): its wizard opens in the tab (swe-wizard-tab.js)
+        const projekt = id(value.projekt_id);
+        if (typeof projekt === 'string' && PLAIN_ID.test(projekt)) ziel.projekt_id = projekt;
+        return ziel;
     }
 
     /** The space as the chat names it: its label in the scene, else a plain name of the Brain's word. */
@@ -87,12 +91,16 @@
         function step(ziel) {
             const app = win.multiverseApp;
             if (!app || app.isNavigating || win.isEnteringBubble) return false;
+            // the project first, so the tab opens with its wizard when it is reached
+            const wizard = ziel.projekt_id ? win.VibeSweWizard : null;
+            if (wizard) wizard.want(ziel.projekt_id);
             if (app.currentSpace !== ziel.space) {
                 const how = target && target.options ? target.options : undefined;
                 if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(ziel.space, how);
                 else app.navigateToSpace(ziel.space, how);
                 return false;
             }
+            if (wizard) { wizard.open(ziel.projekt_id); return true; }   // already in the tab: its wizard now
             if (ziel.space !== 'ideas' || !ziel.bubble_id) return true;   // only Ideas has bubbles to enter
             if (!insideTarget(app, ziel)) {
                 const nav = win.bubbleNavigation;
@@ -123,7 +131,7 @@
             const ziel = zielOf(value);
             if (!ziel || !reachable(ziel)) return false;
             if (target && target.ziel.space === ziel.space && target.ziel.bubble_id === ziel.bubble_id
-                && target.ziel.node_id === ziel.node_id) return true;
+                && target.ziel.node_id === ziel.node_id && target.ziel.projekt_id === ziel.projekt_id) return true;
             if (timer) win.clearTimeout(timer);
             target = { ziel, tries: 0, options: options || null };
             look();

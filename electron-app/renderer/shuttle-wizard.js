@@ -24,19 +24,116 @@
         _lastGapSuggestions: [],
     };
 
-    // Initialize wizard when entering a shuttle
+    // The agent teams need a model; for a promoted project they stay off until there is model access.
+    var AGENT_BUTTONS = ['wizard-generate-context', 'wizard-generate-stakeholders', 'wizard-run-gap-analysis', 'wizard-extract-constraints'];
+    var AGENTS_OFF = 'Aus, bis es wieder einen Modellzugang gibt.';
+
+    // What the wizard says when a promoted project cannot be opened (error of init_from_project)
+    var PROJECT_ERRORS = {
+        'invalid_arguments: projekt_id': 'Kein Projekt gewählt.',
+        'projekt_unbekannt': 'Dieses Projekt gibt es nicht mehr.',
+        'kein_stand': 'Dieses Projekt wurde ohne festen Stand befördert.',
+        'format_unbekannt': 'Der Stand hat ein unbekanntes Format.',
+        'lesen_fehlgeschlagen': 'Das Projekt lässt sich gerade nicht lesen.',
+    };
+
+    // Initialize wizard when entering a shuttle, or for a promoted project ({ projektId }, Software Design tab)
     function initWizard(shuttleData) {
-        wizardState.shuttleId = shuttleData.id;
+        wizardState.shuttleId = shuttleData.id || null;
         wizardState.bubbleId = shuttleData.bubbleId;
+        wizardState.projektId = shuttleData.projektId || null;
         wizardState.currentStep = 'mining';
+        agentsOn(!wizardState.projektId);
+        paintVerdict(null);
 
         // Request wizard state from backend (may have persisted data)
         if (window.vibemind && window.vibemind.sendToPython) {
+            if (wizardState.projektId) {
+                // the space takes the project's shuttle or makes one; its id comes back in the answer
+                window.vibemind.sendToPython({
+                    type: 'wizard_init_from_project',
+                    projekt_id: wizardState.projektId,
+                    shuttle_id: wizardState.shuttleId,
+                });
+                return;
+            }
             window.vibemind.sendToPython({
                 type: 'wizard_init_from_bubble',
                 shuttle_id: shuttleData.id,
                 bubble_id: shuttleData.bubbleId,
             });
+        }
+    }
+
+    function agentsOn(on) {
+        AGENT_BUTTONS.forEach(function(id) {
+            var btn = document.getElementById(id);
+            if (!btn) return;
+            btn.disabled = !on;
+            btn.title = on ? '' : AGENTS_OFF;
+        });
+    }
+
+    /**
+     * The line above the project panel: the sense check of the promoted stand (kopfzeile of the space),
+     * green when passed, yellow with its reasons when not (it does not block), red note when the stand
+     * changed after promoting. `null` takes it away; a string is a calm sentence instead (an error).
+     */
+    function paintVerdict(verdict) {
+        var panel = document.getElementById('checkpoint-mining');
+        if (!panel) return;
+        var line = document.getElementById('wizard-sinnpruefung');
+        if (!verdict) { if (line) line.hidden = true; return; }
+        if (!line) {
+            line = document.createElement('div');
+            line.id = 'wizard-sinnpruefung';
+            panel.insertBefore(line, panel.firstChild);
+        }
+        line.hidden = false;
+        line.textContent = '';
+        if (typeof verdict === 'string') {
+            line.className = 'wizard-sinnpruefung nicht-bestanden';
+            line.textContent = verdict;
+            return;
+        }
+        line.className = 'wizard-sinnpruefung' + (verdict.bestanden ? '' : ' nicht-bestanden');
+        var head = document.createElement('div');
+        head.textContent = verdict.text || (verdict.bestanden ? 'Bestanden' : 'Nicht bestanden');
+        line.appendChild(head);
+        if (!verdict.bestanden && verdict.gruende_text) {
+            var why = document.createElement('div');
+            why.className = 'wizard-sinnpruefung-gruende';
+            why.textContent = verdict.gruende_text;
+            line.appendChild(why);
+        }
+        if (verdict.pruefsumme === 'falsch') {
+            var changed = document.createElement('div');
+            changed.className = 'wizard-sinnpruefung-falsch';
+            changed.textContent = 'Der Stand wurde nach dem Befördern verändert.';
+            line.appendChild(changed);
+        }
+    }
+
+    function fillProject(project) {
+        wizardState.project = project;
+        document.getElementById('wizard-project-name').value = project.name || '';
+        document.getElementById('wizard-project-desc').value = project.description || '';
+        document.getElementById('wizard-domain').value = project.domain || '';
+        document.getElementById('wizard-target-users').value = project.target_users || '';
+    }
+
+    /** The answer for a promoted project: take its shuttle, draw the verdict, then load the stand. */
+    function projectInitialized(msg) {
+        if (!wizardState.projektId || (msg.projekt_id && msg.projekt_id !== wizardState.projektId)) return;   // an older answer
+        if (!msg.success) {
+            paintVerdict(PROJECT_ERRORS[msg.error] || 'Das Projekt lässt sich gerade nicht öffnen.');
+            return;
+        }
+        wizardState.shuttleId = msg.shuttle_id || wizardState.shuttleId;
+        if (msg.project) fillProject(msg.project);
+        paintVerdict(msg.kopfzeile || null);
+        if (wizardState.shuttleId && window.vibemind && window.vibemind.sendToPython) {
+            window.vibemind.sendToPython({ type: 'wizard_get_state', shuttle_id: wizardState.shuttleId });
         }
     }
 
@@ -47,17 +144,14 @@
 
         if (msg.type === 'wizard_initialized') {
             console.log('[Wizard] Initialized:', msg);
-            if (msg.project) {
-                wizardState.project = msg.project;
-                document.getElementById('wizard-project-name').value = msg.project.name || '';
-                document.getElementById('wizard-project-desc').value = msg.project.description || '';
-                document.getElementById('wizard-domain').value = msg.project.domain || '';
-                document.getElementById('wizard-target-users').value = msg.project.target_users || '';
-            }
+            if (msg.quelle === 'projekt') projectInitialized(msg);
+            else if (msg.project) fillProject(msg.project);
         }
 
         if (msg.type === 'wizard_state') {
             console.log('[Wizard] State loaded:', msg);
+            if (wizardState.shuttleId && msg.shuttle_id && msg.shuttle_id !== wizardState.shuttleId) return;   // another shuttle
+            if (wizardState.projektId && msg.context && msg.context.sinnpruefung) paintVerdict(msg.context.sinnpruefung);
             Object.assign(wizardState, {
                 currentStep: msg.current_step || 'mining',
                 project: msg.project || {},
@@ -183,6 +277,19 @@
             prioSpan.textContent = req.priority || 'medium';
             header.appendChild(idSpan);
             header.appendChild(prioSpan);
+            // a card of a promoted project: a candidate to take or strike, with the group of its card
+            if (req.status === 'kandidat') {
+                var candidate = document.createElement('span');
+                candidate.className = 'req-kandidat';
+                candidate.textContent = 'Kandidat';
+                header.appendChild(candidate);
+            }
+            if (req.category) {
+                var group = document.createElement('span');
+                group.className = 'req-gruppe';
+                group.textContent = req.category;
+                header.appendChild(group);
+            }
 
             var text = document.createElement('div');
             text.className = 'req-text';

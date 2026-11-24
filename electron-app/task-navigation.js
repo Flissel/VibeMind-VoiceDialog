@@ -198,6 +198,15 @@ const PLAIN_ID = /^[A-Za-z0-9-]{1,64}$/;
  * null. node_id may be null (a bubble as a whole, e.g. rated or arranged).
  */
 function zielOf(value) {
+  const place = placeOf(value);
+  if (!place) return null;
+  // A promoted project (Software Design): the wizard of this project opens in its tab.
+  const projekt = typeof value.projekt_id === 'number' && Number.isInteger(value.projekt_id) ? String(value.projekt_id) : value.projekt_id;
+  return typeof projekt === 'string' && PLAIN_ID.test(projekt) ? { ...place, projekt_id: projekt } : place;
+}
+
+/** The place of a ziel: { space, bubble_id, node_id } or null (see zielOf). */
+function placeOf(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const id = (x) => (typeof x === 'number' && Number.isInteger(x) ? String(x) : x);
   const space = value.space;

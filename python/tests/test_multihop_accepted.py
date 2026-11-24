@@ -187,3 +187,17 @@ def test_a_direct_answer_naming_only_a_space_carries_its_ziel_to_the_app(monkeyp
     assert sent[0]["success"] is True
     assert sent[0]["message"] == "Offen sind zwei Fenster."
     assert sent[0]["ziel"] == {"space": "desktop", "bubble_id": None, "node_id": None}
+
+
+def test_a_promoted_project_keeps_its_projekt_id_in_the_ziel():
+    """After promoting, the Brain names {space: swedesign, projekt_id}: the app opens that project's wizard."""
+    from swarm.routing.brain_multihop_bridge import ziel_of
+
+    assert ziel_of({"space": "swedesign", "projekt_id": "p1a2b3c4"}) == {
+        "space": "swedesign", "bubble_id": None, "node_id": None, "projekt_id": "p1a2b3c4"}
+    assert ziel_of({"space": "swedesign", "projekt_id": 42})["projekt_id"] == "42"
+    # an id that is not plain is left out, the place stays
+    assert ziel_of({"space": "swedesign", "projekt_id": "../x y"}) == {"space": "swedesign", "bubble_id": None, "node_id": None}
+    # without a project nothing changes
+    assert "projekt_id" not in ziel_of({"space": "ideas", "bubble_id": CARD, "node_id": None})
+    assert ziel_of({"space": "Swe!", "projekt_id": "p1"}) is None

@@ -123,9 +123,23 @@ def ziel_of(value: Any) -> Optional[Dict[str, Any]]:
     /stand). Only plain ids pass; node_id may be None (a bubble as a whole, e.g. rated).
     A space alone (no bubble_id, e.g. {"space": "desktop"}) is a ziel too: the app goes to
     that space. A bubble_id that is there but not plain drops the whole ziel.
+    A promoted project (Software Design) adds a plain projekt_id: the app opens its wizard.
     """
     if not isinstance(value, dict):
         return None
+    ziel = _ziel_place(value)
+    if ziel is None:
+        return None
+    projekt = value.get("projekt_id")
+    if isinstance(projekt, int) and not isinstance(projekt, bool):
+        projekt = str(projekt)
+    if isinstance(projekt, str) and PLAIN_ID.match(projekt):
+        ziel["projekt_id"] = projekt
+    return ziel
+
+
+def _ziel_place(value: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The place of a ziel: {space, bubble_id, node_id} or None (see ziel_of)."""
     space = value.get("space")
     bubble = value.get("bubble_id")
     node = value.get("node_id")
