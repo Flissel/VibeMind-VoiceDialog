@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { ExternalSpaceManager, barState, backTarget, BAR_HEIGHT } = require('./external-spaces');
+const { ExternalSpaceManager, barState, backTarget, BAR_HEIGHT, LANDING_MS } = require('./external-spaces');
+const { create } = require('./renderer/space-bar');
 const { view } = require('./renderer/space-bar');
 
 // The Sales case from the app: signed in at the start, then through inbox and post to the
@@ -51,18 +52,22 @@ function fakeElectron() {
     return { BrowserView, window, made, sent };
 }
 
-function manager(env = { SALES_UI_URL: START }) {
+function manager(env = { SALES_UI_URL: START }, { redirect } = {}) {
     const electron = fakeElectron();
     const loads = [];
+    const clock = { t: 1000 };
     const m = new ExternalSpaceManager(electron.window, {
-        BrowserView: electron.BrowserView, shell: { openExternal() {} }, logger: { log() {} }, env,
+        BrowserView: electron.BrowserView, shell: { openExternal() {} }, logger: { log() {} }, env, now: () => clock.t,
     });
-    // loading the start address = the page arrives there (the status check passed)
+    // loading the start address = the page arrives there (the status check passed), perhaps moves
+    // on by itself (redirect), and then the landing time is over: what follows is the user
     m._load = (id) => {
         loads.push(id);
         const entry = m.views.get(id);
         entry.result = { ok: true };
         entry.view.webContents.follow(m.spaces.get(id).url);
+        if (redirect) { clock.t += 300; entry.view.webContents.follow(redirect); }
+        clock.t += LANDING_MS + 1;
     };
     const bars = () => electron.sent.filter((s) => s.message.type === 'external_space_nav').map((s) => s.message);
     return { m, electron, loads, bars };
@@ -184,4 +189,52 @@ test('main, preload and page are wired to the bar', () => {
     assert.match(preload, /externalSpaceHome: \(id\) => ipcRenderer\.send\('external-space-home', id\)/);
     assert.match(preload, /message\.type === 'external_space_nav'/);
     assert.match(read('renderer', 'index.html'), /<script defer src="space-bar\.js"><\/script>/);
+});
+
+test('Events: the page goes from its start to its sign-in by itself; that is no "away", no bar', () => {
+    const EVENTS = 'https://events.example.test:3170/';
+    const { m, electron, bars } = manager({ EVENT_UI_URL: EVENTS }, { redirect: 'https://events.example.test:3170/anmelden' });
+    m.show('events');
+    const page = electron.made[0].webContents;
+    assert.equal(page.getURL(), 'https://events.example.test:3170/anmelden');
+    assert.deepEqual(bars().at(-1), { type: 'external_space_nav', space: 'events', verlassen: false, zurueck: false }, 'landing on the sign-in: no bar');
+    assert.equal(electron.made[0].bounds.y, 75, 'the page keeps its place');
+
+    page.follow('https://events.example.test:3170/termine');     // the user, after the landing time
+    assert.equal(bars().at(-1).verlassen, true, 'a page the user went to: the bar');
+    assert.equal(m.back('events'), true);
+    assert.equal(bars().at(-1).verlassen, false, 'back on the sign-in it landed on: the bar goes');
+
+    // the pure rule
+    assert.equal(barState(EVENTS, EVENTS + 'anmelden', true, false, ['https://events.example.test:3170/anmelden']).verlassen, false);
+    assert.equal(barState(EVENTS, EVENTS + 'termine', true, false, ['https://events.example.test:3170/anmelden']).verlassen, true);
+});
+
+/** Just enough of a page for create(): elements with attributes, a body with a class list. */
+function fakePage() {
+    const classes = new Set();
+    const el = (tag) => ({
+        tag, hidden: false, attrs: {}, children: [], textContent: '', className: '',
+        setAttribute(k, v) { this.attrs[k] = v; }, append(...c) { this.children.push(...c); },
+        appendChild(c) { this.children.push(c); }, addEventListener() {},
+    });
+    const body = el('body');
+    body.classList = { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)), contains: (name) => classes.has(name) };
+    return { doc: { head: el('head'), body, createElement: el }, body };
+}
+
+test('while the bar is shown the space sign top right moves below it, and back when it goes', () => {
+    const { doc, body } = fakePage();
+    const made = create(doc, { externalSpaceBack() {}, externalSpaceHome() {} }, (id) => ({ events: 'Events' }[id] || id));
+    const style = doc.head.children[0].textContent;
+    const top = (rule) => Number((style.match(new RegExp(rule + '\s*\{[^}]*top:\s*(\d+)px')) || [])[1]);
+    const indicatorTop = Number(fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'space-nav.css'), 'utf8')
+        .match(/#space-indicator \{[^}]*top: (\d+)px/)[1]);
+    assert.ok(top('#space-bar') + BAR_HEIGHT > indicatorTop, 'without the move the bar would cover the sign (the case seen)');
+    assert.ok(top('body\.space-bar-open #space-indicator') >= top('#space-bar') + BAR_HEIGHT, 'moved: below the bar');
+
+    made.render({ space: 'events', verlassen: true, zurueck: false });
+    assert.equal(body.classList.contains('space-bar-open'), true);
+    made.render({ space: 'events', verlassen: false, zurueck: false });
+    assert.equal(body.classList.contains('space-bar-open'), false);
 });

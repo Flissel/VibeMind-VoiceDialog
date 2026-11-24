@@ -154,13 +154,18 @@ function placeOf(text) {
  * when its history allows it. At the start address there is no bar: going back from there only
  * leads into the sign-in detour the page came through. A status card (service not there) gets
  * none either. Only yes/no reach the renderer, never an address.
+ * landed: the places the page went to on its own right after loading (e.g. "/" -> "/anmelden");
+ * they count as the start as well.
  */
-function barState(startUrl, currentUrl, canGoBack, card) {
+function barState(startUrl, currentUrl, canGoBack, card, landed = []) {
   const here = placeOf(currentUrl);
   const start = placeOf(startUrl);
-  const verlassen = Boolean(!card && here && start && here !== start);
+  const verlassen = Boolean(!card && here && start && here !== start && !landed.includes(here));
   return { verlassen, zurueck: verlassen && Boolean(canGoBack) };
 }
+
+/** How long after a load a navigation still counts as the page landing by itself (a redirect). */
+const LANDING_MS = 5000;
 
 /**
  * Where "Zurück" leads: the nearest earlier history entry that shows a different page. Entries
@@ -199,6 +204,8 @@ class ExternalSpaceManager {
     this._pathOnOpen = new Map(); // id -> address inside the space to go to when it is opened next (goTo)
     this._wanted = new Map();     // id -> { target, detour } a path on its way, see _navigated
     this._places = new Map();     // id -> [place per history index], see _remember and backTarget
+    this._landing = new Map();    // id -> { until, places } where the page went by itself after a load
+    this._now = dependencies.now || Date.now;
     this.spaces = new Map(resolveSpaces(this._env).map((space) => [space.id, space]));
     this.views = new Map();   // id -> { view, result }
     this.visibleId = null;
@@ -207,6 +214,12 @@ class ExternalSpaceManager {
   }
 
   has(id) { return this.spaces.has(id); }
+
+  /** Loads the start of a space; what the page does by itself in the next moments is its landing. */
+  _startLoad(id) {
+    this._landing.set(id, { until: this._now() + LANDING_MS, places: [] });
+    return this._load(id);
+  }
 
   _load(id) {
     const space = this.spaces.get(id);
@@ -263,9 +276,9 @@ class ExternalSpaceManager {
     view.webContents.on('did-navigate-in-page', () => { this._remember(id); this._reportBar(id); });
     this.views.set(id, { view, result: null });
     if (space.access && space.url) {
-      this._ready.set(id, this._signIn(space, view).then(() => { this._load(id); }));
+      this._ready.set(id, this._signIn(space, view).then(() => { this._startLoad(id); }));
     } else {
-      this._load(id); // nothing to wait for
+      this._startLoad(id); // nothing to wait for
     }
     return view;
   }
@@ -298,7 +311,7 @@ class ExternalSpaceManager {
       this._create(id);
       entry = this.views.get(id);
     } else if ((entry.result && !entry.result.ok) || this._pathOnOpen.has(id)) {
-      this._load(id); // a status card: look again, the service may be up now; or a path is waiting
+      this._startLoad(id); // a status card: look again, the service may be up now; or a path is waiting
     }
     this.mainWindow.setBrowserView(entry.view);
     this.visibleId = id;
@@ -320,7 +333,8 @@ class ExternalSpaceManager {
     const space = this.spaces.get(id);
     const contents = entry && entry.view.webContents;
     const state = contents && typeof contents.getURL === 'function'
-      ? barState(this._startUrl(space), contents.getURL(), this._backIndex(id) >= 0, Boolean(entry.result && !entry.result.ok))
+      ? barState(this._startUrl(space), contents.getURL(), this._backIndex(id) >= 0, Boolean(entry.result && !entry.result.ok),
+        (this._landing.get(id) || { places: [] }).places)
       : { verlassen: false, zurueck: false };
     this.barShown = state.verlassen;
     this._updateBounds();
@@ -337,6 +351,11 @@ class ExternalSpaceManager {
   _remember(id) {
     const entry = this.views.get(id);
     const contents = entry && entry.view.webContents;
+    const landing = this._landing.get(id);
+    if (landing && contents && typeof contents.getURL === 'function' && this._now() <= landing.until) {
+      const place = placeOf(contents.getURL());
+      if (place && !landing.places.includes(place)) landing.places.push(place);
+    }
     if (!contents || typeof contents.getActiveIndex !== 'function') return;
     if (!this._places.has(id)) this._places.set(id, []);
     this._places.get(id)[contents.getActiveIndex()] = placeOf(contents.getURL());
@@ -369,7 +388,7 @@ class ExternalSpaceManager {
     if (id !== this.visibleId || !this.views.has(id)) return false;
     this._pathOnOpen.delete(id);
     this._wanted.delete(id);
-    this._load(id);
+    this._startLoad(id);
     return true;
   }
 
@@ -445,5 +464,5 @@ class ExternalSpaceManager {
 
 module.exports = {
   EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
-  barState, backTarget, BAR_HEIGHT,
+  barState, backTarget, BAR_HEIGHT, LANDING_MS,
 };

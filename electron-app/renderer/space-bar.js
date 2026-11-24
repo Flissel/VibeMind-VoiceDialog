@@ -18,7 +18,9 @@
   border: 1px solid rgba(136, 102, 255, 0.35); background: rgba(136, 102, 255, 0.12); color: #dde3f0; font: inherit; }
 #space-bar button:hover { background: rgba(136, 102, 255, 0.25); }
 #space-bar button[hidden] { display: none; }
-#space-bar .space-bar-name { color: rgba(200, 210, 235, 0.6); margin-left: 4px; }`;
+#space-bar .space-bar-name { color: rgba(200, 210, 235, 0.6); margin-left: 4px; }
+/* the space sign top right (space-nav.css: top 80px) moves below the bar while it is shown */
+body.space-bar-open #space-indicator { top: 111px; }`;
 
     /** What the bar shows for a report of the main process. */
     function view(state, labelOf) {
@@ -60,6 +62,7 @@
             const v = view(state, labelOf);
             current = v.space;
             bar.hidden = !v.shown;
+            if (doc.body.classList) doc.body.classList.toggle('space-bar-open', v.shown);
             back.hidden = !v.back;
             home.hidden = !v.home;
             const label = v.name || 'Bereich';
