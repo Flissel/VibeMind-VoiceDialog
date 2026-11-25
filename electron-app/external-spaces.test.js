@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const THREE = require('./renderer/lib/three.min.js');
 const {
-    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
+    EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, fromOwnPage, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
 } = require('./external-spaces');
 const { sceneEntry, buildGate } = require('./renderer/external-spaces');
 const { pickSpace } = require('./renderer/space-pick');
@@ -66,7 +66,8 @@ function fakeElectron() {
             this.hooks = [];
             this.webContents = {
                 session: { webRequest: { onBeforeSendHeaders: (filter, handler) => this.hooks.push({ filter, handler }) } },
-                setWindowOpenHandler() {}, on() {}, isDestroyed: () => false,
+                setWindowOpenHandler() {}, isDestroyed: () => false,
+                handlers: {}, on(name, fn) { this.handlers[name] = fn; },
             };
             made.push(this);
         }
@@ -103,7 +104,7 @@ test('the manager shows one space at a time, each in its own session, and sends 
     assert.equal(electron.made[0].hooks.length, 1, 'requests of the space with a key get it');
     assert.equal(electron.made[1].hooks.length, 0, 'Sales requests do not');
     let sent;
-    electron.made[0].hooks[0].handler({ requestHeaders: {} }, (result) => { sent = result; });
+    electron.made[0].hooks[0].handler({ requestHeaders: {}, resourceType: 'mainFrame' }, (result) => { sent = result; });   // the first load
     assert.equal(sent.requestHeaders.Authorization, 'Bearer geheim-123');
 
     manager.hideAll();
@@ -285,4 +286,50 @@ test('Marketing sends its key to its own address only; without the variable noth
     });
     const target = bare._targets(bare.spaces.get('marketing'))[0];
     assert.equal(target.headers, undefined, 'without the variable no header at all');
+});
+
+test('the key goes only with requests of the space\'s own page; a view with a key does not leave its origin', () => {
+    const origins = ['https://marketing.example.test:8460'];
+    const own = 'https://marketing.example.test:8460/mockup/';
+    const page = (url) => ({ getURL: () => url });
+    // the first load and a reload from the status card are the app's own
+    assert.equal(fromOwnPage({ resourceType: 'mainFrame', webContents: page('') }, origins), true);
+    assert.equal(fromOwnPage({ resourceType: 'mainFrame', webContents: page('data:text/html,karte') }, origins), true);
+    // the space's own page: its navigations and its requests
+    assert.equal(fromOwnPage({ resourceType: 'mainFrame', webContents: page(own) }, origins), true);
+    assert.equal(fromOwnPage({ resourceType: 'xhr', webContents: page(own), frame: { url: own } }, origins), true);
+    // a foreign page in the view, or a foreign iframe inside the space: no key
+    assert.equal(fromOwnPage({ resourceType: 'xhr', webContents: page('https://fremd.example.test/') }, origins), false);
+    assert.equal(fromOwnPage({ resourceType: 'mainFrame', webContents: page('https://fremd.example.test/') }, origins), false);
+    assert.equal(fromOwnPage({ resourceType: 'xhr', webContents: page(own), frame: { url: 'https://fremd.example.test/w' } }, origins), false);
+    assert.equal(fromOwnPage({ resourceType: 'xhr', webContents: page('') }, origins), false, 'a request without a page is not the space\'s');
+
+    const env = { MARKETING_UI_URL: own, MARKETING_UI_KEY: 'erfunden-456' };
+    const electron = fakeElectron();
+    const opened = [];
+    const manager = new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: { openExternal: (url) => opened.push(url) }, logger: { log() {} }, env,
+    });
+    manager._load = (id) => { manager.views.get(id).result = { ok: true }; };
+    manager.show('marketing');
+    const view = electron.made[0];
+    let sent;
+    view.hooks[0].handler({ requestHeaders: { Accept: '*/*' }, resourceType: 'xhr', webContents: page('https://fremd.example.test/') }, (r) => { sent = r; });
+    assert.deepEqual(sent.requestHeaders, { Accept: '*/*' }, 'a foreign page gets no key');
+    view.hooks[0].handler({ requestHeaders: {}, resourceType: 'xhr', webContents: page(own), frame: { url: own } }, (r) => { sent = r; });
+    assert.equal(sent.requestHeaders.Authorization, 'Bearer erfunden-456');
+
+    const go = (url) => { let stopped = false; view.webContents.handlers['will-navigate']({ preventDefault: () => { stopped = true; } }, url); return stopped; };
+    assert.equal(go('https://marketing.example.test:8460/kampagnen'), false, 'inside the space: stays');
+    assert.equal(go('https://fremd.example.test/'), true, 'another origin: not in the view');
+    assert.equal(go('javascript:alert(1)'), true);
+    assert.deepEqual(opened, ['https://fremd.example.test/'], 'it opens in the browser instead');
+
+    // a space without a key keeps its free navigation (sign-in pages of other hosts)
+    const salesView = new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} }, env: { SALES_UI_URL: 'https://sales.example.test/' },
+    });
+    salesView._load = (id) => { salesView.views.get(id).result = { ok: true }; };
+    salesView.show('sales');
+    assert.equal(electron.made[1].webContents.handlers['will-navigate'], undefined);
 });

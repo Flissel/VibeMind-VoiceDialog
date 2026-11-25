@@ -107,7 +107,28 @@ function authFor(space, env = process.env) {
   const port = origin.port ? `:${origin.port}` : '';
   const ws = origin.protocol === 'https:' ? 'wss:' : 'ws:';
   const urls = hosts.flatMap((host) => [`${origin.protocol}//${host}${port}/*`, `${ws}//${host}${port}/*`]);
-  return { urls, header: `Bearer ${key}` };
+  const origins = hosts.map((host) => `${origin.protocol}//${host}${port}`);
+  return { urls, origins, header: `Bearer ${key}` };
+}
+
+/**
+ * The request comes from the space's own page, so its key may go with it. A page of another
+ * origin (a site the view was led to, a foreign iframe inside the space) must not use the key:
+ * the header is added by the main process, the page would get the user's access for free.
+ * Navigations of the whole view count from the page being left; the first load (no page yet,
+ * or the status card) is the app's own.
+ */
+function fromOwnPage(details, origins) {
+  const contents = details && details.webContents;
+  const current = contents && typeof contents.getURL === 'function' ? contents.getURL() : '';
+  const page = details && details.resourceType !== 'mainFrame' && details.frame && details.frame.url
+    ? details.frame.url : current;
+  if (!page || page === 'about:blank' || page.startsWith('data:')) return Boolean(details) && details.resourceType === 'mainFrame';
+  try {
+    return origins.includes(new URL(page).origin);
+  } catch (_) {
+    return false;
+  }
 }
 
 /**
@@ -263,7 +284,16 @@ class ExternalSpaceManager {
     const auth = authFor(space, this._env);
     if (auth) {
       view.webContents.session.webRequest.onBeforeSendHeaders({ urls: auth.urls }, (details, callback) => {
-        callback({ requestHeaders: withAuthorization(details.requestHeaders, auth.header) });
+        callback({ requestHeaders: fromOwnPage(details, auth.origins)
+          ? withAuthorization(details.requestHeaders, auth.header) : details.requestHeaders });
+      });
+      // A view that carries a key stays on its own origin; another address opens in the browser.
+      view.webContents.on('will-navigate', (event, url) => {
+        let target;
+        try { target = new URL(url); } catch (_) { event.preventDefault(); return; }
+        if (auth.origins.includes(target.origin)) return;
+        event.preventDefault();
+        if (target.protocol === 'http:' || target.protocol === 'https:') this.shell.openExternal(url);
       });
       this._log.log(`[ExternalSpaces] ${space.label}: Schluessel aus ${space.bearerEnv} wird mitgegeben`);
     }
@@ -470,6 +500,6 @@ class ExternalSpaceManager {
 }
 
 module.exports = {
-  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
+  EXTERNAL_SPACES, resolveSpaces, describeForRenderer, authFor, fromOwnPage, withAuthorization, pathTarget, parsePaths, ExternalSpaceManager,
   barState, backTarget, BAR_HEIGHT, LANDING_MS,
 };
