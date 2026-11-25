@@ -15,6 +15,33 @@ const {
   resolveLauraRendererPath,
 } = require('./laura-embed-config');
 const { loadOverlay } = require('./overlay-status');
+const { applyVibeMindLook } = require('./vibemind-look');
+
+/**
+ * Laura in the VibeMind look: its own variables (laura/apps/desktop/src/index.css, the
+ * light green theme its parts are drawn with) set to the values of the app, accent Video.
+ * Laura itself stays as it is; only this view shows it dark.
+ */
+const LAURA_LOOK = `html:root {
+  --surface-0: var(--vm-bg-deep);
+  --surface-1: var(--vm-bg-surface);
+  --surface-1-5: var(--vm-bg-mid);
+  --surface-2: var(--vm-bg-elevated);
+  --text-strong: var(--vm-text-primary);
+  --text-muted: var(--vm-text-secondary);
+  --text-faint: rgba(200, 190, 220, 0.55);
+  --accent: rgb(var(--space-accent-rgb));
+  --accent-glow: rgb(255, 102, 136);
+  --accent-press: rgb(200, 50, 85);
+  --accent-ink: #ffffff;
+  --status-ok: var(--vm-status-ok);
+  --status-warn: var(--vm-status-warn);
+  --status-err: var(--vm-status-error);
+  --bezel: rgba(var(--space-accent-rgb), 0.20);
+  --playhead: #c8bedc;
+}
+body { font-family: var(--vm-font); background: var(--vm-bg-deep); color: var(--vm-text-primary); }
+`;
 
 class VideoManager {
   constructor(mainWindow, dependencies = {}) {
@@ -78,6 +105,7 @@ class VideoManager {
         partition: LAURA_SESSION_PARTITION,
       },
     });
+    applyVibeMindLook(this.videoView.webContents, 'video', { extraCss: LAURA_LOOK, logger: this.logger });
 
     if (!this.rendererPath) {
       this.overlayReady = loadOverlay(this.videoView.webContents, {
@@ -203,3 +231,4 @@ class VideoManager {
 }
 
 module.exports = VideoManager;
+module.exports.LAURA_LOOK = LAURA_LOOK;
