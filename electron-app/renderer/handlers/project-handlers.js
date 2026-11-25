@@ -89,25 +89,26 @@
     };
 
     // VNC Preview messages
-    H['project-preview_starting'] = function(msg) {
+    H['project_preview_starting'] = function(msg) {
         console.log('[UI] Project preview starting:', msg.project_id);
         window.vncPreview.showVncLoading(true, msg.project_title || 'Project');
         window.vncPreview.updateVncLoadingDetails('Starting sandbox container...');
     };
 
-    H['project-preview-ready'] = function(msg) {
-        console.log('[UI] Project preview ready:', msg.vnc_url);
-        window.vncPreview.showVncPreview(msg.vnc_url, msg.project_title, msg.project_id);
+    H['project_preview_ready'] = function(msg) {
+        var preview = window.VibePreviewMessage.previewOf(msg);
+        console.log('[UI] Project preview ready:', preview.url);
+        window.vncPreview.showVncPreview(preview.url, preview.title, preview.projectId);
         window.showTranscript('System', 'Live Preview ready for ' + (msg.project_title || 'project'));
     };
 
-    H['project-preview-error'] = function(msg) {
+    H['project_preview_error'] = function(msg) {
         console.error('[UI] Project preview error:', msg.error);
         window.vncPreview.hideVncPreview();
         window.showTranscript('System', 'Preview failed: ' + msg.error);
     };
 
-    H['project-preview-stopped'] = function(msg) {
+    H['project_preview_stopped'] = function(msg) {
         console.log('[UI] Project preview stopped:', msg.project_id);
         window.vncPreview.hideVncPreview();
     };

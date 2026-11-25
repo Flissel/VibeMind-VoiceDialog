@@ -276,8 +276,9 @@ class ProjectManager:
                 if existing.get("status") == "running":
                     self.send_message({
                         "type": "project_preview_ready",
-                        "projectId": project_id,
-                        "vncUrl": existing.get("vnc_url"),
+                        "project_id": project_id,
+                        "vnc_url": existing.get("vnc_url"),
+                        "port": existing.get("vnc_port"),
                         "status": "already_running"
                     })
                     return
@@ -324,15 +325,16 @@ class ProjectManager:
 
                 self.send_message({
                     "type": "project_preview_ready",
-                    "projectId": project_id,
-                    "vncUrl": vnc_url
+                    "project_id": project_id,
+                    "vnc_url": vnc_url,
+                    "port": vnc_port,
                 })
             else:
                 error = stderr.decode() or "Docker command failed"
                 self.active_previews[project_id] = {"status": "error", "error": error}
                 self.send_message({
                     "type": "project_preview_error",
-                    "projectId": project_id,
+                    "project_id": project_id,
                     "error": error
                 })
 
@@ -341,7 +343,7 @@ class ProjectManager:
             self.active_previews[project_id] = {"status": "error", "error": str(e)}
             self.send_message({
                 "type": "project_preview_error",
-                "projectId": project_id,
+                "project_id": project_id,
                 "error": str(e)
             })
 
@@ -366,14 +368,14 @@ class ProjectManager:
 
             self.send_message({
                 "type": "project_preview_stopped",
-                "projectId": project_id
+                "project_id": project_id
             })
 
         except Exception as e:
             debug_log(f"Error stopping preview: {e}")
             self.send_message({
                 "type": "project_preview_error",
-                "projectId": project_id,
+                "project_id": project_id,
                 "error": f"Failed to stop: {str(e)}"
             })
 

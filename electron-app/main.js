@@ -1323,7 +1323,7 @@ function setupIpcHandlers() {
         if (mainWindow && mainWindow.webContents) {
             mainWindow.webContents.send('python-message', {
                 type: 'project_preview_starting',
-                projectId: projectId,
+                project_id: projectId,
             });
         }
         
@@ -1357,7 +1357,7 @@ function setupIpcHandlers() {
         if (mainWindow && mainWindow.webContents) {
             mainWindow.webContents.send('python-message', {
                 type: 'project_preview_stopped',
-                projectId: projectId,
+                project_id: projectId,
             });
         }
         
@@ -1393,8 +1393,8 @@ function setupIpcHandlers() {
             if (mainWindow && mainWindow.webContents) {
                 mainWindow.webContents.send('python-message', {
                     type: 'project_preview_ready',
-                    projectId: projectId,
-                    vncUrl: vncUrl,
+                    project_id: projectId,
+                    vnc_url: vncUrl,
                 });
             }
         } else if (status === 'error') {
@@ -1406,7 +1406,7 @@ function setupIpcHandlers() {
             if (mainWindow && mainWindow.webContents) {
                 mainWindow.webContents.send('python-message', {
                     type: 'project_preview_error',
-                    projectId: projectId,
+                    project_id: projectId,
                     error: error,
                 });
             }

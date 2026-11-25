@@ -72,6 +72,7 @@
     <script defer src="stage-renderers.js"></script>
     <!-- Extracted modules (Tier 2 — few dependencies) -->
     <script defer src="flowzen-panel.js"></script>
+    <script defer src="preview-message.js"></script>
     <script defer src="vnc-preview.js"></script>
     <script defer src="claude-runner.js"></script>
     <!-- Extracted modules (Tier 3 — moderate dependencies) -->
@@ -853,31 +854,35 @@
                     break;
 
                 // ============================================
-                // PROJECT LIVE PREVIEW MESSAGES (NEW)
+                // PROJECT LIVE PREVIEW MESSAGES
+                // One name per state and the field vnc_url, as Python and main send them
+                // (preview-message.js). Before, these cases waited for "project-preview-ready".
                 // ============================================
-                
-                case 'project-preview_starting':
+
+                case 'project_preview_starting':
                     // Show loading state
                     console.log('[UI] Project preview starting:', message.project_id);
                     window.vncPreview.showVncLoading(true, message.project_title || 'Project');
                     window.vncPreview.updateVncLoadingDetails('Starting sandbox container...');
                     break;
                     
-                case 'project-preview-ready':
-                    // VNC stream is ready - load in iframe
-                    console.log('[UI] Project preview ready:', message.vnc_url);
-                    window.vncPreview.showVncPreview(message.vnc_url, message.project_title, message.project_id);
+                case 'project_preview_ready': {
+                    // VNC stream is ready - load in iframe (without an address: the sandbox screen on 6090)
+                    const preview = window.VibePreviewMessage.previewOf(message);
+                    console.log('[UI] Project preview ready:', preview.url);
+                    window.vncPreview.showVncPreview(preview.url, preview.title, preview.projectId);
                     showTranscript('System', `Live Preview ready for ${message.project_title || 'project'}`);
                     break;
-                    
-                case 'project-preview-error':
+                }
+
+                case 'project_preview_error':
                     // Preview failed
                     console.error('[UI] Project preview error:', message.error);
                     window.vncPreview.hideVncPreview();
                     showTranscript('System', `Preview failed: ${message.error}`);
                     break;
                     
-                case 'project-preview-stopped':
+                case 'project_preview_stopped':
                     // Preview was stopped
                     console.log('[UI] Project preview stopped:', message.project_id);
                     window.vncPreview.hideVncPreview();
