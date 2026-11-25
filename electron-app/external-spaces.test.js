@@ -247,3 +247,42 @@ test('main process, preload, scene and page are wired to the one manager', () =>
     assert.match(scene, /window\.vibemind\.hideExternalSpaces\(\)/);
     assert.ok(read('renderer', 'index.html').includes('src="external-spaces.js"'));
 });
+
+test('Marketing sends its key to its own address only; without the variable nothing is sent', async () => {
+    const env = { MARKETING_UI_URL: 'https://marketing.example.test:8460/mockup/', MARKETING_UI_KEY: ' erfunden-456 ' };
+    const marketing = resolveSpaces(env).find((s) => s.id === 'marketing');
+    assert.equal(marketing.bearerEnv, 'MARKETING_UI_KEY');
+
+    const auth = authFor(marketing, env);
+    assert.equal(auth.header, 'Bearer erfunden-456');
+    assert.deepEqual(auth.urls, ['https://marketing.example.test:8460/*', 'wss://marketing.example.test:8460/*']);
+    for (const other of ['https://sales.example.test/', 'https://marketing.example.test/', 'http://marketing.example.test:8460/']) {
+        assert.ok(!auth.urls.some((pattern) => other.startsWith(pattern.slice(0, -1))), other);
+    }
+    assert.equal(authFor(marketing, { MARKETING_UI_URL: env.MARKETING_UI_URL }), null, 'no key in the environment');
+    assert.equal(authFor(marketing, { ...env, MARKETING_UI_KEY: '   ' }), null, 'an empty key counts as none');
+    for (const id of ['sales', 'learning', 'events']) {
+        assert.equal(authFor(resolveSpaces({ ...env, SALES_UI_URL: 'https://sales.example.test/', LEARNING_UI_URL: 'https://l.example.test/', EVENT_UI_URL: 'https://e.example.test/' }).find((s) => s.id === id), env), null, id);
+    }
+
+    // the view gets the hook for its own address, and the check before loading sends the key
+    // too (else it would see the 401 and show the status card); the page never sees the value
+    const electron = fakeElectron();
+    const checks = [];
+    const manager = new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} }, env,
+    });
+    manager._load = (id) => { checks.push(manager._targets(manager.spaces.get(id))); manager.views.get(id).result = { ok: true }; };
+    manager.show('marketing');
+    assert.equal(electron.made[0].hooks.length, 1);
+    assert.deepEqual(electron.made[0].hooks[0].filter.urls, auth.urls);
+    assert.equal(checks[0][0].url, 'https://marketing.example.test:8460/mockup/');
+    assert.equal(checks[0][0].headers.Authorization, 'Bearer erfunden-456');
+    assert.doesNotMatch(JSON.stringify(describeForRenderer(env)), /erfunden-456|MARKETING_UI_KEY/);
+
+    const bare = new ExternalSpaceManager(electron.window, {
+        BrowserView: electron.BrowserView, shell: electron.shell, logger: { log() {} }, env: { MARKETING_UI_URL: env.MARKETING_UI_URL },
+    });
+    const target = bare._targets(bare.spaces.get('marketing'))[0];
+    assert.equal(target.headers, undefined, 'without the variable no header at all');
+});

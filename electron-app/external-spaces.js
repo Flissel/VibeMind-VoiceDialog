@@ -32,6 +32,7 @@ const EXTERNAL_SPACES = Object.freeze([
   {
     id: 'marketing', label: 'Marketing', icon: '\u{1F4E3}', color: 0xff7eb6, position: [24, 0, 20],
     urlEnv: 'MARKETING_UI_URL', defaultUrl: 'http://127.0.0.1:5510/mockup/', expectTitle: /Marketing/i,
+    bearerEnv: 'MARKETING_UI_KEY', // the service answers 401 without it
     hint: 'Die Seite kommt vom Marketing-Dienst, der außerhalb der App läuft. Sobald er gestartet ist, den Reiter erneut öffnen.',
     agent: { name: 'Marketing', slug: 'marketing', role: 'Kampagnen und Inhalte' },
   },
@@ -239,6 +240,12 @@ class ExternalSpaceManager {
     // the access cookie it would see the refusal (403) that the signed-in page never gets.
     const cookie = this._issued.get(space.id);
     if (cookie) target.headers = { Cookie: `${cookie.name}=${cookie.value}` };
+    // The same for a key: the view sends it (onBeforeSendHeaders), so the check sends it too.
+    // The target is the space's own address or a page of it, never another origin.
+    const auth = authFor(space, this._env);
+    if (auth && new URL(target.url).origin === new URL(space.url).origin) {
+      target.headers = { ...(target.headers || {}), Authorization: auth.header };
+    }
     return [target];
   }
 
