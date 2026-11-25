@@ -4,7 +4,7 @@
  * It reads only ideas.metadata.bewertung_lauf (written by the fixed tool bubble_bewertung):
  *   { version, zeit, score, sichten: { coding|swe_design|research|rowboat|ideas: { punkte, urteil } },
  *     todos: [{ nr, sicht, titel, fehlt, karten[], punkte, art, erledigt, erledigt_zeit, erledigt_durch }],
- *     kartenstand, gekuerzt }
+ *     kartenstand, gekuerzt, quelle: "agent" | "mirofish" (missing = agent; only mirofish may promote) }
  * plus metadata.handwert (a score given by hand, shown apart) and metadata.eval_history (the course).
  *
  * The total is the sum of the five bars. Promoting is decided by the Brain alone (score against the
@@ -140,7 +140,10 @@
             }))
             .sort((a, b) => (a.erledigt - b.erledigt) || (b.punkte - a.punkte) || (a.nr - b.nr));
 
-        const zustand = veraltet ? 'veraltet' : (score >= base.schwelle ? 'befoerderbar' : 'unter_schwelle');
+        // Who evaluated: "agent" or "mirofish" (missing = "agent"). Only a run of MiroFish may promote.
+        const quelle = lauf.quelle === 'mirofish' ? 'mirofish' : 'agent';
+        const zustand = veraltet ? 'veraltet'
+            : (score >= base.schwelle && quelle === 'mirofish' ? 'befoerderbar' : 'unter_schwelle');
         return {
             ...base,
             leer: false,
@@ -152,10 +155,13 @@
             veraltet,
             geaendert: geaendert.length,
             gekuerzt: lauf.gekuerzt === true,
+            quelle,
             zustand,
             zustandLabel: ZUSTAENDE[zustand],
         };
     }
+
+    const QUELLE_HINWEIS = 'Befördert wird erst nach einer Bewertung durch MiroFish.';
 
     const BESTAETIGEN_MS = 10 * 60 * 1000;
 
@@ -322,7 +328,7 @@
             parts.push(el(doc, 'div', 'eval-empty', 'Noch keine Bewertung für diese Bubble.'));
             parts.push(run);
         } else {
-            parts.push(el(doc, 'div', 'eval-subtitle', `Bewertet ${zeitText(stand.zeit)}${stand.gekuerzt ? ' · Karten gekürzt gelesen' : ''}`));
+            parts.push(el(doc, 'div', 'eval-subtitle', `Bewertet ${zeitText(stand.zeit)}${stand.gekuerzt ? ' · gekürzt bewertet' : ''}`));
             const head = el(doc, 'div', 'score-display');
             head.append(el(doc, 'span', 'score-number', stand.score), el(doc, 'span', 'score-max', '/100'));
             parts.push(head);
@@ -335,6 +341,9 @@
             parts.push(bar);
             const zustand = el(doc, 'span', `score-prediction zustand-${stand.zustand}`, stand.zustandLabel);
             parts.push(zustand);
+            if (stand.zustand === 'unter_schwelle' && stand.quelle !== 'mirofish') {
+                parts.push(el(doc, 'div', 'bewertung-quelle', QUELLE_HINWEIS));
+            }
             parts.push(el(doc, 'div', 'bewertung-schwelle',
                 `Schwelle zum Befördern: ${stand.schwelle}${stand.schwelleVorgabe ? ' (Vorgabe)' : ''}`));
             if (stand.veraltet) {
@@ -436,6 +445,6 @@
         return box;
     }
 
-    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
+    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, QUELLE_HINWEIS, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
         BESTAETIGEN_MS, todoSatz, standOf, farbe, brauchtBestaetigung, guard, createTodoSperre, render };
 }));

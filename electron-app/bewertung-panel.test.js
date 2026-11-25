@@ -60,7 +60,7 @@ test('the threshold comes from the backend; without it the default 95, and it de
     assert.equal(s.schwelle, 95);
     assert.equal(s.schwelleVorgabe, true);
     assert.equal(s.zustand, 'unter_schwelle');
-    const low = panel.standOf({ row: row({ bewertung_lauf: lauf() }), cards, schwelle: 60 });
+    const low = panel.standOf({ row: row({ bewertung_lauf: lauf({ quelle: 'mirofish' }) }), cards, schwelle: 60 });
     assert.equal(low.schwelle, 60);
     assert.equal(low.schwelleVorgabe, false);
     assert.equal(low.zustand, 'befoerderbar');
@@ -191,7 +191,7 @@ test('the panel: German, score and threshold, warning, to-do buttons that call b
 test('white paper and decision to-dos are done by hand: no agent button; at the threshold only a careful word', () => {
     const doc = fakeDoc();
     const box = doc.createElement('div');
-    const run = lauf({ todos: [
+    const run = lauf({ quelle: 'mirofish', todos: [
         { nr: 1, sicht: 'ideas', titel: 'Papier', fehlt: 'Kein White Paper.', karten: [], punkte: 5, art: 'white_paper', erledigt: false },
         { nr: 2, sicht: 'ideas', titel: 'Wahl', fehlt: 'Offen.', karten: [], punkte: 2, art: 'entscheidung', erledigt: false },
     ] });
@@ -433,4 +433,31 @@ test('the window: the bar button only toggles, the open panel reads again after 
     for (const name of ['vibemind:order-ended', 'vibemind:canvas-node-updated']) assert.ok(html.includes(`'${name}'`), name);
     assert.match(html, /setInterval\(_refreshIfOpen, BEWERTUNG_OFFEN_MS\)/);
     assert.match(html, /clearInterval\(_offenTimer\)/);
+});
+
+// ---- only a run of MiroFish may promote; a shortened run says so ----
+
+test('a run of the agent never says "Schwelle erreicht": promoting waits for MiroFish', () => {
+    const agent = panel.standOf({ row: row({ bewertung_lauf: lauf() }), cards, schwelle: 60 });
+    assert.equal(agent.quelle, 'agent', 'missing source = agent');
+    assert.equal(agent.zustand, 'unter_schwelle');
+    assert.equal(panel.standOf({ row: row({ bewertung_lauf: lauf({ quelle: 'agent' }) }), cards, schwelle: 60 }).zustand, 'unter_schwelle');
+    assert.equal(panel.standOf({ row: row({ bewertung_lauf: lauf({ quelle: 'irgendwas' }) }), cards, schwelle: 60 }).quelle, 'agent');
+    const textFor = (stand) => { const doc = fakeDoc(); const box = doc.createElement('div'); panel.render(doc, box, stand, {}); return textOf(box); };
+    const text = textFor(agent);
+    assert.ok(text.includes('Noch nicht beförderbar'));
+    assert.ok(text.includes('Befördert wird erst nach einer Bewertung durch MiroFish.'));
+    assert.ok(!text.includes('Schwelle erreicht'));
+    // MiroFish below the threshold: not yet, but no word about the source
+    const fishLow = textFor(panel.standOf({ row: row({ bewertung_lauf: lauf({ quelle: 'mirofish' }) }), cards }));
+    assert.ok(fishLow.includes('Noch nicht beförderbar') && !fishLow.includes('durch MiroFish'));
+    const fishHigh = textFor(panel.standOf({ row: row({ bewertung_lauf: lauf({ quelle: 'mirofish' }) }), cards, schwelle: 60 }));
+    assert.ok(fishHigh.includes('Schwelle erreicht') && !fishHigh.includes('durch MiroFish'));
+});
+
+test('a shortened run shows "gekürzt bewertet"', () => {
+    const textFor = (run) => { const doc = fakeDoc(); const box = doc.createElement('div');
+        panel.render(doc, box, panel.standOf({ row: row({ bewertung_lauf: run }), cards }), {}); return textOf(box); };
+    assert.ok(textFor(lauf({ gekuerzt: true })).includes('gekürzt bewertet'));
+    assert.ok(!textFor(lauf()).includes('gekürzt'));
 });
