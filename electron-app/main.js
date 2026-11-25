@@ -95,6 +95,7 @@ const AgentFarmManager = require('./agentfarm-manager');
 // MiroFish Integration
 const MiroFishManager = require('./mirofish-manager');
 const { ExternalSpaceManager, describeForRenderer } = require('./external-spaces');
+const { registerDesktopKlicks } = require('./desktop-klicks');
 
 // Flowzen Diary (Blue Rose Journal) Integration
 const FlowzenManager = require('./flowzen-manager');
@@ -1197,6 +1198,10 @@ function setupIpcHandlers() {
         });
     });
     
+    // Desktop space: the clicks of the task book and a click on the picture, through the Brain
+    // (desktop-klicks.js; the key of the sign stays in this process). Only the app window asks.
+    registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+
     // ========================================
     // MULTIVERSE NAVIGATION
     // ========================================

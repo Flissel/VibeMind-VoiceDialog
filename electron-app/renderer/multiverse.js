@@ -2411,6 +2411,8 @@ class MultiverseApp {
 
         // Hide Desktop Dashboard when leaving desktop space
         if (this.currentSpace === 'desktop' && targetSpace !== 'desktop') {
+            // the pictures and the marks are not asked for while the space is not shown
+            if (this._desktopStream) this._desktopStream.stop();
             if (this._insideDesktopDashboard) {
                 const panel = document.getElementById('vapi-panel');
                 if (panel) {
@@ -3416,6 +3418,7 @@ class MultiverseApp {
         if (panel) {
             panel.classList.add('visible');
             requestAnimationFrame(() => panel.classList.add('fade-in'));
+            if (this._desktopStream) this._desktopStream.start();   // the pictures and marks run again
             return;
         }
 
@@ -3471,7 +3474,7 @@ class MultiverseApp {
             overlay.className = 'desktop-interact-overlay';
             overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:9;cursor:crosshair';
             const handleClick = async (e, button) => {
-                if (button === 'right') e.preventDefault();
+                if (button === 'right') { e.preventDefault(); return; }   // the Brain passes left clicks only
                 if (!img.naturalWidth || !img.naturalHeight) return;
 
                 // Account for object-fit:contain letterboxing
@@ -3515,15 +3518,15 @@ class MultiverseApp {
                 ripple.style.cssText = `position:fixed;left:${e.clientX - 15}px;top:${e.clientY - 15}px;width:30px;height:30px;border-radius:50%;border:2px solid #0ff;pointer-events:none;z-index:999;animation:clickRipple .5s ease-out forwards`;
                 document.body.appendChild(ripple);
                 setTimeout(() => ripple.remove(), 600);
+                // Through the Brain (task book, block list, emergency stop), never straight to the
+                // tool service; the answer shows as a mark at once (desktop-klicks.js, klick-marken.js).
+                const marks = this._klickMarken;
+                if (!window.vibemind || !window.vibemind.handKlick) return;
                 try {
-                    await fetch('http://127.0.0.1:8007/api/automation/click', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ x: realX, y: realY, button }),
-                        signal: AbortSignal.timeout(5000),
-                    });
+                    const answer = await window.vibemind.handKlick(realX, realY);
+                    if (marks) marks.add({ x: realX, y: realY, ...(answer || { ok: false, grund: 'keine_antwort' }) });
                 } catch (err) {
-                    console.warn('[Desktop] Click relay failed:', err.message);
+                    if (marks) marks.add({ x: realX, y: realY, ok: false, grund: 'keine_antwort' });
                 }
             };
             overlay.addEventListener('click', (e) => handleClick(e, 'left'));
@@ -3537,6 +3540,13 @@ class MultiverseApp {
             dotCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11';
             wrapper.appendChild(dotCanvas);
 
+            // Per-monitor marks of the clicks (klick-marken.js), own layer: the eyeTerm dots clear theirs
+            const markCanvas = document.createElement('canvas');
+            markCanvas.className = 'klick-marken-canvas';
+            markCanvas.dataset.monitor = monitorIdx;
+            markCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:12';
+            wrapper.appendChild(markCanvas);
+
             // Per-monitor gaze cursor canvas (live crosshair)
             const gazeCanvas = document.createElement('canvas');
             gazeCanvas.className = 'gaze-cursor-canvas';
@@ -3549,6 +3559,14 @@ class MultiverseApp {
 
         streamsArea.appendChild(monitorGrid);
 
+        // Emergency stop (STOP file of the Brain): one line above the pictures while it lies
+        const stopHint = document.createElement('div');
+        stopHint.id = 'klick-not-aus';
+        stopHint.hidden = true;
+        stopHint.textContent = 'Not-Aus: der Desktop-Agent klickt nicht.';
+        stopHint.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:14;padding:4px 12px;border-radius:8px;background:rgba(255,90,110,.18);border:1px solid rgba(255,90,110,.5);color:#ffd6dc;font-size:12px';
+        streamsArea.appendChild(stopHint);
+
         // Click-dot canvases are now per-monitor (inside each monitor-panel)
         panel.appendChild(streamsArea);
 
@@ -3560,12 +3578,49 @@ class MultiverseApp {
             requestAnimationFrame(() => panel.classList.add('fade-in'));
         });
 
-        // Desktop stream: query monitor count, then poll per-monitor screenshots
+        // Desktop stream: query monitor count, then poll per-monitor screenshots.
+        // Runs only while the dashboard is shown: leaving the space stops it (stopDesktopStream),
+        // showing it again starts it anew; a generation number ends the loops of an earlier run.
         let _desktopStreamActive = false;
+        let _desktopStreamGen = 0;
+        let _desktopMonitorCount = 0;     // 0 until the panels are built
+        if (!this._klickMarken && window.VibeKlickMarken) this._klickMarken = window.VibeKlickMarken.create(window, document);
+        const startPolling = (grid) => {
+            const gen = _desktopStreamGen;
+            for (let i = 1; i <= _desktopMonitorCount; i++) {
+                const imgEl = grid.querySelector(`.desktop-stream-img[data-monitor="${i}"]`);
+                if (!imgEl) continue;
+                const pollMonitor = async () => {
+                    if (!_desktopStreamActive || gen !== _desktopStreamGen) return;
+                    try {
+                        const r = await fetch(`http://127.0.0.1:8007/api/desktop/screenshot?monitor=${i}`, {
+                            signal: AbortSignal.timeout(3000),
+                        });
+                        if (r.ok) {
+                            const data = await r.json();
+                            const frameData = data.screenshot?.data || data.frame;
+                            if (frameData) {
+                                imgEl.src = 'data:image/jpeg;base64,' + frameData;
+                                imgEl.style.display = '';
+                            }
+                        }
+                    } catch (e) { /* retry silently */ }
+                    // Stagger frames: ~5 fps per monitor
+                    if (_desktopStreamActive && gen === _desktopStreamGen) setTimeout(pollMonitor, 200);
+                };
+                // Stagger start so monitors do not all fire at once
+                setTimeout(pollMonitor, i * 50);
+            }
+            if (this._klickMarken) this._klickMarken.start(grid);
+        };
         const startDesktopStream = async () => {
+            if (_desktopStreamActive) return;
             _desktopStreamActive = true;
-            const loadEl = document.getElementById('vapi-loading');
+            _desktopStreamGen += 1;
             const grid = document.getElementById('monitor-grid');
+            if (_desktopMonitorCount) { startPolling(grid); return; }   // panels are there: only poll again
+            const gen = _desktopStreamGen;
+            const loadEl = document.getElementById('vapi-loading');
 
             // Wait for backend health
             const waitForHealth = () => new Promise((resolve) => {
@@ -3608,35 +3663,19 @@ class MultiverseApp {
 
             // Hide loading
             if (loadEl) loadEl.style.display = 'none';
+            _desktopMonitorCount = monitorCount;
 
-            // Start polling per monitor
-            for (let i = 1; i <= monitorCount; i++) {
-                const imgEl = grid.querySelector(`.desktop-stream-img[data-monitor="${i}"]`);
-                if (!imgEl) continue;
-
-                const pollMonitor = async () => {
-                    if (!_desktopStreamActive) return;
-                    try {
-                        const r = await fetch(`http://127.0.0.1:8007/api/desktop/screenshot?monitor=${i}`, {
-                            signal: AbortSignal.timeout(3000),
-                        });
-                        if (r.ok) {
-                            const data = await r.json();
-                            const frameData = data.screenshot?.data || data.frame;
-                            if (frameData) {
-                                imgEl.src = 'data:image/jpeg;base64,' + frameData;
-                                imgEl.style.display = '';
-                            }
-                        }
-                    } catch (e) { /* retry silently */ }
-                    // Stagger frames: ~5 fps per monitor
-                    if (_desktopStreamActive) setTimeout(pollMonitor, 200);
-                };
-                // Stagger start so monitors don't all fire at once
-                setTimeout(pollMonitor, i * 50);
-            }
+            // Start polling per monitor (unless the space was left while waiting for the backend)
+            if (_desktopStreamActive && gen === _desktopStreamGen) startPolling(grid);
+            else _desktopStreamActive = false;
         };
-        setTimeout(startDesktopStream, 1000);
+        const stopDesktopStream = () => {
+            _desktopStreamActive = false;
+            _desktopStreamGen += 1;
+            if (this._klickMarken) this._klickMarken.stop();
+        };
+        this._desktopStream = { start: startDesktopStream, stop: stopDesktopStream, isActive: () => _desktopStreamActive };
+        setTimeout(() => { if (this._insideDesktopDashboard) startDesktopStream(); }, 1000);
 
         // Click-dot overlay: listen for eyeterm_click_dots IPC and draw on per-monitor canvases
         if (window.vibemind && window.vibemind.onPythonMessage) {
@@ -3865,6 +3904,7 @@ class MultiverseApp {
      */
     exitDesktopDashboard() {
         if (!this._insideDesktopDashboard) return;
+        if (this._desktopStream) this._desktopStream.stop();   // no pictures asked behind the closed panel
 
         const panel = document.getElementById('vapi-panel');
         if (panel) {
