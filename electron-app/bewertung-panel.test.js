@@ -395,3 +395,42 @@ test('the window keeps the lock: a to-do button goes through it, a second one wa
     assert.match(html, /if \(_todoSperre\) _todoSperre\.clear\(\);/);
     assert.match(html, /if \(_todoSperre\) _todoSperre\.stand\(stand\);/);
 });
+
+// ---- H1: the bar only opens the panel; a run starts in it, a young run asks once more ----
+
+test('a run younger than 10 minutes with no card changed asks once more; otherwise not', () => {
+    const t = Date.parse(ZEIT);
+    const fresh = panel.standOf({ row: row({ bewertung_lauf: lauf() }), cards });
+    assert.equal(panel.brauchtBestaetigung(fresh, t + 9 * 60 * 1000), true);
+    assert.equal(panel.brauchtBestaetigung(fresh, t + 10 * 60 * 1000), false, 'ten minutes old: no question');
+    const changed = panel.standOf({ row: row({ bewertung_lauf: lauf() }),
+        cards: [...cards, { id: 'k-3', title: 'Neu', updated_at: '2026-03-02T10:01:00+00:00' }] });
+    assert.equal(panel.brauchtBestaetigung(changed, t + 2 * 60 * 1000), false, 'a card changed: run without asking');
+    assert.equal(panel.brauchtBestaetigung(panel.standOf({ row: row({}), cards }), t), false, 'no run yet');
+});
+
+test('the question replaces "Neu bewerten": yes runs, Abbrechen does not, both behind the key guard', () => {
+    const calls = { confirm: 0, cancel: 0 };
+    const p = drawn({ bestaetigen: true, onConfirm: () => { calls.confirm += 1; }, onCancel: () => { calls.cancel += 1; } });
+    assert.equal(p.run, undefined, 'no run button while the question is open');
+    assert.ok(textOf(p.box).includes('Trotzdem neu bewerten?'));
+    const yes = p.nodes.find((n) => n.id === 'eval-rerun-confirm-btn');
+    assert.equal(yes.textContent, 'Ja, neu bewerten (1 Abo-Aufruf)');
+    yes.focus();
+    yes.fire('click', KEYBOARD_CLICK);
+    assert.equal(calls.confirm, 0, 'a key on a focused button right after drawing sends nothing');
+    yes.fire('click', MOUSE);
+    assert.equal(calls.confirm, 1);
+    p.nodes.find((n) => n.textContent === 'Abbrechen').fire('click', MOUSE);
+    assert.equal(calls.cancel, 1);
+    assert.equal(drawn().run.textContent, 'Neu bewerten (1 Abo-Aufruf)');
+});
+
+test('the window: the bar button only toggles, the open panel reads again after a run', () => {
+    const html = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+    assert.match(html, /bestaetigen: _runConfirm/);
+    assert.match(html, /VibeBewertung\.brauchtBestaetigung\(_bewertungStand\)/);
+    for (const name of ['vibemind:order-ended', 'vibemind:canvas-node-updated']) assert.ok(html.includes(`'${name}'`), name);
+    assert.match(html, /setInterval\(_refreshIfOpen, BEWERTUNG_OFFEN_MS\)/);
+    assert.match(html, /clearInterval\(_offenTimer\)/);
+});

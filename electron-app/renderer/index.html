@@ -2269,7 +2269,10 @@
             window.VibeBewertung.render(document, box, stand, {
                 laeuft: !!_bewertungLauf,
                 sperre: _todoSperre ? _todoSperre.current() : null,
-                onRun: (e) => window.startBewertung(e),
+                bestaetigen: _runConfirm,
+                onRun: _bewertungRun,
+                onConfirm: _bewertungRun,
+                onCancel: () => { _runConfirm = false; _renderBewertung(); },
                 onTodo: _bewertungTodo,
                 onCard: _bewertungKarte,
             });
@@ -2325,12 +2328,39 @@
             if (_todoSperre) _todoSperre.sent(e.detail && e.detail.trace_id);
         });
         window.addEventListener('vibemind:sentence-answered', (e) => {
-            if (!_todoSperre || !_todoSperre.current()) return;
-            _todoSperre.answered((e && e.detail) || {});
+            if (_todoSperre && _todoSperre.current()) {
+                _todoSperre.answered((e && e.detail) || {});
+                if (_panelOpen()) _renderBewertung();
+            }
+            _refreshIfOpen();
+        });
+
+        // Lauf 34: the open panel kept the old values after a new run until it was closed and opened.
+        // It read only on opening and while a run of its own button went; a run asked in the chat, an
+        // order that ended or a card that changed did not reach it. Now each of these makes it read
+        // again, and while it is open it reads every BEWERTUNG_OFFEN_MS as well.
+        const BEWERTUNG_OFFEN_MS = 20000;
+        let _offenTimer = null;
+        function _refreshIfOpen() {
+            if (!_panelOpen()) return;
             const cur = window.__currentEvalBubble || {};
             window._fetchEvalFromDB(cur.dbId, cur.title);
-            if (_panelOpen()) _renderBewertung();
-        });
+        }
+        for (const name of ['vibemind:order-ended', 'vibemind:canvas-node-added', 'vibemind:canvas-node-updated', 'vibemind:canvas-node-removed']) {
+            window.addEventListener(name, _refreshIfOpen);
+        }
+
+        // "Neu bewerten" asks once more when the last run is young and no card changed (bewertung-panel.js)
+        let _runConfirm = false;
+        function _bewertungRun(event) {
+            if (!_runConfirm && window.VibeBewertung.brauchtBestaetigung(_bewertungStand)) {
+                _runConfirm = true;
+                _renderBewertung();
+                return;
+            }
+            _runConfirm = false;
+            window.startBewertung(event);
+        }
 
         function _panelOpen() {
             const panel = document.getElementById('eval-panel');
@@ -2345,6 +2375,7 @@
             panel.setAttribute('aria-hidden', 'false');
             const toggle = document.getElementById('eval-toggle');
             if (toggle) toggle.classList.add('panel-open');
+            if (!_offenTimer) _offenTimer = setInterval(_refreshIfOpen, BEWERTUNG_OFFEN_MS);
         }
 
         window.__currentEvalBubble = { dbId: null, localId: null, title: null };
@@ -2364,6 +2395,8 @@
             }
             const toggle = document.getElementById('eval-toggle');
             if (toggle) toggle.classList.remove('panel-open');
+            if (_offenTimer) { clearInterval(_offenTimer); _offenTimer = null; }
+            _runConfirm = false;
         };
 
         window.toggleEvalPanel = function() {
@@ -2428,6 +2461,7 @@
             };
             _stopLauf();
             if (_todoSperre) _todoSperre.clear();   // a lock belongs to the bubble it was set in
+            _runConfirm = false;
             _bewertungStand = null;
             _updateToggleBadge(null);
             window._fetchEvalFromDB(opts.dbId || primaryId, title);

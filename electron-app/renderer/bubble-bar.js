@@ -62,10 +62,11 @@
                     : (empty ? 'Noch keine Karten in dieser Bubble' : 'Karten als Verbindungsbild zeigen') },
             summary: send(sentences.summary),
             whitepaper: send(sentences.whitepaper),
-            // starts a run of the Brain (fixed sentence through the chat) and shows it in the panel
-            evaluate: typeof env.startRun === 'function' && sentences.evaluate && canSend
+            // opens the panel with the last run; a run (1 call of the subscription) starts only in the panel
+            evaluate: typeof env.toggleEval === 'function'
                 ? { disabled: false, label: env.score ? `Bewerten · ${env.score}` : 'Bewerten', pressed: !!env.evalOpen,
-                    title: `Schickt „${sentences.evaluate}“ an das Gehirn und zeigt die Bewertung${env.score ? ` (zuletzt ${env.score})` : ''}` }
+                    title: env.evalOpen ? 'Bewertung schließen'
+                        : `Zeigt die letzte Bewertung${env.score ? ` (${env.score})` : ''}; neu bewerten im Panel` }
                 : { disabled: true, label: 'Bewerten', pressed: false, title: 'Bewertung nicht verfügbar' },
             voice: voiceState(env.voice || {}),
             chat: typeof env.fold === 'function'
@@ -160,15 +161,10 @@
             };
             els.summary.addEventListener('click', sendSentence('summary'));
             els.whitepaper.addEventListener('click', sendSentence('whitepaper'));
+            // only opens or closes the panel: never a run, so no key can start one from here
             els.evaluate.addEventListener('click', (e) => {
-                if (e.currentTarget.disabled || typeof win.startBewertung !== 'function') return;
-                const c = chat();
-                if (c && typeof c.folded === 'function' && c.folded() && typeof c.fold === 'function') c.fold(false);
-                // a run already going: the press only shows it
-                if (!win.startBewertung(e)) {
-                    const panel = doc.getElementById('eval-panel');
-                    if (!(panel && panel.classList.contains('open')) && typeof win.toggleEvalPanel === 'function') win.toggleEvalPanel();
-                }
+                if (e.currentTarget.disabled || typeof win.toggleEvalPanel !== 'function') return;
+                win.toggleEvalPanel();
                 render();
             });
             els.voice.addEventListener('click', () => {
@@ -214,7 +210,7 @@
                 canSwitch: !!(c && typeof c.showView === 'function'),
                 sentences: win.vibemind && win.vibemind.bubbleSentences,
                 submit: chat && chat.submit,
-                startRun: win.startBewertung,
+                toggleEval: win.toggleEvalPanel,
                 score: scoreText && scoreText !== '—' ? scoreText : '',
                 evalOpen: !!(panel && panel.classList.contains('open')),
                 voice: {

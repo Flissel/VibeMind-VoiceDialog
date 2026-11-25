@@ -79,7 +79,7 @@ function page({ cards = [], view = 'karten', voice = true } = {}) {
             folded: () => calls.folded,
         },
         toggleEvalPanel: () => { calls.eval += 1; },
-        // index.html: sends the sentence through the chat and opens the panel; false while a run goes
+        // index.html: starts a run; the bar must never call it (the run starts only in the panel)
         startBewertung: (e) => { calls.runs.push(e.isTrusted === true); return calls.runs.length === 1; },
     };
     const b = bar.create(doc, win);
@@ -215,12 +215,13 @@ test('voice, evaluation and chat: the bar shows their state and works them', () 
 
     p.score.textContent = '46';
     p.btn('bubble-eval-btn').fire('click', { isTrusted: true });
-    assert.deepEqual(p.calls.runs, [true], 'Bewerten starts a run, typed on a click of the person');
-    assert.equal(p.calls.eval, 0, 'the run opens the panel itself');
+    assert.deepEqual(p.calls.runs, [], 'Bewerten never starts a run: that is only in the panel');
+    assert.equal(p.calls.eval, 1, 'the press opens the panel with the last run');
     p.btn('bubble-eval-btn').fire('click', { isTrusted: true });
-    assert.equal(p.calls.eval, 1, 'a run already going: the press only shows the panel');
+    assert.equal(p.calls.eval, 2, 'a second press closes it again');
+    assert.deepEqual(p.calls.runs, []);
     assert.equal(p.btn('bubble-eval-btn').textContent, 'Bewerten · 46');
-    assert.equal(p.btn('bubble-eval-btn').title, 'Schickt „Bewerte diese Bubble“ an das Gehirn und zeigt die Bewertung (zuletzt 46)');
+    assert.equal(p.btn('bubble-eval-btn').title, 'Zeigt die letzte Bewertung (46); neu bewerten im Panel');
 
     p.btn('bubble-chat-btn').fire('click');
     assert.equal(p.calls.folded, true);

@@ -157,6 +157,15 @@
         };
     }
 
+    const BESTAETIGEN_MS = 10 * 60 * 1000;
+
+    /** A new run asks once more when the last one is younger than 10 min and no card changed since. */
+    function brauchtBestaetigung(stand, now = Date.now()) {
+        if (!stand || stand.leer || stand.veraltet) return false;
+        const t = timeOf(stand.zeit);
+        return t !== null && now - t >= 0 && now - t < BESTAETIGEN_MS;
+    }
+
     /** Green only when promotable; yellow when out of date or at least half way; red below. */
     function farbe(stand) {
         if (!stand || stand.leer) return '';
@@ -282,13 +291,30 @@
         const parts = [];
         parts.push(el(doc, 'div', 'eval-title', stand.titel));
 
-        const run = el(doc, 'button', 'bewertung-run', stand.leer ? 'Jetzt bewerten' : 'Neu bewerten');
-        run.type = 'button';
-        run.id = 'eval-rerun-btn';
-        run.dataset.satz = LAUF_SATZ;
-        run.disabled = !!actions.laeuft || !!sperre;
-        if (sperre) run.title = 'Erst wenn das To-do beantwortet oder erledigt ist';
-        guard(run, (e) => { if (actions.onRun) actions.onRun(e); }, clock, drawnAt);
+        // A run costs one call of the subscription: it starts only here, never from the bar.
+        const runButton = el(doc, 'button', 'bewertung-run', `${stand.leer ? 'Jetzt bewerten' : 'Neu bewerten'} (1 Abo-Aufruf)`);
+        runButton.type = 'button';
+        runButton.id = 'eval-rerun-btn';
+        runButton.dataset.satz = LAUF_SATZ;
+        runButton.disabled = !!actions.laeuft || !!sperre;
+        if (sperre) runButton.title = 'Erst wenn das To-do beantwortet oder erledigt ist';
+        guard(runButton, (e) => { if (actions.onRun) actions.onRun(e); }, clock, drawnAt);
+        let run = runButton;
+        // The last run is young and no card changed since: ask once more before spending a call.
+        if (actions.bestaetigen && !runButton.disabled) {
+            run = el(doc, 'div', 'bewertung-bestaetigen');
+            const age = Math.max(1, Math.round((clock() - (timeOf(stand.zeit) || clock())) / 60000));
+            run.append(el(doc, 'div', '', `Die letzte Bewertung ist erst ${age} min alt, seitdem wurde keine Karte geändert. Trotzdem neu bewerten?`));
+            const yes = el(doc, 'button', 'bewertung-run', 'Ja, neu bewerten (1 Abo-Aufruf)');
+            yes.type = 'button';
+            yes.id = 'eval-rerun-confirm-btn';
+            yes.dataset.satz = LAUF_SATZ;
+            guard(yes, (e) => { if (actions.onConfirm) actions.onConfirm(e); }, clock, drawnAt);
+            const no = el(doc, 'button', 'bewertung-run', 'Abbrechen');
+            no.type = 'button';
+            guard(no, () => { if (actions.onCancel) actions.onCancel(); }, clock, drawnAt);
+            run.append(yes, no);
+        }
         if (actions.laeuft) parts.push(el(doc, 'div', 'bewertung-laeuft', 'Bewertung läuft … (die Antwort steht im Chat)'));
         if (sperre) parts.push(el(doc, 'div', 'bewertung-laeuft bewertung-sperre', sperre.text));
 
@@ -411,5 +437,5 @@
     }
 
     return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
-        todoSatz, standOf, farbe, guard, createTodoSperre, render };
+        BESTAETIGEN_MS, todoSatz, standOf, farbe, brauchtBestaetigung, guard, createTodoSperre, render };
 }));

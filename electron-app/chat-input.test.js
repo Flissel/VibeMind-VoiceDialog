@@ -161,10 +161,12 @@ test('the sentence buttons of a bubble: a trusted click counts for exactly their
 test('Bewerten and the to-do buttons of the evaluation panel: the sentence is built in the preload from the number', () => {
     const p = preload();
     assert.equal(p.sentences.evaluate, 'Bewerte diese Bubble');
-    for (const id of ['bubble-eval-btn', 'eval-rerun-btn']) {
+    for (const id of ['eval-rerun-btn', 'eval-rerun-confirm-btn']) {
         p.clickButton(id);
         assert.equal(p.send('Bewerte diese Bubble', true), true, id);
     }
+    p.clickButton('bubble-eval-btn');
+    assert.equal(p.send('Bewerte diese Bubble', true), false, 'the bar button only opens the panel');
     const todo = (nr, wie, { trusted = true, disabled = false, cls = 'bewertung-todo-btn' } = {}) => {
         const button = { id: '', type: 'button', disabled, classList: { contains: (c) => c === cls },
             dataset: { todoNr: String(nr), todoWie: wie }, closest: (sel) => (sel === 'button' ? button : null) };

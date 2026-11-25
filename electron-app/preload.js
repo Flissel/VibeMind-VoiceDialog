@@ -38,9 +38,10 @@ let lastSend = null; // { at, text }
 const SENTENCE_BUTTONS = Object.freeze({
     'bubble-summary-btn': 'Fasse diese Bubble zusammen',
     'bubble-whitepaper-btn': 'Erstelle ein White Paper aus dieser Bubble',
-    // Bewerten (bubble bar) and Neu bewerten (evaluation panel): one run of the Brain
-    'bubble-eval-btn': 'Bewerte diese Bubble',
+    // Neu bewerten (evaluation panel) and its confirmation: one run of the Brain (1 call of the subscription).
+    // The button Bewerten of the bubble bar only opens the panel and sends nothing.
     'eval-rerun-btn': 'Bewerte diese Bubble',
+    'eval-rerun-confirm-btn': 'Bewerte diese Bubble',
 });
 
 /**
@@ -138,7 +139,7 @@ contextBridge.exposeInMainWorld('vibemind', {
         ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && sentByPerson(text) }),
     // The sentences of the buttons Zusammenfassung, White Paper and Bewerten of a bubble (see SENTENCE_BUTTONS).
     bubbleSentences: { summary: SENTENCE_BUTTONS['bubble-summary-btn'], whitepaper: SENTENCE_BUTTONS['bubble-whitepaper-btn'],
-        evaluate: SENTENCE_BUTTONS['bubble-eval-btn'] },
+        evaluate: SENTENCE_BUTTONS['eval-rerun-btn'] },
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {
