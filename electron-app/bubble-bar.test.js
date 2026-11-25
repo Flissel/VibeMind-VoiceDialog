@@ -10,7 +10,8 @@ const vm = require('node:vm');
 const bar = require('./renderer/bubble-bar');
 
 const BUBBLE = '00000000-0000-4000-8000-00000000000b';
-const SENTENCES = { summary: 'Fasse diese Bubble zusammen', whitepaper: 'Erstelle ein White Paper aus dieser Bubble' };
+const SENTENCES = { summary: 'Fasse diese Bubble zusammen', whitepaper: 'Erstelle ein White Paper aus dieser Bubble',
+    evaluate: 'Bewerte diese Bubble' };
 
 function element(doc, tag) {
     const classes = new Set();
@@ -57,7 +58,7 @@ function page({ cards = [], view = 'karten', voice = true } = {}) {
     const score = element(doc, 'span'); score.id = 'eval-toggle-score'; score.textContent = '—';
     doc.body.append(spaceView, indicator, status, oldVoice, score);
 
-    const calls = { sent: [], zoom: [], search: [], views: [], voice: 0, eval: 0, folded: false };
+    const calls = { sent: [], zoom: [], search: [], views: [], voice: 0, eval: 0, runs: [], folded: false };
     oldVoice.click = () => { calls.voice += 1; };
     let shownView = view;
     let query = '';
@@ -78,6 +79,8 @@ function page({ cards = [], view = 'karten', voice = true } = {}) {
             folded: () => calls.folded,
         },
         toggleEvalPanel: () => { calls.eval += 1; },
+        // index.html: sends the sentence through the chat and opens the panel; false while a run goes
+        startBewertung: (e) => { calls.runs.push(e.isTrusted === true); return calls.runs.length === 1; },
     };
     const b = bar.create(doc, win);
     b.mount();
@@ -155,7 +158,7 @@ test('what cannot work now is switched off with its reason, not gone', () => {
     }
     assert.equal(empty.btn('bubble-voice-btn').disabled, true);
     assert.equal(empty.btn('bubble-voice-btn').title, 'Sprachdienst nicht verfügbar');
-    assert.equal(empty.btn('bubble-eval-btn').disabled, false, 'the evaluation can be opened in any bubble');
+    assert.equal(empty.btn('bubble-eval-btn').disabled, false, 'an empty bubble can be evaluated too');
     assert.equal(empty.btn('bubble-chat-btn').disabled, false);
     assert.equal(empty.btn('bubble-search').disabled, false);
 
@@ -210,10 +213,14 @@ test('voice, evaluation and chat: the bar shows their state and works them', () 
     assert.equal(p.btn('bubble-voice-btn').disabled, true);
     assert.deepEqual(bar.voiceState({ available: true, indicator: 'inactive', status: 'Voice: Error' }).state, 'fehler');
 
-    p.score.textContent = '46,5';
-    p.btn('bubble-eval-btn').fire('click');
-    assert.equal(p.calls.eval, 1);
-    assert.equal(p.btn('bubble-eval-btn').textContent, 'Bewerten · 46,5');
+    p.score.textContent = '46';
+    p.btn('bubble-eval-btn').fire('click', { isTrusted: true });
+    assert.deepEqual(p.calls.runs, [true], 'Bewerten starts a run, typed on a click of the person');
+    assert.equal(p.calls.eval, 0, 'the run opens the panel itself');
+    p.btn('bubble-eval-btn').fire('click', { isTrusted: true });
+    assert.equal(p.calls.eval, 1, 'a run already going: the press only shows the panel');
+    assert.equal(p.btn('bubble-eval-btn').textContent, 'Bewerten · 46');
+    assert.equal(p.btn('bubble-eval-btn').title, 'Schickt „Bewerte diese Bubble“ an das Gehirn und zeigt die Bewertung (zuletzt 46)');
 
     p.btn('bubble-chat-btn').fire('click');
     assert.equal(p.calls.folded, true);

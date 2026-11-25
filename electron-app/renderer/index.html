@@ -84,6 +84,8 @@
     <script defer src="jump-back.js"></script>
     <!-- Extracted modules (Tier 4 — heavy coupling) -->
     <script defer src="bubble-navigation.js"></script>
+    <!-- the evaluation panel of a bubble (one source: metadata.bewertung_lauf) -->
+    <script defer src="bewertung-panel.js"></script>
     <script defer src="bubble-bar.js"></script>
     <script defer src="tab-scroll.js"></script>
 </head>
@@ -939,92 +941,12 @@
                     }
                     break;
 
-                // Phase 11.U.L — bubble eval result from Mirofish panel.
-                // Updates the 3D bubble fill + opens the right side-panel
-                // with score breakdown + TODO bubble-cards.
+                // Old evaluation messages (MiroFish readiness, evolution eval). Their numbers are no
+                // source any more: the panel reads ideas.metadata.bewertung_lauf (bewertung-panel.js),
+                // so they only make it read the database again.
                 case 'mirofish_result':
-                    if (message.action === 'evaluate_readiness') {
-                        const score = message.total_score;
-                        const bubbleName = message.bubble_name;
-                        console.log(`[UI] Eval result: ${bubbleName} = ${score}/100`);
-
-                        // 1) Update 3D bubble fill
-                        if (window.multiverseApp && typeof window.multiverseApp.updateBubbleScore === 'function') {
-                            const objects = window.multiverseApp.spaces?.ideas?.objects || [];
-                            const found = objects.find(b =>
-                                b.userData?.title === bubbleName ||
-                                String(b.userData?.title).toLowerCase() === String(bubbleName).toLowerCase()
-                            );
-                            if (found) {
-                                const dbId = found.userData.db_id || found.userData.id;
-                                window.multiverseApp.updateBubbleScore(dbId, score);
-                            }
-                        }
-
-                        // 2) Open eval side-panel
-                        if (typeof window.showEvalPanel === 'function') {
-                            window.showEvalPanel(message);
-                        }
-
-                        // 3) Transcript pulse
-                        const pred = message.prediction || '';
-                        const icon = score >= 66 ? '🟢' : score >= 33 ? '🟡' : '🔴';
-                        showTranscript('Eval', `${icon} ${bubbleName}: ${score}/100 — ${pred}`);
-                    }
-                    break;
-
-                // Phase 11.U.M — spaces-ideas evaluate_bubble_evolution path.
-                // This is the eval path that actually WORKS (no KG-recall
-                // hallucination). It broadcasts `bubble_evolution_scored`
-                // with {score, details:{completeness,structure,actionability,
-                // depth,summary,recommendations}}. The mirofish path
-                // hallucinates, so we feed THIS into the eval side-panel by
-                // adapting its shape to what showEvalPanel expects.
                 case 'bubble_evolution_scored':
-                    if (message && message.details) {
-                        const d = message.details;
-                        const sc = Math.round(Number(message.score) || 0);
-                        // Resolve bubble title from the 3D scene by id
-                        let bName = 'Bubble';
-                        try {
-                            const objs = window.multiverseApp?.spaces?.ideas?.objects || [];
-                            const m = objs.find(b =>
-                                String(b.userData?.db_id) === String(message.bubble_id) ||
-                                String(b.userData?.id) === String(message.bubble_id));
-                            if (m) bName = m.userData.title;
-                        } catch (e) { /* ignore */ }
-
-                        // Adapt evolution-eval → showEvalPanel's expected shape.
-                        // recommendations become the actionable TODO list.
-                        const adapted = {
-                            action: 'evaluate_readiness',
-                            bubble_id: message.bubble_id,
-                            bubble_name: bName,
-                            total_score: sc,
-                            prediction: sc >= 66 ? 'GO' : sc >= 40 ? 'NEEDS_WORK' : 'NOT_READY',
-                            // 4-dim breakdown rendered as per-agent bars (×2.5 → /25 scale)
-                            per_agent: {
-                                vibemind_coding:    { score: Math.round((d.actionability||0) * 2.5), assessment: 'Actionability — kann in konkrete Tasks/Deliverables übersetzt werden' },
-                                vibemind_swe_design:{ score: Math.round((d.structure||0)     * 2.5), assessment: 'Structure — logisch organisiert, gut vernetzt' },
-                                vibemind_research:  { score: Math.round((d.depth||0)         * 2.5), assessment: 'Depth — detaillierte, gründlich explorierte Beschreibungen' },
-                                vibemind_ideas:     { score: Math.round((d.completeness||0)  * 2.5), assessment: 'Completeness — klare Ziele, Requirements, Scope' },
-                                vibemind_rowboat:   { score: 0, assessment: d.summary || '' },
-                            },
-                            // The actionable TODOs the user must do next:
-                            missing_items: Array.isArray(d.recommendations) ? d.recommendations : [],
-                            eval_history: [],
-                            _summary: d.summary || '',
-                        };
-                        if (typeof window.showEvalPanel === 'function') {
-                            window.showEvalPanel(adapted);
-                        }
-                        // Update 3D fill
-                        if (window.multiverseApp?.updateBubbleScore) {
-                            try { window.multiverseApp.updateBubbleScore(message.bubble_id, sc); } catch (e) {}
-                        }
-                        const ic = sc >= 66 ? '🟢' : sc >= 33 ? '🟡' : '🔴';
-                        showTranscript('Eval', `${ic} ${bName}: ${sc}/100 — ${(d.recommendations||[]).length} TODOs`);
-                    }
+                    if (typeof window.showEvalPanel === 'function') window.showEvalPanel();
                     break;
 
                 case 'bubbles_listed':
@@ -2237,214 +2159,142 @@
         #eval-panel .history-bar-fill {
             height: 100%; background: rgba(107, 176, 255, 0.5);
         }
+        /* the evaluation panel of bewertung-panel.js */
+        #eval-panel .score-bar { position: relative; }
+        #eval-panel .score-bar-schwelle {
+            position: absolute; top: -2px; bottom: -2px; width: 2px;
+            background: #fff; opacity: 0.7;
+        }
+        #eval-panel .zustand-befoerderbar { background: rgba(68,255,102,0.18); color: #44ff66; }
+        #eval-panel .zustand-unter_schwelle { background: rgba(255,204,51,0.18); color: #ffcc33; }
+        #eval-panel .zustand-veraltet { background: rgba(255,140,60,0.2); color: #ffa060; }
+        #eval-panel .bewertung-schwelle { font-size: 12px; color: #8a94a6; margin: -6px 0 8px 0; }
+        #eval-panel .bewertung-veraltet,
+        #eval-panel .bewertung-laeuft {
+            font-size: 12px; border-radius: 6px; padding: 6px 9px; margin: 6px 0;
+            background: rgba(255,140,60,0.12); color: #ffc49a;
+        }
+        #eval-panel .bewertung-laeuft { background: rgba(107,176,255,0.12); color: #b8d6ff; }
+        #eval-panel .bewertung-run,
+        #eval-panel .bewertung-todo-btn,
+        #eval-panel .bewertung-karte {
+            background: rgba(107,176,255,0.12); color: #d8e6ff;
+            border: 1px solid rgba(107,176,255,0.3); border-radius: 6px;
+            font-size: 12px; padding: 4px 10px; cursor: pointer; margin: 4px 6px 0 0;
+        }
+        #eval-panel .bewertung-run:disabled { opacity: 0.5; cursor: default; }
+        #eval-panel .bewertung-karte { font-size: 11px; padding: 2px 8px; }
+        #eval-panel .bewertung-todo {
+            background: rgba(255, 200, 100, 0.08); border: 1px solid rgba(255, 200, 100, 0.18);
+            border-radius: 8px; padding: 8px 11px; font-size: 12px; line-height: 1.4; color: #d8d2c4;
+        }
+        #eval-panel .bewertung-todo.erledigt { opacity: 0.55; }
+        #eval-panel .bewertung-todo-kopf { display: flex; gap: 6px; font-weight: 600; color: #f0e8d8; }
+        #eval-panel .bewertung-todo-titel { flex: 1; }
+        #eval-panel .bewertung-todo-punkte { color: #44ff66; font-variant-numeric: tabular-nums; }
+        #eval-panel .bewertung-todo-art,
+        #eval-panel .bewertung-todo-erledigt,
+        #eval-panel .bewertung-karte-weg { font-size: 11px; color: #8a94a6; margin-top: 2px; }
+        #eval-panel .bewertung-handwert { font-size: 12px; color: #c0c8d8; }
     </style>
     <!-- Persistent toggle tab — always visible, shows current score -->
-    <button id="eval-toggle" onclick="window.toggleEvalPanel()" title="Toggle Eval Panel">
+    <button id="eval-toggle" onclick="window.toggleEvalPanel()" title="Bewertung dieser Bubble">
         <span class="toggle-dot" id="eval-toggle-dot"></span>
         <span class="toggle-score" id="eval-toggle-score">—</span>
-        Eval
+        Bewertung
     </button>
 
     <div id="eval-panel" aria-hidden="true">
-        <button class="eval-close" onclick="window.closeEvalPanel()" title="Close (Esc)">×</button>
+        <button class="eval-close" onclick="window.closeEvalPanel()" title="Schließen (Esc)">×</button>
         <div id="eval-panel-content">
-            <div class="eval-empty">
-                No evaluation yet for the current bubble.
-                <div class="eval-empty-hint">
-                    Trigger via voice or chat:<br>
-                    "Evaluate bubble &lt;name&gt;"
-                </div>
-            </div>
+            <div class="eval-empty">Noch keine Bewertung für diese Bubble.</div>
         </div>
-        <div id="eval-panel-data" style="display:none">
-            <div class="eval-title" id="eval-bubble-title">Eval</div>
-            <div class="eval-subtitle" id="eval-timestamp"></div>
-
-            <div class="score-display">
-                <span class="score-number" id="eval-score">—</span>
-                <span class="score-max">/100</span>
-            </div>
-            <div class="score-bar"><div class="score-bar-fill" id="eval-score-bar" style="width:0%"></div></div>
-            <span class="score-prediction" id="eval-prediction"></span>
-
-            <div class="section-title">Per-Agent</div>
-            <div id="eval-agents"></div>
-
-            <div class="section-title">Top Missing<span class="todo-count" id="eval-todo-count"></span></div>
-            <div class="todo-list" id="eval-todos"></div>
-
-            <div class="section-title" id="eval-history-title" style="display:none">History</div>
-            <div id="eval-history"></div>
-        </div>
+        <!-- filled by bewertung-panel.js -->
+        <div id="eval-panel-data" style="display:none"></div>
     </div>
     <script>
-        // Bubble-specific side-panel controller.
+        // The evaluation panel of the bubble we are inside (renderer/bewertung-panel.js draws it).
+        // One source: ideas.metadata.bewertung_lauf in the database, read fresh on every look.
         // - Toggle tab + panel ONLY visible while inside a bubble (space-view open)
-        // - Cache per bubble-id in localStorage (so each bubble has its own eval)
-        // - Auto-opens panel when a new mirofish_result arrives for the CURRENT bubble
-        // - Empty state when current bubble has no eval yet
+        // - "Bewerten" (bubble bar) and "Neu bewerten" send the fixed sentence through the chat of the
+        //   bubble and show the run until a new run is in the database
+        // - To-dos: "Agent soll das erledigen" / "erledigt" send their fixed sentences the same way
 
-        const EVAL_STORAGE_PREFIX = 'vibemind.evalPanel.';
-        const _evalKeyFor = id => id ? EVAL_STORAGE_PREFIX + String(id) : null;
+        const BEWERTUNG_POLL_MS = 5000;
+        const BEWERTUNG_POLL_MAX_MS = 5 * 60 * 1000;
+        let _bewertungStand = null;          // what the panel shows for the current bubble
+        let _bewertungLauf = null;           // { seit, zeitVorher, bubble, timer } while a run is going
 
-        function _getCachedEval(bubbleId) {
-            const key = _evalKeyFor(bubbleId);
-            if (!key) return null;
-            try {
-                const raw = localStorage.getItem(key);
-                return raw ? JSON.parse(raw) : null;
-            } catch (e) { return null; }
-        }
-
-        function _saveCachedEval(bubbleId, msg) {
-            const key = _evalKeyFor(bubbleId);
-            if (!key) return;
-            try {
-                localStorage.setItem(key, JSON.stringify(msg));
-            } catch (e) { /* quota — skip */ }
-        }
-
-        function _updateToggleBadge(score) {
+        function _updateToggleBadge(stand) {
             const dot = document.getElementById('eval-toggle-dot');
             const scoreEl = document.getElementById('eval-toggle-score');
             if (!dot || !scoreEl) return;
-            if (score === null || score === undefined || isNaN(score)) {
+            if (!stand || stand.leer) {
                 scoreEl.textContent = '—';
                 dot.className = 'toggle-dot';
                 return;
             }
-            const s = Number(score);
-            scoreEl.textContent = Math.round(s);
-            dot.className = 'toggle-dot ' + (s >= 66 ? 'green' : s >= 33 ? 'yellow' : 'red');
+            scoreEl.textContent = String(stand.score);
+            dot.className = 'toggle-dot ' + window.VibeBewertung.farbe(stand);
         }
 
-        function _renderEvalContent(msg) {
-            // Hide empty-state, show data
-            document.getElementById('eval-panel-content').style.display = 'none';
-            document.getElementById('eval-panel-data').style.display = '';
+        /** Sends a fixed sentence through the chat of the bubble; the answer and any question come there. */
+        function _bewertungSatz(satz, event) {
+            const chat = window.VibeIdeasChat;
+            if (!satz || !chat || typeof chat.submit !== 'function') return false;
+            if (typeof chat.folded === 'function' && chat.folded() && typeof chat.fold === 'function') chat.fold(false);
+            // typed: only a click of the person; the preload checks it against the button it saw
+            chat.submit(satz, { typed: !!(event && event.isTrusted === true) });
+            return true;
+        }
 
-            const score = Number(msg.total_score) || 0;
-            const pred = msg.prediction || '?';
-
-            document.getElementById('eval-bubble-title').textContent = msg.bubble_name || 'Bubble';
-            document.getElementById('eval-timestamp').textContent = new Date(msg._renderedAt || Date.now()).toLocaleString();
-            document.getElementById('eval-score').textContent = score;
-            document.getElementById('eval-score-bar').style.width = Math.min(100, Math.max(0, score)) + '%';
-
-            const predEl = document.getElementById('eval-prediction');
-            predEl.textContent = pred;
-            predEl.style.background = score >= 66 ? 'rgba(68,255,102,0.18)'
-                                    : score >= 33 ? 'rgba(255,204,51,0.18)'
-                                                  : 'rgba(255,68,68,0.18)';
-            predEl.style.color = score >= 66 ? '#44ff66'
-                              : score >= 33 ? '#ffcc33'
-                                            : '#ff7070';
-
-            // Per-agent bars
-            const agentsEl = document.getElementById('eval-agents');
-            agentsEl.innerHTML = '';
-            const per = msg.per_agent || {};
-            const order = ['vibemind_coding','vibemind_swe_design','vibemind_research','vibemind_rowboat','vibemind_ideas'];
-            const labels = {
-                vibemind_coding:'Coding',
-                vibemind_swe_design:'SWE Design',
-                vibemind_research:'Research',
-                vibemind_rowboat:'Rowboat',
-                vibemind_ideas:'Ideas',
-            };
-            order.forEach(k => {
-                const data = per[k] || {};
-                const s = Number(data.score) || 0;
-                const row = document.createElement('div');
-                row.className = 'agent-row';
-                row.title = (data.assessment || '').slice(0, 400);
-                row.innerHTML = `
-                    <span class="agent-name">${labels[k] || k}</span>
-                    <span class="agent-bar"><span class="agent-bar-fill" style="width:${(s/25)*100}%"></span></span>
-                    <span class="agent-score">${s}/25</span>
-                `;
-                agentsEl.appendChild(row);
-            });
-
-            // TODO bubbles (top 15)
-            const todosEl = document.getElementById('eval-todos');
-            todosEl.innerHTML = '';
-            const missing = msg.missing_items || [];
-            document.getElementById('eval-todo-count').textContent = missing.length ? ` (${missing.length} total)` : '';
-            missing.slice(0, 15).forEach((item, idx) => {
-                const div = document.createElement('div');
-                div.className = 'todo-bubble' + (idx < 5 ? ' high-prio' : '');
-                div.textContent = item;
-                todosEl.appendChild(div);
-            });
-
-            // History bars (last 5 from eval_history if available)
-            const hist = msg.eval_history || [];
-            const histEl = document.getElementById('eval-history');
-            const histTitle = document.getElementById('eval-history-title');
-            histEl.innerHTML = '';
-            if (hist.length > 1) {
-                histTitle.style.display = '';
-                hist.slice(-5).forEach(h => {
-                    const s = Number(h.total_score) || 0;
-                    const row = document.createElement('div');
-                    row.className = 'history-row';
-                    const ts = h.ts ? new Date(h.ts * 1000).toLocaleDateString() : '?';
-                    row.innerHTML = `
-                        <span>${ts}</span>
-                        <span class="history-bar"><span class="history-bar-fill" style="width:${s}%"></span></span>
-                        <span class="agent-score">${s}</span>
-                    `;
-                    histEl.appendChild(row);
-                });
-            } else {
-                histTitle.style.display = 'none';
+        function _bewertungKarte(id) {
+            const canvas = window.spaceCanvas;
+            if (!canvas || typeof canvas.showCard !== 'function') return;
+            if (canvas.showCard(id)) return;
+            if (typeof canvas.showView === 'function') {
+                canvas.showView('karten');
+                canvas.showCard(id);
             }
-
-            _updateToggleBadge(score);
         }
 
-        // Track the DB-UUID of the bubble we're inside (set by enterSpace).
-        // window.__currentBubbleId is the LOCAL int id (Python's Bubble.id),
-        // which is NOT what mirofish_result emits (UUID). We need both.
+        function _renderBewertung() {
+            const empty = document.getElementById('eval-panel-content');
+            const box = document.getElementById('eval-panel-data');
+            if (!box || !window.VibeBewertung) return;
+            const stand = _bewertungStand || window.VibeBewertung.standOf({ row: { title: (window.__currentEvalBubble || {}).title } });
+            if (empty) empty.style.display = 'none';
+            box.style.display = '';
+            window.VibeBewertung.render(document, box, stand, {
+                laeuft: !!_bewertungLauf,
+                onRun: (e) => window.startBewertung(e),
+                onTodo: (nr, wie, e) => _bewertungSatz(window.VibeBewertung.todoSatz(nr, wie), e),
+                onCard: _bewertungKarte,
+            });
+        }
+
+        function _panelOpen() {
+            const panel = document.getElementById('eval-panel');
+            return !!(panel && panel.classList.contains('open'));
+        }
+
+        function _openPanel() {
+            const panel = document.getElementById('eval-panel');
+            if (!panel) return;
+            _renderBewertung();
+            panel.classList.add('open');
+            panel.setAttribute('aria-hidden', 'false');
+            const toggle = document.getElementById('eval-toggle');
+            if (toggle) toggle.classList.add('panel-open');
+        }
+
         window.__currentEvalBubble = { dbId: null, localId: null, title: null };
 
-        // Called by the IPC handler when mirofish_result arrives.
-        // Saves to per-bubble cache (keyed by DB-UUID, the field that mirofish
-        // populates). Only auto-opens the panel if the result is for the
-        // bubble the user is currently inside.
-        window.showEvalPanel = function(msg) {
-            if (!msg) return;
-            const evalId = msg.bubble_id || msg.bubble_name;   // UUID first, name as fallback
-            if (!evalId) return;
-            msg._renderedAt = Date.now();
-            _saveCachedEval(evalId, msg);
-            // Also cache by name so we can recover when enter-hook only has title
-            if (msg.bubble_name && msg.bubble_name !== evalId) {
-                _saveCachedEval(msg.bubble_name, msg);
-            }
-
+        // Old messages (mirofish_result, bubble_evolution_scored) bring no data any more: they only
+        // make the panel read the database again, the one source.
+        window.showEvalPanel = function() {
             const cur = window.__currentEvalBubble || {};
-            const isCurrent = (
-                (cur.dbId && (String(cur.dbId) === String(msg.bubble_id) ||
-                              String(cur.dbId).slice(0, 8) === String(msg.bubble_id || '').slice(0, 8))) ||
-                (cur.title && msg.bubble_name && cur.title === msg.bubble_name)
-            );
-            if (!isCurrent) {
-                // Not the current bubble — silent save (visible next time user
-                // enters that bubble).
-                return;
-            }
-
-            _renderEvalContent(msg);
-            const panel = document.getElementById('eval-panel');
-            if (panel) {
-                panel.classList.add('open');
-                panel.setAttribute('aria-hidden', 'false');
-            }
-            document.getElementById('eval-toggle').classList.add('panel-open');
-            // Reflect new score on the always-visible badge
-            _updateToggleBadge(msg.total_score);
+            if (cur.dbId || cur.title) window._fetchEvalFromDB(cur.dbId, cur.title);
         };
 
         window.closeEvalPanel = function() {
@@ -2458,35 +2308,42 @@
         };
 
         window.toggleEvalPanel = function() {
-            const panel = document.getElementById('eval-panel');
-            if (!panel) return;
-            if (panel.classList.contains('open')) {
+            if (_panelOpen()) {
                 window.closeEvalPanel();
                 return;
             }
-            // Opening — re-render from cache of CURRENT bubble, trying multiple keys
+            _openPanel();
             const cur = window.__currentEvalBubble || {};
-            const keys = [cur.dbId, cur.title, window.__currentBubbleId, cur.localId].filter(Boolean);
-            let cached = null;
-            for (const k of keys) {
-                cached = _getCachedEval(k);
-                if (cached) break;
-            }
-            if (cached) {
-                _renderEvalContent(cached);
-            } else {
-                document.getElementById('eval-panel-content').style.display = '';
-                document.getElementById('eval-panel-data').style.display = 'none';
-            }
-            panel.classList.add('open');
-            panel.setAttribute('aria-hidden', 'false');
-            document.getElementById('eval-toggle').classList.add('panel-open');
+            window._fetchEvalFromDB(cur.dbId, cur.title);
+        };
+
+        function _stopLauf() {
+            if (_bewertungLauf && _bewertungLauf.timer) clearInterval(_bewertungLauf.timer);
+            _bewertungLauf = null;
+        }
+
+        /** "Bewerten" / "Neu bewerten": send the sentence, open the panel, show the run until a new one is stored. */
+        window.startBewertung = function(event) {
+            if (_bewertungLauf) return false;
+            if (!_bewertungSatz(window.VibeBewertung && window.VibeBewertung.LAUF_SATZ, event)) return false;
+            const cur = window.__currentEvalBubble || {};
+            _bewertungLauf = { seit: Date.now(), zeitVorher: _bewertungStand && _bewertungStand.zeit, bubble: cur.dbId, timer: null };
+            _bewertungLauf.timer = setInterval(() => {
+                const lauf = _bewertungLauf;
+                const now = window.__currentEvalBubble || {};
+                if (!lauf || now.dbId !== lauf.bubble || Date.now() - lauf.seit > BEWERTUNG_POLL_MAX_MS) {
+                    _stopLauf();
+                    if (_panelOpen()) _renderBewertung();
+                    return;
+                }
+                window._fetchEvalFromDB(now.dbId, now.title);
+            }, BEWERTUNG_POLL_MS);
+            _openPanel();
+            return true;
         };
 
         // Called from bubble-navigation.js enterSpace() so the toggle tab +
-        // panel reflect the bubble the user is currently in. Multi-key
-        // lookup: try DB-UUID first, then title (since mirofish caches by
-        // both), then fall back to local int-id.
+        // panel reflect the bubble the user is currently in.
         window.onEvalBubbleEnter = function(primaryId, opts) {
             opts = opts || {};
             const toggle = document.getElementById('eval-toggle');
@@ -2509,105 +2366,49 @@
                 localId: opts.localId || null,
                 title: title,
             };
-
-            // Try cache keys in order — used ONLY as an instant optimistic
-            // badge while the authoritative DB value is fetched.
-            const keys = [opts.dbId, title, primaryId, opts.localId].filter(Boolean);
-            let cached = null;
-            for (const k of keys) {
-                cached = _getCachedEval(k);
-                if (cached) break;
-            }
-            // Optimistic: show the cached score immediately if we have one,
-            // so the badge isn't blank for the ~100ms REST round-trip.
-            _updateToggleBadge(cached ? cached.total_score : null);
-
-            // Phase 11.U.H — ALWAYS re-fetch from Supabase. The DB is the
-            // source of truth; localStorage cache goes stale the moment a
-            // re-eval runs (bug: cached 46 was shown forever even after the
-            // DB rose to 80, because the old code only hit the DB when
-            // there was NO cache). _fetchEvalFromDB overwrites the cache +
-            // badge + panel with the fresh value.
+            _stopLauf();
+            _bewertungStand = null;
+            _updateToggleBadge(null);
             window._fetchEvalFromDB(opts.dbId || primaryId, title);
-            // Don't auto-open here — wait for user click or new eval
         };
 
-        // Pull persisted ai_eval from Supabase REST and feed it to the
-        // panel via the same adapter shape showEvalPanel expects.
+        // Reads the bubble row and its cards from Supabase REST and feeds the panel.
         window._fetchEvalFromDB = async function(bubbleDbId, title) {
             if (!bubbleDbId && !title) return;
             try {
-                // Phase 11.U.K — window.__SUPABASE_URL/__SUPABASE_ANON_KEY were
-                // read here but SET NOWHERE, so this fetch always fell through
-                // to a hardcoded 127.0.0.1 with an EMPTY key (no auth header at
-                // all), while the canvas talked to whichever instance the
-                // preload bridge names. Use that same config — one place decides.
+                // the same config the canvas uses (preload bridge): one place decides
                 const { base, headers: hdrs } = _supabaseRestConfig();
-                // Phase 11.U.H — DB-UUIDs here are 8+ hex chars (e.g.
-                // ff16dc78). On an auto-enter (force_resync race) the 3D
-                // object isn't loaded yet so enterSpace passes the LOCAL
-                // int id, not the UUID — `id=eq.3` matches nothing and the
-                // eval silently never appears ("da fehlt eval"). Detect a
-                // non-UUID id and resolve by title instead.
+                // On an auto-enter the 3D object may not be loaded yet and enterSpace passes the LOCAL
+                // int id, not the UUID: then the bubble is found by its title.
                 const looksUuid = /^[0-9a-f]{6,}$/i.test(String(bubbleDbId || ''));
                 let url;
                 if (bubbleDbId && looksUuid) {
-                    url = `${base}/ideas?id=eq.${encodeURIComponent(bubbleDbId)}&select=title,score,metadata`;
+                    url = `${base}/ideas?id=eq.${encodeURIComponent(bubbleDbId)}&select=id,title,metadata`;
                 } else if (title) {
-                    url = `${base}/ideas?title=eq.${encodeURIComponent(title)}&parent_id=is.null&select=id,title,score,metadata&limit=1`;
+                    url = `${base}/ideas?title=eq.${encodeURIComponent(title)}&parent_id=is.null&select=id,title,metadata&limit=1`;
                 } else {
-                    return;  // no UUID and no title — can't resolve
+                    return;
                 }
                 const r = await fetch(url, { headers: hdrs });
                 if (!r.ok) return;
                 const rows = await r.json();
                 const row = Array.isArray(rows) ? rows[0] : rows;
-                const ae = row && row.metadata && row.metadata.ai_eval;
-                if (!ae) return;
-                const sc = Math.round(Number(row.score) || 0);
-                // Use the row's real UUID (when resolved by title, the
-                // passed bubbleDbId was a local int — row.id is the truth).
-                const realId = (row && row.id) || bubbleDbId;
-                const adapted = {
-                    action: 'evaluate_readiness',
-                    bubble_id: realId,
-                    bubble_name: row.title || title || 'Bubble',
-                    total_score: sc,
-                    prediction: sc >= 66 ? 'GO' : sc >= 40 ? 'NEEDS_WORK' : 'NOT_READY',
-                    per_agent: {
-                        vibemind_coding:    { score: Math.round((ae.actionability||0)*2.5), assessment: 'Actionability' },
-                        vibemind_swe_design:{ score: Math.round((ae.structure||0)*2.5),     assessment: 'Structure' },
-                        vibemind_research:  { score: Math.round((ae.depth||0)*2.5),         assessment: 'Depth' },
-                        vibemind_ideas:     { score: Math.round((ae.completeness||0)*2.5),  assessment: 'Completeness' },
-                        vibemind_rowboat:   { score: 0, assessment: ae.summary || '' },
-                    },
-                    missing_items: Array.isArray(ae.recommendations) ? ae.recommendations : [],
-                    eval_history: [],
-                    _summary: ae.summary || '',
-                    _fromDB: true,
-                };
-                // Cache it so toggle/badge work, update badge; don't force-open
-                try {
-                    if (typeof _saveCachedEval === 'function') {
-                        _saveCachedEval(realId, adapted);
-                        if (bubbleDbId && bubbleDbId !== realId) _saveCachedEval(bubbleDbId, adapted);
-                        if (title) _saveCachedEval(title, adapted);
-                    }
-                } catch (e) { /* ignore */ }
-                _updateToggleBadge(sc);
-                // Phase 11.U.H — if the panel is already OPEN, re-render its
-                // body with the fresh DB eval. Without this, a user with the
-                // panel open kept seeing the stale 46 even after the DB rose
-                // to 80 (badge updated, body didn't).
-                try {
-                    const panel = document.getElementById('eval-panel');
-                    if (panel && panel.classList.contains('open')
-                        && typeof window.showEvalPanel === 'function') {
-                        window.showEvalPanel(adapted);
-                    }
-                } catch (e) { /* non-fatal */ }
+                if (!row || !row.id) return;
+                // an answer for a bubble we have left since is dropped
+                const cur = window.__currentEvalBubble || {};
+                if (cur.dbId !== (bubbleDbId || cur.dbId)) return;
+                const c = await fetch(`${base}/canvas_nodes?linked_idea_id=eq.${encodeURIComponent(row.id)}&select=id,title,updated_at`, { headers: hdrs });
+                const cards = c.ok ? await c.json() : [];
+                const stand = window.VibeBewertung.standOf({ row, cards });
+                _bewertungStand = stand;
+                if (_bewertungLauf && !stand.leer && stand.zeit && stand.zeit !== _bewertungLauf.zeitVorher) _stopLauf();
+                _updateToggleBadge(stand);
+                if (!stand.leer && window.multiverseApp?.updateBubbleScore) {
+                    try { window.multiverseApp.updateBubbleScore(row.id, stand.score); } catch (e) { /* non-fatal */ }
+                }
+                if (_panelOpen()) _renderBewertung();
             } catch (e) {
-                console.warn('[eval-panel] DB fallback fetch failed:', e);
+                console.warn('[eval-panel] reading the evaluation failed:', e);
             }
         };
 

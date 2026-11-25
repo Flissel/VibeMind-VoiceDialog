@@ -38,7 +38,24 @@ let lastSend = null; // { at, text }
 const SENTENCE_BUTTONS = Object.freeze({
     'bubble-summary-btn': 'Fasse diese Bubble zusammen',
     'bubble-whitepaper-btn': 'Erstelle ein White Paper aus dieser Bubble',
+    // Bewerten (bubble bar) and Neu bewerten (evaluation panel): one run of the Brain
+    'bubble-eval-btn': 'Bewerte diese Bubble',
+    'eval-rerun-btn': 'Bewerte diese Bubble',
 });
+
+/**
+ * The to-do buttons of the evaluation panel (renderer/bewertung-panel.js): the sentence is built
+ * here from the number on the button, never taken from the page; only these two forms exist.
+ */
+function todoSentence(button) {
+    if (!button.classList || !button.classList.contains('bewertung-todo-btn') || button.disabled) return '';
+    const nr = Number(button.dataset && button.dataset.todoNr);
+    if (!Number.isInteger(nr) || nr < 1 || nr > 99) return '';
+    const how = button.dataset.todoWie;
+    if (how === 'agent') return `Erledige To-do ${nr}`;
+    if (how === 'hand') return `To-do ${nr} erledigt`;
+    return '';
+}
 
 function noteSend(field) {
     const input = field && typeof document !== 'undefined' ? document.getElementById(field) : null;
@@ -57,6 +74,8 @@ try {
         if (!button) return;
         if (SEND_BUTTONS[button.id]) { noteSend(SEND_BUTTONS[button.id]); return; }
         if (SENTENCE_BUTTONS[button.id] && !button.disabled) { lastSend = { at: Date.now(), text: SENTENCE_BUTTONS[button.id] }; return; }
+        const todo = todoSentence(button);
+        if (todo) { lastSend = { at: Date.now(), text: todo }; return; }
         const form = button.closest('form.ideas-chat-row');
         if (form && button.type === 'submit') noteSend('ideas-chat-input');
     }, true);
@@ -117,8 +136,9 @@ contextBridge.exposeInMainWorld('vibemind', {
     // or click it saw on the chat field and the text that stood there (sentByPerson).
     sendChatMessage: (text, context, typed) =>
         ipcRenderer.invoke('renderer:chat-text-input', { text, context, typed: typed === true && sentByPerson(text) }),
-    // The sentences of the buttons Zusammenfassung and White Paper of a bubble (see SENTENCE_BUTTONS).
-    bubbleSentences: { summary: SENTENCE_BUTTONS['bubble-summary-btn'], whitepaper: SENTENCE_BUTTONS['bubble-whitepaper-btn'] },
+    // The sentences of the buttons Zusammenfassung, White Paper and Bewerten of a bubble (see SENTENCE_BUTTONS).
+    bubbleSentences: { summary: SENTENCE_BUTTONS['bubble-summary-btn'], whitepaper: SENTENCE_BUTTONS['bubble-whitepaper-btn'],
+        evaluate: SENTENCE_BUTTONS['bubble-eval-btn'] },
 
     // Send tool action from UI toolbar (triggers intent orchestrator directly)
     sendToolAction: (eventType, payload = {}) => ipcRenderer.send('to-python', {
