@@ -11,6 +11,12 @@
  * "<sec>\nhand-klick <x> <y>", key VIBEMIND_EINGABE_SCHLUESSEL), the same form as for a typed
  * sentence (python/swarm/routing/brain_multihop_bridge.py). The key is read here only, never
  * handed to the renderer and never logged. Without it no click goes out.
+ *
+ * The sign says "a person clicked". The renderer alone cannot vouch for that (any script in it
+ * could ask), so the main process watches the real mouse input of the app window
+ * (webContents 'input-event', which a page cannot fake): a click is signed only when a real left
+ * mouse press happened at the same place of the window (CLIENT_TOLERANCE) within WITNESS_MS,
+ * and each press is used once. The Brain takes each sign only once as well.
  */
 const crypto = require('node:crypto');
 const http = require('node:http');
@@ -21,6 +27,8 @@ const HEADER = 'X-Vibemind-Eingabe';
 const LIMIT = 20000;               // the Brain takes -20000…20000
 const CLICK_TIMEOUT_MS = 60000;    // a click waits for its approval in OpenFang
 const LIST_TIMEOUT_MS = 4000;
+const WITNESS_MS = 1500;           // from the press to the request (the click fires on release)
+const CLIENT_TOLERANCE = 4;        // pixels of the window between press and the place asked
 
 function brainPort(env) {
   const text = String(env.BRAIN_PORT || '').trim();
@@ -60,6 +68,30 @@ function brainRequest({ port, method, path, body, headers = {}, timeoutMs }, req
     if (data) req.write(data);
     req.end();
   });
+}
+
+/**
+ * The last real left mouse press in the app window, kept by the main process.
+ * record() takes Electron input events; take() hands the press out once, when it is fresh and
+ * at the place (window pixels, the renderer's client coordinates times the zoom factor).
+ */
+function createClickWitness(nowMs = () => Date.now()) {
+  let last = null;
+  return {
+    record(input) {
+      if (!input || input.type !== 'mouseDown' || (input.button && input.button !== 'left')) return;
+      if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return;
+      last = { x: input.x, y: input.y, at: nowMs(), used: false };
+    },
+    take(clientX, clientY, zoom = 1) {
+      if (!last || last.used || nowMs() - last.at > WITNESS_MS) return false;
+      if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
+      const factor = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+      if (Math.abs(clientX * factor - last.x) > CLIENT_TOLERANCE || Math.abs(clientY * factor - last.y) > CLIENT_TOLERANCE) return false;
+      last.used = true;
+      return true;
+    },
+  };
 }
 
 function createDesktopKlicks(deps = {}) {
@@ -105,14 +137,22 @@ function createDesktopKlicks(deps = {}) {
  */
 function registerDesktopKlicks(ipcMain, isOwnSender, deps = {}) {
   const api = createDesktopKlicks(deps);
+  const witness = deps.witness || createClickWitness(deps.nowMs);
   ipcMain.handle('desktop:klicks', (event, seit) => (isOwnSender(event) ? api.klicks(Number(seit)) : { success: false, klicks: [], error: 'fremd' }));
   ipcMain.handle('desktop:hand-klick', (event, args) => {
     if (!isOwnSender(event)) return { ok: false, grund: 'fremd' };
     const x = args && args.x;
     const y = args && args.y;
+    const zoom = event.sender && typeof event.sender.getZoomFactor === 'function' ? event.sender.getZoomFactor() : 1;
+    // no real press at this place just now: no sign, nothing goes out
+    if (!witness.take(args && args.clientX, args && args.clientY, zoom)) return { ok: false, x, y, grund: 'kein_echter_klick' };
     return api.handKlick(x, y);
   });
-  return api;
+  /** Watch the real mouse input of the app window (call for each new window). */
+  function watch(webContents) {
+    webContents.on('input-event', (_event, input) => witness.record(input));
+  }
+  return { ...api, watch };
 }
 
-module.exports = { createDesktopKlicks, registerDesktopKlicks, zeichen, brainPort, KEY_NAME, HEADER };
+module.exports = { createDesktopKlicks, createClickWitness, registerDesktopKlicks, zeichen, brainPort, KEY_NAME, HEADER, WITNESS_MS };

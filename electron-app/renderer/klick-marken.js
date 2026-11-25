@@ -41,6 +41,7 @@
         gehirn_nicht_erreichbar: 'Gehirn fehlt',
         keine_antwort: 'keine Antwort',
         eingabe_ungueltig: 'ungültige Stelle',
+        kein_echter_klick: 'kein echter Klick',
     });
 
     function reasonText(grund) {

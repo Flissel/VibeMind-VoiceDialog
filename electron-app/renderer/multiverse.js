@@ -3523,7 +3523,7 @@ class MultiverseApp {
                 const marks = this._klickMarken;
                 if (!window.vibemind || !window.vibemind.handKlick) return;
                 try {
-                    const answer = await window.vibemind.handKlick(realX, realY);
+                    const answer = await window.vibemind.handKlick(realX, realY, e.clientX, e.clientY);
                     if (marks) marks.add({ x: realX, y: realY, ...(answer || { ok: false, grund: 'keine_antwort' }) });
                 } catch (err) {
                     if (marks) marks.add({ x: realX, y: realY, ok: false, grund: 'keine_antwort' });

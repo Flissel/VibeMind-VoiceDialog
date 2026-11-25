@@ -104,7 +104,7 @@ contextBridge.exposeInMainWorld('vibemind', {
     sendToPython: (message) => ipcRenderer.send('to-python', message),
     // Desktop space: marks of the clicks and a click on the picture (desktop-klicks.js in main)
     desktopKlicks: (seit) => ipcRenderer.invoke('desktop:klicks', seit),
-    handKlick: (x, y) => ipcRenderer.invoke('desktop:hand-klick', { x, y }),
+    handKlick: (x, y, clientX, clientY) => ipcRenderer.invoke('desktop:hand-klick', { x, y, clientX, clientY }),
 
     // Write renderer log to file (for autonomous debugging)
     writeLog: (level, ...args) => ipcRenderer.send('renderer-log', { level, args }),

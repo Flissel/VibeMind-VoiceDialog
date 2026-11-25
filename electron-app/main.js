@@ -135,6 +135,7 @@ if (app && app.commandLine && process.env.VIBEMIND_ENABLE_CDP === '1') {
 // electron . --disable-gpu --enable-unsafe-swiftshader --enable-webgl --ignore-gpu-blocklist
 
 let mainWindow = null;
+let desktopKlicks = null;   // desktop-klicks.js: watches the real mouse input of the window
 let pythonProcess = null;
 let tray = null;
 
@@ -304,6 +305,9 @@ function createWindow() {
         },
         icon: path.join(__dirname, 'build', 'icon.png'),
     });
+    // a click on the desktop picture is signed only after a real press there (desktop-klicks.js)
+    if (desktopKlicks) desktopKlicks.watch(mainWindow.webContents);
+
 
     // Grant microphone permission for Vapi voice dashboard (iframe at localhost:8007)
     mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -1200,7 +1204,7 @@ function setupIpcHandlers() {
     
     // Desktop space: the clicks of the task book and a click on the picture, through the Brain
     // (desktop-klicks.js; the key of the sign stays in this process). Only the app window asks.
-    registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+    desktopKlicks = registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
 
     // ========================================
     // MULTIVERSE NAVIGATION

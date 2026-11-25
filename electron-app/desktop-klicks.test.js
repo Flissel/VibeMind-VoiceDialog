@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
 
-const { createDesktopKlicks, registerDesktopKlicks, zeichen, brainPort, HEADER } = require('./desktop-klicks');
+const { createDesktopKlicks, createClickWitness, registerDesktopKlicks, zeichen, brainPort, HEADER, WITNESS_MS } = require('./desktop-klicks');
 const KM = require('./renderer/klick-marken');
 
 const KEY = 'erfundener-schluessel-mit-mehr-als-32-zeichen';
@@ -93,17 +93,44 @@ test('the clicks of the book are asked with seit, and a failure is an empty list
     assert.deepEqual((await missing.klicks()).klicks, []);
 });
 
-test('only the window of the app may ask through IPC', async () => {
+test('only the window of the app may ask, and a click is signed only after a real press at that place', async () => {
     const handlers = {};
     const ipcMain = { handle: (name, fn) => { handlers[name] = fn; } };
     const fake = fakeRequest({ status: 200, body: { ok: true } });
-    const own = {};
-    registerDesktopKlicks(ipcMain, (event) => event.sender === own, { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request });
+    let clock = 1000;
+    const inputs = {};
+    const own = { getZoomFactor: () => 1, on: (name, fn) => { inputs[name] = fn; } };
+    const api = registerDesktopKlicks(ipcMain, (event) => event.sender === own,
+        { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request, nowMs: () => clock });
+    api.watch(own);
+    const press = (x, y, extra = {}) => inputs['input-event']({}, { type: 'mouseDown', button: 'left', x, y, ...extra });
+    const click = (clientX, clientY) => handlers['desktop:hand-klick']({ sender: own }, { x: 1, y: 2, clientX, clientY });
+
     assert.deepEqual(Object.keys(handlers).sort(), ['desktop:hand-klick', 'desktop:klicks']);
     assert.deepEqual(await handlers['desktop:hand-klick']({ sender: {} }, { x: 1, y: 2 }), { ok: false, grund: 'fremd' });
     assert.equal((await handlers['desktop:klicks']({ sender: {} }, 0)).error, 'fremd');
-    assert.equal(fake.asked.length, 0);
-    assert.equal((await handlers['desktop:hand-klick']({ sender: own }, { x: 1, y: 2 })).ok, true);
+
+    // a script in the renderer asks without a press: nothing is signed, nothing goes out
+    assert.equal((await click(100, 200)).grund, 'kein_echter_klick');
+    press(100, 200);
+    assert.equal((await click(160, 200)).grund, 'kein_echter_klick', 'the press was elsewhere');
+    assert.equal((await click(102, 199)).ok, true, 'a real press at the place: signed and sent');
+    assert.equal((await click(102, 199)).grund, 'kein_echter_klick', 'each press is used once');
+    press(300, 300);
+    clock += WITNESS_MS + 1;
+    assert.equal((await click(300, 300)).grund, 'kein_echter_klick', 'a stale press counts no more');
+    press(300, 300, { button: 'right' });
+    assert.equal((await click(300, 300)).grund, 'kein_echter_klick', 'a right press is no click');
+    inputs['input-event']({}, { type: 'mouseUp', button: 'left', x: 300, y: 300 });
+    assert.equal((await click(300, 300)).grund, 'kein_echter_klick');
+    assert.equal(fake.asked.length, 1);
+});
+
+test('the witness compares window pixels: client coordinates times the zoom', () => {
+    const w = createClickWitness(() => 0);
+    w.record({ type: 'mouseDown', button: 'left', x: 300, y: 150 });
+    assert.equal(w.take(200, 100, 1.5), true);
+    assert.equal(w.take(Number.NaN, 1), false);
 });
 
 test('a mark: colour by source, refused red with its reason, dry run as outline, fading over 30 s', () => {
@@ -182,7 +209,7 @@ test('while shown the book is asked with the newest zeit; stop ends it; the book
 test('the Desktop view sends the click through the Brain and stops asking when the space is left', () => {
     const scene = read('renderer', 'multiverse.js');
     assert.doesNotMatch(scene, /8007\/api\/automation\/click/, 'the old route that clicks without block list is gone');
-    assert.match(scene, /await window\.vibemind\.handKlick\(realX, realY\)/);
+    assert.match(scene, /await window\.vibemind\.handKlick\(realX, realY, e\.clientX, e\.clientY\)/);
     assert.match(scene, /marks\.add\(\{ x: realX, y: realY,/);
     assert.match(scene, /markCanvas\.className = 'klick-marken-canvas';/);
     assert.match(scene, /if \(this\.currentSpace === 'desktop' && targetSpace !== 'desktop'\) \{\s*\/\/[^\n]*\n\s*if \(this\._desktopStream\) this\._desktopStream\.stop\(\);/);
@@ -192,10 +219,11 @@ test('the Desktop view sends the click through the Brain and stops asking when t
 
     const preload = read('preload.js');
     assert.match(preload, /desktopKlicks: \(seit\) => ipcRenderer\.invoke\('desktop:klicks', seit\)/);
-    assert.match(preload, /handKlick: \(x, y\) => ipcRenderer\.invoke\('desktop:hand-klick', \{ x, y \}\)/);
+    assert.match(preload, /handKlick: \(x, y, clientX, clientY\) => ipcRenderer\.invoke\('desktop:hand-klick', \{ x, y, clientX, clientY \}\)/);
     assert.doesNotMatch(preload, /EINGABE_SCHLUESSEL/, 'the key never reaches the renderer');
     const main = read('main.js');
     assert.match(main, /registerDesktopKlicks\(ipcMain, \(event\) => Boolean\(mainWindow\) && !mainWindow\.isDestroyed\(\) && event\.sender === mainWindow\.webContents\)/);
+    assert.match(main, /mainWindow = new BrowserWindow\(\{[\s\S]*?\n    \}\);\s*\n\s*\/\/[^\n]*\n\s*if \(desktopKlicks\) desktopKlicks\.watch\(mainWindow\.webContents\);/, 'the window is watched as soon as it exists');
     const html = read('renderer', 'index.html');
     assert.ok(html.indexOf('src="klick-marken.js"') > html.indexOf('src="multiverse.js"'));
 });
