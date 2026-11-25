@@ -113,7 +113,7 @@ test('one visible field per tab: the Ideas chat rests outside Ideas, the console
     // another tab closes the bubble: its view lay over every other tab
     const scene = read('renderer/multiverse.js');
     assert.match(scene, /this\.isNavigating = true;[\s\S]{0,400}this\._leaveOpenBubble\(targetSpace\);/);
-    assert.match(scene, /_leaveOpenBubble\(targetSpace\) \{\s*if \(targetSpace === 'ideas'\) return false;[\s\S]{0,700}nav\.exitSpace\(\)/);
+    assert.match(scene, /_leaveOpenBubble\(targetSpace\) \{\s*if \(targetSpace === 'ideas'\) return false;[\s\S]{0,700}nav\.exitSpace\(false, 'bereichswechsel'\)/);
     assert.match(scene, /const shownContext = answers \? answers\.contextFor\(this\.currentSpace, ideas\) : ideas;/);
     assert.match(scene, /const context = trace \? \{ \.\.\.\(shownContext \|\| \{\}\), trace_id: trace \} : shownContext;/);
 });

@@ -135,8 +135,8 @@
             app.scene.add(entry.group);
             if (root.VibeSceneKit) root.VibeSceneKit.polishObject(THREE, entry.group);
             addTab(root.document, space, () => {
-                if (root.spaceNavigator) root.spaceNavigator.switchSpace(space.id);
-                else app.navigateToSpace(space.id);
+                if (root.spaceNavigator) root.spaceNavigator.switchSpace(space.id, { quelle: 'tab' });
+                else app.navigateToSpace(space.id, { quelle: 'tab' });
             });
         }
         // The gates turn slowly towards nothing in particular; a small sign of life.

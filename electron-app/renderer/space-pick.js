@@ -64,7 +64,18 @@
         return best;
     }
 
-    const api = { pickSpace, TARGETS };
+    /**
+     * Lauf 34: "← Zurück" in a bubble, and a second click on the same spot a second later hit the
+     * rose of Blue Rose in the scene that now lay under the pointer: the app stood in another space.
+     * A click on a space object counts only once PICK_AFTER_EXIT_MS have passed since a bubble was left.
+     */
+    const PICK_AFTER_EXIT_MS = 1500;
+    function pickAllowed(bubbleLeftAt, now) {
+        const since = now - bubbleLeftAt;
+        return !(Number.isFinite(since) && since >= 0 && since < PICK_AFTER_EXIT_MS);
+    }
+
+    const api = { pickSpace, pickAllowed, PICK_AFTER_EXIT_MS, TARGETS };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.VibeSpacePick = api;
 })(typeof window !== 'undefined' ? window : globalThis);

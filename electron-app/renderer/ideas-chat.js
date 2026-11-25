@@ -515,7 +515,7 @@
             const last = list[list.length - 1];
             if (last && last.kind !== 'user') mirror(last.text, last.kind);   // the answer came first
             const nav = root.bubbleNavigation;
-            if (nav && typeof nav.exitSpace === 'function') nav.exitSpace();
+            if (nav && typeof nav.exitSpace === 'function') nav.exitSpace(false, 'bubble-geloescht');
             return true;
         }
 

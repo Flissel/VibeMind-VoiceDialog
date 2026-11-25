@@ -2276,6 +2276,10 @@ class MultiverseApp {
             return false;
         }
 
+        // H4c: every switch names where it came from (a tab, the scene, a key, the status line, the
+        // Brain ...); a call without a source is a script or an unknown way. Only names, no content.
+        const quelle = typeof options.quelle === 'string' && /^[a-z-]{1,24}$/.test(options.quelle) ? options.quelle : 'unbekannt';
+        console.log('[Space] Wechsel nach ' + targetSpace + ' durch ' + quelle);
         console.log('[Multiverse] Navigating to:', targetSpace);
         this.isNavigating = true;
         // Another tab while a bubble is open: the bubble closes. Its view lay over every other tab, with
@@ -2553,7 +2557,7 @@ class MultiverseApp {
         const view = document.getElementById('space-view');
         if (!view || view.classList.contains('hidden')) return false;
         const nav = window.bubbleNavigation;
-        if (nav && typeof nav.exitSpace === 'function') nav.exitSpace();
+        if (nav && typeof nav.exitSpace === 'function') nav.exitSpace(false, 'bereichswechsel');
         else view.classList.add('hidden');
         return true;
     }
@@ -2899,7 +2903,7 @@ class MultiverseApp {
         const prevIndex = (currentIndex - 1 + spaceKeys.length) % spaceKeys.length;
         const prevSpace = spaceKeys[prevIndex];
         
-        this.navigateToSpace(prevSpace);
+        this.navigateToSpace(prevSpace, { quelle: 'geste' });
     }
     
     /**
@@ -2913,7 +2917,7 @@ class MultiverseApp {
         const nextIndex = (currentIndex + 1) % spaceKeys.length;
         const nextSpace = spaceKeys[nextIndex];
         
-        this.navigateToSpace(nextSpace);
+        this.navigateToSpace(nextSpace, { quelle: 'geste' });
     }
     
     // ========================================================================
@@ -2932,26 +2936,27 @@ class MultiverseApp {
                     this._exitFlowzenRose();
                 } else if (this._insideDesktopDashboard) {
                     this.exitDesktopDashboard();
-                } else {
+                } else if (this.isInsideBubble) {
+                    console.log('[Exit] Bubble verlassen durch taste');
                     this.exitBubbleWithAnimation();
                 }
                 break;
             case 'ArrowLeft':
                 // Navigate to Ideas Space
                 if (!this.isNavigating) {
-                    this.navigateToSpace('ideas');
+                    this.navigateToSpace('ideas', { quelle: 'taste' });
                 }
                 break;
             case 'ArrowUp':
                 // Navigate to Project Space
                 if (!this.isNavigating) {
-                    this.navigateToSpace('projects');
+                    this.navigateToSpace('projects', { quelle: 'taste' });
                 }
                 break;
             case 'ArrowRight':
                 // Navigate to Desktop Space
                 if (!this.isNavigating) {
-                    this.navigateToSpace('desktop');
+                    this.navigateToSpace('desktop', { quelle: 'taste' });
                 }
                 break;
             case 'Tab':
@@ -3278,7 +3283,13 @@ class MultiverseApp {
             : [];
         const clickedSpace = window.VibeSpacePick.pickSpace(raycaster, this.spaces, this.currentSpace, bubblesInFront);
         if (clickedSpace) {
-            this.navigateToSpace(clickedSpace);
+            // Right after leaving a bubble the scene lies under the pointer of a second click on the same
+            // spot (Lauf 34: "← Zurück", then the rose): that click opens no space.
+            if (!window.VibeSpacePick.pickAllowed(this.bubbleLeftAt, Date.now())) {
+                console.log('[Space] Szenenklick auf ' + clickedSpace + ' uebergangen: Bubble eben verlassen');
+                return;
+            }
+            this.navigateToSpace(clickedSpace, { quelle: 'szene' });
             return;
         }
         // Check based on current space
@@ -4398,6 +4409,7 @@ class MultiverseApp {
         }
         
         console.log('[Multiverse] Exiting bubble with animation');
+        this.bubbleLeftAt = Date.now();   // a scene click right after this opens no space (space-pick.js)
         
         this.isNavigating = true;
         
@@ -4858,7 +4870,7 @@ class MultiverseApp {
         for (const [spaceId, space] of Object.entries(this.spaces)) {
             if (space.agent && space.agent.slug === agentSlug) {
                 if (this.currentSpace !== spaceId) {
-                    this.navigateToSpace(spaceId);
+                    this.navigateToSpace(spaceId, { quelle: 'agent' });
                 }
                 break;
             }

@@ -882,7 +882,7 @@ test('a direct answer naming only a space: the app goes there (desktop, coding i
     const answered = (detail) => w.window.dispatchEvent(new w.window.CustomEvent('vibemind:sentence-answered', { detail }));
     answered({ text: 'Offen sind zwei Fenster.', success: true, space: 'clawport', ziel: { space: 'desktop', bubble_id: null, node_id: null } });
     assert.deepEqual(went, ['desktop']);
-    assert.deepEqual({ ...how[0] }, { quick: true, back: true }, 'Lauf 26: the short flight, and the way back');
+    assert.deepEqual({ ...how[0] }, { quick: true, back: true, quelle: 'ziel' }, 'Lauf 26: the short flight, and the way back');
     answered({ text: 'Zwei Projekte laufen.', success: true, space: 'desktop', ziel: { space: 'coding', bubble_id: null, node_id: null } });
     assert.deepEqual(went, ['desktop', 'projects']);
 });

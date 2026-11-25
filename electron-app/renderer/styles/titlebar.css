@@ -64,6 +64,13 @@
     display: none;
 }
 
+/* A button: it shows that a click goes somewhere (H4c). */
+.task-status:hover {
+    border-color: rgba(160, 205, 255, 0.85);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .task-status[data-state="done"] {
     border-color: rgba(68, 255, 136, 0.55);
     background: rgba(30, 110, 70, 0.35);

@@ -13,6 +13,7 @@ function element(id) {
         id, hidden: false, textContent: '', title: '', className: '', dataset: {},
         listeners: {},
         addEventListener(type, fn) { this.listeners[type] = fn; },
+        setAttribute(k, v) { this[k] = v; },
     };
 }
 
@@ -37,7 +38,8 @@ function scene({ currentSpace = 'ideas' } = {}) {
         },
         // The tab switch of the scene: arrives at once here (the camera move is not part of this test).
         spaceNavigator: {
-            switchSpace(space) {
+            switchSpace(space, options) {
+                window.switched = (window.switched || []).concat([[space, options && options.quelle]]);
                 window.multiverseApp.currentSpace = space;
                 window.dispatchEvent(new window.CustomEvent('vibemind:space-arrived', { detail: { space } }));
             },
@@ -53,6 +55,9 @@ function scene({ currentSpace = 'ideas' } = {}) {
     return {
         handle: window.VibeTaskNav.handle,
         app: window.multiverseApp,
+        switched: () => window.switched || [],
+        click: () => line().listeners.click({}),
+        line,
         emit: (type, detail) => window.dispatchEvent(new window.CustomEvent(type, { detail })),
         // the Enter that sends a sentence: a trusted key press reaches the window first
         pressEnter: () => window.dispatchEvent({ type: 'keydown', key: 'Enter', isTrusted: true }),
@@ -284,4 +289,24 @@ test('at the end the hidden line keeps no old text', () => {
     s.advance(s.GRACE);
     assert.equal(s.visible(), false);
     assert.equal(s.text(), '');
+});
+
+// H4c (Lauf 33): the status line is a button that jumps to the space of its task. It says so, and
+// the jump names itself in the log as one of the status line.
+test('the status line says that a click goes to the space of its task, and the jump names its source', () => {
+    const s = scene({ currentSpace: 'roarboot' });
+    const b = brain(s, 'desktop', 'desktop_open_app');
+    typedSentence(s);
+    b.started();
+    b.hopStarted(); b.hopCompleted(); b.completed();
+    s.emit('vibemind:sentence-answered', { text: 'Der Rechner ist offen.', success: true });
+    for (let i = 0; i < 40; i++) s.advance(300);
+    assert.equal(s.visible(), true);
+    assert.match(s.line().title, /Klick: zum Bereich Desktop$/);
+    assert.match(s.line()['aria-label'], /Klick: zum Bereich Desktop$/);
+    s.click();
+    assert.deepEqual(s.switched(), [['desktop', 'statuszeile']]);
+    const css = fs.readFileSync(path.join(__dirname, 'renderer', 'styles', 'titlebar.css'), 'utf8');
+    assert.match(css, /\.task-status \{[^}]*cursor: pointer;/);
+    assert.match(css, /\.task-status:hover \{[^}]*text-decoration: underline;/);
 });

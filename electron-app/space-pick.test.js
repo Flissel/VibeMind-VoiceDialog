@@ -83,3 +83,22 @@ test('the click handler asks pickSpace and no longer walks the spaces in a fixed
     assert.match(scene, /window\.VibeSpacePick\.pickSpace\(raycaster, this\.spaces, this\.currentSpace/);
     assert.doesNotMatch(scene, /const factoryHit = raycaster\.intersectObjects/);
 });
+
+// H4c (Lauf 34): "← Zurück", a second click on the same spot a second later hit the rose in the scene.
+test('a click on a space object counts only 1.5 s after a bubble was left', () => {
+    const { pickAllowed, PICK_AFTER_EXIT_MS } = require('./renderer/space-pick');
+    assert.equal(PICK_AFTER_EXIT_MS, 1500);
+    assert.equal(pickAllowed(undefined, 5000), true, 'no bubble left yet');
+    assert.equal(pickAllowed(10000, 10000), false);
+    assert.equal(pickAllowed(10000, 11000), false, 'one second after, as in Lauf 34');
+    assert.equal(pickAllowed(10000, 11500), true);
+    assert.equal(pickAllowed(10000, 9000), true, 'a clock that went back blocks nothing');
+    const scene = fs.readFileSync(path.join(__dirname, 'renderer', 'multiverse.js'), 'utf8');
+    const has = (text, part, why) => assert.ok(text.includes(part), why || part);
+    has(scene, "if (!window.VibeSpacePick.pickAllowed(this.bubbleLeftAt, Date.now())) {");
+    has(scene, "this.navigateToSpace(clickedSpace, { quelle: 'szene' });");
+    assert.ok(scene.indexOf('pickAllowed(this.bubbleLeftAt') < scene.indexOf("navigateToSpace(clickedSpace, { quelle: 'szene' })"), 'the check comes first');
+    has(scene, "console.log('[Multiverse] Exiting bubble with animation');\n        this.bubbleLeftAt = Date.now();");
+    const nav = fs.readFileSync(path.join(__dirname, 'renderer', 'bubble-navigation.js'), 'utf8');
+    has(nav, 'if (window.multiverseApp) window.multiverseApp.bubbleLeftAt = Date.now();', 'every way out of a bubble');
+});

@@ -54,8 +54,8 @@
                 const target = offer && offer.from;
                 hide();
                 if (!target) return;
-                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(target);
-                else if (win.multiverseApp) win.multiverseApp.navigateToSpace(target);
+                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(target, { quelle: 'rueckweg' });
+                else if (win.multiverseApp) win.multiverseApp.navigateToSpace(target, { quelle: 'rueckweg' });
             });
             return el;
         }

@@ -50,6 +50,7 @@ function world() {
     };
     const moves = [];
     const ipc = [];
+    const logs = [];
     const window = {
         document,
         vibemind: { navigateToSpace: async (space) => { ipc.push(space); } },
@@ -75,7 +76,7 @@ function world() {
     const quick = /const QUICK_MOVE_MS = (\d+);/.exec(scene);
     assert.ok(quick, 'QUICK_MOVE_MS in multiverse.js');
     const context = vm.createContext({
-        window, document, console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout,
+        window, document, console: { log: (...a) => logs.push(a.join(' ')), warn() {}, error() {} }, setTimeout, clearTimeout,
         CustomEvent: window.CustomEvent, QUICK_MOVE_MS: Number(quick[1]),
     });
     vm.runInContext(`class Scene {
@@ -101,6 +102,7 @@ ${methods}
     vm.runInNewContext(read('jump-back.js'), { window, document, module: undefined });
     return {
         app, window, byId, ipc, moves,
+        switches: () => logs.filter((l) => l.startsWith('[Space] Wechsel nach')),
         advance(ms) {
             now += ms;
             for (const t of timers.filter((x) => x.at <= now).sort((a, b) => a.at - b.at)) {
@@ -191,4 +193,62 @@ test('the page loads the way back, and its button can be clicked in the title ba
     const css = read(path.join('styles', 'titlebar.css'));
     assert.match(css, /\.jump-back \{\s*-webkit-app-region: no-drag;/);
     assert.match(css, /\.jump-back\[hidden\] \{\s*display: none;/);
+});
+
+// H4c (Lauf 33): two switches back to Ideas left nothing in the log about who asked for them.
+test('every switch names its source in the log: tab, way back, status line, a call without one', () => {
+    const w = world();
+    const tab = w.byId.get('tab-roarboot');
+    w.window.spaceNavigator.switchSpace('orders', { quick: true, back: true, quelle: 'ziel' });
+    w.moves[0].done();
+    w.back().click();                                   // "← zurück zu Ideen"
+    w.moves[1].done();
+    w.window.spaceNavigator.switchSpace('roarboot', { quelle: 'tab' });
+    w.moves[2].done();
+    w.app.navigateToSpace('projects');                  // a script, or a way that does not say
+    w.moves[3].done();
+    w.app.navigateToSpace('desktop', { quelle: 'Satz: lösche alles' });   // never text from elsewhere
+    assert.deepEqual(w.switches(), [
+        '[Space] Wechsel nach orders durch ziel',
+        '[Space] Wechsel nach ideas durch rueckweg',
+        '[Space] Wechsel nach roarboot durch tab',
+        '[Space] Wechsel nach projects durch unbekannt',
+        '[Space] Wechsel nach desktop durch unbekannt',
+    ]);
+    assert.equal(tab, undefined, 'no tabs in this stand-in; the tab handler is checked in its source');
+    const nav = read('space-navigator.js');
+    assert.ok(nav.includes("switchSpace(spaceId, { quelle: 'tab' });"));
+    const scene = read('multiverse.js');
+    for (const part of ["navigateToSpace('ideas', { quelle: 'taste' })", "navigateToSpace(prevSpace, { quelle: 'geste' })",
+        "navigateToSpace(spaceId, { quelle: 'agent' })", "nav.exitSpace(false, 'bereichswechsel')", "[Exit] Bubble verlassen durch taste"]) {
+        assert.ok(scene.includes(part), part);
+    }
+    const bubble = read('bubble-navigation.js');
+    assert.ok(bubble.includes("backBtn.onclick = function() { exitSpace(false, 'zurueck-knopf'); };"));
+    assert.ok(bubble.includes("console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ') durch ' + durch);"));
+    const html = read('index.html');
+    assert.ok(html.includes("window.bubbleNavigation.exitSpace(false, 'python');"));
+    assert.ok(html.includes("window.multiverseApp.navigateToSpace(message.space, { quelle: 'python' });"));
+});
+
+// H4c: Esc on the open evaluation panel closed it and, on the same key, the scene left the bubble.
+test('Esc on the open evaluation panel closes only the panel; with the panel closed the scene has the key', () => {
+    const html = read('index.html');
+    const at = html.indexOf("// Esc closes the panel and only the panel");
+    assert.ok(at > 0);
+    const body = html.slice(at, html.indexOf('});', at) + 3);
+    const open = "document.addEventListener('keydown', ";
+    assert.ok(body.includes(open), 'the listener of the panel');
+    const handler = [null, body.slice(body.indexOf(open) + open.length, body.lastIndexOf(');'))];
+    const run = (open) => {
+        const calls = [];
+        const panel = { classList: { contains: (c) => c === 'open' && open } };
+        const sandbox = { document: { getElementById: () => panel }, window: { closeEvalPanel: () => calls.push('close') } };
+        const fn = vm.runInNewContext('(' + handler[1] + ')', sandbox);
+        const event = { key: 'Escape', preventDefault: () => calls.push('prevent'), stopPropagation: () => calls.push('stop') };
+        fn(event);
+        return calls;
+    };
+    assert.deepEqual(run(true), ['prevent', 'stop', 'close'], 'the key ends at the panel: the window listener of the scene never sees it');
+    assert.deepEqual(run(false), [], 'no panel open: Esc goes on to the scene as before');
 });

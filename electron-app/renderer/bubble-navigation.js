@@ -60,7 +60,7 @@
     }
 
     if (backBtn) {
-        backBtn.onclick = function() { exitSpace(); };
+        backBtn.onclick = function() { exitSpace(false, 'zurueck-knopf'); };
     }
 
     function enterSpace(bubbleId) {
@@ -168,10 +168,14 @@
         }
     }
 
-    function exitSpace(fromPython) {
+    /** quelle: what asked for it (zurueck-knopf, bereichswechsel, ziel, ...); only a name, no content (H4c). */
+    function exitSpace(fromPython, quelle) {
         fromPython = fromPython || false;
         try {
-            console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ')');
+            var durch = typeof quelle === 'string' && /^[a-z-]{1,24}$/.test(quelle) ? quelle : (fromPython ? 'python' : 'unbekannt');
+            console.log('[Exit] Starting exit from bubble (fromPython=' + fromPython + ') durch ' + durch);
+            // a scene click right after this opens no space (space-pick.js)
+            if (window.multiverseApp) window.multiverseApp.bubbleLeftAt = Date.now();
             console.trace('[Exit] Call stack:');
 
             // Phase 11.U.L — hide eval toggle & panel when leaving bubble

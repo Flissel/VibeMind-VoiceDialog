@@ -96,8 +96,9 @@
             if (wizard) wizard.want(ziel.projekt_id);
             if (app.currentSpace !== ziel.space) {
                 const how = target && target.options ? target.options : undefined;
-                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(ziel.space, how);
-                else app.navigateToSpace(ziel.space, how);
+                const asked = { ...(how || {}), quelle: 'ziel' };
+                if (win.spaceNavigator && win.spaceNavigator.switchSpace) win.spaceNavigator.switchSpace(ziel.space, asked);
+                else app.navigateToSpace(ziel.space, asked);
                 return false;
             }
             if (wizard) { wizard.open(ziel.projekt_id); return true; }   // already in the tab: its wizard now
@@ -105,7 +106,7 @@
             if (!insideTarget(app, ziel)) {
                 const nav = win.bubbleNavigation;
                 if (!nav) return true;
-                if (app.isInsideBubble) { nav.exitSpace(); return false; }   // another bubble is open
+                if (app.isInsideBubble) { nav.exitSpace(false, 'ziel'); return false; }   // another bubble is open
                 const data = bubbleOf(app, ziel.bubble_id);
                 if (!data) return false;                       // the overview has not loaded it yet
                 const id = data.id != null ? data.id : ziel.bubble_id;

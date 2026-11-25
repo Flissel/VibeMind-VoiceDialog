@@ -1004,7 +1004,7 @@
 
                 case 'exit_bubble':
                     console.log('[Python] Received exit_bubble message');
-                    window.bubbleNavigation.exitSpace();
+                    window.bubbleNavigation.exitSpace(false, 'python');
                     break;
 
                 case 'voice_status':
@@ -1460,7 +1460,7 @@
                         // TRIGGER ANIMATED NAVIGATION in MultiverseApp
                         if (window.multiverseApp) {
                             console.log('[Space] Triggering animated navigation to:', message.space);
-                            window.multiverseApp.navigateToSpace(message.space);
+                            window.multiverseApp.navigateToSpace(message.space, { quelle: 'python' });
                         }
 
                         // Show/hide Brain Dashboard BrowserView
@@ -1500,7 +1500,7 @@
                     // Voice command: navigate to space
                     console.log('[Voice Nav] Navigate to space:', message.space);
                     if (message.space && window.multiverseApp) {
-                        window.multiverseApp.navigateToSpace(message.space);
+                        window.multiverseApp.navigateToSpace(message.space, { quelle: 'python' });
                         window.currentSpace = message.space;
                         // Update UI tabs
                         document.querySelectorAll('.space-tab').forEach(tab => {
@@ -1845,7 +1845,7 @@
 
                 case 'roarboot_open_webview':
                     if (window.multiverseApp) {
-                        window.multiverseApp.navigateToSpace('roarboot');
+                        window.multiverseApp.navigateToSpace('roarboot', { quelle: 'python' });
                     }
                     break;
 
@@ -2518,12 +2518,15 @@
             window.closeEvalPanel();
         };
 
-        // Esc closes panel
+        // Esc closes the panel and only the panel: the scene (multiverse.onKeyDown on window) would
+        // leave the bubble on the same key (H4c). A card open above it (card-view.js) takes Esc first.
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                const panel = document.getElementById('eval-panel');
-                if (panel && panel.classList.contains('open')) window.closeEvalPanel();
-            }
+            if (e.key !== 'Escape') return;
+            const panel = document.getElementById('eval-panel');
+            if (!panel || !panel.classList.contains('open')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            window.closeEvalPanel();
         });
     </script>
 </body>

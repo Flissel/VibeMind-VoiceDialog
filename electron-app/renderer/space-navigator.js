@@ -21,7 +21,7 @@
         var tab = document.getElementById(tabId);
         if (tab) {
             tab.onclick = function() {
-                switchSpace(spaceId);
+                switchSpace(spaceId, { quelle: 'tab' });
                 if (notifyBackend && window.vibemind && window.vibemind.navigateToSpace) {
                     try {
                         window.vibemind.navigateToSpace(spaceId);
@@ -96,7 +96,7 @@
         if (app) {
             var from = app.currentSpace;
             // Nothing started (unknown space): the tabs must not claim the new space.
-            if (app.navigateToSpace(spaceId, { quick: Boolean(options && options.quick) }) === false) return;
+            if (app.navigateToSpace(spaceId, { quick: Boolean(options && options.quick), quelle: options && options.quelle }) === false) return;
             if (window.VibeJumpBack) window.VibeJumpBack.jumped(options && options.back ? from : '', spaceId);
         }
         syncSpace(spaceId);

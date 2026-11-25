@@ -28,7 +28,7 @@ test('every tab names its own space with each sentence of the console', () => {
     // what the console sends: the space on screen (set on arrival for every tab, fixed or external),
     // checked on the sending itself below
     assert.match(scene, /_arriveAtSpace\(targetSpace, space\) \{[\s\S]{0,200}this\.currentSpace = targetSpace;/);
-    assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'external-spaces.js'), 'utf8'), /app\.navigateToSpace\(space\.id\)/,
+    assert.match(fs.readFileSync(path.join(__dirname, 'renderer', 'external-spaces.js'), 'utf8'), /app\.navigateToSpace\(space\.id, \{ quelle: 'tab' \}\)/,
         'an external tab goes the same way');
     // the module is loaded before the scene that uses it
     assert.ok(html.indexOf('src="sentence-answer.js"') > 0 && html.indexOf('src="sentence-answer.js"') < html.indexOf('src="multiverse.js"'));

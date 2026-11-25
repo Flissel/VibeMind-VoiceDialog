@@ -174,7 +174,7 @@ test('a ziel naming a project: the app goes to Software Design and opens that pr
     };
     const follower = RT.create(win, { querySelector: () => null });
     assert.equal(follower.follow({ space: 'swedesign', projekt_id: PROJEKT }, { quick: true, back: true }), true);
-    assert.deepEqual(calls, ['want ' + PROJEKT, 'switch swedesign {"quick":true,"back":true}'], 'the project first, then the short flight with the way back');
+    assert.deepEqual(calls, ['want ' + PROJEKT, 'switch swedesign {"quick":true,"back":true,"quelle":"ziel"}'], 'the project first, then the short flight with the way back');
     app.currentSpace = 'swedesign';
     now += RT.STEP_MS;
     for (const t of timers.filter((x) => x.at <= now)) { timers = timers.filter((x) => x !== t); t.fn(); }

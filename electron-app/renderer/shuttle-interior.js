@@ -254,7 +254,7 @@
 
             // Navigate to Projects space
             if (window.multiverseApp) {
-                window.multiverseApp.navigateToSpace('projects');
+                window.multiverseApp.navigateToSpace('projects', { quelle: 'shuttle' });
             }
         });
     }

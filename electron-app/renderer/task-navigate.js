@@ -122,6 +122,11 @@
         };
     }
 
+    /** What a click on the status line does; shown as its hint. */
+    function jumpHint(label) {
+        return 'Klick: zum Bereich ' + label;
+    }
+
     const LINE_MAX = 240;
     const REPORT_MAX = 200;                      // the answer of an order in the chat; the rest at the card
     const WAIT_MS = 60000;                       // a sentence that never gets an answer: the neutral line goes
@@ -309,7 +314,9 @@
             }, { capture: true, passive: true });
         }
 
+        /** options.quelle: 'statuszeile' for a click on the line; any other jump is one of a task (H4c). */
         function go(space, options) {
+            options = { quelle: 'aufgabe', ...(options || {}) };
             const app = root.multiverseApp;
             if (!app) return false;
             if (app.currentSpace === space) return true;
@@ -341,7 +348,7 @@
             el.hidden = true;
             anchor.parentNode.insertBefore(el, anchor.nextSibling);
             el.addEventListener('click', () => {
-                if (current && current.space) jump(current.space);
+                if (current && current.space) jump(current.space, { quelle: 'statuszeile' });
             });
             return el;
         }
@@ -423,9 +430,12 @@
             // (line empty for 0.5 to 0.7 s, measured 2026-11-23).
             const arriving = followed !== '' && followed === task.space;
             const onScreen = arriving || !app ? task.space : app.currentSpace;
-            const line = describe(task, labelFor(task.space, app && app.spaces), onScreen !== task.space);
+            const label = labelFor(task.space, app && app.spaces);
+            const line = describe(task, label, onScreen !== task.space);
             el.textContent = line.text;
-            el.title = line.title;
+            // The line is a button: a click goes to the space of the task (H4c, Lauf 33). It says so.
+            el.title = [line.title, jumpHint(label)].filter(Boolean).join('\n');
+            if (typeof el.setAttribute === 'function') el.setAttribute('aria-label', line.text + ' – ' + jumpHint(label));
             el.dataset.state = line.state;
             el.dataset.space = task.space;
             el.hidden = shows(task, onScreen) !== 'line';
@@ -887,7 +897,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, asksBack, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, STAND_OPEN, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
+    const api = { decide, describe, jumpHint, labelFor, shows, shorten, isRaw, asksBack, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, STAND_OPEN, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
