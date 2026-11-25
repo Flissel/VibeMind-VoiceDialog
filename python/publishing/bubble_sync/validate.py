@@ -58,7 +58,7 @@ def parse_idea_md(text: str) -> tuple[bool, dict, list[str]]:
         errors.append("tags is not a list")
         tags = []
 
-    description = _body_description(text)
+    description = without_open_points_block(_body_description(text))
 
     fields = {
         "idea_id": idea_id,
@@ -107,6 +107,20 @@ def parse_canvas_md(text: str) -> tuple[bool, dict, list[str]]:
         "last_synced_at": fm.get("last_synced_at"),  # drives conflict-LWW
     }
     return (not errors), fields, errors
+
+
+OPEN_POINTS_MARKER = "--- MiroFish Evaluation: Offene Punkte ---"
+
+
+def without_open_points_block(description: str) -> str:
+    """Drop the machine-written block of open points (from the marker line to the
+    end). An old file may still carry it; writing it back would restore a block
+    that was removed from the description in the app."""
+    lines = description.splitlines()
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith(OPEN_POINTS_MARKER):
+            return "\n".join(lines[:i]).rstrip()
+    return description
 
 
 def _body_description(text: str) -> str:

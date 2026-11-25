@@ -252,7 +252,10 @@ def score_idea(params: Dict[str, Any]) -> str:
     if "urgency" in params:
         idea.urgency = min(10.0, max(0.0, float(params["urgency"])))
 
-    # Calculate and save
+    # This tool is an explicit scoring act: compute from the four axes, then save
+    idea.score = idea.calculate_score()
+    if idea.score > 0 and idea.status == "raw":
+        idea.status = "scored"
     idea = repo.update(idea)
 
     # Generate recommendation

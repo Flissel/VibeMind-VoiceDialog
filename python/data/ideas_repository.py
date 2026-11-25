@@ -218,11 +218,12 @@ class IdeasRepository:
         return self.list(limit=limit, order_by="score DESC")
 
     def update(self, idea: Idea) -> Idea:
-        """Update an existing idea"""
-        # Recalculate score before saving
-        idea.score = idea.calculate_score()
-        if idea.score > 0:
-            idea.status = "scored"
+        """Update an existing idea.
+
+        Saving keeps ideas.score as it is: a score is set only by an explicit
+        evaluation, never recomputed from the old four axes on every save
+        (that overwrote every other evaluation).
+        """
 
         data = idea.to_dict()
         self.db.execute(
