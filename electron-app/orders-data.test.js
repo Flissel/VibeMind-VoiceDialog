@@ -53,6 +53,7 @@ test('reading asks the brain three times and survives each of them failing', asy
     const view = await readOrders({
         base: 'http://127.0.0.1:5000',
         id: () => 'x1',
+        readPm: async () => { throw new Error('weg'); },
         fetchJson: async (url, options) => {
             asked.push(`${options && options.method || 'GET'} ${url}`);
             if (url.endsWith('/api/research/health')) throw new Error('weg');
@@ -66,7 +67,15 @@ test('reading asks the brain three times and survives each of them failing', asy
         'GET http://127.0.0.1:5000/api/research/health',
         'POST http://127.0.0.1:5000/api/multihop/execute',
     ]);
-    assert.deepEqual(view.sections.map((s) => s.state), ['leer', 'fehler', 'aus']);
+    assert.deepEqual(view.sections.map((s) => [s.id, s.state]), [['pm', 'aus'], ['schedule', 'leer'], ['research', 'fehler'], ['minibook', 'aus']]);
+    assert.equal(view.sections[0].text, 'Projektmanager nicht erreichbar.', 'the project manager on top; its failure leaves the rest');
+});
+
+test('every minute only the project manager is read, the brain is not asked', async () => {
+    const asked = [];
+    const view = await readOrders({ teil: 'pm', fetchJson: async (url) => { asked.push(url); return null; }, readPm: async () => ({ id: 'pm', state: 'ok' }) });
+    assert.deepEqual(view, { sections: [{ id: 'pm', state: 'ok' }] });
+    assert.deepEqual(asked, []);
 });
 
 test('the entry is a local page with its own narrow bridge, and tasks of these spaces lead to it', () => {
@@ -86,8 +95,35 @@ test('the entry is a local page with its own narrow bridge, and tasks of these s
     assert.doesNotMatch(page, /https?:\/\/(?!www\.w3\.org)/, 'the page loads nothing from the network');
     const preload = fs.readFileSync(path.join(__dirname, 'auftraege-preload.js'), 'utf8');
     assert.match(preload, /exposeInMainWorld\('auftraege'/);
-    assert.equal((preload.match(/ipcRenderer\.\w+\(/g) || []).length, 1, 'one call, nothing else');
-    assert.match(fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8'), /ipcMain\.handle\('orders:read'/);
+    assert.deepEqual(preload.match(/ipcRenderer\.invoke\('[^']+'/g), [
+        "ipcRenderer.invoke('orders:read'", "ipcRenderer.invoke('orders:pm-chat-state'", "ipcRenderer.invoke('orders:pm-chat-send'",
+    ], 'reading and the two ways of the chat, nothing else');
+    assert.equal((preload.match(/ipcRenderer\.\w+\(/g) || []).length, 3);
+    assert.doesNotMatch(preload, /PM_|process\.env/, 'no key reaches the page');
+    const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+    for (const name of ['orders:read', 'orders:pm-chat-state', 'orders:pm-chat-send']) {
+        assert.ok(main.includes(`ipcMain.handle('${name}', (event`), name);
+        const line = main.slice(main.indexOf(`ipcMain.handle('${name}'`)).split('\n')[0];
+        assert.match(line, /=> \(fromOrdersPage\(event\)/, name + ' only from the page of the entry');
+    }
+    assert.match(main, /const fromOrdersPage = \(event\) => Boolean\(externalSpaces\) && externalSpaces\.ownsPage\('orders', event\.sender\);/);
+    assert.equal(entry.agent.role, 'Projektmanager, Termine, Recherche, Minibook');
+});
+
+test('only the view of the local page counts as the page of the entry', () => {
+    const { ExternalSpaceManager } = require('./external-spaces');
+    class View { constructor() { this.webContents = { url: 'file:///app/auftraege/index.html', getURL() { return this.url; }, session: { webRequest: { onBeforeSendHeaders() {} } }, setWindowOpenHandler() {}, on() {} }; } setBounds() {} }
+    const manager = new ExternalSpaceManager(null, { BrowserView: View, shell: {}, logger: { log() {} }, env: {} });
+    manager._load = () => {};
+    assert.equal(manager.ownsPage('orders', {}), false, 'no view yet');
+    manager._create('orders');
+    manager._create('sales');
+    const own = manager.views.get('orders').view.webContents;
+    assert.equal(manager.ownsPage('orders', own), true);
+    assert.equal(manager.ownsPage('orders', manager.views.get('sales').view.webContents), false);
+    assert.equal(manager.ownsPage('sales', manager.views.get('sales').view.webContents), false, 'a remote page is never one');
+    own.url = 'https://elsewhere.example/';
+    assert.equal(manager.ownsPage('orders', own), false, 'navigated away: no longer the page');
 });
 
 test('a local page gets its preload and is loaded as a file', () => {

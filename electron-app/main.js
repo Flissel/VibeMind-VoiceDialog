@@ -2111,8 +2111,19 @@ function setupIpcHandlers() {
     // Spaces switched off (space-switches.js): their ids only.
     ipcMain.handle('get-space-switches', () => require('./space-switches').hiddenSpaces(process.env));
 
-    // The local page "Auftraege" reads Schedule, Research and Minibook through the brain.
-    ipcMain.handle('orders:read', () => require('./orders-data').readOrders());
+    // The local page "Auftraege" reads the project manager (pm-data.js) and Schedule, Research and
+    // Minibook through the brain; it chats with the project manager. Only that page may ask; the
+    // keys of the project manager stay here and never reach the page.
+    const fromOrdersPage = (event) => Boolean(externalSpaces) && externalSpaces.ownsPage('orders', event.sender);
+    ipcMain.handle('orders:read', (event, teil) => (fromOrdersPage(event)
+        ? require('./orders-data').readOrders({ teil: teil === 'pm' ? 'pm' : undefined })
+        : { sections: [] }));
+    let pmChat = null;
+    const pmChatOf = () => pmChat || (pmChat = require('./pm-data').createPmChat({ log: (line) => console.warn(line) }));
+    ipcMain.handle('orders:pm-chat-state', (event) => (fromOrdersPage(event) ? pmChatOf().state() : { aktiv: false, text: '' }));
+    ipcMain.handle('orders:pm-chat-send', (event, text) => (fromOrdersPage(event)
+        ? pmChatOf().send(text)
+        : { ok: false, text: 'Nicht erlaubt.' }));
 
     ipcMain.on('show-external-space', (_event, id) => {
         if (!externalSpaces || !externalSpaces.has(id)) return;

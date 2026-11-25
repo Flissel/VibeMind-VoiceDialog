@@ -26,6 +26,18 @@
   li { padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
   li small { display: block; color: var(--dim); }
   #stand { color: var(--dim); font-size: 13px; margin-top: 16px; }
+  section.pm { grid-column: 1 / -1; }
+  .gruppen { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 18px; }
+  h3 { font-size: 13px; margin: 10px 0 2px; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .chat { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .verlauf { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .nachricht { padding: 8px 12px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 85%; }
+  .nachricht.ich { align-self: flex-end; background: #1f2a3a; }
+  .nachricht.pm { align-self: flex-start; background: #1b2420; border: 1px solid var(--line); }
+  .nachricht.hinweis { align-self: center; color: var(--dim); font-size: 13px; }
+  .eingabe { display: flex; gap: 8px; }
+  textarea { flex: 1; min-height: 44px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .chat small { color: var(--dim); display: block; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -33,7 +45,7 @@
   <header>
     <div>
       <h1>Aufträge</h1>
-      <p>Termine, Recherche und Minibook an einem Ort. Neue Aufträge geben Sie im Chat.</p>
+      <p>Projektmanager, Termine, Recherche und Minibook an einem Ort. Neue Aufträge geben Sie im Chat.</p>
     </div>
     <button id="neu" type="button">Aktualisieren</button>
   </header>
@@ -52,24 +64,122 @@
     return e;
   }
 
-  function zeigen(ansicht) {
-    bereiche.replaceChildren(...ansicht.sections.map((bereich) => {
-      const karte = element('section', bereich.state);
-      const kopf = element('h2');
-      kopf.append(element('span', 'dot'), document.createTextNode(bereich.title));
-      karte.append(kopf, element('p', 'text', bereich.text));
-      if (bereich.items.length) {
-        const liste = element('ul');
-        for (const punkt of bereich.items) {
-          const zeile = element('li', '', punkt.title);
-          if (punkt.detail) zeile.append(element('small', '', punkt.detail));
-          liste.append(zeile);
-        }
-        karte.append(liste);
-      }
-      return karte;
-    }));
+  // Times come as UTC (ISO 8601); shown in local time.
+  function ortszeit(iso) {
+    const zeit = new Date(iso);
+    return Number.isNaN(zeit.getTime()) ? '' : zeit.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
+
+  function liste(punkte) {
+    const ul = element('ul');
+    for (const punkt of punkte) {
+      const zeile = element('li', '', punkt.title);
+      const unten = [punkt.zeit ? ortszeit(punkt.zeit) : '', punkt.detail || ''].filter(Boolean).join(' · ');
+      if (unten) zeile.append(element('small', '', unten));
+      ul.append(zeile);
+    }
+    return ul;
+  }
+
+  // Everything goes in as text (textContent), never as HTML: names and mail words of others may be in it.
+  function karteVon(bereich) {
+    const karte = element('section', bereich.state + (bereich.id === 'pm' ? ' pm' : ''));
+    karte.dataset.id = bereich.id;
+    const kopf = element('h2');
+    kopf.append(element('span', 'dot'), document.createTextNode(bereich.title));
+    const satz = bereich.stand ? bereich.text + ' Stand ' + ortszeit(bereich.stand) + '.' : bereich.text;
+    karte.append(kopf, element('p', 'text', satz));
+    if (bereich.items && bereich.items.length) karte.append(liste(bereich.items));
+    if (bereich.groups && bereich.groups.length) {
+      const gruppen = element('div', 'gruppen');
+      for (const gruppe of bereich.groups) {
+        const teil = element('div');
+        teil.append(element('h3', '', gruppe.title));
+        if (gruppe.text) teil.append(element('p', 'text', gruppe.text));
+        if (gruppe.items.length) teil.append(liste(gruppe.items));
+        gruppen.append(teil);
+      }
+      karte.append(gruppen);
+    }
+    if (bereich.id === 'pm') karte.append(chat.feld);
+    return karte;
+  }
+
+  function zeigen(ansicht) {
+    bereiche.replaceChildren(...ansicht.sections.map(karteVon));
+  }
+
+  // Only the project manager again: its card is replaced, the others stay as they are.
+  function pmZeigen(ansicht) {
+    const neu = ansicht.sections.find((bereich) => bereich.id === 'pm');
+    const alt = bereiche.querySelector('section[data-id="pm"]');
+    if (neu && alt) alt.replaceWith(karteVon(neu));
+  }
+
+  // Chat with the project manager: what the person typed and sent, nothing else.
+  const chat = (() => {
+    const feld = element('div', 'chat');
+    const verlauf = element('div', 'verlauf');
+    const eingabe = element('textarea');
+    eingabe.placeholder = 'Nachricht an den Projektmanager (Strg+Enter sendet)';
+    eingabe.maxLength = 4000;
+    const senden = element('button', '', 'Senden');
+    senden.type = 'button';
+    const zeile = element('div', 'eingabe');
+    zeile.append(eingabe, senden);
+    const hinweis = element('small', '', 'Eine Mail geht nur raus, wenn Sie selbst „schick <ID>“ schreiben.');
+    const aus = element('p', 'text', 'Chat nicht eingerichtet.');
+    feld.append(aus);
+    let laeuft = false;
+
+    function nachricht(art, text) {
+      verlauf.append(element('div', 'nachricht ' + art, text));
+      verlauf.scrollTop = verlauf.scrollHeight;
+    }
+
+    async function schicken() {
+      const text = eingabe.value.trim();
+      if (!text || laeuft) return;
+      laeuft = true;
+      senden.disabled = true;
+      eingabe.disabled = true;
+      nachricht('ich', text);
+      eingabe.value = '';
+      const wartet = element('div', 'nachricht hinweis', 'Der Projektmanager arbeitet …');
+      verlauf.append(wartet);
+      try {
+        const antwort = await window.auftraege.pmChatSenden(text);
+        wartet.remove();
+        if (antwort && antwort.ok) nachricht('pm', String(antwort.antwort));
+        else nachricht('hinweis', (antwort && antwort.text) || 'Projektmanager nicht erreichbar.');
+      } catch (_) {
+        wartet.remove();
+        nachricht('hinweis', 'Projektmanager nicht erreichbar.');
+      }
+      laeuft = false;
+      senden.disabled = false;
+      eingabe.disabled = false;
+      eingabe.focus();
+    }
+
+    senden.addEventListener('click', schicken);
+    eingabe.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); schicken(); }
+    });
+
+    async function pruefen() {
+      let stand = null;
+      try { stand = await window.auftraege.pmChatStand(); } catch (_) { stand = null; }
+      if (stand && stand.aktiv) {
+        if (!feld.contains(verlauf)) feld.replaceChildren(verlauf, zeile, hinweis);
+      } else {
+        aus.textContent = (stand && stand.text) || 'Chat nicht eingerichtet.';
+        feld.replaceChildren(aus);
+      }
+    }
+
+    return { feld, pruefen };
+  })();
 
   let liest = false;
   async function laden() {
@@ -87,6 +197,16 @@
     liest = false;
   }
 
+  // While shown, the project manager is asked again every minute (the brain only on opening).
+  let pmLiest = false;
+  async function pmLaden() {
+    if (liest || pmLiest || document.visibilityState !== 'visible') return;
+    pmLiest = true;
+    try { pmZeigen(await window.auftraege.lesen('pm')); } catch (_) { /* next minute */ }
+    pmLiest = false;
+  }
+  setInterval(pmLaden, 60000);
+
   knopf.addEventListener('click', laden);
   // Shown again (a sentence jumped here, or the tab was opened): read again. The page stays loaded
   // between showings, so without this it showed the list of its first opening, not the result.
@@ -94,6 +214,7 @@
     if (document.visibilityState === 'visible') laden();
   });
   laden();
+  chat.pruefen();
 </script>
 </body>
 </html>

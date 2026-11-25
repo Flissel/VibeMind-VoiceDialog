@@ -52,7 +52,7 @@ const EXTERNAL_SPACES = Object.freeze([
     // Placed clear of Video (-10, 0, 24): at least 8 units from every space (space-models.test.js).
     id: 'orders', label: 'Aufträge', icon: '\u{1F4CB}', color: 0xb39ddb, position: [-3, 0, 29],
     localPage: 'auftraege/index.html', preload: 'auftraege-preload.js',
-    agent: { name: 'Aufträge', slug: 'orders', role: 'Termine, Recherche, Minibook' },
+    agent: { name: 'Aufträge', slug: 'orders', role: 'Projektmanager, Termine, Recherche, Minibook' },
   },
 ]);
 
@@ -236,6 +236,15 @@ class ExternalSpaceManager {
   }
 
   has(id) { return this.spaces.has(id); }
+
+  /** True when `sender` is the page the app ships for this space (its own view, a local file). */
+  ownsPage(id, sender) {
+    const space = this.spaces.get(id);
+    const entry = this.views.get(id);
+    if (!space || !space.file || !entry || !sender || entry.view.webContents !== sender) return false;
+    const url = typeof sender.getURL === 'function' ? sender.getURL() : '';
+    return typeof url === 'string' && url.startsWith('file:');
+  }
 
   /** Loads the start of a space; what the page does by itself in the next moments is its landing. */
   _startLoad(id) {

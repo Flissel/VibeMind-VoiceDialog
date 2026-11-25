@@ -11,17 +11,25 @@ const html = fs.readFileSync(path.join(__dirname, 'auftraege', 'index.html'), 'u
 const script = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
 
 function element(tag) {
-    const el = { tag, children: [], textContent: '', disabled: false, className: '', listeners: {},
-        append(...c) { el.children.push(...c); }, replaceChildren(...c) { el.children = c; },
+    const el = { tag, children: [], textContent: '', disabled: false, className: '', listeners: {}, dataset: {}, parent: null,
+        append(...c) { for (const x of c) { if (x && typeof x === 'object') x.parent = el; } el.children.push(...c); },
+        replaceChildren(...c) { el.children = []; el.append(...c); },
+        replaceWith(other) { const list = el.parent.children; list[list.indexOf(el)] = other; other.parent = el.parent; },
+        remove() { if (el.parent) el.parent.children = el.parent.children.filter((x) => x !== el); },
+        contains(x) { return el.children.includes(x); },
+        querySelector(selector) { const id = /data-id="([^"]+)"/.exec(selector); return el.children.find((x) => x.dataset && x.dataset.id === (id && id[1])) || null; },
+        focus() {},
         addEventListener(type, fn) { el.listeners[type] = fn; } };
     return el;
 }
 
 /** The page in a stand-in document; the read answers as the brain does (orders-data.summarize). */
-function page(views) {
+function page(views, pmViews = []) {
     const byId = { bereiche: element(), stand: element(), neu: element() };
     const listeners = {};
     const reads = [];
+    const pmReads = [];
+    const timers = [];
     const document = {
         visibilityState: 'visible',
         getElementById: (id) => byId[id],
@@ -29,12 +37,18 @@ function page(views) {
         createTextNode: (text) => ({ textContent: text }),
         addEventListener(type, fn) { listeners[type] = fn; },
     };
-    const window = { auftraege: { lesen: () => new Promise((resolve) => reads.push(() => resolve(views.shift()))) } };
-    vm.runInNewContext(script, { document, window, Date });
+    const window = { auftraege: {
+        lesen: (teil) => (teil === 'pm'
+            ? new Promise((resolve) => pmReads.push(() => resolve(pmViews.shift())))
+            : new Promise((resolve) => reads.push(() => resolve(views.shift())))),
+        pmChatStand: async () => ({ aktiv: false, text: 'Chat nicht eingerichtet.' }),
+        pmChatSenden: async () => ({ ok: false, text: 'nicht' }),
+    } };
+    vm.runInNewContext(script, { document, window, Date, setInterval: (fn, ms) => timers.push({ fn, ms }) });
     const titles = () => byId.bereiche.children.flatMap((s) => s.children.filter((c) => c.tag === 'ul')
         .flatMap((ul) => ul.children.map((li) => li.textContent)));
     return {
-        reads, titles, stand: byId.stand,
+        reads, pmReads, timers, titles, stand: byId.stand, bereiche: byId.bereiche,
         show() { document.visibilityState = 'visible'; listeners.visibilitychange(); },
         hide() { document.visibilityState = 'hidden'; listeners.visibilitychange(); },
     };
@@ -66,4 +80,23 @@ test('one read at a time: shown while the first read runs does not start a secon
     p.reads[0](); await flush();
     p.show();
     assert.equal(p.reads.length, 2);
+});
+
+const pmCard = (text, items = []) => ({ id: 'pm', title: 'Projektmanager', state: 'ok', text, items: [], groups: [{ title: 'Projekte', items }] });
+
+test('the project manager stands on top; every minute only its card is read again', async () => {
+    const first = { sections: [pmCard('1 aktives Projekt.', [{ title: 'gartenhaus', detail: 'Phase aufnahme' }]), ...one.sections] };
+    const p = page([first], [{ sections: [pmCard('2 aktive Projekte.')] }]);
+    p.reads[0](); await flush();
+    assert.equal(p.bereiche.children[0].dataset.id, 'pm');
+    assert.equal(p.bereiche.children[0].children[1].textContent, '1 aktives Projekt.');
+    assert.deepEqual(p.timers.map((t) => t.ms), [60000]);
+
+    p.timers[0].fn();
+    assert.equal(p.reads.length, 1, 'the brain is not asked every minute');
+    assert.equal(p.pmReads.length, 1);
+    p.pmReads[0](); await flush();
+    assert.equal(p.bereiche.children[0].children[1].textContent, '2 aktive Projekte.');
+    assert.equal(p.bereiche.children.length, 4, 'the other cards stay');
+    assert.deepEqual(p.titles(), ['Termin A']);
 });

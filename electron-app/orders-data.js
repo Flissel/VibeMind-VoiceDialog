@@ -1,6 +1,7 @@
 /**
- * What the entry "Auftraege" shows: the three spaces that have no page of their own
- * (Schedule, Research, Minibook), read from the brain on this machine.
+ * What the entry "Auftraege" shows: the project manager (pm-claw, read in pm-data.js) on top,
+ * then the three spaces that have no page of their own (Schedule, Research, Minibook), read from
+ * the brain on this machine. Each part stands on its own: a failure of one leaves the others.
  *
  * Reading only. The page says what is there and what is not; it invents nothing and
  * shows no error detail (only the kind of error).
@@ -82,9 +83,31 @@ async function defaultFetchJson(url, options = {}) {
   return response.json();
 }
 
-async function readOrders({ base = brainBase(), fetchJson = defaultFetchJson, id = () => crypto.randomBytes(3).toString('hex') } = {}) {
+let defaultPm = null;
+function defaultReadPm() {
+  if (!defaultPm) defaultPm = require('./pm-data').createPmOverview();
+  return defaultPm();
+}
+
+/** The project manager alone; never throws (the page shows a calm sentence instead). */
+async function readPmSection(readPm) {
+  try {
+    const section = await readPm();
+    if (section && typeof section === 'object') return section;
+  } catch (_) { /* below */ }
+  const { NOT_REACHABLE } = require('./pm-data');
+  return { id: 'pm', title: 'Projektmanager', state: 'aus', text: NOT_REACHABLE, items: [], groups: [] };
+}
+
+/**
+ * All sections, the project manager first. `teil: 'pm'` reads only the project manager (the page
+ * asks for it every minute while shown; the brain is asked only on opening and on the button).
+ */
+async function readOrders({ base = brainBase(), fetchJson = defaultFetchJson, id = () => crypto.randomBytes(3).toString('hex'), readPm = defaultReadPm, teil } = {}) {
+  if (teil === 'pm') return { sections: [await readPmSection(readPm)] };
   const quiet = (promise) => promise.catch(() => null);
-  const [schedule, minibook, research] = await Promise.all([
+  const [pm, schedule, minibook, research] = await Promise.all([
+    readPmSection(readPm),
     quiet(fetchJson(`${base}/api/multihop/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -93,7 +116,7 @@ async function readOrders({ base = brainBase(), fetchJson = defaultFetchJson, id
     quiet(fetchJson(`${base}/api/minibook/activity`)),
     quiet(fetchJson(`${base}/api/research/health`)),
   ]);
-  return summarize({ schedule, minibook, research });
+  return { sections: [pm, ...summarize({ schedule, minibook, research }).sections] };
 }
 
 module.exports = { brainBase, listPlan, summarize, readOrders, OWN_PLAN_PREFIX };
