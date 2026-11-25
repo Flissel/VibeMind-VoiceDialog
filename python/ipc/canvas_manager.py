@@ -6,6 +6,7 @@ bubble CRUD, canvas node CRUD, shuttle queries, and bubble enter/exit.
 """
 
 import logging
+import threading
 from typing import Dict, List, Optional
 
 import electron_backend
@@ -20,14 +21,24 @@ class CanvasManager:
     def __init__(self, backend):
         self.backend = backend
         self.send_message = backend.send_message
+        # One load from the database at a time (start thread "bubble-loader" and the
+        # renderer's get_bubbles ran over each other: every bubble met its own copy).
+        self._load_lock = threading.Lock()
+        self._positions_written = set()   # bubbles whose new position was written once
 
     # ========================================================================
     # COLLISION / POSITION
     # ========================================================================
 
-    def _check_collision(self, new_pos: Dict[str, float], min_distance: float = 1.2) -> bool:
-        """Check if a position collides with existing bubbles."""
+    def _check_collision(self, new_pos: Dict[str, float], min_distance: float = 1.2,
+                         exclude_db_id: Optional[str] = None) -> bool:
+        """Check if a position collides with existing bubbles.
+
+        ``exclude_db_id``: the bubble the position is for. It never collides with itself.
+        """
         for bubble in self.backend.bubbles.values():
+            if exclude_db_id is not None and getattr(bubble, "db_id", None) == exclude_db_id:
+                continue
             dx = new_pos["x"] - bubble.position["x"]
             dy = new_pos["y"] - bubble.position["y"]
             dz = new_pos["z"] - bubble.position["z"]
@@ -39,7 +50,8 @@ class CanvasManager:
                 return True
         return False
 
-    def _find_free_position(self, angle: float, base_radius: float, max_attempts: int = 20) -> Dict[str, float]:
+    def _find_free_position(self, angle: float, base_radius: float, max_attempts: int = 20,
+                            exclude_db_id: Optional[str] = None) -> Dict[str, float]:
         """Find a collision-free position using spiral pattern with collision avoidance."""
         import math
         import random
@@ -56,7 +68,7 @@ class CanvasManager:
 
             new_pos = {"x": x, "y": y, "z": z}
 
-            if not self._check_collision(new_pos):
+            if not self._check_collision(new_pos, exclude_db_id=exclude_db_id):
                 return new_pos
 
         # If no free position found, use a fallback with larger spacing
@@ -72,7 +84,34 @@ class CanvasManager:
     # BUBBLE LOADING / CRUD
     # ========================================================================
 
-    def _load_bubbles_from_db(self):
+    def _load_bubbles_from_db(self, clear: bool = False):
+        """Load bubbles from the database, one load at a time.
+
+        A call while another load runs waits for it and keeps its result instead of
+        loading again. ``clear`` empties the in-memory state first (get_all_bubbles).
+        """
+        if not self._load_lock.acquire(blocking=False):
+            with self._load_lock:
+                return          # the other load has just put the bubbles in place
+        try:
+            if clear:
+                self._clear_bubbles()
+            self._load_bubbles_locked()
+        finally:
+            self._load_lock.release()
+
+    def _clear_bubbles(self):
+        """Empty the in-memory bubbles so deletions in the database are honoured."""
+        self.backend.bubbles.clear()
+        self.backend.bubble_id_map.clear()
+        try:
+            electron_backend._bubble_id_map.clear()
+        except Exception:
+            pass
+        # Reset numbering so freshly-loaded bubbles get small IDs.
+        self.backend.next_bubble_id = 1
+
+    def _load_bubbles_locked(self):
         """Load bubbles from IdeasRepository into in-memory state.
 
         On Electron startup PostgREST's schema cache is frequently still
@@ -139,52 +178,36 @@ class CanvasManager:
                       0xff9966, 0x66ffcc, 0x9966ff, 0xff6666, 0x66ff66]
 
             for i, idea in enumerate(ideas):
+                # Already in memory (a reload without clearing): no second copy of it.
+                if idea.id in self.backend.bubble_id_map:
+                    continue
+
                 # Check for stored position in metadata (persists across restarts)
                 stored_pos = None
                 if idea.metadata and isinstance(idea.metadata, dict):
                     stored_pos = idea.metadata.get("position")
 
                 if stored_pos and all(k in stored_pos for k in ["x", "y", "z"]):
-                    # Use stored position but check if it still works
+                    # A stored position is the bubble's place: loading never moves it and
+                    # never writes it back (that made every bubble jump at some starts).
                     x, y, z = stored_pos["x"], stored_pos["y"], stored_pos["z"]
-                    test_pos = {"x": x, "y": y, "z": z}
+                else:
+                    # No position yet: a free one, written once for this bubble.
+                    base_angle = i * 0.8
+                    base_radius = 1.5 + (i * 0.3)
+                    new_pos = self._find_free_position(base_angle, base_radius, exclude_db_id=idea.id)
+                    x, y, z = new_pos["x"], new_pos["y"], new_pos["z"]
 
-                    if not self._check_collision(test_pos):
-                        debug_log(f"Using stored position for '{idea.title}': ({x}, {y}, {z})")
-                    else:
-                        # Stored position collides, find a new one
-                        debug_log(f"Stored position collides for '{idea.title}', finding new position")
-                        base_angle = i * 0.8
-                        base_radius = 1.5 + (i * 0.3)
-                        new_pos = self._find_free_position(base_angle, base_radius)
-                        x, y, z = new_pos["x"], new_pos["y"], new_pos["z"]
-
-                        # Update stored position
-                        new_metadata = idea.metadata.copy() if idea.metadata else {}
+                    if idea.id not in self._positions_written:
+                        self._positions_written.add(idea.id)
+                        new_metadata = idea.metadata.copy() if isinstance(idea.metadata, dict) else {}
                         new_metadata["position"] = {"x": x, "y": y, "z": z}
                         try:
                             idea.metadata = new_metadata
                             self.backend.ideas_repo.update(idea)
-                            debug_log(f"Updated position for '{idea.title}': ({x}, {y}, {z})")
+                            debug_log(f"Saved position for bubble {idea.id}")
                         except Exception as e:
-                            debug_log(f"Failed to update position for '{idea.title}': {e}")
-                else:
-                    # Generate new position with collision avoidance
-                    base_angle = i * 0.8
-                    base_radius = 1.5 + (i * 0.3)
-                    new_pos = self._find_free_position(base_angle, base_radius)
-                    x, y, z = new_pos["x"], new_pos["y"], new_pos["z"]
-
-                    # Save generated position to metadata for persistence
-                    new_metadata = idea.metadata.copy() if idea.metadata else {}
-                    new_metadata["position"] = {"x": x, "y": y, "z": z}
-                    try:
-                        # Update the idea object's metadata and save
-                        idea.metadata = new_metadata
-                        self.backend.ideas_repo.update(idea)
-                        debug_log(f"Saved position for '{idea.title}': ({x}, {y}, {z})")
-                    except Exception as e:
-                        debug_log(f"Failed to save position for '{idea.title}': {e}")
+                            debug_log(f"Failed to save position for bubble {idea.id}: {type(e).__name__}")
 
                 bubble = Bubble(
                     id=self.backend.next_bubble_id,
@@ -283,18 +306,9 @@ class CanvasManager:
         """
         if force_reload and self.backend.ideas_repo:
             try:
-                # Clear in-memory cache before re-loading so deletions in
-                # the DB are honoured (the loader appends, never removes).
-                self.backend.bubbles.clear()
-                self.backend.bubble_id_map.clear()
-                # Also reset the module-level map mirroring this state.
-                try:
-                    electron_backend._bubble_id_map.clear()
-                except Exception:
-                    pass
-                # Reset numbering so freshly-loaded bubbles get small IDs.
-                self.backend.next_bubble_id = 1
-                self._load_bubbles_from_db()
+                # Clear in-memory cache before re-loading so deletions in the DB are
+                # honoured. While another load runs this waits for it and uses its result.
+                self._load_bubbles_from_db(clear=True)
             except Exception as e:
                 debug_log(f"get_all_bubbles force_reload failed: {e}")
 

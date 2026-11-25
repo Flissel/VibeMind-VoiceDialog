@@ -629,14 +629,16 @@ class UniverseCanvas {
     _applyPositionsAndRender(nodes, edges, positions) {
         // Overwrite positions with computed ones (when available)
         if (positions) {
+            const before = new Map();   // where each card stood, so only moved ones are written
             for (const n of nodes) {
+                before.set(String(n.id), { x: n.position?.x ?? n.x, y: n.position?.y ?? n.y });
                 const p = positions.get(String(n.id));
                 if (p) {
                     n.position = { x: p.x, y: p.y };
                 }
             }
             // Persist computed positions back via IPC so they survive reload
-            this._persistPositions(positions);
+            this._persistPositions(positions, before);
         }
 
         // Phase 11.U.H — render nodes first, edges second, then a final
@@ -683,7 +685,11 @@ class UniverseCanvas {
         }
     }
 
-    async _persistPositions(positions) {
+    /**
+     * Write the x/y of the cards a layout moved. `before` (id -> {x, y}) holds where
+     * they stood; a card that stays where it was (within half a pixel) is not written.
+     */
+    async _persistPositions(positions, before) {
         // Phase 11.U.H — IDs are DB-UUIDs directly (post-H.1). Use map-keys
         // straight as PATCH targets. Throttle to 6 in-flight at once to
         // avoid ERR_INSUFFICIENT_RESOURCES.
@@ -692,6 +698,9 @@ class UniverseCanvas {
         positions.forEach((pos, nodeId) => {
             // nodeId is already a Supabase UUID string after H.1
             if (!nodeId || typeof nodeId !== 'string' || nodeId.length < 4) return;
+            const was = before ? before.get(nodeId) : null;
+            if (was && Number.isFinite(was.x) && Number.isFinite(was.y)
+                && Math.abs(was.x - pos.x) < 0.5 && Math.abs(was.y - pos.y) < 0.5) return;
             tasks.push({ dbId: nodeId, pos });
         });
         const BATCH = 6;
@@ -1349,10 +1358,12 @@ class UniverseCanvas {
         }
 
         // Apply final positions with animation
+        const before = new Map();   // where each card stood, so only moved ones are written
         nodeIds.forEach(id => {
             const node = this.nodes.get(id);
             const p = positions.get(String(id));
             if (!p) return;
+            if (node.data && node.data.position) before.set(String(id), { x: node.data.position.x, y: node.data.position.y });
             const el = node.element;
             el.style.transition = 'left 0.5s ease, top 0.5s ease';
             // canvasCenter is added because renderNode does `+ this.canvasCenter`
@@ -1366,7 +1377,7 @@ class UniverseCanvas {
         });
 
         // Persist to Supabase so the layout survives reload
-        this._persistPositions(positions);
+        this._persistPositions(positions, before);
 
         // Phase 11.U.H — redraw edges throughout the 500ms transition so
         // they animate along with the nodes. Final pass at 600ms locks in
