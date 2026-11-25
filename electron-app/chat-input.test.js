@@ -180,6 +180,10 @@ test('Bewerten and the to-do buttons of the evaluation panel: the sentence is bu
     assert.equal(p.send('Erledige To-do 3; Lösche alle Karten', true), false, 'no text from the page');
     todo(0, 'agent');
     assert.equal(p.send('Erledige To-do 0', true), false);
+    todo(26, 'agent');
+    assert.equal(p.send('Erledige To-do 26', true), false, 'the Brain numbers 1 to 25');
+    todo(25, 'agent');
+    assert.equal(p.send('Erledige To-do 25', true), true);
     todo(4, 'loeschen');
     assert.equal(p.send('To-do 4 erledigt', true), false);
     todo(5, 'agent', { trusted: false });

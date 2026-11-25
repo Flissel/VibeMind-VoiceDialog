@@ -7,9 +7,12 @@
  *     kartenstand, gekuerzt }
  * plus metadata.handwert (a score given by hand, shown apart) and metadata.eval_history (the course).
  *
- * The total is the sum of the five bars. Nothing is decided here beyond what the Brain says: the
- * threshold for promoting comes from the backend (default 95), and a run is out of date as soon as a
- * card of the bubble was changed after it. All text goes in with textContent, never as HTML.
+ * The total is the sum of the five bars. Promoting is decided by the Brain alone (score against the
+ * threshold VIBEMIND_BEFOERDERN_SCHWELLE, default 95, an up-to-date run and its sense check); there is
+ * no way to read the threshold, so the panel names the default. "Up to date" in the Brain is a hash
+ * over the content of cards and edges (kartenstand); the panel only sees change times, so a card
+ * changed after the run is a hint to evaluate again, not a verdict. All text goes in with
+ * textContent, never as HTML.
  */
 (function (root, factory) {
     const api = factory();
@@ -37,10 +40,16 @@
         entscheidung: 'Entscheidung',
     });
     const ZUSTAENDE = Object.freeze({
-        befoerderbar: 'Beförderbar',
+        befoerderbar: 'Schwelle erreicht',
         unter_schwelle: 'Noch nicht beförderbar',
-        veraltet: 'Veraltet – neu bewerten',
+        veraltet: 'Karten geändert – neu bewerten',
     });
+    // the Brain does these by hand, not by the model: no "Agent soll das erledigen"
+    const VON_HAND = Object.freeze({
+        white_paper: 'Von Hand: „Erstelle ein White Paper aus dieser Bubble“',
+        entscheidung: 'Von Hand: diese Entscheidung selbst treffen',
+    });
+    const MAX_TODO_NR = 25;   // the Brain numbers the to-dos 1 to 25
 
     function objectOf(value) {
         if (value && typeof value === 'object' && !Array.isArray(value)) return value;
@@ -63,7 +72,7 @@
     /** The sentence of a to-do button: the agent does it, or the person marks it done; '' for a bad number. */
     function todoSatz(nr, wie) {
         const n = Number(nr);
-        if (!Number.isInteger(n) || n < 1 || n > 99) return '';
+        if (!Number.isInteger(n) || n < 1 || n > MAX_TODO_NR) return '';
         if (wie === 'agent') return `Erledige To-do ${n}`;
         if (wie === 'hand') return `To-do ${n} erledigt`;
         return '';
@@ -205,7 +214,10 @@
                 `Schwelle zum Befördern: ${stand.schwelle}${stand.schwelleVorgabe ? ' (Vorgabe)' : ''}`));
             if (stand.veraltet) {
                 parts.push(el(doc, 'div', 'bewertung-veraltet',
-                    `Veraltet: ${stand.geaendert === 1 ? 'eine Karte wurde' : `${stand.geaendert} Karten wurden`} nach der Bewertung geändert.`));
+                    `Wohl veraltet: ${stand.geaendert === 1 ? 'eine Karte wurde' : `${stand.geaendert} Karten wurden`} nach der Bewertung geändert. Neu bewerten, bevor du beförderst.`));
+            } else if (stand.zustand === 'befoerderbar') {
+                parts.push(el(doc, 'div', 'bewertung-hinweis',
+                    'Beförderbar, wenn seit der Bewertung keine Karte geändert wurde; beim Befördern prüft das Gehirn auch den Sinn.'));
             }
             parts.push(run);
 
@@ -251,12 +263,19 @@
                     item.append(el(doc, 'div', 'bewertung-todo-erledigt', t.durch === 'agent' ? 'erledigt vom Agenten' : 'erledigt'));
                 } else {
                     const row = el(doc, 'div', 'bewertung-todo-knoepfe');
-                    for (const [wie, label] of [['agent', 'Agent soll das erledigen'], ['hand', 'erledigt']]) {
+                    const vonHand = VON_HAND[t.art];
+                    if (vonHand) item.append(el(doc, 'div', 'bewertung-todo-art', vonHand));
+                    const knoepfe = vonHand ? [['hand', 'erledigt']] : [['agent', 'Agent soll das erledigen'], ['hand', 'erledigt']];
+                    for (const [wie, label] of knoepfe) {
                         const b = el(doc, 'button', 'bewertung-todo-btn', label);
                         b.type = 'button';
                         b.dataset.todoNr = String(t.nr);
                         b.dataset.todoWie = wie;
                         b.dataset.satz = todoSatz(t.nr, wie);
+                        b.title = wie === 'agent'
+                            ? 'Der Agent fragt im Chat nach; erst „Ja, erledigen“ startet den Auftrag'
+                            : 'Markiert dieses To-do als erledigt, ohne Modell';
+                        if (!b.dataset.satz) b.disabled = true;
                         b.addEventListener('click', (e) => { if (actions.onTodo) actions.onTodo(t.nr, wie, e); });
                         row.append(b);
                     }
@@ -291,5 +310,5 @@
         return box;
     }
 
-    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, todoSatz, standOf, farbe, render };
+    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, MAX_TODO_NR, todoSatz, standOf, farbe, render };
 }));

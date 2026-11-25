@@ -74,7 +74,7 @@ test('out of date once a card was changed after the run, whatever the score', ()
     assert.equal(s.veraltet, true);
     assert.equal(s.geaendert, 1);
     assert.equal(s.zustand, 'veraltet', 'not promotable while out of date');
-    assert.equal(s.zustandLabel, 'Veraltet – neu bewerten');
+    assert.equal(s.zustandLabel, 'Karten geändert – neu bewerten');
     assert.equal(panel.farbe(s), 'yellow');
 });
 
@@ -108,6 +108,8 @@ test('the sentences of the buttons; a bad number gives none', () => {
     assert.equal(panel.todoSatz('2', 'hand'), 'To-do 2 erledigt');
     assert.equal(panel.todoSatz(0, 'agent'), '');
     assert.equal(panel.todoSatz(2.5, 'agent'), '');
+    assert.equal(panel.todoSatz(25, 'hand'), 'To-do 25 erledigt');
+    assert.equal(panel.todoSatz(26, 'hand'), '', 'the Brain numbers 1 to 25');
     assert.equal(panel.todoSatz(2, 'x'), '');
 });
 
@@ -147,8 +149,8 @@ test('the panel: German, score and threshold, warning, to-do buttons that call b
         onCard: (id) => calls.card.push(id),
     });
     const text = textOf(box);
-    for (const part of ['Beispielbubble', '61', 'Schwelle zum Befördern: 95 (Vorgabe)', 'Veraltet – neu bewerten',
-        'eine Karte wurde nach der Bewertung geändert', 'Wissenslage', '9/25', 'To-dos', ' (2 offen von 3)',
+    for (const part of ['Beispielbubble', '61', 'Schwelle zum Befördern: 95 (Vorgabe)', 'Karten geändert – neu bewerten',
+        'Wohl veraltet: eine Karte wurde nach der Bewertung geändert', 'Wissenslage', '9/25', 'To-dos', ' (2 offen von 3)',
         'Abnahme festlegen', '+6', 'Karte gelöscht', 'erledigt vom Agenten', 'Handwert', '80 von Hand', 'Neu bewerten']) {
         assert.ok(text.includes(part), part);
     }
@@ -173,6 +175,23 @@ test('the panel: German, score and threshold, warning, to-do buttons that call b
     const empty = textOf(box);
     assert.ok(empty.includes('Noch keine Bewertung für diese Bubble.') && empty.includes('Bewertung läuft'));
     assert.equal(all(box).find((n) => n.id === 'eval-rerun-btn').disabled, true, 'no second run while one goes');
+});
+
+test('white paper and decision to-dos are done by hand: no agent button; at the threshold only a careful word', () => {
+    const doc = fakeDoc();
+    const box = doc.createElement('div');
+    const run = lauf({ todos: [
+        { nr: 1, sicht: 'ideas', titel: 'Papier', fehlt: 'Kein White Paper.', karten: [], punkte: 5, art: 'white_paper', erledigt: false },
+        { nr: 2, sicht: 'ideas', titel: 'Wahl', fehlt: 'Offen.', karten: [], punkte: 2, art: 'entscheidung', erledigt: false },
+    ] });
+    panel.render(doc, box, panel.standOf({ row: row({ bewertung_lauf: run }), cards, schwelle: 60 }), {});
+    const nodes = all(box);
+    assert.deepEqual(nodes.filter((n) => n.className === 'bewertung-todo-btn').map((b) => [b.dataset.todoNr, b.dataset.todoWie]),
+        [['1', 'hand'], ['2', 'hand']]);
+    const text = textOf(box);
+    assert.ok(text.includes('Von Hand: „Erstelle ein White Paper aus dieser Bubble“'));
+    assert.ok(text.includes('Schwelle erreicht'));
+    assert.ok(text.includes('Beförderbar, wenn seit der Bewertung keine Karte geändert wurde'));
 });
 
 test('the window: one source, no threshold of its own, the module loaded before the bar', () => {

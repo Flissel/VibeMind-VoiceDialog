@@ -50,7 +50,7 @@ const SENTENCE_BUTTONS = Object.freeze({
 function todoSentence(button) {
     if (!button.classList || !button.classList.contains('bewertung-todo-btn') || button.disabled) return '';
     const nr = Number(button.dataset && button.dataset.todoNr);
-    if (!Number.isInteger(nr) || nr < 1 || nr > 99) return '';
+    if (!Number.isInteger(nr) || nr < 1 || nr > 25) return '';   // the Brain numbers 1 to 25
     const how = button.dataset.todoWie;
     if (how === 'agent') return `Erledige To-do ${nr}`;
     if (how === 'hand') return `To-do ${nr} erledigt`;
