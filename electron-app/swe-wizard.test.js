@@ -26,7 +26,10 @@ function element(tag, id, placed) {
         appendChild(c) { el.children.push(c); if (placed) placed(c); return c; },
         insertBefore(c) { el.children.unshift(c); if (placed) placed(c); return c; },
         get firstChild() { return el.children[0] || null; },
-        addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+        _on: {},
+        addEventListener(type, fn) { (el._on[type] = el._on[type] || []).push(fn); },
+        click() { (el._on.click || []).forEach((fn) => fn({})); },
+        querySelector: () => null, querySelectorAll: () => [],
     };
     return el;
 }
@@ -35,7 +38,7 @@ function element(tag, id, placed) {
 function page() {
     const byId = new Map();
     // the lines the scripts make themselves are found only once they stand on the page
-    const MADE = new Set(['wizard-sinnpruefung', 'swe-wizard-leer']);
+    const MADE = new Set(['wizard-sinnpruefung', 'swe-wizard-leer', 'wizard-white-paper']);
     const placed = (c) => { if (c.id && !byId.has(c.id)) byId.set(c.id, c); };
     const get = (id) => { if (!byId.has(id)) { if (MADE.has(id)) return null; byId.set(id, element('div', id, placed)); } return byId.get(id); };
     const listeners = {};
@@ -116,16 +119,62 @@ test('a project that cannot be opened: a calm sentence, no stand asked; an older
     assert.notEqual(p.get('wizard-project-name').value, 'Alt');
 });
 
-test('the stand of a promoted project: its cards are candidates with their group', () => {
+const REQS = [
+    { id: 'REQ-001', title: 'Laden planen', description: 'x', priority: 'medium', status: 'pending', category: 'Laden', source_card_id: 'a' },
+    { id: 'REQ-002', title: 'Ohne Gruppe', description: '', priority: 'medium', status: 'pending', category: null, source_card_id: 'b' },
+    { id: 'REQ-003', title: 'Tarif', description: '', priority: 'medium', status: 'gestrichen', category: 'Laden', source_card_id: 'c' },
+];
+
+function opened(context) {
     const p = page();
     p.window.shuttleWizard.initWizard({ projektId: PROJEKT });
     p.fromPython({ type: 'wizard_initialized', quelle: 'projekt', success: true, shuttle_id: SHUTTLE, projekt_id: PROJEKT, project: {}, kopfzeile: VERDICT_OK });
-    p.fromPython({ type: 'wizard_state', shuttle_id: SHUTTLE, current_step: 'mining', project: {}, context: { sinnpruefung: VERDICT_OK },
-        requirements: [{ id: 'REQ-001', title: 'Laden planen', description: 'x', priority: 'medium', status: 'kandidat', category: 'Laden', source_card_id: 'a' }] });
+    p.fromPython({ type: 'wizard_state', shuttle_id: SHUTTLE, current_step: 'mining', project: {},
+        context: Object.assign({ sinnpruefung: VERDICT_OK }, context || {}), requirements: JSON.parse(JSON.stringify(REQS)) });
+    p.sent.length = 0;
+    return p;
+}
+
+test('the stand of a promoted project: cards are requirements, grouped by their card group, struck ones greyed out', () => {
+    const p = opened();
     const grid = p.get('wizard-requirements-grid');
-    assert.equal(grid.children.length, 1);
-    const header = grid.children[0].children[0];
-    assert.deepEqual(header.children.map((c) => c.textContent), ['REQ-001', 'medium', 'Kandidat', 'Laden']);
+    const parts = grid.children.map((c) => (c.className === 'req-group-head' ? '# ' + c.textContent : c.children[0].children[0].textContent));
+    assert.deepEqual(parts, ['# Laden', 'REQ-001', 'REQ-003', '# Ungrouped', 'REQ-002']);
+    const card1 = grid.children[1];
+    assert.deepEqual(card1.children[0].children.map((c) => c.textContent), ['REQ-001', 'medium', 'Strike'], 'no candidate badge');
+    assert.equal(grid.children[2].className, 'req-card req-struck');
+    assert.equal(grid.children[2].children[0].children[2].textContent, 'Restore');
+    assert.equal(p.get('validation-count').textContent, '2 requirements · 1 struck');
+});
+
+test('strike and restore: greyed at once, saved by the space; a failed save shows the old state with a note', () => {
+    const p = opened();
+    const grid = p.get('wizard-requirements-grid');
+    grid.children[1].children[0].children[2].click();   // Strike REQ-001
+    assert.deepEqual(p.sent, [{ type: 'wizard_set_requirement_status', shuttle_id: SHUTTLE, req_id: 'REQ-001', status: 'gestrichen' }]);
+    assert.equal(grid.children[1].className, 'req-card req-struck');
+    assert.equal(p.get('validation-count').textContent, '1 requirements · 2 struck');
+
+    p.fromPython({ type: 'wizard_requirement_status', success: false, error: 'speichern_fehlgeschlagen', shuttle_id: SHUTTLE, req_id: 'REQ-001' });
+    assert.equal(grid.children[1].className, 'req-card');
+    assert.match(grid.children[1].textContent, /Not saved, please try again\./);
+
+    p.sent.length = 0;
+    grid.children[2].children[0].children[2].click();   // Restore REQ-003
+    assert.deepEqual(p.sent, [{ type: 'wizard_set_requirement_status', shuttle_id: SHUTTLE, req_id: 'REQ-003', status: 'pending' }]);
+    p.fromPython({ type: 'wizard_requirement_status', success: true, shuttle_id: SHUTTLE, req_id: 'REQ-003', status: 'pending', aktiv: 3, gestrichen: 0 });
+    assert.equal(p.get('validation-count').textContent, '3 requirements');
+});
+
+test('the white paper: readable in full and collapsible in step Project, as text', () => {
+    const p = opened({ white_paper: { node_id: 'w1', titel: 'Ladeplaner', text: '# Ziel\n<b>nicht fett</b>' } });
+    const box = p.get('wizard-form-mining').children.find((c) => c.id === 'wizard-white-paper');
+    assert.ok(box, 'in the project form');
+    assert.equal(box.tag, 'details');
+    assert.equal(box.children[0].textContent, 'White paper: Ladeplaner');
+    assert.equal(box.children[1].textContent, '# Ziel\n<b>nicht fett</b>', 'text, never HTML');
+    const none = opened({ white_paper: null });
+    assert.equal(none.get('wizard-form-mining').children.find((c) => c.id === 'wizard-white-paper'), undefined);
 });
 
 test('the tab: the wanted project opens below the title bar, once; leaving hides it; without a project a calm line', () => {
@@ -202,4 +251,7 @@ test('the tab shows the wizard, not the stage view; the page loads the tab after
     assert.match(backend, /elif msg_type == "wizard_init_from_project":/);
     assert.match(backend, /handler\.init_from_project\(shuttle_id, projekt_id\)/);
     assert.match(backend, /"type": "wizard_initialized", "quelle": "projekt", \*\*result/);
+    assert.match(backend, /elif msg_type == "wizard_set_requirement_status":/);
+    assert.match(backend, /handler\.set_requirement_status\(shuttle_id, req_id, status\)/);
+    assert.match(backend, /"type": "wizard_requirement_status", \*\*result/);
 });

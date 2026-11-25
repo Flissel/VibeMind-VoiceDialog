@@ -1135,14 +1135,53 @@
     margin-top: 4px;
     color: #ff8a80;
 }
-.req-kandidat,
-.req-gruppe {
-    margin-left: 6px;
-    padding: 1px 6px;
-    border-radius: 6px;
+/* Requirements of a promoted project: grouped by card group, struck ones greyed out (shuttle-wizard.js) */
+.req-group-head {
+    grid-column: 1 / -1;
+    margin: 6px 0 -4px;
     font-size: 11px;
-    background: rgba(255, 255, 255, 0.08);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(200, 215, 240, 0.65);
 }
-.req-kandidat {
-    color: #ffe7a3;
+.req-strike {
+    margin-left: auto;
+}
+.req-card-header .req-priority {
+    margin-left: 8px;
+    margin-right: 8px;
+}
+.req-card.req-struck {
+    opacity: 0.45;
+}
+.req-card.req-struck .req-text,
+.req-card.req-struck .req-desc {
+    text-decoration: line-through;
+}
+.req-note {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #ff8a80;
+}
+/* The white paper in step "Project": readable in full, collapsible */
+.wizard-white-paper {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.wizard-white-paper summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: rgba(220, 230, 250, 0.9);
+}
+.wizard-white-paper-text {
+    margin-top: 8px;
+    max-height: 360px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(210, 220, 240, 0.85);
 }

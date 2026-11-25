@@ -162,7 +162,12 @@
             });
             renderWizardRequirements();
             renderWizardStakeholders();
+            renderWhitePaper();
             navigateWizardStep(wizardState.currentStep);
+        }
+
+        if (msg.type === 'wizard_requirement_status') {
+            requirementStatusSaved(msg);
         }
 
         if (msg.type === 'wizard_agent_result') {
@@ -251,6 +256,77 @@
         };
     }
 
+    var STRUCK = 'gestrichen';
+
+    /** Requirements grouped by the group of their card (first appearance first); ungrouped last. */
+    function groupedRequirements(reqs) {
+        var order = [];
+        var groups = {};
+        reqs.forEach(function(req, i) {
+            var key = req.category || '';
+            if (!groups[key]) { groups[key] = []; order.push(key); }
+            groups[key].push({ req: req, index: i });
+        });
+        order.sort(function(a, b) { return (a === '') - (b === ''); });
+        return order.map(function(key) { return { name: key, items: groups[key] }; });
+    }
+
+    /** Strike (greyed out, kept) or restore one requirement; the space saves it at once. */
+    function setRequirementStatus(req, status) {
+        var before = req.status;
+        req.status = status;
+        req._before = before;
+        renderWizardRequirements();
+        if (wizardState.shuttleId && window.vibemind && window.vibemind.sendToPython) {
+            window.vibemind.sendToPython({
+                type: 'wizard_set_requirement_status',
+                shuttle_id: wizardState.shuttleId,
+                req_id: req.id,
+                status: status,
+            });
+        }
+    }
+
+    function requirementStatusSaved(msg) {
+        if (wizardState.shuttleId && msg.shuttle_id && msg.shuttle_id !== wizardState.shuttleId) return;
+        var req = wizardState.requirements.find(function(r) { return r.id === msg.req_id; });
+        if (!req) return;
+        if (!msg.success) {
+            // not saved: show the old state again, with a note on the card
+            req.status = req._before || 'pending';
+            req._note = 'Not saved, please try again.';
+        } else {
+            delete req._note;
+        }
+        delete req._before;
+        renderWizardRequirements();
+    }
+
+    /** The white paper of a promoted project, readable in full and collapsible in step "Project" (text only). */
+    function renderWhitePaper() {
+        var form = document.getElementById('wizard-form-mining');
+        if (!form) return;
+        var box = document.getElementById('wizard-white-paper');
+        var wp = wizardState.context && wizardState.context.white_paper;
+        if (!wp || !wp.text) { if (box) box.hidden = true; return; }
+        if (!box) {
+            box = document.createElement('details');
+            box.id = 'wizard-white-paper';
+            box.className = 'wizard-white-paper';
+            var actions = form.querySelector('.wizard-actions');
+            form.insertBefore(box, actions || null);
+        }
+        box.hidden = false;
+        box.textContent = '';
+        var summary = document.createElement('summary');
+        summary.textContent = 'White paper' + (wp.titel ? ': ' + wp.titel : '');
+        var body = document.createElement('div');
+        body.className = 'wizard-white-paper-text';
+        body.textContent = wp.text;
+        box.appendChild(summary);
+        box.appendChild(body);
+    }
+
     function renderWizardRequirements() {
         var grid = document.getElementById('wizard-requirements-grid');
         if (!grid) return;
@@ -263,9 +339,25 @@
             grid.appendChild(ph);
             return;
         }
-        reqs.forEach(function(req, i) {
+        var groups = groupedRequirements(reqs);
+        var showHeads = groups.length > 1 || groups[0].name !== '';
+        groups.forEach(function(group) {
+            if (showHeads) {
+                var head = document.createElement('div');
+                head.className = 'req-group-head';
+                head.textContent = group.name || 'Ungrouped';
+                grid.appendChild(head);
+            }
+            group.items.forEach(function(entry) { grid.appendChild(requirementCard(entry.req, entry.index)); });
+        });
+        var struck = reqs.filter(function(r) { return r.status === STRUCK; }).length;
+        document.getElementById('validation-count').textContent =
+            (reqs.length - struck) + ' requirements' + (struck ? ' · ' + struck + ' struck' : '');
+    }
+
+    function requirementCard(req, i) {
             var card = document.createElement('div');
-            card.className = 'req-card';
+            card.className = 'req-card' + (req.status === STRUCK ? ' req-struck' : '');
 
             var header = document.createElement('div');
             header.className = 'req-card-header';
@@ -277,19 +369,16 @@
             prioSpan.textContent = req.priority || 'medium';
             header.appendChild(idSpan);
             header.appendChild(prioSpan);
-            // a card of a promoted project: a candidate to take or strike, with the group of its card
-            if (req.status === 'kandidat') {
-                var candidate = document.createElement('span');
-                candidate.className = 'req-kandidat';
-                candidate.textContent = 'Kandidat';
-                header.appendChild(candidate);
-            }
-            if (req.category) {
-                var group = document.createElement('span');
-                group.className = 'req-gruppe';
-                group.textContent = req.category;
-                header.appendChild(group);
-            }
+
+            // strike greys the requirement out and keeps it; restore brings it back (D16)
+            var toggle = document.createElement('button');
+            toggle.className = 'action-btn small secondary req-strike';
+            toggle.textContent = req.status === STRUCK ? 'Restore' : 'Strike';
+            toggle.title = req.status === STRUCK ? 'Bring this requirement back' : 'Grey out; it stays and can be restored';
+            toggle.addEventListener('click', function() {
+                setRequirementStatus(req, req.status === STRUCK ? 'pending' : STRUCK);
+            });
+            header.appendChild(toggle);
 
             var text = document.createElement('div');
             text.className = 'req-text';
@@ -304,10 +393,13 @@
                 desc.textContent = req.description;
                 card.appendChild(desc);
             }
-
-            grid.appendChild(card);
-        });
-        document.getElementById('validation-count').textContent = reqs.length + ' requirements';
+            if (req._note) {
+                var note = document.createElement('div');
+                note.className = 'req-note';
+                note.textContent = req._note;
+                card.appendChild(note);
+            }
+            return card;
     }
 
     function renderWizardStakeholders() {
@@ -588,7 +680,12 @@
                     step: 'requirements',
                     data: {
                         stakeholders: wizardState.stakeholders,
-                        requirements: wizardState.requirements,
+                        // without the wizard's own notes (_before, _note)
+                        requirements: wizardState.requirements.map(function(r) {
+                            var clean = {};
+                            Object.keys(r).forEach(function(k) { if (k.charAt(0) !== '_') clean[k] = r[k]; });
+                            return clean;
+                        }),
                     },
                 });
             }

@@ -1191,6 +1191,21 @@ class ElectronBackend:
                 result = {"success": False, "error": "lesen_fehlgeschlagen", "projekt_id": projekt_id}
             self.send_message({"type": "wizard_initialized", "quelle": "projekt", **result})
 
+        elif msg_type == "wizard_set_requirement_status":
+            # Strike (greyed out, kept) or restore one requirement; the space saves it at once.
+            shuttle_id = message.get("shuttle_id") or ""
+            req_id = message.get("req_id") or ""
+            status = message.get("status") or ""
+            debug_log(f"Wizard set requirement status: {shuttle_id} / {req_id} -> {status}")
+            from spaces.shuttles.wizard_handler import get_wizard_handler
+            handler = get_wizard_handler()
+            try:
+                result = handler.set_requirement_status(shuttle_id, req_id, status)
+            except Exception as exc:  # an older space without this step, or the database away
+                debug_log(f"Wizard set requirement status failed: {type(exc).__name__}")
+                result = {"success": False, "error": "speichern_fehlgeschlagen", "shuttle_id": shuttle_id, "req_id": req_id}
+            self.send_message({"type": "wizard_requirement_status", **result})
+
         elif msg_type == "wizard_submit_step":
             shuttle_id = message.get("shuttle_id")
             step = message.get("step")
