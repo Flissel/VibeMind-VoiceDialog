@@ -177,11 +177,108 @@
         return t === null ? '' : new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
     }
 
+    // A key that comes this soon after the panel was drawn was meant for what stood there before.
+    const KEY_GRACE_MS = 400;
+
     /**
-     * Fills `box` with the panel. actions: { laeuft, onRun(button), onTodo(nr, wie, button), onCard(id) }.
+     * Calls `fire` on a real press only (Lauf 34: a key on a focused to-do button sent
+     * "Erledige To-do N" twice without being meant). A click with a mouse counts; a click from the
+     * keyboard (detail 0) counts only after a fresh key (no repeat) pressed on this very button after
+     * it got the focus, and not within KEY_GRACE_MS after drawing. Tab and Enter keep working.
+     * After every click the button gives the focus away, so the next key goes nowhere.
+     */
+    function guard(button, fire, clock, drawnAt) {
+        let focusAt = null;
+        let key = null;
+        button.addEventListener('focus', () => { focusAt = clock(); key = null; });
+        button.addEventListener('keydown', (e) => {
+            key = e && e.isTrusted !== false ? { at: clock(), repeat: e.repeat === true } : null;
+        });
+        button.addEventListener('click', (e) => {
+            if (typeof button.blur === 'function') button.blur();
+            if (button.disabled) return;
+            const keyboard = !(e && e.detail > 0);
+            if (keyboard) {
+                const k = key;
+                key = null;
+                if (!k || k.repeat || focusAt === null || k.at < focusAt || k.at - drawnAt < KEY_GRACE_MS) return;
+            }
+            fire(e);
+        });
+        return button;
+    }
+
+    const SPERRE_TEXT = Object.freeze({
+        gesendet: (nr) => `To-do ${nr} ist abgeschickt – die Antwort kommt im Chat. Die übrigen To-dos warten so lange.`,
+        rueckfrage: (nr) => `To-do ${nr}: Rückfrage im Chat offen („Ja, erledigen“). Die übrigen To-dos warten so lange.`,
+        auftrag: (nr) => `To-do ${nr} wird erledigt. Die übrigen To-dos warten so lange.`,
+    });
+
+    /**
+     * While a to-do sent from the panel is answered, asked back or worked on, the other to-do
+     * buttons are locked. Phases: gesendet (until its answer), rueckfrage (until the next sentence;
+     * "Ja, erledigen" turns it into an order, any other sentence drops it; the Brain forgets it after
+     * 120 s), auftrag (until the to-do is done in the database, or the order ended). Each phase has a
+     * time limit, so a lost answer never locks the panel for good.
+     */
+    const SPERRE_MS = Object.freeze({ gesendet: 60 * 1000, rueckfrage: 125 * 1000, auftrag: 10 * 60 * 1000 });
+    const ORDER_OPEN = Object.freeze(['laeuft', 'wartet']);
+
+    function createTodoSperre({ now = Date.now } = {}) {
+        let s = null;
+        const set = (phase, more = {}) => { s = { ...s, ...more, phase, seit: now() }; };
+        return {
+            start(nr, wie) { s = { nr: Number(nr), wie, phase: 'gesendet', seit: now(), trace: null, orders: [] }; },
+            /** The trace of the sentence just sent (event vibemind:sentence-sent). */
+            sent(trace) { if (s && s.phase === 'gesendet' && !s.trace && trace) s.trace = String(trace); },
+            /** No sentence went out (the same question was still open): nothing to wait for. */
+            clear() { s = null; },
+            /** An answer in the chat (event vibemind:sentence-answered). */
+            answered(d) {
+                if (!s || !d) return;
+                const orders = Array.isArray(d.orders) ? d.orders.map(String) : [];
+                if (s.phase === 'gesendet') {
+                    if (s.trace && d.trace_id !== s.trace) return;
+                    if (d.accepted) set('auftrag', { orders });
+                    else if (d.note === 'rueckfrage' && d.success !== false) set('rueckfrage');
+                    else s = null;
+                } else if (s.phase === 'rueckfrage') {
+                    if (d.accepted) set('auftrag', { orders });
+                    else s = null;
+                }
+            },
+            /** What the database says now: a to-do marked done ends its lock. */
+            stand(st) {
+                if (!s || !st || st.leer || !Array.isArray(st.todos)) return;
+                const t = st.todos.find((x) => x.nr === s.nr);
+                if (t && t.erledigt) s = null;
+            },
+            /** The stand of the order the Brain names (GET /api/agent-auftraege/{id}/stand). */
+            order(id, stand) {
+                if (!s || s.phase !== 'auftrag' || !stand || !s.orders.includes(String(id))) return;
+                if (!ORDER_OPEN.includes(stand.stand)) s = null;
+            },
+            current() {
+                if (s && now() - s.seit > SPERRE_MS[s.phase]) s = null;
+                return s ? { ...s, orders: s.orders.slice(), text: SPERRE_TEXT[s.phase](s.nr) } : null;
+            },
+        };
+    }
+
+    /**
+     * Fills `box` with the panel. actions: { laeuft, sperre, now, onRun(event), onTodo(nr, wie, event), onCard(id) }.
+     * sperre: the current lock of createTodoSperre (or null): the to-do buttons are off while it holds.
      * The buttons that send a sentence carry it in data-satz; the preload knows the same sentences.
+     * Drawing never puts the focus on a button; a focused button inside gives it up first.
      */
     function render(doc, box, stand, actions = {}) {
+        const clock = typeof actions.now === 'function' ? actions.now : Date.now;
+        const drawnAt = clock();
+        const focused = doc.activeElement;
+        if (focused && focused !== doc.body && typeof box.contains === 'function' && box.contains(focused)
+            && typeof focused.blur === 'function') focused.blur();
+        const sperre = actions.sperre || null;
+        const todosAus = !!actions.laeuft || !!sperre;
         const parts = [];
         parts.push(el(doc, 'div', 'eval-title', stand.titel));
 
@@ -189,9 +286,11 @@
         run.type = 'button';
         run.id = 'eval-rerun-btn';
         run.dataset.satz = LAUF_SATZ;
-        run.disabled = !!actions.laeuft;
-        run.addEventListener('click', (e) => { if (actions.onRun) actions.onRun(e); });
+        run.disabled = !!actions.laeuft || !!sperre;
+        if (sperre) run.title = 'Erst wenn das To-do beantwortet oder erledigt ist';
+        guard(run, (e) => { if (actions.onRun) actions.onRun(e); }, clock, drawnAt);
         if (actions.laeuft) parts.push(el(doc, 'div', 'bewertung-laeuft', 'Bewertung läuft … (die Antwort steht im Chat)'));
+        if (sperre) parts.push(el(doc, 'div', 'bewertung-laeuft bewertung-sperre', sperre.text));
 
         if (stand.leer) {
             parts.push(el(doc, 'div', 'eval-empty', 'Noch keine Bewertung für diese Bubble.'));
@@ -254,7 +353,7 @@
                         const link = el(doc, 'button', 'bewertung-karte', card.title);
                         link.type = 'button';
                         link.dataset.cardId = card.id;
-                        link.addEventListener('click', () => { if (actions.onCard) actions.onCard(card.id); });
+                        guard(link, () => { if (actions.onCard) actions.onCard(card.id); }, clock, drawnAt);
                         links.append(link);
                     }
                     item.append(links);
@@ -275,8 +374,9 @@
                         b.title = wie === 'agent'
                             ? 'Der Agent fragt im Chat nach; erst „Ja, erledigen“ startet den Auftrag'
                             : 'Markiert dieses To-do als erledigt, ohne Modell';
-                        if (!b.dataset.satz) b.disabled = true;
-                        b.addEventListener('click', (e) => { if (actions.onTodo) actions.onTodo(t.nr, wie, e); });
+                        if (!b.dataset.satz || todosAus) b.disabled = true;
+                        if (todosAus) b.title = actions.laeuft ? 'Während die Bewertung läuft' : sperre.text;
+                        guard(b, (e) => { if (actions.onTodo) actions.onTodo(t.nr, wie, e); }, clock, drawnAt);
                         row.append(b);
                     }
                     item.append(row);
@@ -310,5 +410,6 @@
         return box;
     }
 
-    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, MAX_TODO_NR, todoSatz, standOf, farbe, render };
+    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
+        todoSatz, standOf, farbe, guard, createTodoSperre, render };
 }));

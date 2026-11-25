@@ -2268,11 +2268,69 @@
             box.style.display = '';
             window.VibeBewertung.render(document, box, stand, {
                 laeuft: !!_bewertungLauf,
+                sperre: _todoSperre ? _todoSperre.current() : null,
                 onRun: (e) => window.startBewertung(e),
-                onTodo: (nr, wie, e) => _bewertungSatz(window.VibeBewertung.todoSatz(nr, wie), e),
+                onTodo: _bewertungTodo,
                 onCard: _bewertungKarte,
             });
         }
+
+        // While a to-do sent from the panel is answered, asked back or worked on, the other to-dos
+        // are locked (bewertung-panel.js createTodoSperre). The chat says what happens to a sentence.
+        let _todoSperre = null;
+        let _sperreTimer = null;
+        function _sperre() {
+            if (!_todoSperre && window.VibeBewertung) _todoSperre = window.VibeBewertung.createTodoSperre();
+            return _todoSperre;
+        }
+
+        function _bewertungTodo(nr, wie, event) {
+            const sp = _sperre();
+            if (!sp || sp.current() || _bewertungLauf) return;
+            sp.start(nr, wie);
+            // the chat sends at once and names the sentence (vibemind:sentence-sent) before it waits for
+            // the answer; when it sent nothing (the same question still open), there is nothing to wait for
+            const sent = _bewertungSatz(window.VibeBewertung.todoSatz(nr, wie), event);
+            const now = sp.current();
+            if (!sent || !now || !now.trace) sp.clear();
+            _watchSperre();
+            if (_panelOpen()) _renderBewertung();
+        }
+
+        function _watchSperre() {
+            if (_sperreTimer) return;
+            _sperreTimer = setInterval(() => {
+                const sp = _todoSperre;
+                const now = sp && sp.current();
+                if (!now) {
+                    clearInterval(_sperreTimer);
+                    _sperreTimer = null;
+                    if (_panelOpen()) _renderBewertung();
+                    return;
+                }
+                const cur = window.__currentEvalBubble || {};
+                window._fetchEvalFromDB(cur.dbId, cur.title);
+                if (now.phase === 'auftrag' && window.vibemind && typeof window.vibemind.orderStand === 'function') {
+                    for (const id of now.orders) {
+                        window.vibemind.orderStand(id).then((stand) => {
+                            sp.order(id, stand);
+                            if (!sp.current() && _panelOpen()) _renderBewertung();
+                        }).catch(() => {});
+                    }
+                }
+            }, BEWERTUNG_POLL_MS);
+        }
+
+        window.addEventListener('vibemind:sentence-sent', (e) => {
+            if (_todoSperre) _todoSperre.sent(e.detail && e.detail.trace_id);
+        });
+        window.addEventListener('vibemind:sentence-answered', (e) => {
+            if (!_todoSperre || !_todoSperre.current()) return;
+            _todoSperre.answered((e && e.detail) || {});
+            const cur = window.__currentEvalBubble || {};
+            window._fetchEvalFromDB(cur.dbId, cur.title);
+            if (_panelOpen()) _renderBewertung();
+        });
 
         function _panelOpen() {
             const panel = document.getElementById('eval-panel');
@@ -2326,6 +2384,7 @@
         /** "Bewerten" / "Neu bewerten": send the sentence, open the panel, show the run until a new one is stored. */
         window.startBewertung = function(event) {
             if (_bewertungLauf) return false;
+            if (_todoSperre && _todoSperre.current()) return false;   // a to-do of the panel is still open
             if (!_bewertungSatz(window.VibeBewertung && window.VibeBewertung.LAUF_SATZ, event)) return false;
             const cur = window.__currentEvalBubble || {};
             _bewertungLauf = { seit: Date.now(), zeitVorher: _bewertungStand && _bewertungStand.zeit, bubble: cur.dbId, timer: null };
@@ -2368,6 +2427,7 @@
                 title: title,
             };
             _stopLauf();
+            if (_todoSperre) _todoSperre.clear();   // a lock belongs to the bubble it was set in
             _bewertungStand = null;
             _updateToggleBadge(null);
             window._fetchEvalFromDB(opts.dbId || primaryId, title);
@@ -2402,6 +2462,7 @@
                 const cards = c.ok ? await c.json() : [];
                 const stand = window.VibeBewertung.standOf({ row, cards });
                 _bewertungStand = stand;
+                if (_todoSperre) _todoSperre.stand(stand);   // a to-do marked done ends its lock
                 if (_bewertungLauf && !stand.leer && stand.zeit && stand.zeit !== _bewertungLauf.zeitVorher) _stopLauf();
                 _updateToggleBadge(stand);
                 if (!stand.leer && window.multiverseApp?.updateBubbleScore) {
