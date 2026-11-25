@@ -42,6 +42,7 @@
         keine_antwort: 'keine Antwort',
         eingabe_ungueltig: 'ungültige Stelle',
         kein_echter_klick: 'kein echter Klick',
+        desktop_nicht_sichtbar: 'Desktop nicht im Vordergrund',
     });
 
     function reasonText(grund) {

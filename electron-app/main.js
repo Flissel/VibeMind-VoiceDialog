@@ -1128,6 +1128,19 @@ function readREProjectDetail(projectDir) {
     };
 }
 
+/**
+ * The desktop picture can be clicked only while the Desktop space is in front: the space this
+ * process holds, the window shown and not minimized, no other view (BrowserView) over the scene.
+ * A hand click is signed only then (desktop-klicks.js).
+ */
+function desktopPictureInFront() {
+    if (currentSpace !== 'desktop') return false;
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return false;
+    const views = [dashboardManager, rowboatManager, sweDesignManager, clawportManager, brainManager, openfangManager,
+        agentfarmManager, mirofishManager, externalSpaces, flowzenManager, videoManager];
+    return !views.some((view) => view && typeof view.getIsVisible === 'function' && view.getIsVisible());
+}
+
 function setupIpcHandlers() {
     // Forward messages from renderer to Python
     const desktopService = require('./desktop-service').createDesktopService();
@@ -1204,7 +1217,8 @@ function setupIpcHandlers() {
     
     // Desktop space: the clicks of the task book and a click on the picture, through the Brain
     // (desktop-klicks.js; the key of the sign stays in this process). Only the app window asks.
-    desktopKlicks = registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+    desktopKlicks = registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents,
+        { isShown: desktopPictureInFront });
 
     // ========================================
     // MULTIVERSE NAVIGATION

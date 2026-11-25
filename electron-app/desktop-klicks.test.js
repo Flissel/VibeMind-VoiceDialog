@@ -101,7 +101,7 @@ test('only the window of the app may ask, and a click is signed only after a rea
     const inputs = {};
     const own = { getZoomFactor: () => 1, on: (name, fn) => { inputs[name] = fn; } };
     const api = registerDesktopKlicks(ipcMain, (event) => event.sender === own,
-        { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request, nowMs: () => clock });
+        { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request, nowMs: () => clock, isShown: () => true });
     api.watch(own);
     const press = (x, y, extra = {}) => inputs['input-event']({}, { type: 'mouseDown', button: 'left', x, y, ...extra });
     const click = (clientX, clientY) => handlers['desktop:hand-klick']({ sender: own }, { x: 1, y: 2, clientX, clientY });
@@ -124,6 +124,42 @@ test('only the window of the app may ask, and a click is signed only after a rea
     inputs['input-event']({}, { type: 'mouseUp', button: 'left', x: 300, y: 300 });
     assert.equal((await click(300, 300)).grund, 'kein_echter_klick');
     assert.equal(fake.asked.length, 1);
+});
+
+test('a click is signed only while the main process holds the Desktop space in front', async () => {
+    const handlers = {};
+    const ipcMain = { handle: (name, fn) => { handlers[name] = fn; } };
+    const fake = fakeRequest({ status: 200, body: { ok: true } });
+    const inputs = {};
+    const own = { getZoomFactor: () => 1, on: (name, fn) => { inputs[name] = fn; } };
+    let shown = false;
+    const api = registerDesktopKlicks(ipcMain, (event) => event.sender === own,
+        { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request, nowMs: () => 0, isShown: () => shown });
+    api.watch(own);
+    const pressAndClick = () => {
+        inputs['input-event']({}, { type: 'mouseDown', button: 'left', x: 50, y: 60 });
+        return handlers['desktop:hand-klick']({ sender: own }, { x: 7, y: 8, clientX: 50, clientY: 60 });
+    };
+    assert.deepEqual(await pressAndClick(), { ok: false, x: 7, y: 8, grund: 'desktop_nicht_sichtbar' });
+    assert.equal(fake.asked.length, 0, 'another space in front: nothing goes out, even after a real press');
+    shown = true;
+    assert.equal((await pressAndClick()).ok, true);
+    assert.equal(fake.asked.length, 1);
+
+    const without = {};
+    registerDesktopKlicks({ handle: (name, fn) => { without[name] = fn; } }, () => true, { env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, request: fake.request });
+    assert.equal((await without['desktop:hand-klick']({ sender: own }, { x: 1, y: 1, clientX: 0, clientY: 0 })).grund, 'desktop_nicht_sichtbar', 'without the state: refused');
+    assert.equal(KM.reasonText('desktop_nicht_sichtbar'), 'Desktop nicht im Vordergrund');
+});
+
+test('the main process knows by itself whether the Desktop space is in front', () => {
+    const main = read('main.js');
+    assert.match(main, /registerDesktopKlicks\([\s\S]{0,200}\{ isShown: desktopPictureInFront \}\)/);
+    const fn = main.slice(main.indexOf('function desktopPictureInFront()'));
+    const body = fn.slice(0, fn.indexOf('\n}\n'));
+    assert.match(body, /if \(currentSpace !== 'desktop'\) return false;/);
+    assert.match(body, /isMinimized\(\)/);
+    for (const view of ['dashboardManager', 'rowboatManager', 'externalSpaces', 'videoManager', 'flowzenManager']) assert.match(body, new RegExp(view));
 });
 
 test('the witness compares window pixels: client coordinates times the zoom', () => {
@@ -222,7 +258,7 @@ test('the Desktop view sends the click through the Brain and stops asking when t
     assert.match(preload, /handKlick: \(x, y, clientX, clientY\) => ipcRenderer\.invoke\('desktop:hand-klick', \{ x, y, clientX, clientY \}\)/);
     assert.doesNotMatch(preload, /EINGABE_SCHLUESSEL/, 'the key never reaches the renderer');
     const main = read('main.js');
-    assert.match(main, /registerDesktopKlicks\(ipcMain, \(event\) => Boolean\(mainWindow\) && !mainWindow\.isDestroyed\(\) && event\.sender === mainWindow\.webContents\)/);
+    assert.match(main, /registerDesktopKlicks\(ipcMain, \(event\) => Boolean\(mainWindow\) && !mainWindow\.isDestroyed\(\) && event\.sender === mainWindow\.webContents,/);
     assert.match(main, /mainWindow = new BrowserWindow\(\{[\s\S]*?\n    \}\);\s*\n\s*\/\/[^\n]*\n\s*if \(desktopKlicks\) desktopKlicks\.watch\(mainWindow\.webContents\);/, 'the window is watched as soon as it exists');
     const html = read('renderer', 'index.html');
     assert.ok(html.indexOf('src="klick-marken.js"') > html.indexOf('src="multiverse.js"'));

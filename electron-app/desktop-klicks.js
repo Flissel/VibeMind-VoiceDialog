@@ -17,6 +17,10 @@
  * (webContents 'input-event', which a page cannot fake): a click is signed only when a real left
  * mouse press happened at the same place of the window (CLIENT_TOLERANCE) within WITNESS_MS,
  * and each press is used once. The Brain takes each sign only once as well.
+ * And only while the Desktop space is in front (`deps.isShown`, kept by the main process: its own
+ * space state, the window shown, no other view over it); otherwise no click goes out.
+ * The place on the desktop (x, y) still comes from the page: only the main process could vouch
+ * for it if it showed the picture itself (a later rebuild, not this one).
  */
 const crypto = require('node:crypto');
 const http = require('node:http');
@@ -139,10 +143,13 @@ function registerDesktopKlicks(ipcMain, isOwnSender, deps = {}) {
   const api = createDesktopKlicks(deps);
   const witness = deps.witness || createClickWitness(deps.nowMs);
   ipcMain.handle('desktop:klicks', (event, seit) => (isOwnSender(event) ? api.klicks(Number(seit)) : { success: false, klicks: [], error: 'fremd' }));
+  const isShown = typeof deps.isShown === 'function' ? deps.isShown : () => false;
   ipcMain.handle('desktop:hand-klick', (event, args) => {
     if (!isOwnSender(event)) return { ok: false, grund: 'fremd' };
     const x = args && args.x;
     const y = args && args.y;
+    // the desktop picture is not in front (state of the main process, not of the page): no sign
+    if (!isShown()) return { ok: false, x, y, grund: 'desktop_nicht_sichtbar' };
     const zoom = event.sender && typeof event.sender.getZoomFactor === 'function' ? event.sender.getZoomFactor() : 1;
     // no real press at this place just now: no sign, nothing goes out
     if (!witness.take(args && args.clientX, args && args.clientY, zoom)) return { ok: false, x, y, grund: 'kein_echter_klick' };
