@@ -47,6 +47,29 @@ def preview_mount(project_path, root):
         return None
 
 
+NOT_A_PROJECT = "Kein Projektordner im Projektverzeichnis."
+NOT_BUILT = "Die App dieses Auftrags ist noch nicht gebaut (kein Ordner out mit package.json)."
+APP_FOLDER = "out"   # the built app of an order lies in <order>\out, next to its logs
+
+
+def preview_app_folder(project_path, root):
+    """(folder, reason): the built app of an order, `<order>/out` with a package.json.
+
+    The order folder and `out` are both checked to lie strictly inside `root`. A path that is
+    already the `out` folder is taken as it is. Without it: (None, a calm sentence).
+    """
+    order = preview_mount(project_path, root)
+    if not order:
+        return None, NOT_A_PROJECT
+    if os.path.basename(order).lower() == APP_FOLDER:
+        app = order
+    else:
+        app = preview_mount(os.path.join(order, APP_FOLDER), root)
+    if not app or not os.path.isfile(os.path.join(app, "package.json")):
+        return None, NOT_BUILT
+    return app, ""
+
+
 def preview_docker_command(project_id, mount, vnc_port, vnc_resolution="1280x720"):
     """docker run for the preview sandbox; the port is bound to 127.0.0.1 only."""
     resolution = vnc_resolution if isinstance(vnc_resolution, str) and _RESOLUTION.match(vnc_resolution) else "1280x720"
@@ -334,15 +357,15 @@ class ProjectManager:
                     })
                     return
 
-            # The folder comes from the window: only a project folder under the projects directory
-            # is mounted, never any other path.
-            mount = preview_mount(project_path, preview_projects_root(self.coding_engine_path))
+            # The folder comes from the window: only the built app (`out`) of a project folder under
+            # the projects directory is mounted, never any other path.
+            mount, reason = preview_app_folder(project_path, preview_projects_root(self.coding_engine_path))
             if not mount or not _SAFE_ID.match(str(project_id or "")):
                 self.active_previews.pop(project_id, None)
                 self.send_message({
                     "type": "project_preview_error",
                     "project_id": project_id,
-                    "error": "Kein Projektordner im Projektverzeichnis.",
+                    "error": reason or NOT_A_PROJECT,
                 })
                 return
 

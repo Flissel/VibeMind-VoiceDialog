@@ -78,6 +78,35 @@ def test_a_path_from_outside_starts_nothing_and_says_so(monkeypatch=None):
     assert backend.active_previews == {}
 
 
+def test_the_built_app_in_out_is_mounted_not_the_order_folder():
+    root, order, _outside = _tree()
+    folder, reason = pm.preview_app_folder(order, root)
+    assert folder is None and reason == pm.NOT_BUILT, "no out folder: a calm sentence"
+
+    out = os.path.join(order, "out")
+    os.makedirs(out)
+    assert pm.preview_app_folder(order, root) == (None, pm.NOT_BUILT), "out without package.json"
+
+    with open(os.path.join(out, "package.json"), "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert pm.preview_app_folder(order, root) == (os.path.realpath(out), "")
+    assert pm.preview_app_folder(out, root) == (os.path.realpath(out), ""), "the out folder itself"
+    assert pm.preview_app_folder(_outside, root) == (None, pm.NOT_A_PROJECT)
+
+
+def test_an_order_not_yet_built_starts_nothing_and_says_so():
+    root, order, _outside = _tree()
+    sent = []
+    backend = types.SimpleNamespace(send_message=sent.append, active_previews={}, coding_engine_path=root)
+    original = pm.subprocess.Popen
+    pm.subprocess.Popen = lambda *a, **k: (_ for _ in ()).throw(AssertionError("docker called"))
+    try:
+        asyncio.run(pm.ProjectManager(backend).handle_start_project_preview("abc12345", order))
+    finally:
+        pm.subprocess.Popen = original
+    assert sent == [{"type": "project_preview_error", "project_id": "abc12345", "error": pm.NOT_BUILT}]
+
+
 def test_the_projects_directory_can_be_named():
     old = os.environ.get("PREVIEW_PROJECTS_DIR")
     try:
