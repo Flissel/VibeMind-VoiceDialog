@@ -6,12 +6,63 @@ code generation, Docker VNC preview, and quality callbacks.
 """
 
 import asyncio
+import os
+import re
 import subprocess
 import logging
 
 from electron_backend import debug_log
 
 logger = logging.getLogger(__name__)
+
+# The live preview runs in the sandbox of the Coding engine (the same image the engine starts):
+# noVNC on 6090 inside, the project under /workspace/app, the port only on this machine.
+PREVIEW_IMAGE = "coding-engine/sandbox:latest"
+PREVIEW_NOVNC_PORT = 6090
+PREVIEW_MEMORY = "1536m"
+_SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_RESOLUTION = re.compile(r"^\d{3,4}x\d{3,4}$")
+
+
+def preview_projects_root(coding_engine_path):
+    """The directory that holds the projects: PREVIEW_PROJECTS_DIR, else the Coding engine path."""
+    return os.environ.get("PREVIEW_PROJECTS_DIR") or coding_engine_path or ""
+
+
+def preview_mount(project_path, root):
+    """The real folder to mount, or None when it is not a folder strictly inside `root`."""
+    if not isinstance(project_path, str) or not project_path.strip() or not root:
+        return None
+    try:
+        base = os.path.realpath(root)
+        folder = os.path.realpath(project_path.strip())
+        if not os.path.isdir(base) or not os.path.isdir(folder):
+            return None
+        if os.path.normcase(folder) == os.path.normcase(base):
+            return None
+        if os.path.normcase(os.path.commonpath([base, folder])) != os.path.normcase(base):
+            return None
+        return folder
+    except (OSError, ValueError):
+        return None
+
+
+def preview_docker_command(project_id, mount, vnc_port, vnc_resolution="1280x720"):
+    """docker run for the preview sandbox; the port is bound to 127.0.0.1 only."""
+    resolution = vnc_resolution if isinstance(vnc_resolution, str) and _RESOLUTION.match(vnc_resolution) else "1280x720"
+    name = "preview-" + re.sub(r"[^A-Za-z0-9_.-]", "", str(project_id))[:8]
+    return [
+        "docker", "run", "-d",
+        "--name", name,
+        "-p", f"127.0.0.1:{int(vnc_port)}:{PREVIEW_NOVNC_PORT}",
+        "-v", f"{mount}:/workspace/app",
+        "-w", "/workspace/app",
+        "-e", "ENABLE_VNC=true",
+        "-e", f"NOVNC_PORT={PREVIEW_NOVNC_PORT}",
+        "-e", f"DISPLAY_RESOLUTION={resolution}",
+        "--memory", PREVIEW_MEMORY,
+        PREVIEW_IMAGE,
+    ]
 
 
 class ProjectManager:
@@ -283,24 +334,29 @@ class ProjectManager:
                     })
                     return
 
+            # The folder comes from the window: only a project folder under the projects directory
+            # is mounted, never any other path.
+            mount = preview_mount(project_path, preview_projects_root(self.coding_engine_path))
+            if not mount or not _SAFE_ID.match(str(project_id or "")):
+                self.active_previews.pop(project_id, None)
+                self.send_message({
+                    "type": "project_preview_error",
+                    "project_id": project_id,
+                    "error": "Kein Projektordner im Projektverzeichnis.",
+                })
+                return
+
             self.active_previews[project_id] = {
                 "status": "starting",
-                "project_path": project_path
+                "project_path": mount
             }
 
             import socket
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('', 0))
+                s.bind(('127.0.0.1', 0))
                 vnc_port = s.getsockname()[1]
 
-            docker_cmd = [
-                "docker", "run", "-d",
-                "--name", f"preview-{project_id[:8]}",
-                "-p", f"{vnc_port}:6080",
-                "-v", f"{project_path}:/app",
-                "-e", f"DISPLAY_RESOLUTION={vnc_resolution}",
-                "sandbox-vnc:latest",
-            ]
+            docker_cmd = preview_docker_command(project_id, mount, vnc_port, vnc_resolution)
 
             process = subprocess.Popen(
                 docker_cmd,

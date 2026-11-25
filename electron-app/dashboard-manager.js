@@ -27,6 +27,12 @@ function codingUiUrl(env = process.env) {
   }
 }
 
+/** True only when DASHBOARD_DEVTOOLS is "1" or "true" (default off). */
+function dashboardDevTools(env = process.env) {
+  const text = typeof env.DASHBOARD_DEVTOOLS === 'string' ? env.DASHBOARD_DEVTOOLS.trim().toLowerCase() : '';
+  return text === '1' || text === 'true';
+}
+
 /** What the status card of the Project Space tells the person to do. */
 const CODING_HINT = 'Die Seite kommt künftig vom Dienst der Coding-Sitzung. Läuft er, seine Adresse als '
   + 'CODING_UI_URL in die .env eintragen und die App neu starten.';
@@ -105,8 +111,8 @@ class DashboardManager {
 
     this._startOverlay();
 
-    // Open DevTools always while debugging the embed
-    this.dashboardView.webContents.openDevTools({ mode: 'detach' });
+    // DevTools of the embed only when asked for (DASHBOARD_DEVTOOLS=1); before, they opened every time
+    if (dashboardDevTools(this._env)) this.dashboardView.webContents.openDevTools({ mode: 'detach' });
 
     // Log load failures explicitly
     this.dashboardView.webContents.on('did-fail-load', (_e, code, desc, url) => {
@@ -230,3 +236,4 @@ class DashboardManager {
 module.exports = DashboardManager;
 module.exports.codingUiUrl = codingUiUrl;
 module.exports.CODING_HINT = CODING_HINT;
+module.exports.dashboardDevTools = dashboardDevTools;
