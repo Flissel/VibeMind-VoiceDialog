@@ -69,6 +69,15 @@
      * The status line for a `task_status` message: { text, title, state }.
      * `away` = the task runs in another space than the one on screen.
      */
+    /**
+     * The Brain says a missing detail ("clarification required") as a failure: "Mir fehlt eine Angabe: die
+     * Karte." That is a question back, not a failure (Lauf 34). The same sentence in ideas-chat.js.
+     */
+    const ASKS_BACK = /^Mir fehlt eine Angabe\b/;
+    function asksBack(text) {
+        return typeof text === 'string' && ASKS_BACK.test(text.trim());
+    }
+
     function describe(message, label, away) {
         const state = message.state === 'done' || message.state === 'failed' || message.state === 'accepted' || message.state === 'note' ? message.state : 'running';
         // A question back or a hint of the Brain: calm, with a question mark or an info sign; never red.
@@ -800,6 +809,10 @@
             const corrected = message.berichtigt === true;
             if (message.state === 'done' && answer && !corrected) message = { ...message, result: answer };
             if (message.state === 'failed' && refusal && !corrected) message = { ...message, error: refusal };
+            // A missing detail asks back, whichever comes first, the answer or the end of the plan.
+            if (message.state === 'failed' && asksBack(message.error) && !corrected) {
+                message = { ...message, state: 'note', note: 'rueckfrage', result: shorten(message.error), error: '' };
+            }
             // The answer to the sentence asked back or gave a hint: the end of its plan is calm too.
             if ((message.state === 'failed' || message.state === 'done') && noted && !corrected) {
                 message = { ...message, state: 'note', note: noted.kind, result: noted.text || message.result, error: '' };
@@ -874,7 +887,7 @@
         };
     }
 
-    const api = { decide, describe, labelFor, shows, shorten, isRaw, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, STAND_OPEN, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
+    const api = { decide, describe, labelFor, shows, shorten, isRaw, asksBack, snapshot, resultArrived, orderNumber, reasonCount, NO_JUMP, BUSY_MS, KEEP_MS, WAITING_TEXT, ACCEPTED_TEXT, ACCEPTED_MAX_MS, ACCEPTED_STALE_MS, STAND_MS, STAND_UNKNOWN_MS, STAND_ENDS, STAND_OPEN, ANSWER_GRACE_MS, ANSWER_WAIT_MS, RUN_AFTER_ANSWER_MS, BLIND_ACCEPT_MS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {

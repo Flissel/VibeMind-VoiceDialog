@@ -886,3 +886,29 @@ test('a direct answer naming only a space: the app goes there (desktop, coding i
     answered({ text: 'Zwei Projekte laufen.', success: true, space: 'desktop', ziel: { space: 'coding', bubble_id: null, node_id: null } });
     assert.deepEqual(went, ['desktop', 'projects']);
 });
+
+// H4a (Lauf 34): the Brain says a missing detail as a failure, the end of the plan first, its answer
+// a moment later ("Mir fehlt eine Angabe: die Karte.", state failed, success false). That asks back.
+test('"Mir fehlt eine Angabe" asks back: never "fehlgeschlagen", in the line or in the chat', async () => {
+    const statusFailed = { type: 'task_status', state: 'failed', plan_id: 'p9', space: 'ideas', step: 'Notiz ändern',
+        done: 1, total: 1, result: '', error: 'Mir fehlt eine Angabe: die Karte.', elapsed_s: 0.9 };
+    const w = world();
+    w.answerWith({ success: false, message: 'Mir fehlt eine Angabe: die Karte.', event_type: 'brain.multihop.failed' });
+    const sending = w.send('Ändere die Notiz Beispiel: neuer Text.');
+    w.handle(statusFailed);
+    assert.doesNotMatch(w.line(), /fehlgeschlagen|✕/, 'the end of the plan alone');
+    await sending;
+    assert.match(w.line(), /^\? Ideas: Mir fehlt eine Angabe: die Karte\./);
+    assert.ok(!w.statuses.includes('failed'));
+    assert.ok(!w.chatLog().some((t) => /fehlgeschlagen|Keine Antwort/.test(t)));
+    // the answer first, then the end of the plan
+    const v = world();
+    v.answerWith({ success: false, message: 'Mir fehlt eine Angabe: der Titel.' });
+    await v.send('Lege eine Karte an.');
+    v.handle({ ...statusFailed, error: 'Mir fehlt eine Angabe: der Titel.' });
+    assert.match(v.line(), /^\? Ideas: Mir fehlt eine Angabe: der Titel\./);
+    // a real failure stays one
+    const u = world();
+    u.handle({ ...statusFailed, error: 'Das Werkzeug meldet einen Fehler.' });
+    assert.match(u.line(), /^✕ Ideas: fehlgeschlagen — Das Werkzeug meldet einen Fehler\./);
+});

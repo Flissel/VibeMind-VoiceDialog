@@ -152,6 +152,10 @@
 
     const ACCEPTED_LINE = '● arbeitet … (Auftrag angenommen)';
 
+    // The Brain says a missing detail as a failure ("Mir fehlt eine Angabe: die Karte."); it asks back.
+    // The same sentence in task-navigate.js.
+    const ASKS_BACK = /^Mir fehlt eine Angabe\b/;
+
     /** The Brain took the order and a model works on it: { ok: true, pending: true, status: 'angenommen' }. */
     function isAccepted(response) {
         return Boolean(response) && response.ok !== false && (response.pending === true || response.status === 'angenommen');
@@ -675,7 +679,9 @@
                 const accepted = isAccepted(response);
                 // Not understood or asked back (question, rueckfrage, verstanden: false): a calm question,
                 // never a failure; the raw original of an error (`fehler`) is never shown.
-                const asks = !accepted && !!response && (response.question === true || response.rueckfrage === true || response.verstanden === false);
+                // "Mir fehlt eine Angabe: …" comes as a failure, but it asks back (Lauf 34).
+                const asks = !accepted && !!response && (response.question === true || response.rueckfrage === true || response.verstanden === false
+                    || (response.success === false && ASKS_BACK.test(String(response.message || '').trim())));
                 // A hint ("keine Spalten") is information for the user, not a failure.
                 const hint = !accepted && !asks && !!response && response.hinweis === true;
                 // A proposal for a changed card: the sentence and its two answers, never a failure.

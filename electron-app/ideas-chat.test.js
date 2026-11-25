@@ -320,7 +320,8 @@ test('a failed plan and a question back take the card noted in advance away', ()
     assert.match(chat, /if \(failed && newId\) store\.reject\(newId, message\);/, 'a refused tool: the card goes, the chat names the reason');
     assert.match(chat, /if \(\(asks \|\| hint \|\| proposes\) && newId\) store\.settle\(newId\);/, 'a proposal stored nothing either');
     // a question back (question, rueckfrage or verstanden: false) is calm, never a failure
-    assert.match(chat, /const asks = !accepted && !!response && \(response\.question === true \|\| response\.rueckfrage === true \|\| response\.verstanden === false\);/);
+    assert.match(chat, /const asks = !accepted && !!response && \(response\.question === true \|\| response\.rueckfrage === true \|\| response\.verstanden === false\s+\|\| \(response\.success === false && ASKS_BACK\.test/);
+    assert.match(chat, /const ASKS_BACK = \/\^Mir fehlt eine Angabe\\b\/;/);
     assert.match(chat, /const failed = !accepted && !asks && !hint &&/);
     assert.match(chat, /if \(status\.state === 'failed'\) store\.failAll\(\);/);
     assert.match(chat, /say\(message, failed \? 'error' : asks \? 'rueckfrage' : hint \? 'hinweis' : 'agent', asked, null, ask\);/);
