@@ -144,10 +144,13 @@ function registerDesktopKlicks(ipcMain, isOwnSender, deps = {}) {
   const witness = deps.witness || createClickWitness(deps.nowMs);
   ipcMain.handle('desktop:klicks', (event, seit) => (isOwnSender(event) ? api.klicks(Number(seit)) : { success: false, klicks: [], error: 'fremd' }));
   const isShown = typeof deps.isShown === 'function' ? deps.isShown : () => false;
+  // K9: with the remote-control port open a "real press" proves no person (fernsteuerung.js)
+  const blocked = typeof deps.blocked === 'function' ? deps.blocked : () => false;
   ipcMain.handle('desktop:hand-klick', (event, args) => {
     if (!isOwnSender(event)) return { ok: false, grund: 'fremd' };
     const x = args && args.x;
     const y = args && args.y;
+    if (blocked()) return { ok: false, x, y, grund: 'fernsteuerung_offen' };
     // the desktop picture is not in front (state of the main process, not of the page): no sign
     if (!isShown()) return { ok: false, x, y, grund: 'desktop_nicht_sichtbar' };
     const zoom = event.sender && typeof event.sender.getZoomFactor === 'function' ? event.sender.getZoomFactor() : 1;

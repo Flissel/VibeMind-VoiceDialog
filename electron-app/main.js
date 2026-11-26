@@ -81,7 +81,8 @@ const OpenFangManager = require('./openfang-manager');
 const { initRealtimeSubscriptions, destroyRealtimeSubscriptions } = require('./supabase-realtime');
 const { initBrainEventBridge } = require('./brain-event-bridge');
 const { initTaskNavigation, closeTaskNavigation } = require('./task-navigation');
-const { chatMessage, withoutTypedMark, withProof } = require('./chat-input');
+const { chatMessage, nativeConfirmation, withoutTypedMark, withProof } = require('./chat-input');
+const { remoteControlOpen, showBanner, nativeQuestion, askNatively, TEXT: REMOTE_TEXT } = require('./fernsteuerung');
 // How long a chat field waits for its answer. Longer than the limit of the Brain bridge in Python
 // (VOICE_BRAIN_MULTIHOP_TIMEOUT_S, 45 s in operation): with 30 s an answer after 33 s (first call
 // after an OpenFang restart, measured) was lost, and the bridge's own sentence came too late as well.
@@ -120,8 +121,10 @@ const EyeTermManager = require('./eyeterm-manager');
 //   - devtools://devtools for the DevTools frontend.
 // A browser-based attacker always sends its own (http(s)://...) origin -> blocked.
 //
-// Gated behind VIBEMIND_ENABLE_CDP=1 so a production user is not exposed to an
-// open debugging port by default. Set it where the CDP consumers run.
+// Gated behind VIBEMIND_ENABLE_CDP=1 (the test-run start; K9): the normal start leaves the port out.
+// Whoever opened it (this switch or a --remote-debugging-port in a start line), REMOTE_CONTROL_OPEN
+// below sees it: then the window shows a strip, nothing counts as typed, no desktop click is signed
+// and Sales approvals are refused (fernsteuerung.js).
 if (app && app.commandLine && process.env.VIBEMIND_ENABLE_CDP === '1') {
     const CDP_PORT = process.env.VIBEMIND_CDP_PORT || '9223';
     app.commandLine.appendSwitch('remote-debugging-port', CDP_PORT);
@@ -130,6 +133,9 @@ if (app && app.commandLine && process.env.VIBEMIND_ENABLE_CDP === '1') {
         `http://127.0.0.1:${CDP_PORT},http://localhost:${CDP_PORT},devtools://devtools`
     );
 }
+
+const REMOTE_CONTROL_OPEN = remoteControlOpen(app && app.commandLine);
+if (REMOTE_CONTROL_OPEN) console.log('[Main] Pruefmodus: Fernsteuerung offen (getippt, Hand-Klick und Sales-Freigaben gesperrt)');
 
 // Note: GPU flags are now passed via command line when starting electron:
 // electron . --disable-gpu --enable-unsafe-swiftshader --enable-webgl --ignore-gpu-blocklist
@@ -307,6 +313,8 @@ function createWindow() {
     });
     // a click on the desktop picture is signed only after a real press there (desktop-klicks.js)
     if (desktopKlicks) desktopKlicks.watch(mainWindow.webContents);
+    // test mode: a strip says that the window can be remote-controlled (fernsteuerung.js)
+    if (REMOTE_CONTROL_OPEN) showBanner(mainWindow.webContents);
 
 
     // Grant microphone permission for Vapi voice dashboard (iframe at localhost:8007)
@@ -1218,7 +1226,7 @@ function setupIpcHandlers() {
     // Desktop space: the clicks of the task book and a click on the picture, through the Brain
     // (desktop-klicks.js; the key of the sign stays in this process). Only the app window asks.
     desktopKlicks = registerDesktopKlicks(ipcMain, (event) => Boolean(mainWindow) && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents,
-        { isShown: desktopPictureInFront });
+        { isShown: desktopPictureInFront, blocked: () => REMOTE_CONTROL_OPEN });
 
     // ========================================
     // MULTIVERSE NAVIGATION
@@ -2625,8 +2633,15 @@ function setupIpcHandlers() {
             // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js.
             // Only here is the mark "typed by the person" set, with the proof of this main process
             // (chat-input.js); the Brain runs Desktop tasks only with it.
-            const message = chatMessage(text, context, typed);
-            return await sendToPythonAndWait(message, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
+            const message = chatMessage(text, context, typed, undefined, { remoteOpen: REMOTE_CONTROL_OPEN });
+            const answer = await sendToPythonAndWait(message, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
+            // K9: a Sales approval is answered in a dialog of this process, never by a sentence of the page
+            const question = nativeQuestion(answer);
+            if (!question) return answer;
+            const said = await askNatively(question, { dialog, window: mainWindow, remoteOpen: REMOTE_CONTROL_OPEN });
+            if (said.gesperrt) return { ...answer, bestaetigung: undefined, message: REMOTE_TEXT.gesperrt };
+            const confirmation = nativeConfirmation(question, said.ja, context);
+            return await sendToPythonAndWait(confirmation, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
         } catch (e) {
             console.warn(`[Chat] renderer: no answer – ${e.message}`);
             return { type: 'chat_response', success: false, message: NO_ANSWER_IN_TIME };

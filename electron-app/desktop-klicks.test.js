@@ -154,7 +154,8 @@ test('a click is signed only while the main process holds the Desktop space in f
 
 test('the main process knows by itself whether the Desktop space is in front', () => {
     const main = read('main.js');
-    assert.match(main, /registerDesktopKlicks\([\s\S]{0,200}\{ isShown: desktopPictureInFront \}\)/);
+    // K9 adds `blocked` (remote control open, fernsteuerung.test.js); isShown stays the main process's own
+    assert.match(main, /registerDesktopKlicks\([\s\S]{0,200}\{ isShown: desktopPictureInFront(, blocked: [^}]+)? \}\)/);
     const fn = main.slice(main.indexOf('function desktopPictureInFront()'));
     const body = fn.slice(0, fn.indexOf('\n}\n'));
     assert.match(body, /if \(currentSpace !== 'desktop'\) return false;/);
