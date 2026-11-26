@@ -71,4 +71,30 @@ function applyVibeMindLook(webContents, space, options = {}) {
   return css;
 }
 
-module.exports = { applyVibeMindLook, lookCss, SPACE_ACCENT_RGB, VM_TOKENS };
+/**
+ * The token set of our own React pages (agentfarm/src/styles/globals.css, the same names in
+ * dashboard/src/styles/globals.css for ClawPort) set to the values of the app. Their dark values were
+ * copied from base.css once; here they follow it, and the accent is that of the space shown
+ * (it was Ideas blue #4488ff on every page). Sizes, radii and shadows stay as they are.
+ */
+const TOKEN_PAGE_LOOK = `html:root {
+  --bg: var(--vm-bg-deep);
+  --bg-secondary: var(--vm-bg-mid);
+  --bg-tertiary: var(--vm-bg-elevated);
+  --material-regular: var(--vm-bg-surface);
+  --material-thick: var(--vm-panel-bg);
+  --text-primary: var(--vm-text-primary);
+  --text-secondary: var(--vm-text-secondary);
+  --text-tertiary: var(--vm-text-muted);
+  --accent: rgb(var(--space-accent-rgb));
+  --accent-fill: rgba(var(--space-accent-rgb), 0.15);
+  --space-accent: rgb(var(--space-accent-rgb));
+  --system-green: var(--vm-status-ok);
+  --system-orange: var(--vm-status-warn);
+  --system-red: var(--vm-status-error);
+  --system-blue: var(--vm-status-info);
+}
+body { font-family: var(--vm-font); background: var(--vm-bg-deep); color: var(--vm-text-primary); }
+`;
+
+module.exports = { applyVibeMindLook, lookCss, SPACE_ACCENT_RGB, VM_TOKENS, TOKEN_PAGE_LOOK };

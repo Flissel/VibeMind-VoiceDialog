@@ -17,6 +17,7 @@ const {
 } = require('./n8n-access');
 const { openfangAuth, fromOpenFangFrame, withKey, matchesPatterns } = require('./openfang-access');
 const { pathToFileURL } = require('url');
+const { applyVibeMindLook, TOKEN_PAGE_LOOK } = require('./vibemind-look');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
@@ -148,6 +149,10 @@ class AgentFarmManager {
         sandbox: false, // Required for contextBridge + ipcRenderer
       },
     });
+
+    // H3: the Agent Farm page in the VibeMind look, accent of its space (green). The embedded n8n,
+    // Rowboat and OpenFang pages keep their own look: insertCSS reaches only this page, not its iframes.
+    applyVibeMindLook(this.agentfarmView.webContents, 'agentfarm', { extraCss: TOKEN_PAGE_LOOK, logger: { warn: (m) => _afLog(m) } });
 
     this._startOverlay();
 
