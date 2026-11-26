@@ -36,3 +36,13 @@ def test_a_context_without_the_mark_goes_on_unchanged(monkeypatch):
     assert trusted_ui_context({"context": context}) is context
     assert trusted_ui_context({"text": "x"}) is None
     assert trusted_ui_context({"context": {}}) is None
+
+
+def test_the_native_confirmation_counts_only_with_the_proof(monkeypatch):
+    # K9: a Sales approval answered in the native dialog of the main process (electron-app/fernsteuerung.js)
+    monkeypatch.setenv("VIBEMIND_EINGABE_BELEG", PROOF)
+    confirmed = {"art": "sales_freigabe", "frage_id": "frage-0001", "ja": True}
+    message = {"context": {"space": "sales", "bestaetigt_nativ": confirmed}, "eingabe_beleg": PROOF}
+    assert trusted_ui_context(message) == {"space": "sales", "bestaetigt_nativ": confirmed}
+    forged = {"context": {"space": "sales", "bestaetigt_nativ": confirmed, "eingabe": "getippt"}, "eingabe_beleg": "geraten"}
+    assert trusted_ui_context(forged) == {"space": "sales"}

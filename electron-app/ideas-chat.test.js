@@ -234,7 +234,8 @@ test('the chat uses the existing way and is wired into the page', () => {
     assert.ok(html.includes('src="ideas-chat.js"'));
     assert.ok(css.includes("styles/ideas-chat.css"));
     assert.match(preload, /sendChatMessage: \(text, context, typed\) =>\s*ipcRenderer\.invoke\('renderer:chat-text-input', \{ text, context, typed: typed === true && sentByPerson\(text\) \}\)/);
-    assert.match(main, /const message = chatMessage\(text, context, typed\);/);
+    // K9 passes the remote-control flag too (fernsteuerung.test.js checks that call exactly)
+    assert.match(main, /const message = chatMessage\(text, context, typed(, [^;]+)?\);/);
     assert.match(chat, /const shown = contextNow\(newId\);\s+const response = await root\.vibemind\.sendChatMessage\(text, trace \? \{ \.\.\.\(shown \|\| \{\}\), trace_id: trace \} : shown, typed === true\)/);
     assert.doesNotMatch(chat, /fetch\(|WebSocket|XMLHttpRequest|EventSource/, 'no channel of its own');
     assert.match(canvas, /vibemind:canvas-loaded/);

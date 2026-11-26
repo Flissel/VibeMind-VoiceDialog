@@ -14,7 +14,7 @@ PROOF_ENV = "VIBEMIND_EINGABE_BELEG"
 
 
 def trusted_ui_context(message: dict):
-    """The context of a chat message, with eingabe "getippt" only when the main process vouches for it.
+    """The context of a chat message, with eingabe "getippt" and bestaetigt_nativ only when the main process vouches for them.
 
     The generic `to-python` channel of the app lets a page forward any message, so the mark in
     the context proves nothing. The main process of the app adds `eingabe_beleg`, a random value
@@ -24,13 +24,16 @@ def trusted_ui_context(message: dict):
     ui_context = message.get("context")
     if not isinstance(ui_context, dict) or not ui_context:
         return None
-    if "eingabe" not in ui_context:
+    # the answer of the person from the native dialog of the main process (K9, fernsteuerung.js)
+    # counts like the mark: only with the proof
+    vouched = [k for k in ("eingabe", "bestaetigt_nativ") if k in ui_context]
+    if not vouched:
         return ui_context
     expected = os.environ.get(PROOF_ENV) or ""
     given = message.get("eingabe_beleg")
     if expected and isinstance(given, str) and hmac.compare_digest(given, expected):
         return ui_context
-    context = {k: v for k, v in ui_context.items() if k != "eingabe"}
+    context = {k: v for k, v in ui_context.items() if k not in vouched}
     return context or None
 
 

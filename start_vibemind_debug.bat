@@ -109,10 +109,15 @@ REM ================================================
 echo.
 set DEBUG_PORT=9223
 
-REM Start Electron with debug port (in new window)
-echo Starting Electron with debug port %DEBUG_PORT%...
+REM Start Electron in test mode (in new window). K9: the port opens only through
+REM VIBEMIND_ENABLE_CDP=1 (main.js, origins limited). The window then shows the strip
+REM "Pruefmodus: Fernsteuerung offen"; typed sentences, hand clicks and Sales approvals are locked.
+REM The normal start (npm start) sets neither and has no port.
+echo Starting Electron in test mode, debug port %DEBUG_PORT%...
 echo Project root: %PROJECT_ROOT%
-start "VibeMind Electron" "%PROJECT_ROOT%\electron-app\node_modules\electron\dist\electron.exe" --remote-debugging-port=%DEBUG_PORT% "%PROJECT_ROOT%\electron-app"
+set VIBEMIND_ENABLE_CDP=1
+set VIBEMIND_CDP_PORT=%DEBUG_PORT%
+start "VibeMind Electron" "%PROJECT_ROOT%\electron-app\node_modules\electron\dist\electron.exe" "%PROJECT_ROOT%\electron-app"
 
 REM Wait for Electron to fully start (Rowboat, Python backend, etc.)
 echo Waiting for Electron to start (8s)...
