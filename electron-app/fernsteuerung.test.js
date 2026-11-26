@@ -30,6 +30,29 @@ test('main.js opens the port only with VIBEMIND_ENABLE_CDP=1 and checks it after
   assert.match(main, /chatMessage\(text, context, typed, undefined, \{ remoteOpen: REMOTE_CONTROL_OPEN \}\)/);
 });
 
+test('Lauf 39: every window of the app carries the strip; views stay below the strip of the main window', () => {
+  const main = read('main.js');
+  const windows = [...main.matchAll(/(\w+) = new BrowserWindow\(/g)].map((m) => m[1]);
+  assert.deepEqual(windows, ['mainWindow', 'n8nWindow'], 'a new window needs the strip too');
+  for (const win of windows) {
+    assert.match(main, new RegExp(`if \\(REMOTE_CONTROL_OPEN\\) showBanner\\(${win}\\.webContents\\);`), win);
+  }
+  const editor = main.slice(main.indexOf('n8nWindow = new BrowserWindow('));
+  assert.ok(editor.indexOf('showBanner(n8nWindow.webContents)') < editor.indexOf('editor.openEditor('), 'strip before the first load');
+
+  // No other page may open a window of its own, and no view covers the top of the main window.
+  for (const file of fs.readdirSync(__dirname).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'))) {
+    const src = read(file);
+    for (const m of src.matchAll(/setWindowOpenHandler\(([\s\S]*?)\n\s*\}\);/g)) {
+      assert.doesNotMatch(m[1], /action: 'allow'/, `${file} lets a page open a window`);
+    }
+    for (const m of src.matchAll(/this\.(?:topOffset|titlebarHeight) = ([\d +]+);/g)) {
+      const top = m[1].split('+').reduce((a, b) => a + Number(b), 0);
+      assert.ok(top >= 22, `${file}: a view at ${top}px would cover the strip`);
+    }
+  }
+});
+
 test('the debug start of the repo opens the port through the switch, not by a start line', () => {
   const bat = read('..', 'start_vibemind_debug.bat');
   assert.doesNotMatch(bat, /--remote-debugging-port/);
