@@ -84,3 +84,24 @@ test('Agent Farm: the embedded pages (n8n, Rowboat, OpenFang) keep their own loo
     assert.doesNotMatch(read('agentfarm', 'src', 'features', file), /--vm-|vibemind-look/, file);
   }
 });
+
+test('ClawPort: same token names as the Agent Farm page, so the same block fits', () => {
+  const page = rootNames(read('dashboard', 'src', 'styles', 'globals.css'));
+  for (const name of namesIn(TOKEN_PAGE_LOOK)) assert.ok(page.has(name), `${name} is a variable of the ClawPort page`);
+});
+
+test('ClawPort: after every load the page gets the look, accent of its space (violet, as multiverse.js)', async () => {
+  const ClawPortManager = require('./clawport-manager');
+  const view = fakeView();
+  class FakeBrowserView { constructor() { this.webContents = view.contents; } setBounds() {} setAutoResize() {} }
+  silent(() => {
+    const m = new ClawPortManager(null, { BrowserView: FakeBrowserView, shell: { openExternal() {} }, env: {},
+      rendererPath: 'C:/x/index.html', overlayDeps: { existsSync: () => true, logger: quiet } });
+    m.createView();
+  });
+  await view.load();
+  assert.equal(view.inserted.length, 1);
+  assert.equal(view.inserted[0].css, lookCss('clawport', TOKEN_PAGE_LOOK));
+  assert.equal(SPACE_ACCENT_RGB.clawport, sceneAccent('clawport'));
+  assert.match(view.inserted[0].css, new RegExp(`--space-accent-rgb: ${sceneAccent('clawport')};`));
+});

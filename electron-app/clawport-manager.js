@@ -10,6 +10,7 @@
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const path = require('path');
 const fs = require('fs');
+const { applyVibeMindLook, TOKEN_PAGE_LOOK } = require('./vibemind-look');
 
 const _CP_C = '\x1b[97m', _RST = '\x1b[0m'; // White Bold (ClawPort/Dashboard)
 function _cpLog(...a) { process.stdout.write(`${_CP_C}[ClawPortManager] ${a.join(' ')}${_RST}\n`); }
@@ -89,6 +90,10 @@ class ClawPortManager {
         sandbox: false, // Required for contextBridge + ipcRenderer
       },
     });
+
+    // H3: the ClawPort page in the VibeMind look, accent of its space (violet, multiverse.js). Its token
+    // names are those of the Agent Farm page (dashboard/src/styles/globals.css), so the same block fits.
+    applyVibeMindLook(this.clawportView.webContents, 'clawport', { extraCss: TOKEN_PAGE_LOOK, logger: { warn: (m) => _cpLog(m) } });
 
     this._startOverlay();
 
