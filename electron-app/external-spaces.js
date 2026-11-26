@@ -16,6 +16,7 @@
  */
 const path = require('node:path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
+const { applyVibeMindLook, rgbOf, ORDERS_LOOK } = require('./vibemind-look');
 
 const EXTERNAL_SPACES = Object.freeze([
   // OpenFang has no entry here: its dashboard is a tab of the Agent Farm; its key (OPENFANG_API_KEY)
@@ -52,6 +53,7 @@ const EXTERNAL_SPACES = Object.freeze([
     // Placed clear of Video (-10, 0, 24): at least 8 units from every space (space-models.test.js).
     id: 'orders', label: 'Aufträge', icon: '\u{1F4CB}', color: 0xb39ddb, position: [-3, 0, 29],
     localPage: 'auftraege/index.html', preload: 'auftraege-preload.js',
+    look: ORDERS_LOOK, // H3: the VibeMind look, accent of its colour above (vibemind-look.js)
     agent: { name: 'Aufträge', slug: 'orders', role: 'Projektmanager, Termine, Recherche, Minibook' },
   },
 ]);
@@ -290,6 +292,12 @@ class ExternalSpaceManager {
     // Only a page shipped with the app gets a bridge; a remote page never does.
     if (space.file && space.preload) webPreferences.preload = path.join(__dirname, space.preload);
     const view = new this.BrowserView({ webPreferences });
+    // H3: a space with a look block gets the VibeMind look after every load, accent = its scene colour.
+    // Only our own pages have one so far; a service of another session is left as it is.
+    if (space.look) {
+      applyVibeMindLook(view.webContents, space.id, { extraCss: space.look, accentRgb: rgbOf(space.color),
+        logger: { warn: (m) => this._log.log(m) } });
+    }
     const auth = authFor(space, this._env);
     if (auth) {
       view.webContents.session.webRequest.onBeforeSendHeaders({ urls: auth.urls }, (details, callback) => {

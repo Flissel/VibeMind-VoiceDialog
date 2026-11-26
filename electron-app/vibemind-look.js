@@ -44,8 +44,9 @@ const VM_TOKENS = Object.freeze({
  * The CSS for a space: the tokens, its accent and the extra block of the space.
  * `html:root` weighs more than a page's own `:root`, so the values hold whatever the order.
  */
-function lookCss(space, extraCss = '') {
-  const rgb = SPACE_ACCENT_RGB[space] || SPACE_ACCENT_RGB.ideas;
+function lookCss(space, extraCss = '', accentRgb = '') {
+  // A space of external-spaces.js has its colour in its entry (the scene draws it with that); others in the table.
+  const rgb = (/^\d{1,3},\d{1,3},\d{1,3}$/.test(accentRgb) && accentRgb) || SPACE_ACCENT_RGB[space] || SPACE_ACCENT_RGB.ideas;
   const lines = Object.entries(VM_TOKENS).map(([name, value]) => `  ${name}: ${value};`);
   lines.push(`  --space-accent-rgb: ${rgb};`);
   lines.push(`  --space-accent: rgb(${rgb});`);
@@ -59,7 +60,7 @@ function lookCss(space, extraCss = '') {
  * card). Returns the CSS it puts in. A failed insert is logged and changes nothing else.
  */
 function applyVibeMindLook(webContents, space, options = {}) {
-  const css = lookCss(space, options.extraCss);
+  const css = lookCss(space, options.extraCss, options.accentRgb);
   const logger = options.logger || console;
   const put = () => {
     if (typeof webContents.isDestroyed === 'function' && webContents.isDestroyed()) return;
@@ -97,4 +98,25 @@ const TOKEN_PAGE_LOOK = `html:root {
 body { font-family: var(--vm-font); background: var(--vm-bg-deep); color: var(--vm-text-primary); }
 `;
 
-module.exports = { applyVibeMindLook, lookCss, SPACE_ACCENT_RGB, VM_TOKENS, TOKEN_PAGE_LOOK };
+/** "r,g,b" of a colour number as the scene uses it (0xb39ddb -> "179,157,219"). */
+const rgbOf = (color) => [16, 8, 0].map((shift) => (Number(color) >> shift) & 255).join(',');
+
+/**
+ * The Aufträge page (auftraege/index.html): its own variables set to the values of the app. The
+ * status colours stay meaningful (ok, warn, bad); the lines and cards take the surfaces of the app.
+ */
+const ORDERS_LOOK = `html:root {
+  --bg: var(--vm-bg-deep);
+  --card: var(--vm-bg-surface);
+  --line: rgba(var(--space-accent-rgb), 0.20);
+  --text: var(--vm-text-primary);
+  --dim: var(--vm-text-secondary);
+  --ok: var(--vm-status-ok);
+  --warn: var(--vm-status-warn);
+  --bad: var(--vm-status-error);
+}
+body { font-family: var(--vm-font); }
+button:hover { border-color: rgb(var(--space-accent-rgb)); }
+`;
+
+module.exports = { applyVibeMindLook, lookCss, rgbOf, SPACE_ACCENT_RGB, VM_TOKENS, TOKEN_PAGE_LOOK, ORDERS_LOOK };
