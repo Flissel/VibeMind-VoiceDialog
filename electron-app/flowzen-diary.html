@@ -7,9 +7,9 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background: #0a0a14;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            color: #e0e0e0;
+            background: var(--vm-bg-deep, #0a0a14);
+            font-family: var(--vm-font, 'Segoe UI', system-ui, sans-serif);
+            color: var(--vm-text-primary, #e0e0e0);
             height: 100vh;
             overflow: hidden;
             display: flex;
@@ -22,13 +22,13 @@
             align-items: center;
             justify-content: space-between;
             padding: 12px 24px;
-            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-            border-bottom: 1px solid rgba(51,102,204,0.2);
+            background: linear-gradient(135deg, var(--vm-bg-mid, #0d1117) 0%, var(--vm-bg-surface, #161b22) 100%);
+            border-bottom: 1px solid rgba(var(--space-accent-rgb, 51,102,204),0.2);
         }
         .journal-title {
             font-size: 18px;
             font-weight: 600;
-            color: #c9d1d9;
+            color: var(--vm-text-primary, #c9d1d9);
         }
         .journal-title .rose { margin-right: 8px; filter: hue-rotate(200deg) saturate(1.5) brightness(1.2); }
         .journal-stats {
@@ -36,11 +36,11 @@
             gap: 24px;
         }
         .stat { text-align: center; }
-        .stat-label { font-size: 10px; text-transform: uppercase; color: #8b949e; letter-spacing: 1px; }
+        .stat-label { font-size: 10px; text-transform: uppercase; color: var(--vm-text-secondary, #8b949e); letter-spacing: 1px; }
         .stat-value { font-size: 14px; color: #58a6ff; font-weight: 500; }
         .state-badge {
             font-size: 11px; padding: 2px 10px; border-radius: 12px;
-            background: rgba(51,102,204,0.15); color: #58a6ff; border: 1px solid rgba(51,102,204,0.3);
+            background: rgba(var(--space-accent-rgb, 51,102,204),0.15); color: #58a6ff; border: 1px solid rgba(var(--space-accent-rgb, 51,102,204),0.3);
         }
 
         /* Book container */
@@ -186,8 +186,8 @@
             transform: translateY(-50%);
             width: 44px; height: 44px;
             border-radius: 50%;
-            border: 1px solid rgba(51,102,204,0.3);
-            background: rgba(13,17,23,0.85);
+            border: 1px solid rgba(var(--space-accent-rgb, 51,102,204),0.3);
+            background: var(--vm-panel-bg, rgba(13,17,23,0.85));
             color: #58a6ff;
             font-size: 20px;
             cursor: pointer;
@@ -197,7 +197,7 @@
             transition: all 0.2s;
             z-index: 10;
         }
-        .nav-arrow:hover { background: rgba(51,102,204,0.2); border-color: #58a6ff; }
+        .nav-arrow:hover { background: rgba(var(--space-accent-rgb, 51,102,204),0.2); border-color: #58a6ff; }
         .nav-arrow:disabled { opacity: 0.3; cursor: default; }
         .nav-arrow.left { left: -56px; }
         .nav-arrow.right { right: -56px; }
@@ -221,8 +221,8 @@
         .recommend-btn {
             margin: 0 24px 16px;
             padding: 10px 20px;
-            background: linear-gradient(135deg, rgba(51,102,204,0.15), rgba(51,102,204,0.08));
-            border: 1px solid rgba(51,102,204,0.3);
+            background: linear-gradient(135deg, rgba(var(--space-accent-rgb, 51,102,204),0.15), rgba(var(--space-accent-rgb, 51,102,204),0.08));
+            border: 1px solid rgba(var(--space-accent-rgb, 51,102,204),0.3);
             border-radius: 8px;
             color: #58a6ff;
             font-size: 14px;
@@ -230,7 +230,7 @@
             transition: all 0.2s;
             text-align: center;
         }
-        .recommend-btn:hover { background: rgba(51,102,204,0.25); }
+        .recommend-btn:hover { background: rgba(var(--space-accent-rgb, 51,102,204),0.25); }
         .recommend-btn.loading { opacity: 0.6; pointer-events: none; }
 
         /* Page counter */
@@ -238,7 +238,7 @@
             text-align: center;
             padding: 8px;
             font-size: 12px;
-            color: #8b949e;
+            color: var(--vm-text-secondary, #8b949e);
         }
     </style>
 </head>

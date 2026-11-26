@@ -11,6 +11,7 @@
 const path = require('path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 const { withoutTypedMark } = require('./chat-input');
+const { applyVibeMindLook } = require('./vibemind-look');
 
 const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
 function _fzLog(...a) { process.stdout.write(`${_FZ_C}[FlowzenManager] ${a.join(' ')}${_RST}\n`); }
@@ -74,6 +75,9 @@ class FlowzenManager {
       },
     });
 
+    // The frame of the journal (header, arrows, buttons) takes the app look; its variables fall back to
+    // the old colors. The paper pages and the cover stay as they are.
+    applyVibeMindLook(this.flowzenView.webContents, 'flowzen', { logger: { warn: (m) => _fzLog(m) } });
     this._startOverlay();
 
     // Handle external link navigation

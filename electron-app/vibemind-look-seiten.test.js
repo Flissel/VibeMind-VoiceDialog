@@ -140,3 +140,38 @@ test('Aufträge: its view gets the look after every load; services of other sess
   assert.equal(views.sales.inserted.length, 0, 'Sales stays as it is');
   assert.equal(views.marketing.inserted.length, 0, 'Marketing stays as it is');
 });
+
+test('Flowzen: the frame of the journal takes the --vm values, each with its old colour as fallback', () => {
+  const page = read('flowzen-diary.html');
+  const css = page.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const used = new Set([...css.matchAll(/var\((--[a-z0-9-]+)/g)].map((m) => m[1]));
+  const set = new Set(namesIn(lookCss('flowzen')));
+  for (const name of used) assert.ok(set.has(name), `${name} is set by the look`);
+  for (const name of ['--vm-bg-deep', '--vm-text-primary', '--vm-text-secondary', '--vm-panel-bg', '--vm-font', '--space-accent-rgb']) {
+    assert.ok(used.has(name), name);
+  }
+  // every variable has its old value behind it: alone in a browser the page looks as before
+  assert.doesNotMatch(css, /var\(--[a-z0-9-]+\)/);
+  // the frame no longer has the old accent written out; the paper pages and the cover keep theirs
+  const body = css.match(/body \{[\s\S]*?\}/)[0];
+  assert.match(body, /background: var\(--vm-bg-deep, #0a0a14\);/);
+  assert.match(css, /\.book-cover \{[\s\S]*?linear-gradient\(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%\)/);
+  assert.match(css, /font-family: Georgia, 'Times New Roman', serif;/);
+  assert.equal(SPACE_ACCENT_RGB.flowzen, sceneAccent('flowzen'));
+  assert.equal(SPACE_ACCENT_RGB.flowzen, '51,102,204', 'the old accent of the page is that of its scene');
+});
+
+test('Flowzen: after every load the journal gets the look, accent of its space (blue, as multiverse.js)', async () => {
+  const FlowzenManager = require('./flowzen-manager');
+  const view = fakeView();
+  class FakeBrowserView { constructor() { this.webContents = view.contents; } setBounds() {} setAutoResize() {} }
+  silent(() => {
+    const m = new FlowzenManager(null, null, { BrowserView: FakeBrowserView, shell: { openExternal() {} },
+      ipcMain: { on() {} }, overlayDeps: { existsSync: () => true, logger: quiet } });
+    m.createView();
+  });
+  await silent(() => view.load());
+  assert.equal(view.inserted.length, 1);
+  assert.equal(view.inserted[0].css, lookCss('flowzen'));
+  assert.match(view.inserted[0].css, new RegExp(`--space-accent-rgb: ${sceneAccent('flowzen')};`));
+});
