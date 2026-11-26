@@ -51,6 +51,58 @@ async function n8nHealth(env = process.env, { fetchImpl = globalThis.fetch, time
   }
 }
 
+/** An n8n workflow id: letters, digits, _ and -; nothing that could change the path. */
+function isWorkflowId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id);
+}
+
+/**
+ * Activate a workflow through the n8n REST interface (POST /api/v1/workflows/<id>/activate), from the
+ * main process with N8N_API_KEY. The VibeCoder field calls it only after the person said "Ja" to a
+ * proposal (vibecoder-chat.js). The reason of a failure names the variable, never its value.
+ */
+async function n8nActivateRest(env, workflowId, { fetchImpl = globalThis.fetch, timeoutMs = 10000 } = {}) {
+  const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
+  if (!key) return { success: false, error: 'N8N_API_KEY fehlt' };
+  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gueltige Workflow-id' };
+  const url = new URL(`/api/v1/workflows/${workflowId}/activate`, n8nBaseUrl(env));
+  if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url.href, { method: 'POST', headers: { 'X-N8N-API-KEY': key, Accept: 'application/json' }, signal: controller.signal });
+    return res && res.ok ? { success: true } : { success: false, error: `n8n antwortet mit ${res ? res.status : 'nichts'}` };
+  } catch (_) {
+    return { success: false, error: 'n8n nicht erreichbar' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Name and state of a workflow as n8n itself has them (GET /api/v1/workflows/<id>), or null.
+ * The VibeCoder field shows this name in its question, never the one the agent wrote.
+ */
+async function n8nWorkflowInfo(env, workflowId, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
+  const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
+  if (!key || !isWorkflowId(workflowId)) return null;
+  const url = new URL(`/api/v1/workflows/${workflowId}`, n8nBaseUrl(env));
+  if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url.href, { method: 'GET', headers: { 'X-N8N-API-KEY': key, Accept: 'application/json' }, signal: controller.signal });
+    if (!res || !res.ok) return null;
+    const body = await res.json();
+    if (!body || String(body.id) !== workflowId || typeof body.name !== 'string') return null;
+    return { id: workflowId, name: body.name.slice(0, 120), active: body.active === true };
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function isLocal(baseUrl) {
   const host = new URL(baseUrl).hostname;
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
@@ -137,6 +189,6 @@ function sessionCookieUrls(env = process.env) {
 }
 
 module.exports = {
-  LOCAL_URL, n8nBaseUrl, n8nHealth, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
+  LOCAL_URL, n8nBaseUrl, n8nHealth, n8nActivateRest, n8nWorkflowInfo, isWorkflowId, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
   cookiePairs, mergeCookieHeader, sessionCookieUrls,
 };

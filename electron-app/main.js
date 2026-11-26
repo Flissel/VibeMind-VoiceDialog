@@ -2289,65 +2289,14 @@ function setupIpcHandlers() {
         }
     });
 
-    // ── VibeCoder Chat (iterative n8n workflow builder) ─────────
-    ipcMain.handle('agentfarm:n8n-chat-start', async (_event, { description }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_chat_start', description: description || '' }, 'n8n_chat_start_result', 10000);
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-chat-checklist', async (_event, { sessionId, action, itemId, value }) => {
-        try {
-            return await sendToPythonAndWait({
-                type: 'n8n_chat_checklist', session_id: sessionId,
-                action: action || 'answer', item_id: itemId, value: value || '',
-            }, 'n8n_chat_checklist_result', 15000);
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-chat-message', async (_event, { sessionId, text }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_chat_message', session_id: sessionId, text }, 'n8n_chat_message_result', 90000);
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-chat-deploy', async (_event, { sessionId }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_chat_deploy', session_id: sessionId }, 'n8n_chat_deploy_result', 15000);
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-claude-build', async (_event, { sessionId }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_claude_build', session_id: sessionId }, 'n8n_claude_build_result', 600000);
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-chat-history', async (_event, { sessionId }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_chat_history', session_id: sessionId }, 'n8n_chat_history_result');
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
-
-    ipcMain.handle('agentfarm:n8n-chat-sessions', async () => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_chat_sessions' }, 'n8n_chat_sessions_result');
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
+    // ── VibeCoder: the field is a chat with the OpenFang agent brain-n8n (vibecoder-chat.js) ──
+    // The checklist and its Python channels (n8n_chat_*) are gone: their module spaces.n8n is not
+    // installed, the field stayed empty (2026-11-26). Keys stay here; activating needs the person's "Ja".
+    let vibecoderChat = null;
+    const vibecoder = () => vibecoderChat || (vibecoderChat = require('./vibecoder-chat').createVibeCoderChat({ env: process.env, log: (line) => console.log(line) }));
+    ipcMain.handle('agentfarm:vibecoder-state', () => vibecoder().state());
+    ipcMain.handle('agentfarm:vibecoder-send', (_event, { text }) => vibecoder().send(text));
+    ipcMain.handle('agentfarm:vibecoder-decide', (_event, { proposalId, yes }) => vibecoder().decide(proposalId, yes === true));
 
     // ── AgentFarm Autogen Handlers ──────────────────────────────
     ipcMain.handle('agentfarm:create-team', async (_, templateId, config) => {

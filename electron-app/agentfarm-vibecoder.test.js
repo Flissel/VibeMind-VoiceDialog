@@ -36,22 +36,11 @@ test('the main process answers agentfarm:n8n-status and clawport:n8n-status itse
   assert.doesNotMatch(main, /type: 'n8n_status' \}/);
 });
 
-test('the field: a missing backend, a failed start or no checklist gives the sentence; a checklist gives none', async () => {
-  const { startNotice, VIBECODER_NOT_CONNECTED } = await loadNotice();
-  // the answer of the running app (renderer.log): no module, no checklist
-  assert.equal(startNotice({ type: 'n8n_chat_start_result', success: false, message: "No module named 'spaces.n8n'" }), VIBECODER_NOT_CONNECTED);
-  assert.equal(startNotice(null), VIBECODER_NOT_CONNECTED);
-  assert.equal(startNotice({ success: true, session_id: 's1', checklist_items: [] }), VIBECODER_NOT_CONNECTED);
-  assert.equal(startNotice({ success: true, checklist_items: [{ id: 'description' }] }), VIBECODER_NOT_CONNECTED, 'no session');
-  assert.equal(startNotice({ success: true, session_id: 's1', checklist_items: [{ id: 'description', label: 'Beschreibung' }] }), null);
+test('the field: the sentence for a page without the channel names no raw error', async () => {
+  const { VIBECODER_NOT_CONNECTED } = await loadNotice();
+  assert.match(VIBECODER_NOT_CONNECTED, /noch nicht verbunden/);
   assert.doesNotMatch(VIBECODER_NOT_CONNECTED, /module|spaces\.n8n|Error/i, 'the raw error is not shown');
-});
-
-test('the field shows the sentence and no start button while not connected', () => {
-  const page = read('agentfarm', 'src', 'features', 'WorkflowBuilder.tsx');
-  assert.match(page, /import \{ startNotice, VIBECODER_NOT_CONNECTED \} from '\.\.\/vibecoder'/);
-  assert.match(page, /const said = startNotice\(result\)/);
-  assert.match(page, /\.catch\(\(\) => setNotice\(VIBECODER_NOT_CONNECTED\)\)/);
-  assert.match(page, /\{notice && \(\s*<p data-vibecoder-notice/);
-  assert.match(page, /\{!notice && <div style=\{\{/);
+  const field = read('agentfarm', 'src', 'features', 'VibeCoderChat.tsx');
+  assert.match(field, /import \{ VIBECODER_NOT_CONNECTED \} from '\.\.\/vibecoder'/);
+  assert.match(field, /\{!connected && \(\s*<p data-vibecoder-notice/);
 });
