@@ -45,14 +45,16 @@ function row(meta) {
     return { id: 'idee-1', title: 'Beispielbubble', metadata: meta };
 }
 
-test('the total is the sum of the five bars; rowboat shows as Wissenslage', () => {
+test('the total is the stored score (Lauf 39), the sum of the bars only without one; rowboat shows as Wissenslage', () => {
     const s = panel.standOf({ row: row({ bewertung_lauf: lauf({ score: 99 }) }), cards });
     assert.equal(s.leer, false);
     assert.deepEqual(s.sichten.map((b) => [b.label, b.punkte]),
         [['Coding', 14], ['SWE Design', 12], ['Research', 10], ['Wissenslage', 9], ['Ideen', 16]]);
-    assert.equal(s.score, 61, 'the bars, not a number beside them');
-    const odd = panel.standOf({ row: row({ bewertung_lauf: lauf({ sichten: { coding: { punkte: 40 }, ideas: { punkte: -3 } } }) }) });
-    assert.equal(odd.score, 25, 'each bar 0 to 25');
+    assert.equal(s.score, 99, 'the score the Brain stored (it decides the promotion with it)');
+    assert.equal(s.scoreMax, panel.SCORE_MAX);
+    const odd = panel.standOf({ row: row({ bewertung_lauf: lauf({ score: undefined, sichten: { coding: { punkte: 40 }, ideas: { punkte: -3 } } }) }) });
+    assert.equal(odd.score, 25, 'no stored score: the sum, each bar 0 to 25');
+    assert.equal(panel.standOf({ row: row({ bewertung_lauf: lauf({ score: 400 }) }) }).score, panel.SCORE_MAX, 'never beyond the scale');
 });
 
 test('the threshold comes from the backend; without it the default 95, and it decides the state', () => {
@@ -415,7 +417,7 @@ test('the question replaces "Neu bewerten": yes runs, Abbrechen does not, both b
     assert.equal(p.run, undefined, 'no run button while the question is open');
     assert.ok(textOf(p.box).includes('Trotzdem neu bewerten?'));
     const yes = p.nodes.find((n) => n.id === 'eval-rerun-confirm-btn');
-    assert.equal(yes.textContent, 'Ja, neu bewerten (1 Abo-Aufruf)');
+    assert.equal(yes.textContent, 'Ja, neu bewerten (5–10 Abo-Aufrufe)');
     yes.focus();
     yes.fire('click', KEYBOARD_CLICK);
     assert.equal(calls.confirm, 0, 'a key on a focused button right after drawing sends nothing');
@@ -423,7 +425,7 @@ test('the question replaces "Neu bewerten": yes runs, Abbrechen does not, both b
     assert.equal(calls.confirm, 1);
     p.nodes.find((n) => n.textContent === 'Abbrechen').fire('click', MOUSE);
     assert.equal(calls.cancel, 1);
-    assert.equal(drawn().run.textContent, 'Neu bewerten (1 Abo-Aufruf)');
+    assert.equal(drawn().run.textContent, 'Neu bewerten (5–10 Abo-Aufrufe)');
 });
 
 test('the window: the bar button only toggles, the open panel reads again after a run', () => {

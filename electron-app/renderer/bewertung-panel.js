@@ -2,12 +2,14 @@
  * The evaluation panel of a bubble: one source, the last run of the Brain.
  *
  * It reads only ideas.metadata.bewertung_lauf (written by the fixed tool bubble_bewertung):
- *   { version, zeit, score, sichten: { coding|swe_design|research|rowboat|ideas: { punkte, urteil } },
+ *   { version, zeit, score, sichten: { coding|swe_design|research|rowboat|ideas: { punkte, urteil,
+ *       kriterien: [{ name, punkte (0-5), begruendung }] } }, aufrufe (calls of the subscription),
  *     todos: [{ nr, sicht, titel, fehlt, karten[], punkte, art, erledigt, erledigt_zeit, erledigt_durch }],
  *     kartenstand, gekuerzt, quelle: "agent" | "mirofish" (missing = agent; only mirofish may promote) }
  * plus metadata.handwert (a score given by hand, shown apart) and metadata.eval_history (the course).
  *
- * The total is the sum of the five bars. Promoting is decided by the Brain alone (score against the
+ * The total is the stored score (the sum of the five bars only when none is stored), shown against
+ * SCORE_MAX, the one place of the scale (Lauf 39: percent 0-100 or the raw sum 0-125 is still open). Promoting is decided by the Brain alone (score against the
  * threshold VIBEMIND_BEFOERDERN_SCHWELLE, default 95, an up-to-date run and its sense check); there is
  * no way to read the threshold, so the panel names the default. "Up to date" in the Brain is a hash
  * over the content of cards and edges (kartenstand); the panel only sees change times, so a card
@@ -30,6 +32,13 @@
         ['ideas', 'Ideen'],
     ]);
     const MAX_SICHT = 25;
+    const MAX_KRITERIUM = 5;
+    // The one place of the scale of the total. Lauf 39: the operator still decides between percent
+    // (0-100) and the raw sum of the five views (0-125); the bar, the "/max" and the mark follow this.
+    const SCORE_MAX = 100;
+    // A run goes through MiroFish: one call per role (five), at most ten (Lauf 39). No quick run.
+    const LAUF_KOSTEN = '5–10 Abo-Aufrufe';
+    const ZAHLWORT = Object.freeze(['', 'einer Rolle', 'zwei Rollen', 'drei Rollen', 'vier Rollen', 'fünf Rollen']);
     const DEFAULT_SCHWELLE = 95;
     const LAUF_SATZ = 'Bewerte diese Bubble';
     const ARTEN = Object.freeze({
@@ -109,9 +118,20 @@
         const bars = SICHTEN.map(([key, label]) => {
             const s = objectOf(sichten[key]);
             const punkte = Math.min(MAX_SICHT, Math.max(0, Math.round(number(s.punkte) || 0)));
-            return { key, label, punkte, urteil: typeof s.urteil === 'string' ? s.urteil : '' };
+            const kriterien = (Array.isArray(s.kriterien) ? s.kriterien : [])
+                .filter((k) => k && typeof k === 'object' && !Array.isArray(k))
+                .slice(0, 10)
+                .map((k) => ({
+                    name: String(k.name || '').slice(0, 120),
+                    punkte: Math.min(MAX_KRITERIUM, Math.max(0, Math.round(number(k.punkte) || 0))),
+                    begruendung: String(k.begruendung || '').slice(0, 800),
+                }))
+                .filter((k) => k.name || k.begruendung);
+            return { key, label, punkte, urteil: typeof s.urteil === 'string' ? s.urteil : '', kriterien };
         });
-        const score = bars.reduce((sum, b) => sum + b.punkte, 0);
+        const summe = bars.reduce((sum, b) => sum + b.punkte, 0);
+        const gespeichert = number(lauf.score);
+        const score = gespeichert === null ? summe : Math.min(SCORE_MAX, Math.max(0, Math.round(gespeichert)));
 
         const zeit = timeOf(lauf.zeit);
         const geaendert = zeit === null ? [] : list.filter((c) => {
@@ -142,6 +162,9 @@
 
         // Who evaluated: "agent" or "mirofish" (missing = "agent"). Only a run of MiroFish may promote.
         const quelle = lauf.quelle === 'mirofish' ? 'mirofish' : 'agent';
+        const n = number(lauf.aufrufe);
+        const aufrufe = n !== null && Number.isInteger(n) && n > 0 && n <= 50 ? n : null;
+        const rollen = bars.filter((b) => Object.keys(objectOf(sichten[b.key])).length).length;
         const zustand = veraltet ? 'veraltet'
             : (score >= base.schwelle && quelle === 'mirofish' ? 'befoerderbar' : 'unter_schwelle');
         return {
@@ -149,6 +172,7 @@
             leer: false,
             zeit: lauf.zeit || null,
             score,
+            scoreMax: SCORE_MAX,
             sichten: bars,
             todos,
             offen: todos.filter((t) => !t.erledigt).length,
@@ -156,12 +180,23 @@
             geaendert: geaendert.length,
             gekuerzt: lauf.gekuerzt === true,
             quelle,
+            aufrufe,
+            rollen,
+            quelleText: quelleText(quelle, rollen, aufrufe),
             zustand,
             zustandLabel: ZUSTAENDE[zustand],
         };
     }
 
     const QUELLE_HINWEIS = 'Befördert wird erst nach einer Bewertung durch MiroFish.';
+
+    /** Who evaluated and what it cost, in one line (Lauf 39). */
+    function quelleText(quelle, rollen, aufrufe) {
+        const kosten = aufrufe === null ? '' : `, ${aufrufe} Abo-Aufruf${aufrufe === 1 ? '' : 'e'}`;
+        if (quelle !== 'mirofish') return `Bewertet vom Agenten (ältere Bewertung)${kosten}`;
+        const mit = rollen > 0 ? ` mit ${ZAHLWORT[rollen] || `${rollen} Rollen`}` : '';
+        return `Bewertet von MiroFish${mit}${kosten}`;
+    }
 
     const BESTAETIGEN_MS = 10 * 60 * 1000;
 
@@ -297,8 +332,9 @@
         const parts = [];
         parts.push(el(doc, 'div', 'eval-title', stand.titel));
 
-        // A run costs one call of the subscription: it starts only here, never from the bar.
-        const runButton = el(doc, 'button', 'bewertung-run', `${stand.leer ? 'Jetzt bewerten' : 'Neu bewerten'} (1 Abo-Aufruf)`);
+        // A run goes through MiroFish and costs 5 to 10 calls of the subscription: it starts only here,
+        // never from the bar. There is no quick run.
+        const runButton = el(doc, 'button', 'bewertung-run', `${stand.leer ? 'Jetzt bewerten' : 'Neu bewerten'} (${LAUF_KOSTEN})`);
         runButton.type = 'button';
         runButton.id = 'eval-rerun-btn';
         runButton.dataset.satz = LAUF_SATZ;
@@ -311,7 +347,7 @@
             run = el(doc, 'div', 'bewertung-bestaetigen');
             const age = Math.max(1, Math.round((clock() - (timeOf(stand.zeit) || clock())) / 60000));
             run.append(el(doc, 'div', '', `Die letzte Bewertung ist erst ${age} min alt, seitdem wurde keine Karte geändert. Trotzdem neu bewerten?`));
-            const yes = el(doc, 'button', 'bewertung-run', 'Ja, neu bewerten (1 Abo-Aufruf)');
+            const yes = el(doc, 'button', 'bewertung-run', `Ja, neu bewerten (${LAUF_KOSTEN})`);
             yes.type = 'button';
             yes.id = 'eval-rerun-confirm-btn';
             yes.dataset.satz = LAUF_SATZ;
@@ -329,14 +365,15 @@
             parts.push(run);
         } else {
             parts.push(el(doc, 'div', 'eval-subtitle', `Bewertet ${zeitText(stand.zeit)}${stand.gekuerzt ? ' · gekürzt bewertet' : ''}`));
+            parts.push(el(doc, 'div', 'bewertung-von', stand.quelleText));
             const head = el(doc, 'div', 'score-display');
-            head.append(el(doc, 'span', 'score-number', stand.score), el(doc, 'span', 'score-max', '/100'));
+            head.append(el(doc, 'span', 'score-number', stand.score), el(doc, 'span', 'score-max', `/${stand.scoreMax}`));
             parts.push(head);
             const bar = el(doc, 'div', 'score-bar');
             const fill = el(doc, 'div', 'score-bar-fill');
-            fill.style.width = `${Math.min(100, stand.score)}%`;
+            fill.style.width = `${Math.min(100, (stand.score * 100) / stand.scoreMax)}%`;
             const mark = el(doc, 'div', 'score-bar-schwelle');
-            mark.style.left = `${Math.min(100, stand.schwelle)}%`;
+            mark.style.left = `${Math.min(100, (stand.schwelle * 100) / stand.scoreMax)}%`;
             bar.append(fill, mark);
             parts.push(bar);
             const zustand = el(doc, 'span', `score-prediction zustand-${stand.zustand}`, stand.zustandLabel);
@@ -357,14 +394,29 @@
 
             parts.push(el(doc, 'div', 'section-title', 'Sichten'));
             for (const s of stand.sichten) {
-                const row = el(doc, 'div', 'agent-row');
-                if (s.urteil) row.title = s.urteil.slice(0, 400);
+                // Lauf 39: each view opens to its verdict and its criteria (name, points of 5, reason).
+                const sicht = el(doc, 'details', 'sicht');
+                sicht.dataset.sicht = s.key;
+                const row = el(doc, 'summary', 'agent-row');
                 const track = el(doc, 'span', 'agent-bar');
                 const f = el(doc, 'span', 'agent-bar-fill');
-                f.style.width = `${(s.punkte / MAX_SICHT) * 100}%`;
+                f.style.width = `${(s.punkte * 100) / MAX_SICHT}%`;
                 track.append(f);
                 row.append(el(doc, 'span', 'agent-name', s.label), track, el(doc, 'span', 'agent-score', `${s.punkte}/${MAX_SICHT}`));
-                parts.push(row);
+                sicht.append(row);
+                const inner = el(doc, 'div', 'sicht-inhalt');
+                if (s.urteil) inner.append(el(doc, 'div', 'sicht-urteil', s.urteil));
+                for (const k of s.kriterien) {
+                    const item = el(doc, 'div', 'kriterium');
+                    const kopf = el(doc, 'div', 'kriterium-kopf');
+                    kopf.append(el(doc, 'span', 'kriterium-name', k.name), el(doc, 'span', 'kriterium-punkte', `${k.punkte}/${MAX_KRITERIUM}`));
+                    item.append(kopf);
+                    if (k.begruendung) item.append(el(doc, 'div', 'kriterium-begruendung', k.begruendung));
+                    inner.append(item);
+                }
+                if (!s.urteil && !s.kriterien.length) inner.append(el(doc, 'div', 'eval-empty-hint', 'Keine Kriterien gespeichert.'));
+                sicht.append(inner);
+                parts.push(sicht);
             }
 
             const title = el(doc, 'div', 'section-title', 'To-dos');
@@ -445,6 +497,6 @@
         return box;
     }
 
-    return { SICHTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, QUELLE_HINWEIS, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
+    return { SICHTEN, SCORE_MAX, LAUF_KOSTEN, DEFAULT_SCHWELLE, LAUF_SATZ, ARTEN, ZUSTAENDE, QUELLE_HINWEIS, MAX_TODO_NR, KEY_GRACE_MS, SPERRE_MS,
         BESTAETIGEN_MS, todoSatz, standOf, farbe, brauchtBestaetigung, guard, createTodoSperre, render };
 }));

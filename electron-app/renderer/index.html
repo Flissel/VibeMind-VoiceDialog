@@ -2196,6 +2196,26 @@
         #eval-panel .bewertung-handwert { font-size: 12px; color: #c0c8d8; }
         #eval-panel .bewertung-hinweis { font-size: 11px; color: #8a94a6; margin: 4px 0; }
         #eval-panel .bewertung-quelle { font-size: 11px; color: #c9a227; margin: 4px 0; }
+        /* Lauf 39: the fills are spans; without a block box their width counts for nothing (grey bars) */
+        #eval-panel .agent-bar-fill,
+        #eval-panel .history-bar-fill { display: block; }
+        #eval-panel .bewertung-von { font-size: 12px; color: #c0c8d8; margin: -10px 0 14px 0; }
+        #eval-panel details.sicht { margin: 2px 0; }
+        #eval-panel details.sicht > summary.agent-row { cursor: pointer; list-style: none; }
+        #eval-panel details.sicht > summary.agent-row::-webkit-details-marker { display: none; }
+        #eval-panel details.sicht > summary.agent-row::before {
+            content: '\25B8'; color: #8a94a6; font-size: 10px; flex: 0 0 10px; transition: transform 0.15s;
+        }
+        #eval-panel details.sicht[open] > summary.agent-row::before { transform: rotate(90deg); }
+        #eval-panel .sicht-inhalt { margin: 2px 0 10px 18px; font-size: 12px; line-height: 1.45; color: #c0c8d8; }
+        #eval-panel .sicht-urteil { margin-bottom: 6px; }
+        #eval-panel .kriterium { margin: 6px 0; }
+        #eval-panel .kriterium-kopf { display: flex; gap: 6px; font-weight: 600; color: #e0e6ed; }
+        #eval-panel .kriterium-name { flex: 1; }
+        #eval-panel .kriterium-punkte { color: #8a94a6; font-variant-numeric: tabular-nums; }
+        #eval-panel .kriterium-begruendung { color: #a8b2c4; }
+        /* Lauf 39: the strip of the test mode (fernsteuerung.js) lies over the window; the panel starts below it */
+        #eval-panel { top: var(--vm-pruefstreifen, 0px); height: calc(100vh - var(--vm-pruefstreifen, 0px)); }
     </style>
     <!-- Persistent toggle tab — always visible, shows current score -->
     <button id="eval-toggle" onclick="window.toggleEvalPanel()" title="Bewertung dieser Bubble">

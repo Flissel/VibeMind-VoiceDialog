@@ -35,11 +35,16 @@ function remoteControlOpen(commandLine) {
   return commandLine.hasSwitch('remote-debugging-port') || commandLine.hasSwitch('remote-debugging-pipe');
 }
 
+/** Height of the strip; the page reads it as --vm-pruefstreifen to keep panels at the top below it (Lauf 39). */
+const BANNER_HEIGHT_PX = 22;
+
 /** The strip at the top of the window, as CSS only (no script in the page). */
 function bannerCss() {
-  return `html body::before {
+  return `html { --vm-pruefstreifen: ${BANNER_HEIGHT_PX}px; }
+html body::before {
   content: '${BANNER}';
   position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647;
+  height: ${BANNER_HEIGHT_PX}px; box-sizing: border-box; line-height: 16px;
   padding: 3px 12px; text-align: center; pointer-events: none;
   font: 600 12px 'Segoe UI', Tahoma, sans-serif; letter-spacing: 0.3px;
   color: #1a1000; background: #ffc145; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
@@ -88,4 +93,4 @@ async function askNatively(question, { dialog, window, remoteOpen }) {
   return { ja: !!result && result.response === 1, gesperrt: false };
 }
 
-module.exports = { remoteControlOpen, bannerCss, showBanner, nativeQuestion, askNatively, BANNER, NATIVE_ARTS, TEXT };
+module.exports = { remoteControlOpen, bannerCss, showBanner, nativeQuestion, askNatively, BANNER, BANNER_HEIGHT_PX, NATIVE_ARTS, TEXT };
