@@ -97,7 +97,7 @@ function TeamCard({ team }: { team: TeamInfo }) {
         {team.github_url && (
           <a href={team.github_url} target="_blank" rel="noreferrer" style={{
             fontSize: 'var(--text-caption1)',
-            color: 'var(--tint)',
+            color: 'var(--accent)',
             textDecoration: 'none',
           }}>
             GitHub
@@ -139,7 +139,7 @@ export function TeamRunner() {
             onClick={() => setShowChat(!showChat)}
             style={{
               border: '1px solid var(--separator)',
-              background: showChat ? 'var(--tint)' : 'var(--fill-tertiary)',
+              background: showChat ? 'var(--accent)' : 'var(--fill-tertiary)',
               color: showChat ? '#fff' : 'var(--text-secondary)',
               padding: '6px 14px',
               borderRadius: 'var(--radius-md)',

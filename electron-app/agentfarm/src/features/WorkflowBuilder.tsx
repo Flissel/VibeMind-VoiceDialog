@@ -118,7 +118,7 @@ export function WorkflowBuilder() {
             style={{
               padding: '4px 10px', borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--separator)',
-              background: showVibeCoder ? 'var(--tint)' : 'transparent',
+              background: showVibeCoder ? 'var(--accent)' : 'transparent',
               color: showVibeCoder ? '#fff' : 'var(--text-secondary)',
               cursor: 'pointer', fontSize: 'var(--text-caption1)', fontWeight: 600,
             }}
@@ -130,8 +130,8 @@ export function WorkflowBuilder() {
             style={{
               padding: '4px 10px', borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--separator)',
-              background: showEditor ? 'var(--system-blue)' : 'transparent',
-              color: showEditor ? '#fff' : 'var(--system-blue)',
+              background: showEditor ? 'var(--accent)' : 'transparent',
+              color: showEditor ? '#fff' : 'var(--accent)',
               cursor: 'pointer', fontSize: 'var(--text-caption1)', fontWeight: 600,
             }}
           >
@@ -260,7 +260,7 @@ export function WorkflowBuilder() {
                           <button onClick={() => wf.active ? handleDeactivate(wf.id) : handleActivate(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title={wf.active ? 'Deaktivieren' : 'Aktivieren'} style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: wf.active ? 'var(--system-orange)' : 'var(--system-green)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
                             {wf.active ? '\u23F8' : '\u25B6'}
                           </button>
-                          <button onClick={() => { setEditorWorkflowId(wf.id); setShowEditor(true) }} className="hover-bg" title="Im Editor oeffnen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-blue)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                          <button onClick={() => { setEditorWorkflowId(wf.id); setShowEditor(true) }} className="hover-bg" title="Im Editor oeffnen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
                             &#x2197;
                           </button>
                           <button onClick={() => handleDelete(wf.id)} disabled={actionLoading === wf.id} className="hover-bg" title="Loeschen" style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--separator)', background: 'transparent', color: 'var(--system-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
