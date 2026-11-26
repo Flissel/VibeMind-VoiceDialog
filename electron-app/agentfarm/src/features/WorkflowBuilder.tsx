@@ -41,7 +41,11 @@ function useN8nWorkflows() {
   const refresh = useCallback(async () => {
     if (!api?.n8nList) return
     setLoading(true); setError(null)
-    try { setWorkflows((await api.n8nList())?.workflows ?? []) }
+    try {
+      const result = await api.n8nList()
+      setWorkflows(result?.workflows ?? [])
+      if (result?.error) setError(result.error)
+    }
     catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { setLoading(false) }
   }, [])

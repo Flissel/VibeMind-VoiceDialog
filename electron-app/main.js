@@ -2257,13 +2257,9 @@ function setupIpcHandlers() {
     // handler needs spaces.n8n, which this installation does not have.
     ipcMain.handle('agentfarm:n8n-status', () => require('./n8n-access').n8nHealth(process.env));
 
-    ipcMain.handle('agentfarm:n8n-list', async () => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_list' }, 'n8n_list_result');
-        } catch (e) {
-            return { workflows: [], error: e.message };
-        }
-    });
+    // Lauf 39: the list, activating and deactivating go to n8n itself (REST with N8N_API_KEY); the Python
+    // handlers need spaces.n8n, which this installation does not have ("Keine Workflows" beside ten in the editor).
+    ipcMain.handle('agentfarm:n8n-list', () => require('./n8n-access').n8nListRest(process.env));
 
     ipcMain.handle('agentfarm:n8n-generate', async (_event, { description }) => {
         try {
@@ -2273,21 +2269,9 @@ function setupIpcHandlers() {
         }
     });
 
-    ipcMain.handle('agentfarm:n8n-activate', async (_event, { workflowId }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_activate', workflow_id: workflowId }, 'n8n_activate_result');
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
+    ipcMain.handle('agentfarm:n8n-activate', (_event, { workflowId } = {}) => require('./n8n-access').n8nActivateRest(process.env, workflowId));
 
-    ipcMain.handle('agentfarm:n8n-deactivate', async (_event, { workflowId }) => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_deactivate', workflow_id: workflowId }, 'n8n_deactivate_result');
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
-    });
+    ipcMain.handle('agentfarm:n8n-deactivate', (_event, { workflowId } = {}) => require('./n8n-access').n8nDeactivateRest(process.env, workflowId));
 
     ipcMain.handle('agentfarm:n8n-delete', async (_event, { workflowId }) => {
         try {

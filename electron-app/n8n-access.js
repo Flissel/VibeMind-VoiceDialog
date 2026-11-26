@@ -79,6 +79,72 @@ async function n8nActivateRest(env, workflowId, { fetchImpl = globalThis.fetch, 
   }
 }
 
+/** POST /api/v1/workflows/<id>/deactivate, like n8nActivateRest. */
+async function n8nDeactivateRest(env, workflowId, { fetchImpl = globalThis.fetch, timeoutMs = 10000 } = {}) {
+  const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
+  if (!key) return { success: false, error: 'N8N_API_KEY fehlt' };
+  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gueltige Workflow-id' };
+  const url = new URL(`/api/v1/workflows/${workflowId}/deactivate`, n8nBaseUrl(env));
+  if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url.href, { method: 'POST', headers: { 'X-N8N-API-KEY': key, Accept: 'application/json' }, signal: controller.signal });
+    return res && res.ok ? { success: true } : { success: false, error: `n8n antwortet mit ${res ? res.status : 'nichts'}` };
+  } catch (_) {
+    return { success: false, error: 'n8n nicht erreichbar' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const LIST_PAGES = 5;
+const LIST_LIMIT = 100;
+
+/**
+ * The workflows of n8n (GET /api/v1/workflows, page by page) from the main process with N8N_API_KEY.
+ * Lauf 39: the list of the Agent Farm said "Keine Workflows" while the editor showed ten; it asked Python,
+ * whose module spaces.n8n is missing. Returns { workflows: [{ id, name, active, updatedAt }] } and, when
+ * n8n could not be asked, a short German reason (the variable is named, never its value).
+ */
+async function n8nListRest(env, { fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+  const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
+  if (!key) return { workflows: [], error: 'Die Workflows lassen sich nicht lesen: N8N_API_KEY fehlt.' };
+  const workflows = [];
+  let cursor = '';
+  for (let page = 0; page < LIST_PAGES; page += 1) {
+    const url = new URL('/api/v1/workflows', n8nBaseUrl(env));
+    if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
+    url.searchParams.set('limit', String(LIST_LIMIT));
+    if (cursor) url.searchParams.set('cursor', cursor);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let body;
+    try {
+      const res = await fetchImpl(url.href, { method: 'GET', headers: { 'X-N8N-API-KEY': key, Accept: 'application/json' }, signal: controller.signal });
+      if (!res || !res.ok) return { workflows, error: `Die Workflows lassen sich nicht lesen: n8n antwortet mit ${res ? res.status : 'nichts'}.` };
+      body = await res.json();
+    } catch (_) {
+      return { workflows, error: 'Die Workflows lassen sich nicht lesen: n8n nicht erreichbar.' };
+    } finally {
+      clearTimeout(timer);
+    }
+    const data = body && Array.isArray(body.data) ? body.data : [];
+    for (const wf of data) {
+      if (!wf || !isWorkflowId(String(wf.id))) continue;
+      workflows.push({
+        id: String(wf.id),
+        name: typeof wf.name === 'string' ? wf.name.slice(0, 200) : String(wf.id),
+        active: wf.active === true,
+        updatedAt: typeof wf.updatedAt === 'string' ? wf.updatedAt : null,
+      });
+    }
+    cursor = body && typeof body.nextCursor === 'string' ? body.nextCursor : '';
+    if (!cursor) break;
+  }
+  return { workflows };
+}
+
 /**
  * Name and state of a workflow as n8n itself has them (GET /api/v1/workflows/<id>), or null.
  * The VibeCoder field shows this name in its question, never the one the agent wrote.
@@ -189,6 +255,6 @@ function sessionCookieUrls(env = process.env) {
 }
 
 module.exports = {
-  LOCAL_URL, n8nBaseUrl, n8nHealth, n8nActivateRest, n8nWorkflowInfo, isWorkflowId, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
+  LOCAL_URL, n8nBaseUrl, n8nHealth, n8nActivateRest, n8nDeactivateRest, n8nListRest, n8nWorkflowInfo, isWorkflowId, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
   cookiePairs, mergeCookieHeader, sessionCookieUrls,
 };
