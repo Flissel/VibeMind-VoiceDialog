@@ -110,13 +110,26 @@ class AgentFarmManager {
     this._setSendRule('openfang', {
       urls: auth.urls,
       apply: (details, headers) => {
-        const refusal = openFangRefusal({ ...details, requestHeaders: headers }, auth.origins, (url) => this._isAppPage(url));
+        const refusal = openFangRefusal({ ...details, requestHeaders: headers }, auth.origins, (url) => this._isAppPage(url),
+          { frameTree: () => this._frameTree(details) });
         this._noteOpenFangVerdict(details, refusal);
         return refusal === null ? withKey(headers, auth.header) : headers;
       },
     });
     this._note(`OpenFang: Schluessel aus ${auth.name} wird nur an die OpenFang-Seite im Reiter mitgegeben`);
     return true;
+  }
+
+  /**
+   * The frames of the Agent Farm view, for a request Electron reported without its frame (Lauf 39); null for a
+   * request of another web contents (the session is shared with the main window).
+   */
+  _frameTree(details) {
+    const wc = this.agentfarmView && this.agentfarmView.webContents;
+    if (!wc || !wc.mainFrame) return null;
+    if (typeof details.webContentsId === 'number' && typeof wc.id === 'number' && details.webContentsId !== wc.id) return null;
+    if (details.webContents && details.webContents !== wc) return null;
+    return wc.mainFrame.framesInSubtree;
   }
 
   /** stdout and the app log; never a value, only names and reasons. */
@@ -127,7 +140,7 @@ class AgentFarmManager {
 
   /** Once per verdict: whether the key went with a request to OpenFang, and if not, why (path only). */
   _noteOpenFangVerdict(details, refusal) {
-    const verdict = refusal === null ? 'mit Schluessel' : `ohne Schluessel: ${refusal}`;
+    const verdict = refusal === null ? (details.frame ? 'mit Schluessel' : 'mit Schluessel, Rahmen aus dem Rahmenbaum') : `ohne Schluessel: ${refusal}`;
     if (this._openFangSaid.has(verdict)) return;
     this._openFangSaid.add(verdict);
     let where = '?';

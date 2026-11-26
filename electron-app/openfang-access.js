@@ -70,16 +70,22 @@ function header(headers, name) {
  * Why this request may not carry the key, or null when it may. The reason is a short phrase for the log
  * (Lauf 38: the tab asked for a key and nothing said which check had refused it); it names no value.
  * `isAppPage(url)` says whether a document is the Agent Farm page itself (file:// or its dev address).
+ * `frameTree()` (optional) lists the frames of the Agent Farm view; it stands in for `details.frame` when
+ * Electron gives none (see frameWithoutDetails).
  */
-function openFangRefusal(details, origins, isAppPage) {
+function openFangRefusal(details, origins, isAppPage, { frameTree } = {}) {
   if (!details || !Array.isArray(origins) || !origins.length) return 'keine OpenFang-Adresse';
   // the target: OpenFang only (a redirect to another host is a request to that host: no key)
   if (!origins.includes(originOf(details.url))) return 'Ziel ist nicht OpenFang';
   const headers = details.requestHeaders || {};
   const origin = header(headers, 'origin');
   if (origin && origin !== 'null' && !origins.includes(origin)) return 'fremde Herkunft (Origin)';
-  const frame = details.frame;
-  if (!frame) return 'kein Rahmen bekannt';
+  let frame = details.frame;
+  if (!frame) {
+    const found = frameWithoutDetails(details, origins, typeof frameTree === 'function' ? frameTree : null);
+    if (typeof found === 'string') return found;
+    frame = found;
+  }
   const parent = frame.parent || null;
 
   if (details.resourceType === 'subFrame') {
@@ -100,6 +106,43 @@ function openFangRefusal(details, origins, isAppPage) {
   if (parent.parent) return 'verschachtelter Rahmen';   // the tab's own frame, not nested
   if (!isAppPage(parent.url)) return 'Elternseite ist nicht die Agent Farm';
   return origins.includes(originOf(frame.url || '')) ? null : 'Rahmen zeigt nicht OpenFang';
+}
+
+/**
+ * The frame of a request that Electron reported without one (Lauf 39: every request of the OpenFang tab came
+ * with `details.frame` empty, "kein Rahmen bekannt", so the key never went). Only a request of an OpenFang
+ * document qualifies, and only when the view holds exactly one OpenFang frame:
+ *   - not a navigation (subFrame/mainFrame always come with their frame),
+ *   - started by a document of the OpenFang origin: `Sec-Fetch-Site: same-origin` or an OpenFang Referer
+ *     (the browser sets both; a page cannot), and no foreign Referer,
+ *   - in the frame tree of the Agent Farm view exactly one frame shows OpenFang. Two (say one nested in n8n)
+ *     leave it open which one asked: no key.
+ * Returns that frame, or the reason why none.
+ */
+function frameWithoutDetails(details, origins, frameTree) {
+  if (!frameTree) return 'kein Rahmen bekannt';
+  if (details.resourceType === 'subFrame' || details.resourceType === 'mainFrame') return 'kein Rahmen bekannt';
+  const headers = details.requestHeaders || {};
+  const site = header(headers, 'sec-fetch-site');
+  const referer = header(headers, 'referer');
+  if (referer && !origins.includes(originOf(referer))) return 'kein Rahmen bekannt, fremder Referer';
+  // Both are set by the browser, never by the page. Whether the main process sees Sec-Fetch-Site is not sure,
+  // so an OpenFang Referer counts as well; with neither, it stays open who asked.
+  if (site && site !== 'same-origin') return 'kein Rahmen bekannt, Anfrage nicht aus OpenFang';
+  if (!site && !referer) return 'kein Rahmen bekannt, weder Sec-Fetch-Site noch Referer';
+  let frames;
+  try {
+    frames = frameTree();
+  } catch (_) {
+    frames = null;
+  }
+  if (!Array.isArray(frames)) return 'kein Rahmen bekannt, Rahmenbaum nicht lesbar';
+  const shown = frames.filter((f) => {
+    try { return f && origins.includes(originOf(f.url || '')); } catch (_) { return false; }
+  });
+  if (shown.length === 0) return 'kein Rahmen bekannt, kein OpenFang-Rahmen in der Ansicht';
+  if (shown.length > 1) return 'kein Rahmen bekannt, mehrere OpenFang-Rahmen';
+  return shown[0];
 }
 
 /** Whether this request may carry the key (see openFangRefusal). */

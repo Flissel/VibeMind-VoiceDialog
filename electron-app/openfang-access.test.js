@@ -141,7 +141,7 @@ test('Lauf 38: each verdict on the key is logged once, with the reason and the p
   const notes = appLog.slice(1);
   assert.deepEqual(notes, [
     'OpenFang: erste Anfrage mit Schluessel (xhr /api/tools)',
-    'OpenFang: erste Anfrage ohne Schluessel: kein Rahmen bekannt (xhr /api/tools)',
+    'OpenFang: erste Anfrage ohne Schluessel: kein Rahmen bekannt, weder Sec-Fetch-Site noch Referer (xhr /api/tools)',
   ]);
   assert.ok(!appLog.join('').includes(KEY));
 });
@@ -214,4 +214,43 @@ test('the key is read only in the main process: no renderer file and no preload 
   for (const file of ['agentfarm-preload.js', path.join('agentfarm', 'src', 'features', 'OpenFangWorkflow.tsx')]) {
     assert.doesNotMatch(fs.readFileSync(path.join(__dirname, file), 'utf8'), /OPENFANG_API_KEY/, file);
   }
+});
+
+// ---- Lauf 39: Electron gives the requests of the OpenFang tab without details.frame ----
+
+test('without details.frame: the one OpenFang frame of the view stands in, only for a request of OpenFang', () => {
+  const tree = [top, openfangFrame, n8nFrame];
+  const r = (fields, frames = tree) => openFangRefusal(req({ frame: undefined, ...fields }), ORIGINS, isApp, { frameTree: () => frames });
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }), null, 'the request of the tab: key');
+  assert.equal(r({ requestHeaders: { Referer: 'http://localhost:4200/' } }), null, 'an OpenFang Referer is proof too');
+  assert.equal(r({ requestHeaders: {} }), 'kein Rahmen bekannt, weder Sec-Fetch-Site noch Referer');
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'cross-site' } }), 'kein Rahmen bekannt, Anfrage nicht aus OpenFang');
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin', Referer: 'http://localhost:15678/x' } }), 'kein Rahmen bekannt, fremder Referer');
+  assert.equal(r({ requestHeaders: { Origin: 'http://localhost:15678', 'Sec-Fetch-Site': 'cross-site' } }), 'fremde Herkunft (Origin)', 'n8n fetching OpenFang');
+  const nestedFang = { url: 'http://localhost:4200/', parent: n8nFrame };
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }, [top, openfangFrame, n8nFrame, nestedFang]),
+    'kein Rahmen bekannt, mehrere OpenFang-Rahmen', 'two OpenFang frames: open which one asked');
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }, [top, n8nFrame, nestedFang]), 'verschachtelter Rahmen',
+    'the only OpenFang frame sits in n8n');
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }, [top, n8nFrame]), 'kein Rahmen bekannt, kein OpenFang-Rahmen in der Ansicht');
+  assert.equal(r({ requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }, null), 'kein Rahmen bekannt, Rahmenbaum nicht lesbar');
+  assert.equal(r({ resourceType: 'subFrame', requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }), 'kein Rahmen bekannt', 'a navigation never guesses');
+  assert.equal(openFangRefusal(req({ frame: undefined, requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } }), ORIGINS, isApp), 'kein Rahmen bekannt', 'no tree given');
+});
+
+test('the manager: a request without details.frame gets the key from the frame tree of its own view only', async () => {
+  const { m, send, app, appLog } = manager({ ...ENV });
+  const appTop = { url: app, parent: null };
+  const fang = { url: 'http://localhost:4200/', parent: appTop };
+  const wc = m.agentfarmView.webContents;
+  wc.id = 7;
+  wc.mainFrame = { framesInSubtree: [appTop, fang] };
+  const own = await send({ url: 'http://localhost:4200/api/tools', resourceType: 'xhr', webContentsId: 7,
+    requestHeaders: { 'Sec-Fetch-Site': 'same-origin', Referer: 'http://localhost:4200/' } });
+  assert.equal(own.Authorization, 'Bearer ' + KEY);
+  const other = await send({ url: 'http://localhost:4200/api/tools', resourceType: 'xhr', webContentsId: 1,
+    requestHeaders: { 'Sec-Fetch-Site': 'same-origin' } });
+  assert.equal(other.Authorization, undefined, 'the main window shares the session: its requests get nothing');
+  assert.ok(appLog.includes('OpenFang: erste Anfrage mit Schluessel, Rahmen aus dem Rahmenbaum (xhr /api/tools)'));
+  assert.ok(!appLog.join('').includes(KEY));
 });
