@@ -29,6 +29,28 @@ function n8nBaseUrl(env = process.env) {
   }
 }
 
+/**
+ * Whether n8n answers: GET <base>/healthz from the main process. The display "n8n online/offline"
+ * of the Agent Farm used to come from python spaces.n8n, which is missing from the installation:
+ * it said "offline" while the editor beside it showed n8n (2026-11-26). localhost is asked as
+ * 127.0.0.1, so a name that resolves to ::1 first does not make a running n8n look offline.
+ */
+async function n8nHealth(env = process.env, { fetchImpl = globalThis.fetch, timeoutMs = 3000 } = {}) {
+  const url = n8nBaseUrl(env);
+  const probe = new URL('/healthz', url);
+  if (probe.hostname === 'localhost') probe.hostname = '127.0.0.1';
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetchImpl(probe.href, { method: 'GET', signal: controller ? controller.signal : undefined });
+    return res && res.ok ? { online: true, url } : { online: false, url, error: `n8n antwortet mit ${res ? res.status : 'nichts'}` };
+  } catch (_) {
+    return { online: false, url, error: 'n8n nicht erreichbar' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function isLocal(baseUrl) {
   const host = new URL(baseUrl).hostname;
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
@@ -115,6 +137,6 @@ function sessionCookieUrls(env = process.env) {
 }
 
 module.exports = {
-  LOCAL_URL, n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
+  LOCAL_URL, n8nBaseUrl, n8nHealth, n8nLogin, shouldRetryLogin, frameHeaderUrls, forwardTarget,
   cookiePairs, mergeCookieHeader, sessionCookieUrls,
 };

@@ -2245,13 +2245,9 @@ function setupIpcHandlers() {
 
     ipcMain.handle('agentfarm:n8n-url', () => require('./n8n-access').n8nBaseUrl(process.env));
 
-    ipcMain.handle('agentfarm:n8n-status', async () => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_status' }, 'n8n_status_result');
-        } catch (e) {
-            return { online: false, error: e.message };
-        }
-    });
+    // n8n online/offline straight from the main process (n8n-access.js n8nHealth): the Python
+    // handler needs spaces.n8n, which this installation does not have.
+    ipcMain.handle('agentfarm:n8n-status', () => require('./n8n-access').n8nHealth(process.env));
 
     ipcMain.handle('agentfarm:n8n-list', async () => {
         try {
@@ -2794,13 +2790,8 @@ function setupIpcHandlers() {
 
     // ── n8n Workflow Builder ──
 
-    ipcMain.handle('clawport:n8n-status', async () => {
-        try {
-            return await sendToPythonAndWait({ type: 'n8n_status' }, 'n8n_status_result', 10000);
-        } catch (e) {
-            return { online: false, error: e.message };
-        }
-    });
+    // Same answer as the Agent Farm: n8n is asked itself, not the missing Python module spaces.n8n.
+    ipcMain.handle('clawport:n8n-status', () => require('./n8n-access').n8nHealth(process.env));
 
     ipcMain.handle('clawport:n8n-list', async () => {
         try {
