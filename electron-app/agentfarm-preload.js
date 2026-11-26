@@ -41,27 +41,15 @@ contextBridge.exposeInMainWorld('vibemindAgentFarm', {
   n8nDelete: (workflowId) =>
     ipcRenderer.invoke('agentfarm:n8n-delete', { workflowId }),
 
-  // ── VibeCoder Chat (iterative workflow builder) ──
-  n8nChatStart: (description) =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-start', { description: description || '' }),
+  // ── VibeCoder: chat with brain-n8n through the main process (vibecoder-chat.js) ──
+  vibecoderState: () =>
+    ipcRenderer.invoke('agentfarm:vibecoder-state'),
 
-  n8nChatChecklist: (sessionId, action, itemId, value) =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-checklist', { sessionId, action, itemId, value }),
+  vibecoderSend: (text) =>
+    ipcRenderer.invoke('agentfarm:vibecoder-send', { text }),
 
-  n8nChatMessage: (sessionId, text) =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-message', { sessionId, text }),
-
-  n8nChatDeploy: (sessionId) =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-deploy', { sessionId }),
-
-  n8nClaudeBuild: (sessionId) =>
-    ipcRenderer.invoke('agentfarm:n8n-claude-build', { sessionId }),
-
-  n8nChatHistory: (sessionId) =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-history', { sessionId }),
-
-  n8nChatSessions: () =>
-    ipcRenderer.invoke('agentfarm:n8n-chat-sessions'),
+  vibecoderDecide: (proposalId, yes) =>
+    ipcRenderer.invoke('agentfarm:vibecoder-decide', { proposalId, yes: yes === true }),
 
   // ── Video Production (Video tab) ──
   videoStatus: () =>
