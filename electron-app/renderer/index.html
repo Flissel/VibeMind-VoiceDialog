@@ -1431,11 +1431,11 @@
                 }
 
                 case 'space_changed':
-                    // Space was changed (from backend, keyboard shortcut, or agent transfer)
-                    console.log('[Space] Changed to:', message.space);
-                    
-                    // Only animate if space is actually different
+                    // Space was changed (from backend, keyboard shortcut, or agent transfer).
+                    // Only a real change is logged: the echo of the app's own switch (main and Python
+                    // each send one back) said "Changed to / Already in space" again and again (Lauf 35).
                     if (message.space !== window.currentSpace) {
+                        console.log('[Space] Changed to:', message.space);
                         window.currentSpace = message.space;
                         
                         // Update UI tabs
@@ -1474,8 +1474,6 @@
                             showTranscript('System', message.reason);
                         }
                     } else {
-                        console.log('[Space] Already in space:', message.space);
-
                         // Ensure Brain Dashboard is shown even if already in space
                         if (message.space === 'thebrain' && window.vibemind && window.vibemind.showBrain) {
                             window.vibemind.showBrain();
@@ -2519,15 +2517,18 @@
         };
 
         // Esc closes the panel and only the panel: the scene (multiverse.onKeyDown on window) would
-        // leave the bubble on the same key (H4c). A card open above it (card-view.js) takes Esc first.
+        // leave the bubble on the same key (H4c). In the capture phase: the chat field stops every key
+        // it gets (ideas-chat.js), and after typing the cursor stands there (Lauf 35). The field and its
+        // text stay as they are. A card open above the panel (card-view.js) takes Esc first.
         document.addEventListener('keydown', e => {
             if (e.key !== 'Escape') return;
             const panel = document.getElementById('eval-panel');
             if (!panel || !panel.classList.contains('open')) return;
+            if (document.querySelector('.kv-reader:not([hidden])')) return;
             e.preventDefault();
             e.stopPropagation();
             window.closeEvalPanel();
-        });
+        }, true);
     </script>
 </body>
 </html>

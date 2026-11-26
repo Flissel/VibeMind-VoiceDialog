@@ -232,23 +232,61 @@ test('every switch names its source in the log: tab, way back, status line, a ca
 });
 
 // H4c: Esc on the open evaluation panel closed it and, on the same key, the scene left the bubble.
-test('Esc on the open evaluation panel closes only the panel; with the panel closed the scene has the key', () => {
+// Lauf 35: with the cursor in the chat field (after typing) Esc did nothing: the field stops every key.
+test('Esc closes the open panel, also from the chat field; the bubble stays, the text stays, a card goes first', () => {
     const html = read('index.html');
-    const at = html.indexOf("// Esc closes the panel and only the panel");
+    const at = html.indexOf('// Esc closes the panel and only the panel');
     assert.ok(at > 0);
-    const body = html.slice(at, html.indexOf('});', at) + 3);
     const open = "document.addEventListener('keydown', ";
-    assert.ok(body.includes(open), 'the listener of the panel');
-    const handler = [null, body.slice(body.indexOf(open) + open.length, body.lastIndexOf(');'))];
-    const run = (open) => {
+    const from = html.indexOf(open, at) + open.length;
+    const to = html.indexOf('}, true);', from);
+    assert.ok(from > open.length && to > from, 'the listener of the panel, in the capture phase');
+    const handler = html.slice(from, to + 1);
+
+    /** The way of a key: document (capture), the target, document (bubble), window (the scene). */
+    function press({ panelOpen = true, inField = false, cardOpen = false } = {}) {
         const calls = [];
-        const panel = { classList: { contains: (c) => c === 'open' && open } };
-        const sandbox = { document: { getElementById: () => panel }, window: { closeEvalPanel: () => calls.push('close') } };
-        const fn = vm.runInNewContext('(' + handler[1] + ')', sandbox);
-        const event = { key: 'Escape', preventDefault: () => calls.push('prevent'), stopPropagation: () => calls.push('stop') };
-        fn(event);
-        return calls;
-    };
-    assert.deepEqual(run(true), ['prevent', 'stop', 'close'], 'the key ends at the panel: the window listener of the scene never sees it');
-    assert.deepEqual(run(false), [], 'no panel open: Esc goes on to the scene as before');
+        const field = { value: 'halber Satz', listeners: [(e) => e.stopPropagation()] };   // as ideas-chat.js
+        const panel = { classList: { contains: (c) => c === 'open' && panelOpen } };
+        const doc = {
+            getElementById: () => panel,
+            querySelector: (sel) => (sel === '.kv-reader:not([hidden])' && cardOpen ? {} : null),
+        };
+        const fn = vm.runInNewContext('(' + handler + ')', { document: doc, window: { closeEvalPanel: () => calls.push('panel zu') } });
+        let stopped = false;
+        const event = { key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } };
+        fn(event);                                                     // document, capture: the panel
+        if (!stopped && cardOpen) { calls.push('Karte zu'); stopped = true; }  // document, capture: card-view.js
+        if (!stopped && inField) for (const l of field.listeners) l(event);   // the chat field
+        if (!stopped) calls.push('Szene: Bubble verlassen');            // window: multiverse.onKeyDown
+        return { calls, text: field.value };
+    }
+    assert.deepEqual(press().calls, ['panel zu'], 'the scene never sees the key');
+    const typed = press({ inField: true });
+    assert.deepEqual(typed.calls, ['panel zu'], 'Lauf 35: cursor in the chat field');
+    assert.equal(typed.text, 'halber Satz', 'the text in the field stays');
+    assert.deepEqual(press({ cardOpen: true, inField: true }).calls, ['Karte zu'],
+        'a card above the panel: the panel leaves the key to the card, and stays open');
+    assert.deepEqual(press({ panelOpen: false }).calls, ['Szene: Bubble verlassen'], 'no panel open: Esc goes on to the scene as before');
+    assert.deepEqual(press({ panelOpen: false, inField: true }).calls, [], 'and the chat field keeps its keys');
+});
+
+// Lauf 35: after each switch 4 to 6 lines "Changed to / Already in space". The tab, the switch and
+// the arrival each told the backend, and main and Python each sent every one back.
+test('a switch tells the backend once, on arrival; the echo of it is not logged again', () => {
+    const w = world();
+    w.window.spaceNavigator.switchSpace('roarboot', { quelle: 'tab' });
+    assert.deepEqual(w.ipc, [], 'nothing while the camera flies');
+    w.moves[0].done();
+    assert.deepEqual(w.ipc, ['roarboot'], 'once, on arrival');
+    w.window.spaceNavigator.switchSpace('roarboot', { quelle: 'tab' });   // its tab again: already there
+    assert.deepEqual(w.ipc, ['roarboot']);
+    const nav = read('space-navigator.js');
+    assert.ok(!/makeTabHandler\([^)]*(true|false)\)/.test(nav), 'the tabs no longer tell the backend themselves');
+    assert.ok(nav.includes('if (app) return;'), 'switchSpace tells it only without a scene');
+    const html = read('index.html');
+    assert.ok(!html.includes("'[Space] Already in space:'"));
+    const at = html.indexOf("case 'space_changed':");
+    const branch = html.indexOf('if (message.space !== window.currentSpace) {', at);
+    assert.ok(branch > at && html.indexOf("console.log('[Space] Changed to:'", at) > branch, 'only a real change is logged');
 });

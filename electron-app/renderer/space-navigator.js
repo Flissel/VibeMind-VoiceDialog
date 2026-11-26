@@ -16,35 +16,29 @@
 
     var agentNameDisplay = document.getElementById('current-agent-name');
 
-    // Helper to create tab click handler
-    function makeTabHandler(tabId, spaceId, notifyBackend) {
+    // Helper to create tab click handler. The backend hears of the switch once, from the scene on
+    // arrival (multiverse.js _arriveAtSpace); the tab told it a second and third time (Lauf 35).
+    function makeTabHandler(tabId, spaceId) {
         var tab = document.getElementById(tabId);
         if (tab) {
             tab.onclick = function() {
                 switchSpace(spaceId, { quelle: 'tab' });
-                if (notifyBackend && window.vibemind && window.vibemind.navigateToSpace) {
-                    try {
-                        window.vibemind.navigateToSpace(spaceId);
-                    } catch(e) {
-                        console.error('[Space] Navigation failed:', e);
-                    }
-                }
             };
         }
     }
 
     // Space tab click handlers
-    makeTabHandler('tab-ideas', 'ideas', true);
-    makeTabHandler('tab-projects', 'projects', true);
-    makeTabHandler('tab-desktop', 'desktop', true);
-    makeTabHandler('tab-swedesign', 'swedesign', true);
-    makeTabHandler('tab-roarboot', 'roarboot', true);
-    makeTabHandler('tab-clawport', 'clawport', false);
-    makeTabHandler('tab-agentfarm', 'agentfarm', false);
-    makeTabHandler('tab-thebrain', 'thebrain', false);
-    makeTabHandler('tab-flowzen', 'flowzen', false);
-    makeTabHandler('tab-mirofish', 'mirofish', false);
-    makeTabHandler('tab-video', 'video', false);
+    makeTabHandler('tab-ideas', 'ideas');
+    makeTabHandler('tab-projects', 'projects');
+    makeTabHandler('tab-desktop', 'desktop');
+    makeTabHandler('tab-swedesign', 'swedesign');
+    makeTabHandler('tab-roarboot', 'roarboot');
+    makeTabHandler('tab-clawport', 'clawport');
+    makeTabHandler('tab-agentfarm', 'agentfarm');
+    makeTabHandler('tab-thebrain', 'thebrain');
+    makeTabHandler('tab-flowzen', 'flowzen');
+    makeTabHandler('tab-mirofish', 'mirofish');
+    makeTabHandler('tab-video', 'video');
 
     // The space asked for while a camera move was running. The scene starts one move at a time;
     // without this a click during a move was lost (measured 2026-11-23: of five switches 0.4 s
@@ -101,7 +95,8 @@
         }
         syncSpace(spaceId);
 
-        // Also notify backend
+        // The scene tells the backend on arrival; only without a scene does this have to.
+        if (app) return;
         try {
             await window.vibemind.navigateToSpace(spaceId);
         } catch(e) {
