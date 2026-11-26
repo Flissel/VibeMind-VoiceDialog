@@ -15,6 +15,8 @@ const { loadOverlay, loadStatus } = require('./overlay-status');
 const {
   n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls, cookiePairs, mergeCookieHeader, sessionCookieUrls,
 } = require('./n8n-access');
+const { openfangAuth, fromOpenFangFrame, withKey, matchesPatterns } = require('./openfang-access');
+const { pathToFileURL } = require('url');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
@@ -39,6 +41,10 @@ class AgentFarmManager {
     // Renderer dist path (dev vs production)
     this.isDev = !!this._env.AGENTFARM_DEV_URL;
 
+    // Request-header rules of the view's session (n8n cookie, OpenFang key): Electron keeps only the
+    // last onBeforeSendHeaders listener of a session, so every rule runs in one (_setSendRule).
+    this._sendRules = new Map();
+
     // Listen for window resize
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
@@ -47,6 +53,53 @@ class AgentFarmManager {
         }
       });
     }
+  }
+
+  /** The Agent Farm page itself (its file, or the dev address): the only parent of the OpenFang frame. */
+  _isAppPage(url) {
+    if (typeof url !== 'string' || !url) return false;
+    const bare = url.split('#')[0].split('?')[0];
+    try {
+      if (this.isDev) return new URL(bare).origin === new URL(this._env.AGENTFARM_DEV_URL).origin;
+      return bare === pathToFileURL(this._resolveRendererPath()).href;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Set one rule for the request headers and (re)install the one listener with all rules.
+   * A rule: { urls: session filter patterns, apply(details, headers) -> headers }.
+   */
+  _setSendRule(name, rule) {
+    this._sendRules.set(name, rule);
+    const session = this.agentfarmView && this.agentfarmView.webContents && this.agentfarmView.webContents.session;
+    if (!session || !session.webRequest || typeof session.webRequest.onBeforeSendHeaders !== 'function') return;
+    const rules = [...this._sendRules.values()];
+    session.webRequest.onBeforeSendHeaders({ urls: rules.flatMap((r) => r.urls) }, (details, callback) => {
+      let headers = { ...details.requestHeaders };
+      for (const r of rules) if (matchesPatterns(details.url, r.urls)) headers = r.apply(details, headers);
+      callback({ requestHeaders: headers });
+    });
+  }
+
+  /**
+   * R3: the OpenFang key goes only to requests of the OpenFang page in its tab (openfang-access.js).
+   * The log names the variable, never the value.
+   */
+  _installOpenFangKey() {
+    const auth = openfangAuth(this._env);
+    if (!auth) {
+      _afLog('OpenFang: kein OPENFANG_API_KEY, der Reiter laedt ohne Schluessel');
+      return false;
+    }
+    this._setSendRule('openfang', {
+      urls: auth.urls,
+      apply: (details, headers) => (fromOpenFangFrame({ ...details, requestHeaders: headers }, auth.origins, (url) => this._isAppPage(url))
+        ? withKey(headers, auth.header) : headers),
+    });
+    _afLog(`OpenFang: Schluessel aus ${auth.name} wird nur an die OpenFang-Seite im Reiter mitgegeben`);
+    return true;
   }
 
   /**
@@ -117,6 +170,8 @@ class AgentFarmManager {
         callback({ responseHeaders: headers });
       },
     );
+
+    this._installOpenFangKey();
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development' || this.isDev) {
@@ -190,15 +245,13 @@ class AgentFarmManager {
           // (see mergeCookieHeader for why the cookie store alone is not enough for a remote n8n).
           const pairs = cookiePairs(cookies);
           if (pairs.length && this.agentfarmView) {
-            this.agentfarmView.webContents.session.webRequest.onBeforeSendHeaders(
-              { urls: sessionCookieUrls(process.env) },
-              (details, callback) => {
-                const headers = { ...details.requestHeaders };
+            this._setSendRule('n8n-cookie', {
+              urls: sessionCookieUrls(process.env),
+              apply: (details, headers) => {
                 const key = Object.keys(headers).find((name) => name.toLowerCase() === 'cookie') || 'Cookie';
-                headers[key] = mergeCookieHeader(headers[key], pairs);
-                callback({ requestHeaders: headers });
+                return { ...headers, [key]: mergeCookieHeader(headers[key], pairs) };
               },
-            );
+            });
             _afLog(`n8n session cookie wird an ${n8nUrl} mitgegeben (${pairs.length})`);
           }
           if (cookies && this.agentfarmView) {

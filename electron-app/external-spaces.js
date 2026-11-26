@@ -18,8 +18,8 @@ const path = require('node:path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
 
 const EXTERNAL_SPACES = Object.freeze([
-  // OpenFang has no entry here: its dashboard is a tab of the Agent Farm and needs no key
-  // on this machine (GET /api/auth/check -> mode "none").
+  // OpenFang has no entry here: its dashboard is a tab of the Agent Farm; its key (OPENFANG_API_KEY)
+  // goes only to the OpenFang page in that tab (openfang-access.js, agentfarm-manager.js).
   {
     id: 'sales', label: 'Sales', icon: '\u{1F91D}', color: 0x4fc3f7, position: [26, 0, 2],
     urlEnv: 'SALES_UI_URL',
