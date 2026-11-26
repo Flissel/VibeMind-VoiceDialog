@@ -8,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const { acceptedOf, targetsOf, createTaskNavigator } = require('./task-navigation');
-const { isAccepted, ACCEPTED_LINE } = require('./renderer/ideas-chat');
+const { isAccepted, ACCEPTED_LINE, REPEAT_ANSWERED, REPEAT_RUNNING, REPEAT_MS } = require('./renderer/ideas-chat');
 const { resultArrived, snapshot } = require('./renderer/task-navigate');
 
 const BUBBLE = '00000000-0000-4000-8000-00000000000b';
@@ -785,6 +785,7 @@ test('a stopped order after repeated questions: one question, the order kept, it
     assert.deepEqual(sent, [SENTENCE], 'the same sentence is not sent again while its question is open');
     const before = w.chatLog();
     assert.equal(before.filter((t) => t === SENTENCE).length, 1, 'one pair, not four');
+    assert.equal(before.filter((t) => t.includes(REPEAT_ANSWERED)).length, 1, 'the repeats are answered, by one line (Lauf 36)');
     assert.ok(before.includes(ACCEPTED_LINE + ' — Auftrag angenommen'), 'the question did not take the "angenommen" line');
     assert.equal(w.chatState(), 'arbeitet … (Auftrag angenommen)', 'the head still says the order works');
 
@@ -809,6 +810,48 @@ test('the same sentence after its question is answered, or a different one, is s
     await w.send('Karte 1');                          // the answer to the question
     await w.send('Ergänze eine Zeile');               // asked again later: a new sentence
     assert.deepEqual(sent, ['Ergänze eine Zeile.', 'Karte 1', 'Ergänze eine Zeile']);
+});
+
+// Lauf 36: "Befördere diese Bubble" answered as a question (answer form as in renderer.log:
+// success: true, event_type brain.multihop.question, question: true, a "fehlt: …" text). The same sentence
+// 13.5 s and 39 s later: no new chat line, no status, nothing sent; "not sent" stood only in the log.
+test('a repeated sentence is never dropped silently: soon after its question a line says so, later it is sent', async () => {
+    const w = world();
+    const sent = [];
+    const question = { type: 'chat_response', success: true, event_type: 'brain.multihop.question', question: true,
+        message: 'fehlt: 12 lose Karten, kein White Paper. Die Bewertung steht bei 30 von 100 Punkten, befördert wird ab 95.' };
+    w.window.vibemind.sendChatMessage = async (text) => { sent.push(text); return question; };
+    const SENTENCE = 'Befördere diese Bubble';
+    await w.send(SENTENCE);
+    w.advance(2000);
+    await w.send(SENTENCE);                            // a double press: answered by a line, not sent
+    assert.deepEqual(sent, [SENTENCE]);
+    assert.equal(w.chatLog().filter((t) => t.includes(REPEAT_ANSWERED)).length, 1, w.chatLog().join(' | '));
+    w.advance(REPEAT_MS + 6500);                       // 13.5 s after the answer
+    await w.send(SENTENCE);
+    assert.deepEqual(sent, [SENTENCE, SENTENCE], 'later the same sentence goes to the Brain again');
+    w.advance(25500);                                  // 39 s
+    await w.send(SENTENCE);
+    assert.deepEqual(sent, [SENTENCE, SENTENCE, SENTENCE]);
+    assert.equal(w.chatLog().filter((t) => t === SENTENCE).length, 3, 'each sent sentence stands in the chat');
+});
+
+test('the same sentence while it still runs: not sent twice, but the chat says it runs', async () => {
+    const w = world();
+    const sent = [];
+    const replies = [];
+    w.window.vibemind.sendChatMessage = (text) => { sent.push(text); return new Promise((resolve) => replies.push(resolve)); };
+    const first = w.send('Erledige To-do 8');
+    await w.send('Erledige To-do 8');
+    await w.send('Erledige To-do 8');
+    assert.deepEqual(sent, ['Erledige To-do 8']);
+    assert.equal(w.chatLog().filter((t) => t.includes(REPEAT_RUNNING)).length, 1, w.chatLog().join(' | '));
+    replies[0]({ success: true, message: 'To-do 8 erledigt.' });
+    await first;
+    const again = w.send('Erledige To-do 8');          // answered, not a question: a new sentence
+    assert.deepEqual(sent, ['Erledige To-do 8', 'Erledige To-do 8']);
+    replies[1]({ success: true, message: 'To-do 8 ist schon erledigt.' });
+    await again;
 });
 
 test('an order that never reports: after 20 minutes the chat says so calmly instead of "arbeitet"', async () => {

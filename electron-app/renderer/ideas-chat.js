@@ -155,6 +155,11 @@
     // The Brain says a missing detail as a failure ("Mir fehlt eine Angabe: die Karte."); it asks back.
     // The same sentence in task-navigate.js.
     const ASKS_BACK = /^Mir fehlt eine Angabe\b/;
+    // A sentence sent again (Lauf 36): never dropped without a word. Within REPEAT_MS of its question it is
+    // answered by a line; later it goes to the Brain again.
+    const REPEAT_MS = 5000;
+    const REPEAT_ANSWERED = 'Das habe ich gerade schon beantwortet, die Antwort steht darüber.';
+    const REPEAT_RUNNING = 'Der Satz läuft noch, die Antwort kommt gleich.';
 
     /** The Brain took the order and a model works on it: { ok: true, pending: true, status: 'angenommen' }. */
     function isAccepted(response) {
@@ -639,21 +644,40 @@
         const same = (a, b) => String(a).trim().replace(/[.!?\s]+$/, '').toLowerCase()
             === String(b).trim().replace(/[.!?\s]+$/, '').toLowerCase();
         const unanswered = new Map();   // bubble key -> sentences sent and not answered yet
-        function stillOpen(key, text) {
-            if ((unanswered.get(key) || []).some((sent) => same(sent, text))) return true;
+        /**
+         * Lauf 36: "Befördere diese Bubble" got its answer as a question (question: true); the same sentence
+         * 13 s and 39 s later was dropped without a word, and the person could not tell whether it reached
+         * the Brain. A repeat is never dropped silently: while it runs, or within REPEAT_MS of its question,
+         * the chat says so in one line; later it is a new sentence and is sent (things may have changed).
+         */
+        const now = () => (root.Date && typeof root.Date.now === 'function' ? root.Date.now() : Date.now());
+        function repeatOf(key, text) {
+            if ((unanswered.get(key) || []).some((sent) => same(sent, text))) return 'laeuft';
             const list = history.get(key);
-            const last = list[list.length - 1];
-            return Boolean(last) && last.kind === 'rueckfrage' && Boolean(last.answerTo)
+            let at = list.length - 1;
+            while (at >= 0 && list[at].repeat) at -= 1;        // our own repeat lines do not count
+            const last = list[at];
+            const asked = Boolean(last) && last.kind === 'rueckfrage' && Boolean(last.answerTo)
                 && last.answerTo.kind === 'user' && same(last.answerTo.text, text);
+            return asked && typeof last.at === 'number' && now() - last.at < REPEAT_MS ? 'beantwortet' : '';
         }
 
         async function submit(text, { typed = false } = {}) {
             if (!text) return;
             const asked = bubbleKey();
-            if (stillOpen(asked, text)) {
+            const repeat = repeatOf(asked, text);
+            if (repeat) {
                 setFolded(false);
+                const list = history.get(asked);
+                const last = list[list.length - 1];
+                const reply = repeat === 'laeuft' ? REPEAT_RUNNING : REPEAT_ANSWERED;
+                // one line per run of presses: a fifth press in 3 s does not push the answer out of sight
+                if (!(last && last.repeat && last.text === reply)) {
+                    const entry = say(reply, 'hinweis', asked);
+                    if (entry) entry.repeat = true;
+                }
                 log.scrollTop = log.scrollHeight;
-                if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('info', '[IdeasChat] same sentence again while its question is open: not sent');
+                if (root.vibemind && root.vibemind.writeLog) root.vibemind.writeLog('info', '[IdeasChat] same sentence again: not sent, said so (' + repeat + ')');
                 return;
             }
             unanswered.set(asked, [...(unanswered.get(asked) || []), text]);
@@ -710,7 +734,8 @@
                     const order = Array.isArray(response.orders) ? response.orders.find((id) => typeof id === 'string' && id) : '';
                     if (order) orderKeys.set(String(order), { key: asked, ask, line: acceptedLine.line });
                 } else {
-                    say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked, null, ask);
+                    const said = say(message, failed ? 'error' : asks ? 'rueckfrage' : hint ? 'hinweis' : 'agent', asked, null, ask);
+                    if (asks && said) said.at = now();   // a repeat soon after it is answered by a line (repeatOf)
                 }
             } catch (error) {
                 if (newId) store.reject(newId, error.message);
@@ -921,7 +946,7 @@
         return { submit, contextNow, store, bubbleRow, bubbleRemoved, note: (text) => say(String(text), 'hinweis'), fold: setFolded, folded: () => view.classList.contains('chat-folded') };
     }
 
-    const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
+    const api = { buildContext, reloadsCards, noteText, cardTitle, fullTitle, isAccepted, ACCEPTED_LINE, REPEAT_ANSWERED, REPEAT_RUNNING, REPEAT_MS, FULL_CARDS, createCardStore, createHistory, reasonsFor, bubbleDbId, MAX_CARDS, HISTORY_MAX, MAX_REASONS };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
     } else {
