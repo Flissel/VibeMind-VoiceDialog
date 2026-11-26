@@ -15,12 +15,22 @@ const { loadOverlay, loadStatus } = require('./overlay-status');
 const {
   n8nBaseUrl, n8nLogin, shouldRetryLogin, frameHeaderUrls, cookiePairs, mergeCookieHeader, sessionCookieUrls,
 } = require('./n8n-access');
-const { openfangAuth, fromOpenFangFrame, withKey, matchesPatterns } = require('./openfang-access');
+const { openfangAuth, openFangRefusal, sameFileUrl, withKey, matchesPatterns } = require('./openfang-access');
 const { pathToFileURL } = require('url');
 const { applyVibeMindLook, TOKEN_PAGE_LOOK } = require('./vibemind-look');
 
 const _AF_C = '\x1b[93m', _RST = '\x1b[0m'; // Yellow (AgentFarm)
 function _afLog(...a) { process.stdout.write(`${_AF_C}[AgentFarmManager] ${a.join(' ')}${_RST}\n`); }
+
+// The app log the test runs read (voice/logs/renderer.log, written by main.js too). Lauf 38: the lines
+// about the OpenFang key went only to stdout, so nobody could tell whether the key was there.
+const APP_LOG = path.join(__dirname, '..', 'logs', 'renderer.log');
+function _appendAppLog(text) {
+  try {
+    fs.mkdirSync(path.dirname(APP_LOG), { recursive: true });
+    fs.appendFileSync(APP_LOG, `[${new Date().toISOString()}] [main] [AgentFarmManager] ${text}\n`);
+  } catch (_) { /* the log is a help, never a reason to fail */ }
+}
 
 class AgentFarmManager {
   constructor(mainWindow, dependencies = {}) {
@@ -30,6 +40,9 @@ class AgentFarmManager {
     this._env = dependencies.env || process.env;
     this._n8nLoginEnabled = dependencies.n8nLogin !== false;
     this._overlayDeps = dependencies.overlayDeps || {};
+    this._appLog = dependencies.appLog || _appendAppLog;
+    this._caseInsensitivePaths = dependencies.caseInsensitivePaths ?? process.platform === 'win32';
+    this._openFangSaid = new Set();   // each verdict about the key is logged once
     this.overlayReady = null;
     this.overlayResult = null;
     this.mainWindow = mainWindow;
@@ -62,7 +75,7 @@ class AgentFarmManager {
     const bare = url.split('#')[0].split('?')[0];
     try {
       if (this.isDev) return new URL(bare).origin === new URL(this._env.AGENTFARM_DEV_URL).origin;
-      return bare === pathToFileURL(this._resolveRendererPath()).href;
+      return sameFileUrl(bare, pathToFileURL(this._resolveRendererPath()).href, { caseInsensitive: this._caseInsensitivePaths });
     } catch (_) {
       return false;
     }
@@ -91,16 +104,35 @@ class AgentFarmManager {
   _installOpenFangKey() {
     const auth = openfangAuth(this._env);
     if (!auth) {
-      _afLog('OpenFang: kein OPENFANG_API_KEY, der Reiter laedt ohne Schluessel');
+      this._note('OpenFang: kein OPENFANG_API_KEY im Hauptprozess, der Reiter laedt ohne Schluessel');
       return false;
     }
     this._setSendRule('openfang', {
       urls: auth.urls,
-      apply: (details, headers) => (fromOpenFangFrame({ ...details, requestHeaders: headers }, auth.origins, (url) => this._isAppPage(url))
-        ? withKey(headers, auth.header) : headers),
+      apply: (details, headers) => {
+        const refusal = openFangRefusal({ ...details, requestHeaders: headers }, auth.origins, (url) => this._isAppPage(url));
+        this._noteOpenFangVerdict(details, refusal);
+        return refusal === null ? withKey(headers, auth.header) : headers;
+      },
     });
-    _afLog(`OpenFang: Schluessel aus ${auth.name} wird nur an die OpenFang-Seite im Reiter mitgegeben`);
+    this._note(`OpenFang: Schluessel aus ${auth.name} wird nur an die OpenFang-Seite im Reiter mitgegeben`);
     return true;
+  }
+
+  /** stdout and the app log; never a value, only names and reasons. */
+  _note(text) {
+    _afLog(text);
+    this._appLog(text);
+  }
+
+  /** Once per verdict: whether the key went with a request to OpenFang, and if not, why (path only). */
+  _noteOpenFangVerdict(details, refusal) {
+    const verdict = refusal === null ? 'mit Schluessel' : `ohne Schluessel: ${refusal}`;
+    if (this._openFangSaid.has(verdict)) return;
+    this._openFangSaid.add(verdict);
+    let where = '?';
+    try { where = new URL(details.url).pathname.slice(0, 80); } catch (_) { /* keep ? */ }
+    this._note(`OpenFang: erste Anfrage ${verdict} (${details.resourceType || '?'} ${where})`);
   }
 
   /**

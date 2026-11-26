@@ -183,7 +183,7 @@ const FlowzenManager = require('./flowzen-manager');
 const FILE_CASES = [
   ['ClawPort', (h, deps) => new ClawPortManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, rendererPath: 'C:/x/index.html', overlayDeps: deps }), /ClawPort nicht verfuegbar/],
   ['Dashboard', (h, deps) => new DashboardManager(h.mainWindow, { BrowserView: h.FakeBrowserView, env: {}, dashboardPath: 'C:/x/index.html', overlayDeps: deps }), /Dashboard \(Coding Engine\) nicht verfuegbar/],
-  ['AgentFarm', (h, deps) => new AgentFarmManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, n8nLogin: false, overlayDeps: deps }), /AgentFarm nicht verfuegbar/],
+  ['AgentFarm', (h, deps) => new AgentFarmManager(h.mainWindow, { BrowserView: h.FakeBrowserView, shell: h.shell, env: {}, n8nLogin: false, appLog: () => {}, overlayDeps: deps }), /AgentFarm nicht verfuegbar/],
   ['Flowzen', (h, deps) => new FlowzenManager(h.mainWindow, null, { ipcMain: { on() {} }, BrowserView: h.FakeBrowserView, shell: h.shell, overlayDeps: deps }), /Flowzen nicht verfuegbar/],
 ];
 

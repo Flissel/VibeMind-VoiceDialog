@@ -67,34 +67,59 @@ function header(headers, name) {
 }
 
 /**
- * Whether this request may carry the key.
+ * Why this request may not carry the key, or null when it may. The reason is a short phrase for the log
+ * (Lauf 38: the tab asked for a key and nothing said which check had refused it); it names no value.
  * `isAppPage(url)` says whether a document is the Agent Farm page itself (file:// or its dev address).
  */
-function fromOpenFangFrame(details, origins, isAppPage) {
-  if (!details || !Array.isArray(origins) || !origins.length) return false;
+function openFangRefusal(details, origins, isAppPage) {
+  if (!details || !Array.isArray(origins) || !origins.length) return 'keine OpenFang-Adresse';
   // the target: OpenFang only (a redirect to another host is a request to that host: no key)
-  if (!origins.includes(originOf(details.url))) return false;
+  if (!origins.includes(originOf(details.url))) return 'Ziel ist nicht OpenFang';
   const headers = details.requestHeaders || {};
   const origin = header(headers, 'origin');
-  if (origin && origin !== 'null' && !origins.includes(origin)) return false;
+  if (origin && origin !== 'null' && !origins.includes(origin)) return 'fremde Herkunft (Origin)';
   const frame = details.frame;
-  if (!frame) return false;
+  if (!frame) return 'kein Rahmen bekannt';
   const parent = frame.parent || null;
 
   if (details.resourceType === 'subFrame') {
     // The navigation of the OpenFang frame: a frame directly in the Agent Farm page, empty or already
     // OpenFang. A frame inside n8n or Rowboat (its parent is not the app page) gets nothing.
-    if (!parent || parent.parent || !isAppPage(parent.url)) return false;
+    if (!parent) return 'Rahmen ohne Elternseite';
+    if (parent.parent) return 'verschachtelter Rahmen';
+    if (!isAppPage(parent.url)) return 'Elternseite ist nicht die Agent Farm';
     const now = frame.url || '';
-    return now === '' || now === 'about:blank' || origins.includes(originOf(now));
+    return now === '' || now === 'about:blank' || origins.includes(originOf(now)) ? null : 'Rahmen zeigt eine fremde Seite';
   }
-  if (details.resourceType === 'mainFrame') return false;   // the Agent Farm view itself is never OpenFang
+  if (details.resourceType === 'mainFrame') return 'Hauptrahmen';   // the Agent Farm view itself is never OpenFang
 
   // Anything else (fetch, xhr, script, websocket, image): from the OpenFang document, same origin.
   const site = header(headers, 'sec-fetch-site');
-  if (site && site !== 'same-origin') return false;
-  if (!parent || parent.parent || !isAppPage(parent.url)) return false;   // the tab's own frame, not nested
-  return origins.includes(originOf(frame.url || ''));
+  if (site && site !== 'same-origin') return `Sec-Fetch-Site ${site.slice(0, 20)}`;
+  if (!parent) return 'Rahmen ohne Elternseite';
+  if (parent.parent) return 'verschachtelter Rahmen';   // the tab's own frame, not nested
+  if (!isAppPage(parent.url)) return 'Elternseite ist nicht die Agent Farm';
+  return origins.includes(originOf(frame.url || '')) ? null : 'Rahmen zeigt nicht OpenFang';
+}
+
+/** Whether this request may carry the key (see openFangRefusal). */
+function fromOpenFangFrame(details, origins, isAppPage) {
+  return openFangRefusal(details, origins, isAppPage) === null;
+}
+
+/**
+ * Whether two file:// addresses name the same file. Electron reports a loaded file with the drive letter
+ * upper-cased and its own percent-encoding; pathToFileURL keeps the case the app was started with. On
+ * Windows paths are case-insensitive, so the comparison is too.
+ */
+function sameFileUrl(a, b, { caseInsensitive = process.platform === 'win32' } = {}) {
+  const norm = (url) => {
+    let text = String(url || '').split('#')[0].split('?')[0];
+    try { text = decodeURIComponent(text); } catch (_) { /* keep as is */ }
+    text = text.replace(/\\/g, '/');
+    return caseInsensitive ? text.toLowerCase() : text;
+  };
+  return Boolean(a) && Boolean(b) && norm(a) === norm(b);
 }
 
 /** The headers with the key added (an Authorization the page set itself is replaced). */
@@ -110,4 +135,6 @@ function matchesPatterns(url, patterns) {
   return patterns.some((pattern) => String(url).startsWith(pattern.replace(/\*$/, '')));
 }
 
-module.exports = { DEFAULT_URL, openfangBaseUrl, openfangOrigins, openfangAuth, fromOpenFangFrame, withKey, matchesPatterns };
+module.exports = {
+  DEFAULT_URL, openfangBaseUrl, openfangOrigins, openfangAuth, openFangRefusal, fromOpenFangFrame, sameFileUrl, withKey, matchesPatterns,
+};

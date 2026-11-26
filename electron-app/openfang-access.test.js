@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
-  openfangBaseUrl, openfangOrigins, openfangAuth, fromOpenFangFrame, withKey, matchesPatterns,
+  openfangBaseUrl, openfangOrigins, openfangAuth, fromOpenFangFrame, withKey, matchesPatterns, openFangRefusal, sameFileUrl,
 } = require('./openfang-access');
 const AgentFarmManager = require('./agentfarm-manager');
 
@@ -88,8 +88,9 @@ test('withKey replaces an Authorization the page set itself and leaves the rest'
 });
 
 /** The manager with a stand-in view: the session collects the one onBeforeSendHeaders listener. */
-function manager(env) {
+function manager(env, extra = {}) {
   const hooks = [];
+  const appLog = [];
   class FakeBrowserView {
     constructor() {
       this.webContents = {
@@ -105,6 +106,7 @@ function manager(env) {
   let m;
   try {
     m = new AgentFarmManager(null, { BrowserView: FakeBrowserView, shell: { openExternal() {} }, env, n8nLogin: false,
+      appLog: (text) => appLog.push(text), caseInsensitivePaths: false, ...extra,
       overlayDeps: { existsSync: () => true, logger: { log() {}, warn() {}, error() {}, info() {} } } });
     m._resolveRendererPath = () => path.join(path.sep, 'app', 'agentfarm', 'dist', 'index.html');
     m.createView();
@@ -115,8 +117,62 @@ function manager(env) {
     const hook = hooks[hooks.length - 1];
     hook.handler({ requestHeaders: {}, ...details }, (result) => resolve(result.requestHeaders));
   });
-  return { m, hooks, logs, send, app: pathToFileURL(m._resolveRendererPath()).href };
+  return { m, hooks, logs, appLog, send, app: pathToFileURL(m._resolveRendererPath()).href };
 }
+
+test('Lauf 38: the lines about the key reach the app log, not only stdout; never the value', () => {
+  const without = manager({});
+  assert.deepEqual(without.appLog, ['OpenFang: kein OPENFANG_API_KEY im Hauptprozess, der Reiter laedt ohne Schluessel']);
+  const withKey_ = manager({ ...ENV });
+  assert.deepEqual(withKey_.appLog, ['OpenFang: Schluessel aus OPENFANG_API_KEY wird nur an die OpenFang-Seite im Reiter mitgegeben']);
+  assert.ok(!withKey_.appLog.join('').includes(KEY));
+  const source = require('node:fs').readFileSync(path.join(__dirname, 'agentfarm-manager.js'), 'utf8');
+  assert.match(source, /const APP_LOG = path\.join\(__dirname, '\.\.', 'logs', 'renderer\.log'\);/, 'the file main.js writes the renderer log to');
+});
+
+test('Lauf 38: each verdict on the key is logged once, with the reason and the path, never the value', async () => {
+  const { send, appLog, app } = manager({ ...ENV });
+  const appTop = { url: app, parent: null };
+  const own = { url: 'http://localhost:4200/', parent: appTop };
+  await send({ url: 'http://localhost:4200/api/tools?x=1', resourceType: 'xhr', frame: own });
+  await send({ url: 'http://localhost:4200/api/templates', resourceType: 'xhr', frame: own });
+  await send({ url: 'http://localhost:4200/api/tools', resourceType: 'xhr', frame: null });
+  await send({ url: 'http://localhost:4200/api/tools', resourceType: 'xhr', frame: null });
+  const notes = appLog.slice(1);
+  assert.deepEqual(notes, [
+    'OpenFang: erste Anfrage mit Schluessel (xhr /api/tools)',
+    'OpenFang: erste Anfrage ohne Schluessel: kein Rahmen bekannt (xhr /api/tools)',
+  ]);
+  assert.ok(!appLog.join('').includes(KEY));
+});
+
+test('Lauf 38: the Agent Farm page is recognised whatever case the drive letter has (Windows)', async () => {
+  assert.equal(sameFileUrl('file:///C:/App/agentfarm/dist/index.html', 'file:///c:/app/agentfarm/dist/index.html', { caseInsensitive: true }), true);
+  assert.equal(sameFileUrl('file:///C:/a%20b/index.html', 'file:///C:/a b/index.html', { caseInsensitive: false }), true, 'percent-encoding');
+  assert.equal(sameFileUrl('file:///C:/App/index.html#x', 'file:///C:/App/index.html', { caseInsensitive: false }), true);
+  assert.equal(sameFileUrl('file:///C:/App/index.html', 'file:///c:/app/index.html', { caseInsensitive: false }), false);
+  assert.equal(sameFileUrl('file:///C:/App/other.html', 'file:///C:/App/index.html', { caseInsensitive: true }), false);
+  assert.equal(sameFileUrl('', '', { caseInsensitive: true }), false);
+
+  const { send, app } = manager({ ...ENV }, { caseInsensitivePaths: true });
+  const reported = 'file:' + app.slice('file:'.length).toUpperCase();   // another case than the app was started with
+  assert.notEqual(reported, app);
+  const own = await send({ url: 'http://localhost:4200/api/tools', resourceType: 'xhr', frame: { url: 'http://localhost:4200/', parent: { url: reported, parent: null } } });
+  assert.equal(own.Authorization, 'Bearer ' + KEY);
+});
+
+test('the refusal names its reason for every check that says no', () => {
+  const r = (fields) => openFangRefusal(req(fields), ORIGINS, isApp);
+  assert.equal(r({ frame: openfangFrame }), null);
+  assert.equal(r({ url: 'http://127.0.0.1:9999/x', frame: openfangFrame }), 'Ziel ist nicht OpenFang');
+  assert.equal(r({ frame: openfangFrame, requestHeaders: { Origin: 'http://localhost:15678' } }), 'fremde Herkunft (Origin)');
+  assert.equal(r({ frame: null }), 'kein Rahmen bekannt');
+  assert.equal(r({ frame: n8nFrame }), 'Rahmen zeigt nicht OpenFang');
+  assert.equal(r({ frame: { url: 'http://localhost:4200/', parent: nestedInN8n } }), 'verschachtelter Rahmen');
+  assert.equal(r({ frame: { url: 'http://localhost:4200/', parent: { url: 'file:///other.html', parent: null } } }), 'Elternseite ist nicht die Agent Farm');
+  assert.equal(r({ frame: openfangFrame, requestHeaders: { 'Sec-Fetch-Site': 'cross-site' } }), 'Sec-Fetch-Site cross-site');
+  assert.equal(r({ frame: openfangFrame, resourceType: 'mainFrame' }), 'Hauptrahmen');
+});
 
 test('the manager: OpenFang frame → header, foreign frame → none; the log names the variable, never the value', async () => {
   const { hooks, logs, send, app } = manager({ ...ENV });

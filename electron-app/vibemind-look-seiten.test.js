@@ -59,7 +59,7 @@ test('Agent Farm: after every load the page gets the look, accent of its space (
   const view = fakeView();
   class FakeBrowserView { constructor() { this.webContents = view.contents; } setBounds() {} setAutoResize() {} }
   const m = silent(() => {
-    const made = new AgentFarmManager(null, { BrowserView: FakeBrowserView, shell: { openExternal() {} }, env: {}, n8nLogin: false,
+    const made = new AgentFarmManager(null, { BrowserView: FakeBrowserView, shell: { openExternal() {} }, env: {}, n8nLogin: false, appLog: () => {},
       overlayDeps: { existsSync: () => true, logger: quiet } });
     made.createView();
     return made;
