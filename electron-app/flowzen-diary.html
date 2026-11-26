@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Blue Rose — Journal</title>
+    <title>Blue Rose — Tagebuch</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -244,25 +244,25 @@
 </head>
 <body>
     <div class="journal-header">
-        <span class="journal-title"><span class="rose">&#127801;</span>Blue Rose — Journal</span>
+        <span class="journal-title"><span class="rose">&#127801;</span>Blue Rose — Tagebuch</span>
         <div class="journal-stats">
             <div class="stat">
-                <div class="stat-label">Time</div>
+                <div class="stat-label">Zeit</div>
                 <div class="stat-value" id="stat-time">—</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Mood</div>
+                <div class="stat-label">Stimmung</div>
                 <div class="stat-value" id="stat-mood">—</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Category</div>
+                <div class="stat-label">Kategorie</div>
                 <div class="stat-value" id="stat-category">—</div>
             </div>
-            <span class="state-badge" id="state-badge">idle</span>
+            <span class="state-badge" id="state-badge">ruhig</span>
         </div>
     </div>
 
-    <button class="recommend-btn" id="recommend-btn">What should I do next?</button>
+    <button class="recommend-btn" id="recommend-btn">Was soll ich als Nächstes tun?</button>
 
     <div class="book-container">
         <div class="book">
@@ -284,9 +284,15 @@
         var container = document.getElementById('pages-container');
 
         var WINDOW_NAMES = {
-            early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
-            afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
+            early_morning: 'Früher Morgen', morning: 'Morgen', midday: 'Mittag',
+            afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
         };
+        // Lauf 39: moods and states come from Flowzen in English; the page names them in German, unknown ones as sent.
+        var MOOD_NAMES = {
+            energized: 'energiegeladen', focused: 'fokussiert', calm: 'ruhig', tired: 'müde', anxious: 'unruhig'
+        };
+        var STATE_NAMES = { idle: 'ruhig', thinking: 'denkt nach', active: 'aktiv' };
+        function moodName(mood) { return MOOD_NAMES[mood] || mood || ''; }
         var MOOD_EMOJI = {
             energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F'
         };
@@ -316,7 +322,7 @@
 
             var emoji = MOOD_EMOJI[entry.mood] || '';
             var windowName = WINDOW_NAMES[entry.time_window] || entry.time_window || '';
-            var source = entry.source === 'manual' ? '\uD83C\uDF39 On request' : '\u23F0 Every 30 min';
+            var source = entry.source === 'manual' ? '\uD83C\uDF39 Auf Wunsch' : '\u23F0 Alle 30 Minuten';
 
             // Build DOM safely using textContent
             var header = document.createElement('div');
@@ -334,7 +340,7 @@
 
             var moodLine = document.createElement('div');
             moodLine.className = 'page-mood-line';
-            moodLine.textContent = emoji + ' ' + (entry.mood || '') + ' \u00B7 Energy ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' activities \u00B7 ' + (entry.category || '');
+            moodLine.textContent = emoji + ' ' + moodName(entry.mood) + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivitäten \u00B7 ' + (entry.category || '');
 
             var textDiv = document.createElement('div');
             textDiv.className = 'page-text';
@@ -365,20 +371,20 @@
                 if (logId) {
                     var acceptBtn = document.createElement('button');
                     acceptBtn.className = 'accept-btn';
-                    acceptBtn.textContent = '\u2713 I did this';
+                    acceptBtn.textContent = '\u2713 Erledigt';
                     acceptBtn.onclick = function() {
                         if (window.flowzenBridge) {
                             window.flowzenBridge.sendToPython({ type: 'flowzen_accept', recommendation_log_id: logId });
                         }
                         acceptBtn.disabled = true;
-                        acceptBtn.textContent = '\u2713 Accepted';
+                        acceptBtn.textContent = '\u2713 Angenommen';
                         acceptBtn.classList.add('accepted');
                         if (skipBtn) skipBtn.style.display = 'none';
                     };
 
                     var skipBtn = document.createElement('button');
                     skipBtn.className = 'skip-btn';
-                    skipBtn.textContent = '\u2192 Skip';
+                    skipBtn.textContent = '\u2192 Überspringen';
                     skipBtn.onclick = function() {
                         acceptDiv.style.display = 'none';
                     };
@@ -415,12 +421,12 @@
                 emptyState.appendChild(iconSpan);
 
                 var line1 = document.createElement('span');
-                line1.textContent = 'No journal entries yet...';
+                line1.textContent = 'Noch keine Tagebucheinträge …';
                 emptyState.appendChild(line1);
 
                 var line2 = document.createElement('span');
                 line2.style.fontSize = '13px';
-                line2.textContent = 'Press the button above to create your first entry';
+                line2.textContent = 'Drück den Knopf oben, um den ersten Eintrag anzulegen';
                 emptyState.appendChild(line2);
 
                 empty.appendChild(emptyState);
@@ -468,7 +474,7 @@
             document.getElementById('prev-btn').disabled = currentPage <= 0;
             document.getElementById('next-btn').disabled = currentPage >= pageElements.length - 1;
             if (entries.length > 0) {
-                document.getElementById('page-counter').textContent = (currentPage + 1) + ' of ' + entries.length;
+                document.getElementById('page-counter').textContent = (currentPage + 1) + ' von ' + entries.length;
             }
         }
 
@@ -486,7 +492,7 @@
         document.getElementById('recommend-btn').addEventListener('click', function() {
             var btn = this;
             btn.classList.add('loading');
-            btn.textContent = 'Thinking...';
+            btn.textContent = 'Denke nach …';
             if (window.flowzenDiary) window.flowzenDiary.recommend();
         });
 
@@ -508,13 +514,13 @@
                     var badge = document.getElementById('state-badge');
 
                     if (timeEl && data.current_time_window) timeEl.textContent = WINDOW_NAMES[data.current_time_window] || data.current_time_window;
-                    if (moodEl && data.mood) moodEl.textContent = data.mood;
+                    if (moodEl && data.mood) moodEl.textContent = moodName(data.mood);
                     if (catEl && data.category) catEl.textContent = data.category;
-                    if (badge && data.state) { badge.textContent = data.state; badge.className = 'state-badge ' + data.state; }
+                    if (badge && data.state) { badge.textContent = STATE_NAMES[data.state] || data.state; badge.className = 'state-badge ' + data.state; }
                 },
                 recommendDone: function(data) {
                     var btn = document.getElementById('recommend-btn');
-                    if (btn) { btn.classList.remove('loading'); btn.textContent = 'What should I do next?'; }
+                    if (btn) { btn.classList.remove('loading'); btn.textContent = 'Was soll ich als Nächstes tun?'; }
                     if (data && data.recommendation) {
                         this.updateStatus({
                             mood: data.recommendation.mood,

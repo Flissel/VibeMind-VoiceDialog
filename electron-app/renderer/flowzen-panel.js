@@ -7,6 +7,18 @@
 (function() {
     'use strict';
 
+    // Lauf 39: the same German words as the diary page (flowzen-diary.html); moods and states come from Flowzen
+    // in English and are named in German here, unknown ones as sent.
+    var WINDOW_NAMES = {
+        early_morning: 'Früher Morgen', morning: 'Morgen', midday: 'Mittag',
+        afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
+    };
+    var MOOD_NAMES = {
+        energized: 'energiegeladen', focused: 'fokussiert', calm: 'ruhig', tired: 'müde', anxious: 'unruhig'
+    };
+    var STATE_NAMES = { idle: 'ruhig', thinking: 'denkt nach', active: 'aktiv' };
+    function moodName(mood) { return MOOD_NAMES[mood] || mood || ''; }
+
     function requestFlowzenStatus() {
         if (window.vibemind && window.vibemind.sendToPython) {
             window.vibemind.sendToPython({ type: 'flowzen_status' });
@@ -23,7 +35,7 @@
         var btn = document.getElementById('fz-recommend-btn');
         if (btn) {
             btn.classList.add('loading');
-            btn.textContent = 'Thinking...';
+            btn.textContent = 'Denke nach …';
         }
         if (window.vibemind && window.vibemind.sendToPython) {
             window.vibemind.sendToPython({ type: 'flowzen_recommend' });
@@ -37,17 +49,13 @@
         var stateEl = document.getElementById('flowzen-state-badge');
 
         if (timeEl && data.current_time_window) {
-            var windowNames = {
-                early_morning: 'Early Morning', morning: 'Morning', midday: 'Midday',
-                afternoon: 'Afternoon', evening: 'Evening', night: 'Night'
-            };
-            timeEl.textContent = windowNames[data.current_time_window] || data.current_time_window;
+            timeEl.textContent = WINDOW_NAMES[data.current_time_window] || data.current_time_window;
         }
-        if (moodEl && data.mood) moodEl.textContent = data.mood;
+        if (moodEl && data.mood) moodEl.textContent = moodName(data.mood);
         if (catEl && data.category) catEl.textContent = data.category;
         if (stateEl && data.state !== undefined) {
             var state = data.state || 'idle';
-            stateEl.textContent = state;
+            stateEl.textContent = STATE_NAMES[state] || state;
             stateEl.className = 'flowzen-state ' + state;
         }
     }
@@ -91,11 +99,6 @@
         var card = document.createElement('div');
         card.className = 'diary-entry';
 
-        var windowNames = {
-            early_morning: 'Frueh', morning: 'Morgen', midday: 'Mittag',
-            afternoon: 'Nachmittag', evening: 'Abend', night: 'Nacht'
-        };
-
         // Time header
         var header = document.createElement('div');
         header.className = 'diary-entry-time';
@@ -105,7 +108,7 @@
         } catch(e) {
             timeStr = (entry.hour || 0) + ':00';
         }
-        header.textContent = timeStr + ' \u2014 ' + (windowNames[entry.time_window] || entry.time_window || '');
+        header.textContent = timeStr + ' \u2014 ' + (WINDOW_NAMES[entry.time_window] || entry.time_window || '');
         card.appendChild(header);
 
         // Meta line
@@ -113,7 +116,7 @@
         meta.className = 'diary-entry-meta';
         var moodEmojis = { energized: '\u26A1', focused: '\uD83C\uDFAF', calm: '\uD83C\uDF3F', tired: '\uD83D\uDCA4', anxious: '\u26A0\uFE0F' };
         var emoji = moodEmojis[entry.mood] || '';
-        meta.textContent = emoji + ' ' + (entry.mood || '') + ' \u00B7 energy ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' activities';
+        meta.textContent = emoji + ' ' + moodName(entry.mood) + ' \u00B7 Energie ' + (entry.energy || '?') + '/10 \u00B7 ' + (entry.intent_count || 0) + ' Aktivitäten';
         card.appendChild(meta);
 
         // Diary text (the warm LLM-generated text)
@@ -126,7 +129,7 @@
         if (entry.source === 'manual') {
             var badge = document.createElement('div');
             badge.className = 'diary-entry-source';
-            badge.textContent = '\uD83C\uDF39 On request';
+            badge.textContent = '\uD83C\uDF39 Auf Wunsch';
             card.appendChild(badge);
         }
 

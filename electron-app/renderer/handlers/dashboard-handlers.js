@@ -87,7 +87,7 @@
             window.flowzenPanel.addSingleDiaryEntry(msg.diary_entry);
         }
         var fzBtn = document.getElementById('fz-recommend-btn');
-        if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich machen?'; }
+        if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich als Nächstes tun?'; }
     };
 
     H['flowzen_diary_entries_result'] = function(msg) {

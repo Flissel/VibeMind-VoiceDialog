@@ -279,30 +279,30 @@
         <div id="flowzen-panel" class="flowzen-panel hidden">
             <div class="flowzen-header">
                 <span class="flowzen-icon">🌹</span>
-                <span class="flowzen-title">Blue Rose — Journal</span>
-                <span class="flowzen-state" id="flowzen-state-badge">idle</span>
+                <span class="flowzen-title">Blue Rose — Tagebuch</span>
+                <span class="flowzen-state" id="flowzen-state-badge">ruhig</span>
             </div>
             <div class="flowzen-status" id="flowzen-status">
                 <div class="flowzen-stat">
-                    <span class="flowzen-stat-label">Time</span>
+                    <span class="flowzen-stat-label">Zeit</span>
                     <span class="flowzen-stat-value" id="fz-time-window">—</span>
                 </div>
                 <div class="flowzen-stat">
-                    <span class="flowzen-stat-label">Mood</span>
+                    <span class="flowzen-stat-label">Stimmung</span>
                     <span class="flowzen-stat-value" id="fz-mood">—</span>
                 </div>
                 <div class="flowzen-stat">
-                    <span class="flowzen-stat-label">Category</span>
+                    <span class="flowzen-stat-label">Kategorie</span>
                     <span class="flowzen-stat-value" id="fz-category">—</span>
                 </div>
             </div>
             <button class="flowzen-recommend-btn" id="fz-recommend-btn">
-                What should I do next?
+                Was soll ich als Nächstes tun?
             </button>
             <div class="flowzen-diary-journal" id="fz-diary-journal">
                 <div class="flowzen-diary-empty" id="fz-diary-empty">
                     <span class="diary-empty-icon">📖</span>
-                    <span>No entries yet...</span>
+                    <span>Noch keine Tagebucheinträge …</span>
                 </div>
             </div>
         </div>
@@ -1907,7 +1907,7 @@
                     }
                     // Reset button
                     var fzBtn = document.getElementById('fz-recommend-btn');
-                    if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich machen?'; }
+                    if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich als Nächstes tun?'; }
                     break;
 
                 case 'flowzen_diary_entries_result':
