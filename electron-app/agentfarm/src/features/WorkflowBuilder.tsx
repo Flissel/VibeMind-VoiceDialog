@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { startNotice, VIBECODER_NOT_CONNECTED } from '../vibecoder'
 
 /* ── Types ────────────────────────────────────────────────── */
 
@@ -86,12 +87,17 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
   const [autoChecks, setAutoChecks] = useState<AutoCheck[]>([])
   const [completing, setCompleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A sentence instead of an empty field when the VibeCoder's backend does not answer (vibecoder.ts)
+  const [notice, setNotice] = useState<string | null>(null)
 
   // Start or reuse session on mount
   useEffect(() => {
-    if (!api?.n8nChatStart) return
+    if (!api?.n8nChatStart) { setNotice(VIBECODER_NOT_CONNECTED); return }
     const desc = existingDescription || ''
     api.n8nChatStart(desc).then((result: any) => {
+      const said = startNotice(result)
+      setNotice(said)
+      if (said) return
       if (result?.session_id) {
         // If a session was already started by Voice/Chat, use that instead
         const sid = existingSessionId || result.session_id
@@ -108,7 +114,7 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
           api.n8nChatChecklist?.(sid, 'answer', 'description', desc)
         }
       }
-    })
+    }).catch(() => setNotice(VIBECODER_NOT_CONNECTED))
   }, [existingSessionId, existingDescription])
 
   const updateItem = async (itemId: string, value: string) => {
@@ -180,6 +186,15 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
 
       {/* Checklist Items */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3)' }}>
+        {notice && (
+          <p data-vibecoder-notice style={{
+            padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
+            background: 'var(--fill-secondary)', color: 'var(--text-secondary)',
+            fontSize: 'var(--text-footnote)', lineHeight: 'var(--leading-normal)',
+          }}>
+            {notice}
+          </p>
+        )}
         {items.map(item => (
           <div key={item.id} style={{
             marginBottom: 'var(--space-3)',
@@ -317,8 +332,8 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
         )}
       </div>
 
-      {/* Start Button */}
-      <div style={{
+      {/* Start Button (not while the VibeCoder is not connected: there is nothing to start) */}
+      {!notice && <div style={{
         padding: 'var(--space-3) var(--space-4)',
         borderTop: '1px solid var(--separator)',
         display: 'flex', justifyContent: 'flex-end',
@@ -338,7 +353,7 @@ function ChecklistPhase({ onComplete, existingSessionId, existingDescription }: 
         >
           {completing ? 'Claude baut Workflow...' : 'VibeCoder starten'}
         </button>
-      </div>
+      </div>}
     </div>
   )
 }
