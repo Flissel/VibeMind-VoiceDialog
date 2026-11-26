@@ -2273,6 +2273,8 @@ class MultiverseApp {
         }
         // A space switched off (space-switches.js) is not entered, by no way (tab, voice, agent, keys).
         if (this.spaces[targetSpace] && this.spaces[targetSpace].hidden) {
+            // Lauf 38: the refusal was silent; a test run took it for a broken switch.
+            console.log('[Space] ' + targetSpace + ' ist abgeschaltet (space-switches.js), kein Wechsel');
             return false;
         }
 
