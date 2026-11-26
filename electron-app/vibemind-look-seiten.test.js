@@ -105,3 +105,38 @@ test('ClawPort: after every load the page gets the look, accent of its space (vi
   assert.equal(SPACE_ACCENT_RGB.clawport, sceneAccent('clawport'));
   assert.match(view.inserted[0].css, new RegExp(`--space-accent-rgb: ${sceneAccent('clawport')};`));
 });
+
+test('Aufträge: every name of its block is a variable of the page; the accent is its scene colour', () => {
+  const { ORDERS_LOOK, rgbOf } = require('./vibemind-look');
+  const page = read('auftraege', 'index.html');
+  const declared = new Set([...page.match(/:root \{([^}]*)\}/)[1].matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1]));
+  for (const name of namesIn(ORDERS_LOOK)) assert.ok(declared.has(name), `${name} is a variable of the Aufträge page`);
+  const { EXTERNAL_SPACES } = require('./external-spaces');
+  const orders = EXTERNAL_SPACES.find((s) => s.id === 'orders');
+  assert.equal(orders.look, ORDERS_LOOK);
+  assert.equal(rgbOf(orders.color), '179,157,219', 'the colour the scene draws the space with');
+  assert.match(lookCss('orders', ORDERS_LOOK, rgbOf(orders.color)), /--space-accent-rgb: 179,157,219;/);
+  assert.match(lookCss('orders', '', 'kein,rgb'), /--space-accent-rgb: 68,136,255;/, 'a malformed accent falls back');
+});
+
+test('Aufträge: its view gets the look after every load; services of other sessions (Sales, Marketing) do not', async () => {
+  const { ExternalSpaceManager } = require('./external-spaces');
+  const { ORDERS_LOOK, rgbOf } = require('./vibemind-look');
+  const views = {};
+  class View {
+    constructor() {
+      const v = fakeView();
+      this.fake = v;
+      this.webContents = { ...v.contents, getURL: () => '' };
+    }
+    setBounds() {}
+  }
+  const manager = new ExternalSpaceManager(null, { BrowserView: View, shell: {}, logger: { log() {} }, env: {} });
+  manager._load = () => {};
+  for (const id of ['orders', 'sales', 'marketing']) { manager._create(id); views[id] = manager.views.get(id).view.fake; }
+  for (const v of Object.values(views)) await v.load();
+  assert.equal(views.orders.inserted.length, 1);
+  assert.equal(views.orders.inserted[0].css, lookCss('orders', ORDERS_LOOK, rgbOf(0xb39ddb)));
+  assert.equal(views.sales.inserted.length, 0, 'Sales stays as it is');
+  assert.equal(views.marketing.inserted.length, 0, 'Marketing stays as it is');
+});
