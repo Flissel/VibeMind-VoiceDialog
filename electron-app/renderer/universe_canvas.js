@@ -50,6 +50,8 @@ class UniverseCanvas {
         this.svgOverlay = null;
         this.nodesContainer = null;
         this.selectedNode = null;
+        // The card the person marked with a click; null when the mark came from the app (a jump, a result).
+        this.userSelectedNode = null;
         this.dragState = null;
         this.nextLocalId = 1000;     // For optimistic local IDs
 
@@ -723,6 +725,7 @@ class UniverseCanvas {
         this.edges.forEach(edge => edge.element.remove());
         this.edges = [];
         this.selectedNode = null;
+        this.userSelectedNode = null;
     }
 
     createZoomControls() {
@@ -813,7 +816,7 @@ class UniverseCanvas {
 
         el.addEventListener('click', (e) => {
             if (!e.target.classList.contains('node-delete')) {
-                this.selectNode(data.id);
+                this.selectNode(data.id, { byUser: true });
             }
         });
 
@@ -1556,7 +1559,14 @@ class UniverseCanvas {
         }
     }
 
-    selectNode(nodeId) {
+    /**
+     * Mark a card. Only a click of the person passes byUser; the app marks a card on its own after
+     * a jump or a result (ideas-chat showCard, result-target mark). Such a mark is shown but is no
+     * selection of the person, so it replaces theirs with none (run 37: a new card went to the Brain
+     * as selection after a note, though nobody had marked anything).
+     */
+    selectNode(nodeId, { byUser = false } = {}) {
+        this.userSelectedNode = byUser ? nodeId : null;
         // Deselect previous
         if (this.selectedNode) {
             const prev = this.nodes.get(this.selectedNode);

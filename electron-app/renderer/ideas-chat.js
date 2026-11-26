@@ -586,8 +586,9 @@
             if (shown && shown !== 'ideas') return { space: shown };
             const inside = !view.classList.contains('hidden');
             const canvas = root.spaceCanvas;
+            // Only a card the person marked: one the app marked itself (a jump, a result) is no selection.
             // The canvas marks one card at a time; marking several in order is not there yet.
-            const selection = canvas && canvas.selectedNode != null ? [canvas.selectedNode] : [];
+            const selection = canvas && canvas.userSelectedNode != null ? [canvas.userSelectedNode] : [];
             return buildContext({ bubble: inside ? openBubble() : null, nodes, nodesBubbleId, bubbles: overviewBubbles(), newId, selection, lastId });
         }
 
