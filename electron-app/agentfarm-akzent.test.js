@@ -14,7 +14,7 @@ test('the n8n editor buttons of the Agent Farm take the accent of the space, not
   const editorButton = page.slice(page.indexOf('setShowEditor(!showEditor)'), page.indexOf('n8n Editor'));
   assert.match(editorButton, /background: showEditor \? 'var\(--accent\)' : 'transparent'/);
   assert.match(editorButton, /color: showEditor \? '#fff' : 'var\(--accent\)'/);
-  assert.match(page, /title="Im Editor oeffnen" style=\{\{[^}]*color: 'var\(--accent\)'/);
+  assert.match(page, /title="Im Editor öffnen" style=\{\{[^}]*color: 'var\(--accent\)'/);
 });
 
 test('the toggle buttons use --accent, which the look sets; --tint is set nowhere', () => {

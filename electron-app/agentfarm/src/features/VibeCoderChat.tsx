@@ -136,7 +136,7 @@ export function VibeCoderChat({ onWorkflowChanged }: { onWorkflowChanged: (workf
         <textarea
           value={input} onChange={e => setInput(e.target.value)} rows={1} disabled={!connected}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder="Workflow beschreiben oder Aenderung vorschlagen …"
+          placeholder="Workflow beschreiben oder Änderung vorschlagen …"
           style={{
             flex: 1, resize: 'none', padding: 'var(--space-2)', borderRadius: 'var(--radius-sm)',
             border: '1px solid var(--separator)', background: 'var(--fill-secondary)', color: 'var(--text-primary)',

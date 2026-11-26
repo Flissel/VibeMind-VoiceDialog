@@ -53,7 +53,7 @@ test('deactivating goes to n8n like activating; a bad id sends nothing', async (
   const fetchImpl = async (url, init) => { calls.push([url, init.method]); return { ok: true, status: 200 }; };
   assert.deepEqual(await n8nDeactivateRest(ENV, 'Wf00000000000001', { fetchImpl }), { success: true });
   assert.deepEqual(calls, [['http://127.0.0.1:15678/api/v1/workflows/Wf00000000000001/deactivate', 'POST']]);
-  assert.deepEqual(await n8nDeactivateRest(ENV, '../x', { fetchImpl }), { success: false, error: 'keine gueltige Workflow-id' });
+  assert.deepEqual(await n8nDeactivateRest(ENV, '../x', { fetchImpl }), { success: false, error: 'keine gültige Workflow-id' });
   assert.equal(calls.length, 1);
 });
 

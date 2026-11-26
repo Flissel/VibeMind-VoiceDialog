@@ -64,7 +64,7 @@ function isWorkflowId(id) {
 async function n8nActivateRest(env, workflowId, { fetchImpl = globalThis.fetch, timeoutMs = 10000 } = {}) {
   const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
   if (!key) return { success: false, error: 'N8N_API_KEY fehlt' };
-  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gueltige Workflow-id' };
+  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gültige Workflow-id' };
   const url = new URL(`/api/v1/workflows/${workflowId}/activate`, n8nBaseUrl(env));
   if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
   const controller = new AbortController();
@@ -83,7 +83,7 @@ async function n8nActivateRest(env, workflowId, { fetchImpl = globalThis.fetch, 
 async function n8nDeactivateRest(env, workflowId, { fetchImpl = globalThis.fetch, timeoutMs = 10000 } = {}) {
   const key = typeof env.N8N_API_KEY === 'string' ? env.N8N_API_KEY.trim() : '';
   if (!key) return { success: false, error: 'N8N_API_KEY fehlt' };
-  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gueltige Workflow-id' };
+  if (!isWorkflowId(workflowId)) return { success: false, error: 'keine gültige Workflow-id' };
   const url = new URL(`/api/v1/workflows/${workflowId}/deactivate`, n8nBaseUrl(env));
   if (url.hostname === 'localhost') url.hostname = '127.0.0.1';
   const controller = new AbortController();

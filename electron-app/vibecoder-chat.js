@@ -22,17 +22,17 @@ const ANSWER_MS = 180000;
 const LIST_MS = 5000;
 
 /** Said in front of every sentence, so the agent knows the two lines the field reads. */
-const FRAME = '[VibeCoder-Feld] Antworte auf Deutsch und knapp. Aktivieren oder ausfuehren darfst du nicht selbst. '
+const FRAME = '[VibeCoder-Feld] Antworte auf Deutsch und knapp. Aktivieren oder ausführen darfst du nicht selbst. '
   + 'Willst du einen Workflow aktivieren, schreibe eine eigene Zeile "AKTIVIEREN: <workflow-id> | <name>"; '
-  + 'die Person entscheidet mit einem Knopf. Hast du einen Workflow angelegt oder geaendert, schreibe eine '
-  + 'eigene Zeile "WORKFLOW: <workflow-id>". Zugangsdaten (Credentials) legst du nie an; dafuer verweise auf den '
+  + 'die Person entscheidet mit einem Knopf. Hast du einen Workflow angelegt oder geändert, schreibe eine '
+  + 'eigene Zeile "WORKFLOW: <workflow-id>". Zugangsdaten (Credentials) legst du nie an; dafür verweise auf den '
   + 'n8n-Editor rechts.\n---\n';
 
 const TEXT = Object.freeze({
   noOpenFang: 'OpenFang antwortet nicht. Ohne OpenFang kann der VibeCoder nicht antworten; der n8n-Editor rechts geht weiter.',
   noAgent: `Der Agent ${AGENT} ist in OpenFang nicht eingerichtet.`,
   failed: 'Der VibeCoder hat nicht geantwortet. Bitte noch einmal versuchen.',
-  noTools: 'Dem VibeCoder fehlen noch seine n8n-Werkzeuge: Er kann mit dir planen, aber noch keine Workflows anlegen oder aendern.',
+  noTools: 'Dem VibeCoder fehlen noch seine n8n-Werkzeuge: Er kann mit dir planen, aber noch keine Workflows anlegen oder ändern.',
   unknownProposal: 'Diesen Vorschlag gibt es nicht (mehr). Es wurde nichts aktiviert.',
   unknownWorkflow: (id) => `Der VibeCoder schlägt vor, den Workflow ${id} zu aktivieren; n8n kennt ihn nicht oder antwortet nicht. Darum gibt es keinen Knopf dafür.`,
   alreadyActive: (name) => `„${name}" ist schon aktiv.`,

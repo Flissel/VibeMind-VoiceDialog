@@ -116,7 +116,7 @@ test('n8n REST activation: without a key nothing is sent; the reason names the v
   const calls = [];
   const fetchImpl = async (url) => { calls.push(url); return { ok: true, status: 200 }; };
   assert.deepEqual(await n8nActivateRest({}, WF, { fetchImpl }), { success: false, error: 'N8N_API_KEY fehlt' });
-  assert.deepEqual(await n8nActivateRest(env, '../x', { fetchImpl }), { success: false, error: 'keine gueltige Workflow-id' });
+  assert.deepEqual(await n8nActivateRest(env, '../x', { fetchImpl }), { success: false, error: 'keine gültige Workflow-id' });
   assert.equal(calls.length, 0);
   const refused = await n8nActivateRest(env, WF, { fetchImpl: async () => ({ ok: false, status: 401 }) });
   assert.deepEqual(refused, { success: false, error: 'n8n antwortet mit 401' });
@@ -163,4 +163,15 @@ AKTIVIEREN: Wf00000000active | Laeuft`,
   assert.equal(lookup.headers['X-N8N-API-KEY'], 'test-n8n-key');
   const field = read('agentfarm', 'src', 'features', 'VibeCoderChat.tsx');
   assert.match(field, /data-vibecoder-name-differs/);
+});
+
+test('Lauf 39: what the field says is written with umlauts, not ae/oe/ue', () => {
+  const ERSATZ = /\b(ae|oe|ue)[a-z]*|[a-z](ae|oe|ue)(ndern|ndert|nderung|hren|r|ltige|schen|ffnen)\b/i;
+  const said = [...Object.values(TEXT).map((t) => (typeof t === 'function' ? t('Wf0000000000test') : t)), FRAME];
+  for (const sentence of said) assert.doesNotMatch(sentence, ERSATZ, sentence);
+  assert.match(TEXT.noTools, /anlegen oder ändern/);
+  const field = read('agentfarm', 'src', 'features', 'VibeCoderChat.tsx');
+  assert.match(field, /placeholder="Workflow beschreiben oder Änderung vorschlagen …"/);
+  const page = read('agentfarm', 'src', 'features', 'WorkflowBuilder.tsx');
+  assert.doesNotMatch(page, /title="(Loeschen|Im Editor oeffnen)"/);
 });
