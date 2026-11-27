@@ -38,10 +38,19 @@ function remoteControlOpen(commandLine) {
 /** Height of the strip; the page reads it as --vm-pruefstreifen to keep panels at the top below it (Lauf 39). */
 const BANNER_HEIGHT_PX = 22;
 
-/** The strip at the top of the window, as CSS only (no script in the page). */
-function bannerCss() {
+/**
+ * The strip at the top of the window, as CSS only (no script in the page).
+ * pushDown (Lauf 42): for a page that is not ours (the n8n editor), which does not read --vm-pruefstreifen and
+ * lost half of its top line under the strip: the whole page starts below the strip and keeps its height.
+ */
+function bannerCss({ pushDown = false } = {}) {
+  const push = pushDown
+    ? `html { margin-top: ${BANNER_HEIGHT_PX}px !important; height: calc(100% - ${BANNER_HEIGHT_PX}px) !important; overflow: hidden !important; }
+html body { height: 100% !important; }
+`
+    : '';
   return `html { --vm-pruefstreifen: ${BANNER_HEIGHT_PX}px; }
-html body::before {
+${push}html body::before {
   content: '${BANNER}';
   position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647;
   height: ${BANNER_HEIGHT_PX}px; box-sizing: border-box; line-height: 16px;
@@ -53,8 +62,8 @@ html body::before {
 }
 
 /** Put the strip into the window after every load. */
-function showBanner(webContents, logger = console) {
-  const css = bannerCss();
+function showBanner(webContents, logger = console, { pushDown = false } = {}) {
+  const css = bannerCss({ pushDown });
   webContents.on('did-finish-load', () => {
     Promise.resolve()
       .then(() => webContents.insertCSS(css, { cssOrigin: 'author' }))

@@ -2732,7 +2732,8 @@ function setupIpcHandlers() {
         n8nWindow.on('closed', () => { n8nWindow = null; });
         // Lauf 39: the only window besides the main window; the remote-control port reaches it too (signed in to
         // n8n), so it carries the strip as well. Overlay views sit below the strip of the main window.
-        if (REMOTE_CONTROL_OPEN) showBanner(n8nWindow.webContents);
+        // Lauf 42: n8n does not know the strip, so its page is pushed below it (pushDown).
+        if (REMOTE_CONTROL_OPEN) showBanner(n8nWindow.webContents, console, { pushDown: true });
         // Sign-in in the main process with the account from the environment only; the window
         // stays on n8n (see n8n-editor.js). The account never enters the page.
         return editor.openEditor({

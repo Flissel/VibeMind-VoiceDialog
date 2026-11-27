@@ -35,8 +35,11 @@ test('Lauf 39: every window of the app carries the strip; views stay below the s
   const windows = [...main.matchAll(/(\w+) = new BrowserWindow\(/g)].map((m) => m[1]);
   assert.deepEqual(windows, ['mainWindow', 'n8nWindow'], 'a new window needs the strip too');
   for (const win of windows) {
-    assert.match(main, new RegExp(`if \\(REMOTE_CONTROL_OPEN\\) showBanner\\(${win}\\.webContents\\);`), win);
+    assert.match(main, new RegExp(`if \\(REMOTE_CONTROL_OPEN\\) showBanner\\(${win}\\.webContents[,)]`), win);
   }
+  // Lauf 42: the main window keeps its page (it reads --vm-pruefstreifen); n8n is pushed below the strip.
+  assert.match(main, /if \(REMOTE_CONTROL_OPEN\) showBanner\(mainWindow\.webContents\);/);
+  assert.match(main, /if \(REMOTE_CONTROL_OPEN\) showBanner\(n8nWindow\.webContents, console, \{ pushDown: true \}\);/);
   const editor = main.slice(main.indexOf('n8nWindow = new BrowserWindow('));
   assert.ok(editor.indexOf('showBanner(n8nWindow.webContents)') < editor.indexOf('editor.openEditor('), 'strip before the first load');
 
@@ -142,4 +145,18 @@ test('test mode: no click on the desktop picture is signed, before any other che
     { ok: false, x: 10, y: 20, grund: 'fernsteuerung_offen' });
   assert.equal(sent.length, 0);
   assert.match(read('renderer', 'klick-marken.js'), /fernsteuerung_offen: 'Prüfmodus',/);
+});
+
+test('Lauf 42: pushDown puts a foreign page below the strip; without it the page stays as it is', async () => {
+  const plain = bannerCss();
+  assert.doesNotMatch(plain, /margin-top/);
+  const pushed = bannerCss({ pushDown: true });
+  assert.match(pushed, /html \{ margin-top: 22px !important; height: calc\(100% - 22px\) !important; overflow: hidden !important; \}/);
+  assert.match(pushed, /html body \{ height: 100% !important; \}/);
+  assert.ok(pushed.includes(plain.split('\n').slice(1).join('\n')), 'the strip itself is the same');
+  const inserted = [];
+  const handlers = [];
+  showBanner({ on: (event, fn) => handlers.push([event, fn]), insertCSS: async (c) => { inserted.push(c); } }, console, { pushDown: true });
+  await handlers[0][1]();
+  assert.equal(inserted[0], pushed);
 });
