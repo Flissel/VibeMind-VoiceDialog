@@ -137,3 +137,19 @@ test('the strip of the test mode no longer covers the head of the panel', () => 
     // without the strip the variable is not set: the panel stays at the top
     assert.doesNotMatch(html, /--vm-pruefstreifen:/);
 });
+
+test('Lauf 41: below the score, small, the raw sum of the five views when they have criteria', () => {
+    // 8 + 9 + 7 + 7 + 9 = 40 of 5 x 25
+    const { nodes } = drawn(mirofishLauf({ score: 32 }));
+    const line = nodes.find((n) => n.className === 'score-punkte');
+    assert.equal(line.textContent, '40 von 125 Punkten');
+    const order = nodes.map((n) => n.className);
+    assert.ok(order.indexOf('score-display') < order.indexOf('score-punkte') && order.indexOf('score-punkte') < order.indexOf('score-bar'));
+    assert.equal(nodes.find((n) => n.className === 'score-number').textContent, '32', 'the score stays the stored one');
+
+    const ohne = mirofishLauf();
+    for (const s of Object.values(ohne.sichten)) delete s.kriterien;
+    assert.equal(drawn(ohne).nodes.find((n) => n.className === 'score-punkte'), undefined);
+    assert.equal(panel.standOf({ row: row(ohne), cards: [] }).punkte, null);
+    assert.match(read('renderer', 'index.html'), /#eval-panel \.score-punkte \{ font-size: 11px;/);
+});

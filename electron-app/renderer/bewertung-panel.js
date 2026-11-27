@@ -9,7 +9,8 @@
  * plus metadata.handwert (a score given by hand, shown apart) and metadata.eval_history (the course).
  *
  * The total is the stored score (the sum of the five bars only when none is stored), shown against
- * SCORE_MAX, the one place of the scale (Lauf 39: percent 0-100 or the raw sum 0-125 is still open). Promoting is decided by the Brain alone (score against the
+ * SCORE_MAX, the one place of the scale (percent 0-100, decided after Lauf 39). When the views have criteria,
+ * the raw sum of the five views (0-125) stands small below it (Lauf 41). Promoting is decided by the Brain alone (score against the
  * threshold VIBEMIND_BEFOERDERN_SCHWELLE, default 95, an up-to-date run and its sense check); there is
  * no way to read the threshold, so the panel names the default. "Up to date" in the Brain is a hash
  * over the content of cards and edges (kartenstand); the panel only sees change times, so a card
@@ -130,6 +131,8 @@
             return { key, label, punkte, urteil: typeof s.urteil === 'string' ? s.urteil : '', kriterien };
         });
         const summe = bars.reduce((sum, b) => sum + b.punkte, 0);
+        // Lauf 41: the conversion stood nowhere; with criteria the raw sum of the five views is shown beside it.
+        const punkte = bars.some((b) => b.kriterien.length) ? summe : null;
         const gespeichert = number(lauf.score);
         const score = gespeichert === null ? summe : Math.min(SCORE_MAX, Math.max(0, Math.round(gespeichert)));
 
@@ -173,6 +176,8 @@
             zeit: lauf.zeit || null,
             score,
             scoreMax: SCORE_MAX,
+            punkte,
+            punkteMax: SICHTEN.length * MAX_SICHT,
             sichten: bars,
             todos,
             offen: todos.filter((t) => !t.erledigt).length,
@@ -369,6 +374,9 @@
             const head = el(doc, 'div', 'score-display');
             head.append(el(doc, 'span', 'score-number', stand.score), el(doc, 'span', 'score-max', `/${stand.scoreMax}`));
             parts.push(head);
+            if (stand.punkte !== null && stand.punkte !== undefined) {
+                parts.push(el(doc, 'div', 'score-punkte', `${stand.punkte} von ${stand.punkteMax} Punkten`));
+            }
             const bar = el(doc, 'div', 'score-bar');
             const fill = el(doc, 'div', 'score-bar-fill');
             fill.style.width = `${Math.min(100, (stand.score * 100) / stand.scoreMax)}%`;
