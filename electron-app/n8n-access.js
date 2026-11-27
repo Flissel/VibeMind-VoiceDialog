@@ -98,6 +98,10 @@ async function n8nDeactivateRest(env, workflowId, { fetchImpl = globalThis.fetch
   }
 }
 
+// Lauf 41: n8n refused a well-formed key (401, with and without the forward): the n8n behind the editor does
+// not know it (deleted, or a key of another n8n). Only a new key made in that n8n helps; the text says where.
+const KEY_REFUSED = 'Die Workflows lassen sich nicht lesen: n8n lehnt N8N_API_KEY ab (401). '
+  + 'Neuen Schlüssel im n8n-Editor unter Einstellungen → n8n API anlegen und in der .env als N8N_API_KEY eintragen, dann die App neu starten.';
 const LIST_PAGES = 5;
 const LIST_LIMIT = 100;
 
@@ -122,6 +126,7 @@ async function n8nListRest(env, { fetchImpl = globalThis.fetch, timeoutMs = 8000
     let body;
     try {
       const res = await fetchImpl(url.href, { method: 'GET', headers: { 'X-N8N-API-KEY': key, Accept: 'application/json' }, signal: controller.signal });
+      if (res && res.status === 401) return { workflows, error: KEY_REFUSED };
       if (!res || !res.ok) return { workflows, error: `Die Workflows lassen sich nicht lesen: n8n antwortet mit ${res ? res.status : 'nichts'}.` };
       body = await res.json();
     } catch (_) {

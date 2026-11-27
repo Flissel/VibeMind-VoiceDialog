@@ -236,7 +236,7 @@ export function WorkflowBuilder() {
                     <div key={i} style={{ height: 56, borderRadius: 'var(--radius-md)', background: 'var(--material-regular)', marginBottom: 'var(--space-2)' }} />
                   ))}
                 </div>
-              ) : workflows.length === 0 ? (
+              ) : workflows.length === 0 && error ? null : workflows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center" style={{ height: 150, color: 'var(--text-secondary)', gap: 'var(--space-2)' }}>
                   <span style={{ fontSize: 'var(--text-subheadline)', fontWeight: 'var(--weight-medium)' }}>Keine Workflows</span>
                   <span style={{ fontSize: 'var(--text-footnote)', color: 'var(--text-tertiary)' }}>Nutze den VibeCoder links um einen Workflow zu bauen</span>

@@ -2711,7 +2711,9 @@ function setupIpcHandlers() {
 
     let n8nWindow = null;
     ipcMain.handle('clawport:open-n8n-editor', async (_event, opts) => {
-        const n8nUrl = process.env.N8N_API_URL || 'http://localhost:15678';
+        // Lauf 41: the same address as the embedded editor (the local forward when n8n runs elsewhere over
+        // plain http); the VM address made n8n refuse its secure cookie ("insecure URL").
+        const n8nUrl = require('./n8n-access').n8nBaseUrl(process.env);
         const editor = require('./n8n-editor');
         const workflowId = opts?.workflowId;
         if (n8nWindow && !n8nWindow.isDestroyed()) {

@@ -42,8 +42,8 @@ test('no key, a refusal or no answer: an empty list with a reason in German, nev
   assert.deepEqual(await n8nListRest({}, { fetchImpl: async () => { asked += 1; } }),
     { workflows: [], error: 'Die Workflows lassen sich nicht lesen: N8N_API_KEY fehlt.' });
   assert.equal(asked, 0);
-  assert.deepEqual(await n8nListRest(ENV, { fetchImpl: async () => ({ ok: false, status: 401 }) }),
-    { workflows: [], error: 'Die Workflows lassen sich nicht lesen: n8n antwortet mit 401.' });
+  assert.deepEqual(await n8nListRest(ENV, { fetchImpl: async () => ({ ok: false, status: 500 }) }),
+    { workflows: [], error: 'Die Workflows lassen sich nicht lesen: n8n antwortet mit 500.' });
   assert.deepEqual(await n8nListRest(ENV, { fetchImpl: async () => { throw new Error('ECONNREFUSED'); } }),
     { workflows: [], error: 'Die Workflows lassen sich nicht lesen: n8n nicht erreichbar.' });
 });
@@ -65,4 +65,26 @@ test('the main process answers list, activate and deactivate itself; the page sh
   assert.doesNotMatch(main, /type: 'n8n_list' \}, 'n8n_list_result'\);/);
   const page = read('agentfarm', 'src', 'features', 'WorkflowBuilder.tsx');
   assert.match(page, /if \(result\?\.error\) setError\(result\.error\)/);
+});
+
+test('Lauf 41: a refused key (401) says what to do, names only the variable; the page shows only the error', async () => {
+  const result = await n8nListRest(ENV, { fetchImpl: async () => ({ ok: false, status: 401 }) });
+  assert.deepEqual(result.workflows, []);
+  assert.match(result.error, /^Die Workflows lassen sich nicht lesen: n8n lehnt N8N_API_KEY ab \(401\)\. /);
+  assert.match(result.error, /Einstellungen → n8n API/);
+  assert.match(result.error, /in der \.env als N8N_API_KEY eintragen, dann die App neu starten\.$/);
+  assert.doesNotMatch(result.error, /test-n8n-key/);
+
+  const page = read('agentfarm', 'src', 'features', 'WorkflowBuilder.tsx');
+  assert.match(page, /\) : workflows\.length === 0 && error \? null : workflows\.length === 0 \? \(/, 'no "Keine Workflows" below an error');
+});
+
+test('Lauf 41: the button ↗ opens n8n where the embedded editor has it, not under the address of the other machine', () => {
+  const main = read('main.js');
+  const handler = main.slice(main.indexOf("ipcMain.handle('clawport:open-n8n-editor'"));
+  const body = handler.slice(0, handler.indexOf('\n    });'));
+  assert.match(body, /const n8nUrl = require\('\.\/n8n-access'\)\.n8nBaseUrl\(process\.env\);/);
+  assert.doesNotMatch(body, /N8N_API_URL/);
+  const { n8nBaseUrl } = require('./n8n-access');
+  assert.equal(n8nBaseUrl({ N8N_API_URL: 'http://n8n.example.test:5678', N8N_UI_URL: 'http://localhost:15678' }), 'http://localhost:15678');
 });
