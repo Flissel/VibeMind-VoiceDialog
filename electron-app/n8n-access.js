@@ -137,6 +137,8 @@ async function n8nListRest(env, { fetchImpl = globalThis.fetch, timeoutMs = 8000
     const data = body && Array.isArray(body.data) ? body.data : [];
     for (const wf of data) {
       if (!wf || !isWorkflowId(String(wf.id))) continue;
+      // Lauf 42: the API also returns archived workflows (16 here, the editor said "Total 10"); the editor hides them.
+      if (wf.isArchived === true) continue;
       workflows.push({
         id: String(wf.id),
         name: typeof wf.name === 'string' ? wf.name.slice(0, 200) : String(wf.id),

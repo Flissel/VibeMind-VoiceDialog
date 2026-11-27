@@ -37,6 +37,16 @@ test('the list: every page of n8n, with the key in the header, localhost asked a
   assert.doesNotMatch(JSON.stringify(result), /test-n8n-key/);
 });
 
+test('Lauf 42: archived workflows are left out, as in the n8n editor', async () => {
+  const f = pages({
+    '': { data: [{ id: 'Wf00000000000011', name: 'Testlauf D', active: true, isArchived: false },
+      { id: 'Wf00000000000012', name: 'Testlauf E', active: false, isArchived: true },
+      { id: 'Wf00000000000013', name: 'Testlauf F', active: false }], nextCursor: null },
+  });
+  const result = await n8nListRest(ENV, { fetchImpl: f.fetchImpl });
+  assert.deepEqual(result.workflows.map((w) => w.id), ['Wf00000000000011', 'Wf00000000000013']);
+});
+
 test('no key, a refusal or no answer: an empty list with a reason in German, never the key', async () => {
   let asked = 0;
   assert.deepEqual(await n8nListRest({}, { fetchImpl: async () => { asked += 1; } }),
