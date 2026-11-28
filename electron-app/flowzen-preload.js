@@ -31,7 +31,8 @@ function flushQueue() {
 
 // Expose API to page JS
 contextBridge.exposeInMainWorld('flowzenDiary', {
-    // Page JS calls this to send recommend request to Python
+    // The old request to Python. The journal no longer uses it: Python's part for it is gone, the
+    // button asks window.blueRose.recommend instead.
     recommend: () => ipcRenderer.send('to-python', { type: 'flowzen_recommend' }),
 
     // Page JS calls this to register its handlers (setEntries, addEntry, etc.)
@@ -45,6 +46,7 @@ contextBridge.exposeInMainWorld('flowzenDiary', {
 // brain (blue-rose-data.js). The page gets ready lines; it never talks to the brain itself.
 contextBridge.exposeInMainWorld('blueRose', {
     read: (place) => ipcRenderer.invoke('blue-rose:read', place),
+    recommend: (place) => ipcRenderer.invoke('blue-rose:recommend', place),
     saveMood: (entry) => ipcRenderer.invoke('blue-rose:mood', entry),
     setAnalysis: (on) => ipcRenderer.invoke('blue-rose:analysis', on),
     remove: (art, id) => ipcRenderer.invoke('blue-rose:remove', art, id),

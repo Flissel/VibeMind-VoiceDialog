@@ -164,6 +164,84 @@ test('without the key of the app nothing is asked, and the page says why', async
   assert.equal(asked, 0);
 });
 
+// Lauf 43: "Was soll ich als Nächstes tun?" called a part of Python that is gone; nothing happened
+// on screen, and each click reached Python twice.
+test('the recommendation is one sentence from the brain, or the reason why there is none', async () => {
+  const urls = [];
+  const make = (answerOf) => createBlueRose({ env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY },
+    fetchJson: async (url) => { urls.push(url); return answerOf(); } });
+  assert.deepEqual(await make(() => answer()).recommend({ stunde: 9 }), { ok: true, text: 'Jetzt passt: Konzentrierte Arbeit.' });
+  assert.equal(urls.length, 1, 'one request');
+  assert.match(urls[0], /\/api\/blue_rose\/uebersicht\?tage=14&stunde=9$/);
+  assert.deepEqual(await make(() => answer({ empfehlung: { ok: false, grund: 'befinden_fehlt' } })).recommend({ stunde: 9 }),
+    { ok: true, text: 'Trag dein Befinden ein, dann sagt Blue Rose, was jetzt passt.' });
+  assert.deepEqual(await make(() => ({ ok: false, grund: 'nicht_belegt' })).recommend({}),
+    { ok: false, text: 'Das Gehirn erkennt die App nicht (Schlüssel fehlt oder passt nicht).' });
+  assert.deepEqual(await make(() => { throw new Error('x'); }).recommend({}),
+    { ok: false, text: 'Das Gehirn antwortet gerade nicht. Blue Rose zeigt deshalb nichts an.' });
+});
+
+test('the panel button: one click is one request, the answer or the reason is shown, nothing goes to Python', async () => {
+  const vmod = require('node:vm');
+  const els = {};
+  const document = { getElementById: (id) => (els[id] = els[id] || { id, textContent: '', className: '', classList: { add() {}, remove() {} }, addEventListener() {} }) };
+  let settle; let asked = 0; const toPython = [];
+  const window = { vibemind: {
+    sendToPython: (message) => toPython.push(message.type),
+    blueRoseRecommend: () => { asked += 1; return new Promise((resolve, reject) => { settle = { resolve, reject }; }); },
+  } };
+  vmod.runInNewContext(fs.readFileSync(path.join(__dirname, 'renderer', 'flowzen-panel.js'), 'utf8'), { window, document });
+  const panel = window.flowzenPanel;
+  panel.requestFlowzenRecommend();
+  panel.requestFlowzenRecommend();            // a second click while the first is under way
+  assert.equal(asked, 1);
+  assert.equal(els['fz-recommend-btn'].textContent, 'Denke nach …');
+  settle.resolve({ ok: true, text: 'Jetzt passt: Pause.' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(els['fz-recommend-answer'].textContent, 'Jetzt passt: Pause.');
+  assert.equal(els['fz-recommend-btn'].textContent, 'Was soll ich als Nächstes tun?');
+  panel.requestFlowzenRecommend();
+  assert.equal(asked, 2);
+  settle.reject(new Error('x'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(els['fz-recommend-answer'].textContent, 'Das hat nicht geklappt.');
+  assert.deepEqual(toPython, []);
+  // the old answer of Python, should it ever come: its reason is shown
+  panel.showRecommendAnswer('Fehler: Beispielgrund');
+  assert.equal(els['fz-recommend-answer'].textContent, 'Fehler: Beispielgrund');
+
+  delete window.vibemind.blueRoseRecommend;
+  panel.requestFlowzenRecommend();
+  assert.equal(els['fz-recommend-answer'].textContent, 'Die Empfehlung ist hier nicht verfügbar.');
+});
+
+test('one receiver for to-python: the journal view adds none, and its button asks the main process', () => {
+  const read = (...p) => fs.readFileSync(path.join(__dirname, ...p), 'utf8');
+  const main = read('main.js');
+  assert.equal(main.match(/ipcMain\.on\('to-python'/g).length, 1);
+  assert.doesNotMatch(read('flowzen-manager.js'), /ipcMain\.on\(/);
+  const FlowzenManager = require('./flowzen-manager');
+  const listened = [];
+  const contents = { on() {}, setWindowOpenHandler() {}, isDestroyed: () => false, insertCSS: async () => {}, loadFile: async () => {}, loadURL: async () => {}, send() {} };
+  class FakeBrowserView { constructor() { this.webContents = contents; } setBounds() {} setAutoResize() {} }
+  const write = process.stdout.write; process.stdout.write = () => true;
+  try {
+    new FlowzenManager(null, () => {}, { BrowserView: FakeBrowserView, shell: { openExternal() {} },
+      ipcMain: { on: (channel) => listened.push(channel) }, overlayDeps: { existsSync: () => true, logger: { log() {}, warn() {}, error() {} } } }).createView();
+  } finally { process.stdout.write = write; }
+  assert.deepEqual(listened, []);
+
+  const diary = read('flowzen-diary.html');
+  assert.match(diary, /window\.blueRose\.recommend\(/);
+  assert.doesNotMatch(diary, /flowzenDiary\.recommend\(/);
+  assert.match(diary, /id="recommend-answer"/);
+  assert.match(read('renderer', 'index.html'), /id="fz-recommend-answer"/);
+  assert.match(main, /'blue-rose:recommend', \(event, place\) => \(fromApp\(event\)/);
+  for (const file of [['renderer', 'index.html'], ['renderer', 'handlers', 'dashboard-handlers.js']]) {
+    assert.match(read(...file), /success === false && window\.flowzenPanel\.showRecommendAnswer/, file.join('/'));
+  }
+});
+
 test('the tab opens with the personal space; the journal is one page of the same view', () => {
   const FlowzenManager = require('./flowzen-manager');
   const loaded = [];

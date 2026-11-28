@@ -299,6 +299,7 @@
             <button class="flowzen-recommend-btn" id="fz-recommend-btn">
                 Was soll ich als Nächstes tun?
             </button>
+            <div id="fz-recommend-answer" role="status" aria-live="polite" style="min-height:18px;margin:6px 0 10px;font-size:13px;text-align:center"></div>
             <div class="flowzen-diary-journal" id="fz-diary-journal">
                 <div class="flowzen-diary-empty" id="fz-diary-empty">
                     <span class="diary-empty-icon">📖</span>
@@ -1905,9 +1906,12 @@
                     if (message.diary_entry) {
                         window.flowzenPanel.addSingleDiaryEntry(message.diary_entry);
                     }
-                    // Reset button
+                    // Reset button; a failed answer says why instead of nothing
                     var fzBtn = document.getElementById('fz-recommend-btn');
                     if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich als Nächstes tun?'; }
+                    if (message.success === false && window.flowzenPanel.showRecommendAnswer) {
+                        window.flowzenPanel.showRecommendAnswer((message.recommendation && message.recommendation.reasoning) || 'Das hat nicht geklappt.');
+                    }
                     break;
 
                 case 'flowzen_diary_entries_result':

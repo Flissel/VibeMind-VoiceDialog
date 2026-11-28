@@ -264,7 +264,8 @@
 
     <!-- Back to the personal space (blue-rose.html); the journal is one view of the tab Blue Rose. -->
     <button class="recommend-btn" id="home-btn" style="margin-bottom:0">&#8249; Dein Bereich</button>
-    <button class="recommend-btn" id="recommend-btn">Was soll ich als Nächstes tun?</button>
+    <button class="recommend-btn" id="recommend-btn" style="margin-bottom:0">Was soll ich als Nächstes tun?</button>
+    <div id="recommend-answer" role="status" aria-live="polite" style="min-height:20px;margin:6px auto 10px;text-align:center;font-size:13px;color:var(--vm-text-primary, #e0e0e0)"></div>
 
     <div class="book-container">
         <div class="book">
@@ -496,9 +497,18 @@
         });
         document.getElementById('recommend-btn').addEventListener('click', function() {
             var btn = this;
+            var answer = document.getElementById('recommend-answer');
+            function done(text) {
+                btn.classList.remove('loading'); btn.textContent = 'Was soll ich als Nächstes tun?';
+                answer.textContent = text;
+            }
+            if (!window.blueRose || !window.blueRose.recommend) { done('Die Empfehlung ist hier nicht verfügbar.'); return; }
             btn.classList.add('loading');
             btn.textContent = 'Denke nach …';
-            if (window.flowzenDiary) window.flowzenDiary.recommend();
+            answer.textContent = '';
+            window.blueRose.recommend({ stunde: new Date().getHours() }).then(function(result) {
+                done((result && result.text) || 'Das hat nicht geklappt.');
+            }, function() { done('Das hat nicht geklappt.'); });
         });
 
         // Register handlers via contextBridge (contextIsolation-safe)

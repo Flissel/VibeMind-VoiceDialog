@@ -10,7 +10,6 @@
 
 const path = require('path');
 const { loadOverlay, loadStatus, resolveElectronParts } = require('./overlay-status');
-const { withoutTypedMark } = require('./chat-input');
 const { applyVibeMindLook } = require('./vibemind-look');
 
 const _FZ_C = '\x1b[92m', _RST = '\x1b[0m'; // Bright Green (Flowzen)
@@ -110,14 +109,8 @@ class FlowzenManager {
       return { action: 'deny' };
     });
 
-    // Forward 'to-python' IPC from the diary BrowserView to the Python backend
-    const ipcMain = this._ipcMain || require('electron').ipcMain;
-    ipcMain.on('to-python', (_event, message) => {
-      if (this.sendToPython) {
-        // Nothing from this channel may claim a typed sentence (chat-input.js).
-        this.sendToPython(withoutTypedMark(message));
-      }
-    });
+    // 'to-python' from this view is forwarded by main.js (setupIpcHandlers) like from every page.
+    // A second receiver stood here and sent each message of any page to Python twice (Lauf 43).
 
     this._loaded = false;
 

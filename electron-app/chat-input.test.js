@@ -49,7 +49,10 @@ test('the generic to-python channel cannot claim a typed sentence', () => {
     const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
     const flowzen = fs.readFileSync(path.join(__dirname, 'flowzen-manager.js'), 'utf8');
     assert.match(main, /sendToPython\(withoutTypedMark\(message\)\)/);
-    assert.match(flowzen, /this\.sendToPython\(withoutTypedMark\(message\)\)/);
+    // The journal view had a second receiver for this channel (each message reached Python twice,
+    // Lauf 43). It is gone: main.js is the only way to Python, and it strips the mark.
+    assert.doesNotMatch(flowzen, /ipcMain\.on\(/);
+    assert.equal(main.match(/ipcMain\.on\('to-python'/g).length, 1);
     assert.match(main, /env: withProof\(pythonEnv\)/);
     assert.match(main, /eingabe_beleg: '\*\*\*'/, 'the proof is never shown in the IPC log of the renderer');
     // the ClawPort channel carries only its space, never the mark

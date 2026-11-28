@@ -434,6 +434,8 @@ contextBridge.exposeInMainWorld('vibemind', {
     // External spaces (Sales, Marketing, Lernen, Events): one overlay manager for all
     getExternalSpaces: () => ipcRenderer.invoke('get-external-spaces'),
     getSpaceSwitches: () => ipcRenderer.invoke('get-space-switches'),
+    // Blue Rose panel: "Was soll ich als Nächstes tun?" -> { ok, text } (blue-rose-data.js)
+    blueRoseRecommend: (place) => ipcRenderer.invoke('blue-rose:recommend', place),
     showExternalSpace: (id) => ipcRenderer.send('show-external-space', id),
     hideExternalSpaces: () => ipcRenderer.send('hide-external-spaces'),
     externalSpacePath: (id, path) => ipcRenderer.send('external-space-path', id, path),

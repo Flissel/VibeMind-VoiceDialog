@@ -65,7 +65,7 @@ test('the Flowzen panel in the main window speaks the same German', () => {
   }
   const els = {};
   const document = { getElementById: (id) => (els[id] = els[id] || { id, textContent: '', className: '', classList: { add() {}, remove() {} }, addEventListener() {} }) };
-  const window = {};
+  const window = { vibemind: { blueRoseRecommend: () => new Promise(() => {}) } };
   vm.runInNewContext(panel, { window, document });
   window.flowzenPanel.updateFlowzenPanel({ current_time_window: 'early_morning', mood: 'tired', category: 'Testkategorie', state: 'idle' });
   assert.equal(els['fz-time-window'].textContent, 'Früher Morgen');

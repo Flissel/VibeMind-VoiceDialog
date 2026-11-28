@@ -31,15 +31,40 @@
         }
     }
 
+    var RECOMMEND_LABEL = 'Was soll ich als Nächstes tun?';
+
+    /** The answer to the button, or why there is none. Also frees the button again. */
+    function showRecommendAnswer(text) {
+        var btn = document.getElementById('fz-recommend-btn');
+        if (btn) { btn.classList.remove('loading'); btn.textContent = RECOMMEND_LABEL; }
+        var answer = document.getElementById('fz-recommend-answer');
+        if (answer) answer.textContent = text || '';
+    }
+
+    // One click, one request to the main process (blue-rose-data.js): a sentence from the fixed table
+    // of the brain. The old way through Python has no receiver any more and answered nothing.
+    var asking = false;
     function requestFlowzenRecommend() {
+        if (asking) return;
+        if (!(window.vibemind && window.vibemind.blueRoseRecommend)) {
+            showRecommendAnswer('Die Empfehlung ist hier nicht verfügbar.');
+            return;
+        }
         var btn = document.getElementById('fz-recommend-btn');
         if (btn) {
             btn.classList.add('loading');
             btn.textContent = 'Denke nach …';
         }
-        if (window.vibemind && window.vibemind.sendToPython) {
-            window.vibemind.sendToPython({ type: 'flowzen_recommend' });
-        }
+        var answer = document.getElementById('fz-recommend-answer');
+        if (answer) answer.textContent = '';
+        asking = true;
+        window.vibemind.blueRoseRecommend({ stunde: new Date().getHours() }).then(function(result) {
+            asking = false;
+            showRecommendAnswer((result && result.text) || 'Das hat nicht geklappt.');
+        }, function() {
+            asking = false;
+            showRecommendAnswer('Das hat nicht geklappt.');
+        });
     }
 
     function updateFlowzenPanel(data) {
@@ -145,6 +170,7 @@
         requestFlowzenStatus: requestFlowzenStatus,
         requestFlowzenDiaryEntries: requestFlowzenDiaryEntries,
         requestFlowzenRecommend: requestFlowzenRecommend,
+        showRecommendAnswer: showRecommendAnswer,
         updateFlowzenPanel: updateFlowzenPanel,
         renderDiaryEntries: renderDiaryEntries,
         addSingleDiaryEntry: addSingleDiaryEntry

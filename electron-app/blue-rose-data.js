@@ -214,7 +214,7 @@ function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log 
   if (key.length < KEY_MIN_LENGTH) {
     const text = 'Der App fehlt der Schlüssel, mit dem sie sich beim Gehirn ausweist.';
     const no = async () => ({ ok: false, text });
-    return { read: async () => ({ state: 'fehler', hinweis: text }), saveMood: no, setAnalysis: no, remove: no };
+    return { read: async () => ({ state: 'fehler', hinweis: text }), recommend: no, saveMood: no, setAnalysis: no, remove: no };
   }
   const quiet = async (work, what) => {
     try { return await work(); } catch (error) {
@@ -230,6 +230,15 @@ function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log 
       const hour = isHour(stunde) ? `&stunde=${stunde}` : '';
       const answer = await quiet(() => signed('GET', `/api/blue_rose/uebersicht?tage=14${hour}`), 'lesen');
       return viewModel(answer, { offsetHours });
+    },
+    /**
+     * "Was soll ich als Nächstes tun?": one sentence from the fixed table of the brain (mood of the
+     * last hours x time of day), no model. Without a fresh entry it says what to do first; a
+     * failure says why. Only the sentence leaves here, never the entries.
+     */
+    async recommend({ stunde } = {}) {
+      const vm = await this.read({ stunde });
+      return vm.state === 'ok' ? { ok: true, text: vm.empfehlung } : { ok: false, text: vm.hinweis };
     },
     async saveMood({ stimmung, energie, stunde } = {}) {
       if (!Object.hasOwn(MOODS, stimmung) || !Number.isInteger(energie) || energie < 1 || energie > 10 || !isHour(stunde)) {

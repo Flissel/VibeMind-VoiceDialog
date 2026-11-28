@@ -88,6 +88,10 @@
         }
         var fzBtn = document.getElementById('fz-recommend-btn');
         if (fzBtn) { fzBtn.classList.remove('loading'); fzBtn.textContent = 'Was soll ich als Nächstes tun?'; }
+        // A failed answer says why instead of nothing (Lauf 43)
+        if (msg.success === false && window.flowzenPanel.showRecommendAnswer) {
+            window.flowzenPanel.showRecommendAnswer((msg.recommendation && msg.recommendation.reasoning) || 'Das hat nicht geklappt.');
+        }
     };
 
     H['flowzen_diary_entries_result'] = function(msg) {

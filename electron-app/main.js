@@ -2236,6 +2236,12 @@ function setupIpcHandlers() {
     ipcMain.handle('blue-rose:analysis', (event, on) => (fromBlueRose(event) ? blueRoseOf().setAnalysis(on) : NOT_ALLOWED));
     ipcMain.handle('blue-rose:remove', (event, art, id) => (fromBlueRose(event) ? blueRoseOf().remove(art, id) : NOT_ALLOWED));
     ipcMain.on('blue-rose:page', (event, name) => { if (fromBlueRose(event)) flowzenManager.showPage(name); });
+    // "Was soll ich als Nächstes tun?" (journal page and the Blue Rose panel of the main window): one
+    // sentence from the brain's fixed table. It used to call Python, whose part is gone (Lauf 43).
+    const fromApp = (event) => fromBlueRose(event)
+        || Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+    ipcMain.handle('blue-rose:recommend', (event, place) => (fromApp(event)
+        ? blueRoseOf().recommend(place && typeof place === 'object' ? place : {}) : NOT_ALLOWED));
 
     ipcMain.on('show-agentfarm-tab', (_event, tab) => {
         if (agentfarmManager) {
