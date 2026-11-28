@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Video-Quellen</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { display: flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box;
+    background: #0f0d1a; border-bottom: 1px solid rgba(255, 51, 102, 0.28);
+    font: 12px system-ui, "Segoe UI", sans-serif; color: #dde3f0; }
+  button { height: 22px; padding: 0 12px; border-radius: 6px; cursor: pointer; font: inherit; color: #dde3f0;
+    border: 1px solid rgba(255, 51, 102, 0.35); background: rgba(255, 51, 102, 0.08); }
+  button:hover { background: rgba(255, 51, 102, 0.2); }
+  button[aria-pressed="true"] { background: rgba(255, 51, 102, 0.32); border-color: rgba(255, 51, 102, 0.7); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .hinweis { color: rgba(200, 210, 235, 0.6); margin-left: 6px; }
+</style>
+</head>
+<body>
+  <button type="button" id="laura" aria-pressed="true">Laura</button>
+  <button type="button" id="marketing" aria-pressed="false">Aus dem Marketing</button>
+  <span class="hinweis" id="hinweis"></span>
+  <script src="video-quellen-seite.js"></script>
+</body>
+</html>

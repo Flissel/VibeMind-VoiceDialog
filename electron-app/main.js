@@ -2097,6 +2097,11 @@ function setupIpcHandlers() {
         }
     });
 
+    // The bar of the Video space: Laura or "Aus dem Marketing" (video-quellen.js checks the sender).
+    ipcMain.on('video-quelle', (event, quelle) => {
+        if (videoManager) videoManager.chooseSource(event.sender, quelle);
+    });
+
     ipcMain.on('hide-video', () => {
         if (videoManager) {
             videoManager.hide();

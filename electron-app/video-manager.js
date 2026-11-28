@@ -79,6 +79,16 @@ class VideoManager {
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
 
+    // Laura or "Aus dem Marketing" (video-quellen.js): a bar above the view switches. Only a window that
+    // can hold two views at once gets it; otherwise the space shows Laura as before.
+    const { VideoQuellen } = require('./video-quellen');
+    this.quellen = dependencies.quellen !== false && VideoQuellen.supported(this.mainWindow)
+      ? new VideoQuellen({
+        mainWindow: this.mainWindow, BrowserView: this.BrowserView, shell: this.shell,
+        env: dependencies.env || process.env, logger: this.logger, overlayDeps: this._overlayDeps, topOffset: this.topOffset,
+      })
+      : null;
+
     // Listen for window resize
     if (this.mainWindow) {
       this.mainWindow.on('resize', () => {
@@ -170,9 +180,13 @@ class VideoManager {
     if (!this.mainWindow) return;
     if (!this.videoView) this.createView();
 
-    this.mainWindow.setBrowserView(this.videoView);
-    this.updateBounds();
     this.isVisible = true;
+    if (this.quellen) {
+      this.quellen.show(this.videoView);
+    } else {
+      this.mainWindow.setBrowserView(this.videoView);
+      this.updateBounds();
+    }
     this.logger.info('[VideoManager] Video shown');
   }
 
@@ -180,6 +194,7 @@ class VideoManager {
     if (!this.mainWindow || !this.videoView) return;
     this.mainWindow.setBrowserView(null);
     this.isVisible = false;
+    if (this.quellen) this.quellen.hide();
     this.logger.info('[VideoManager] Video hidden');
   }
 
@@ -191,8 +206,14 @@ class VideoManager {
     }
   }
 
+  /** The bar of the space asks for a source (main.js, ipc 'video-quelle'); only that bar may. */
+  chooseSource(sender, quelle) {
+    return this.quellen ? this.quellen.choose(sender, quelle) : false;
+  }
+
   updateBounds() {
     if (!this.mainWindow || !this.videoView) return;
+    if (this.quellen) { this.quellen.updateBounds(); return; }
     const bounds = this.mainWindow.getContentBounds();
     this.videoView.setBounds({
       x: 0,
@@ -220,12 +241,16 @@ class VideoManager {
   destroy() {
     if (this.videoView) {
       const view = this.videoView;
-      if (this.mainWindow?.getBrowserView?.() === view) {
+      // getBrowserView throws while two views are attached (the bar of video-quellen.js and the source)
+      let shown = null;
+      try { shown = this.mainWindow?.getBrowserView?.(); } catch { shown = view; }
+      if (shown === view || (this.quellen && this.isVisible)) {
         this.mainWindow.setBrowserView(null);
       }
       view.webContents.destroy();
       this.videoView = null;
     }
+    if (this.quellen) this.quellen.destroy();
     this.isVisible = false;
   }
 }
