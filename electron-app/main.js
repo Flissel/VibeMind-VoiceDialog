@@ -2318,7 +2318,9 @@ function setupIpcHandlers() {
     // The checklist and its Python channels (n8n_chat_*) are gone: their module spaces.n8n is not
     // installed, the field stayed empty (2026-11-26). Keys stay here; activating needs the person's "Ja".
     let vibecoderChat = null;
-    const vibecoder = () => vibecoderChat || (vibecoderChat = require('./vibecoder-chat').createVibeCoderChat({ env: process.env, log: (line) => console.log(line) }));
+    // Its log lines (status and duration, never content) also go to logs/renderer.log (Lauf 43: they were nowhere).
+    const vibecoderLog = (line) => { console.log(line); require('./protokoll-datei').protokollZeile('info', line); };
+    const vibecoder = () => vibecoderChat || (vibecoderChat = require('./vibecoder-chat').createVibeCoderChat({ env: process.env, log: vibecoderLog }));
     ipcMain.handle('agentfarm:vibecoder-state', () => vibecoder().state());
     ipcMain.handle('agentfarm:vibecoder-send', (_event, { text }) => vibecoder().send(text));
     ipcMain.handle('agentfarm:vibecoder-decide', (_event, { proposalId, yes }) => vibecoder().decide(proposalId, yes === true));

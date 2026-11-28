@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createVibeCoderChat, hasN8nTools, readAnswer, FRAME, TEXT } = require('./vibecoder-chat');
+const { createVibeCoderChat, hasN8nTools, readAnswer, reasonOf, FRAME, TEXT } = require('./vibecoder-chat');
 const { n8nActivateRest } = require('./n8n-access');
 
 const read = (...parts) => fs.readFileSync(path.join(__dirname, ...parts), 'utf8');
@@ -174,4 +174,68 @@ test('Lauf 39: what the field says is written with umlauts, not ae/oe/ue', () =>
   assert.match(field, /placeholder="Workflow beschreiben oder Änderung vorschlagen …"/);
   const page = read('agentfarm', 'src', 'features', 'WorkflowBuilder.tsx');
   assert.doesNotMatch(page, /title="(Loeschen|Im Editor oeffnen)"/);
+});
+
+/** A clock that moves 250 ms each time it is read. */
+function clock() {
+  let t = 1000;
+  return () => (t += 250);
+}
+
+/** OpenFang whose message endpoint answers with this status and raw body text. */
+function failing(status, bodyText) {
+  return async (url) => {
+    if (url.endsWith('/api/agents')) return { ok: true, status: 200, json: async () => [{ id: AGENT_ID, name: 'brain-n8n' }] };
+    return { ok: status < 400, status, headers: { get: () => 'application/json' }, text: async () => bodyText, json: async () => JSON.parse(bodyText) };
+  };
+}
+
+test('Lauf 43: the log has status and duration, never the sentence or the answer', async () => {
+  const lines = [];
+  const f = fake({ answer: 'Geheime Antwort' });
+  const chat = createVibeCoderChat({ env, fetchImpl: f.fetchImpl, readFile: () => CONFIG_WITH, log: (l) => lines.push(l), now: clock() });
+  await chat.send('Geheimer Satz');
+  assert.deepEqual(lines, ['[VibeCoder] OpenFang antwortet mit 200 nach 250 ms']);
+  const bad = [];
+  const failed = createVibeCoderChat({ env, fetchImpl: failing(500, '{"error":"Modell nicht gefunden"}'), readFile: () => CONFIG_WITH, log: (l) => bad.push(l), now: clock() });
+  await failed.send('Geheimer Satz');
+  assert.deepEqual(bad, ['[VibeCoder] OpenFang antwortet mit 500 nach 250 ms']);
+  const timeouts = [];
+  const slow = createVibeCoderChat({
+    env, readFile: () => CONFIG_WITH, log: (l) => timeouts.push(l), now: clock(),
+    fetchImpl: async (url) => {
+      if (url.endsWith('/api/agents')) return { ok: true, status: 200, json: async () => [{ id: AGENT_ID, name: 'brain-n8n' }] };
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    },
+  });
+  await slow.send('Hallo');
+  assert.deepEqual(timeouts, ['[VibeCoder] keine Antwort von OpenFang (Zeitlimit) nach 250 ms']);
+  const downLines = [];
+  const down = createVibeCoderChat({ env, fetchImpl: async () => { throw new Error('ECONNREFUSED'); }, readFile: () => CONFIG_WITH, log: (l) => downLines.push(l), now: clock() });
+  await down.send('Hallo');
+  assert.match(downLines[0], /^\[VibeCoder\] OpenFang nicht erreichbar \(Agentenliste\) nach \d+ ms$/);
+  for (const l of [...lines, ...bad, ...timeouts, ...downLines]) assert.doesNotMatch(l, /Geheim|Modell nicht gefunden|test-of-key/, l);
+});
+
+test('Lauf 43: a 500 shows OpenFang\'s short reason when one comes along, else the old sentence', async () => {
+  const send = async (status, body) => (await createVibeCoderChat({ env, fetchImpl: failing(status, body), readFile: () => CONFIG_WITH }).send('Hallo')).error;
+  assert.equal(await send(500, '{"error":"Modell gpt-x ist dem Agenten unbekannt"}'), TEXT.failedWithReason('Modell gpt-x ist dem Agenten unbekannt'));
+  assert.equal(await send(502, '{"error":{"message":"Anbieter nicht erreichbar"}}'), TEXT.failedWithReason('Anbieter nicht erreichbar'));
+  assert.equal(await send(500, 'kurzer Klartext'), TEXT.failedWithReason('kurzer Klartext'));
+  assert.equal(await send(500, ''), TEXT.failed);
+  assert.equal(await send(500, '<html><body>Internal Server Error</body></html>'), TEXT.failed, 'an HTML page is no reason');
+  assert.equal(await send(500, '{"ok":false}'), TEXT.failed);
+  assert.equal(await send(400, '{"error":"nur bei 5xx"}'), TEXT.failed, 'only server errors carry a reason');
+});
+
+test('the reason is one short line without control characters and without key-like runs', () => {
+  assert.equal(reasonOf('{"error":"Zeile eins\\nZeile zwei\\u0007"}'), 'Zeile eins Zeile zwei');
+  assert.equal(reasonOf('kaputt\nin zwei Zeilen'), 'kaputt in zwei Zeilen');
+  assert.equal(reasonOf('{"message":"bad key sk-abcdefghijklmnop1234 used"}'), 'bad key […] used');
+  assert.equal(reasonOf('{"detail":"Authorization: Bearer abc.def.ghi failed"}'), 'Authorization: Bearer […] failed');
+  assert.equal(reasonOf(`{"error":"x ${'A1'.repeat(20)} y"}`), 'x […] y');
+  const long = reasonOf(JSON.stringify({ error: 'w '.repeat(300) }));
+  assert.ok(long.length <= 200 && long.endsWith('…'), long);
+  assert.equal(reasonOf(null), null);
+  assert.equal(reasonOf('   '), null);
 });
