@@ -222,9 +222,12 @@ function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log 
       return null;
     }
   };
-  const result = (answer) => (answer && answer.ok === true
-    ? { ok: true }
-    : { ok: false, text: answer ? reason(answer.grund) : 'Das Gehirn antwortet gerade nicht.' });
+  // A refusal of the brain is logged by its code (a fixed word such as "nicht_belegt"), never by content.
+  const result = (answer, what) => {
+    if (answer && answer.ok === true) return { ok: true };
+    if (answer && what) log(`[BlueRose] ${what}: abgelehnt (${/^[a-z_]{1,40}$/.test(answer.grund) ? answer.grund : 'ohne Grund'})`);
+    return { ok: false, text: answer ? reason(answer.grund) : 'Das Gehirn antwortet gerade nicht.' };
+  };
   return {
     async read({ stunde, offsetHours } = {}) {
       const hour = isHour(stunde) ? `&stunde=${stunde}` : '';
@@ -244,18 +247,21 @@ function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log 
       if (!Object.hasOwn(MOODS, stimmung) || !Number.isInteger(energie) || energie < 1 || energie > 10 || !isHour(stunde)) {
         return { ok: false, text: reason('eingabe_ungueltig') };
       }
-      return result(await quiet(() => post('/api/blue_rose/befinden', { stimmung, energie, stunde }), 'eintragen'));
+      return result(await quiet(() => post('/api/blue_rose/befinden', { stimmung, energie, stunde }), 'eintragen'), 'eintragen');
     },
     async setAnalysis(on) {
       if (typeof on !== 'boolean') return { ok: false, text: reason('eingabe_ungueltig') };
-      return result(await quiet(() => post('/api/blue_rose/einstellungen', { analyse: on }), 'schalter'));
+      return result(await quiet(() => post('/api/blue_rose/einstellungen', { analyse: on }), 'schalter'), 'schalter');
     },
+    /** One kind, everything ('alles'), or one mood entry by its id. No id may arrive as undefined or null. */
     async remove(art, id) {
+      const one = id !== undefined && id !== null;
       const known = art === 'alles' || KINDS.some((kind) => kind.id === art);
-      if (!known || (id !== undefined && (art !== 'befinden' || typeof id !== 'string' || !/^[0-9a-zA-Z-]{1,64}$/.test(id)))) {
+      if (!known || (one && (art !== 'befinden' || typeof id !== 'string' || !/^[0-9a-zA-Z-]{1,64}$/.test(id)))) {
+        log('[BlueRose] loeschen: Eingabe nicht angenommen');
         return { ok: false, text: reason('eingabe_ungueltig') };
       }
-      return result(await quiet(() => post('/api/blue_rose/loeschen', id === undefined ? { art } : { art, id }), 'loeschen'));
+      return result(await quiet(() => post('/api/blue_rose/loeschen', one ? { art, id } : { art }), 'loeschen'), 'loeschen');
     },
   };
 }

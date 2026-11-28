@@ -63,7 +63,15 @@
         .row .what { flex: 0 0 46%; min-width: 0; }
         .row .how { flex: 1; color: var(--vm-text-secondary, #8b93a7); min-width: 0; }
         #entries .row .how { color: var(--vm-text-primary, #e0e0e0); }
-        #msg { min-height: 18px; margin: 10px 2px 0; }
+        /* What just happened, or why not: always in sight, whatever part of the page is shown. */
+        #msg {
+            position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5;
+            max-width: min(720px, calc(100vw - 32px)); padding: 8px 14px; border-radius: 8px;
+            background: var(--vm-bg-elevated, #1b1e30); border: 1px solid rgba(var(--space-accent-rgb, 51,102,204), 0.45);
+            color: var(--vm-text-primary, #e0e0e0);
+        }
+        #msg:empty { display: none; }
+        #msg.warn { border-color: var(--vm-status-warn, #ffc145); color: var(--vm-status-warn, #ffc145); }
         details summary { cursor: pointer; color: var(--vm-text-secondary, #8b93a7); margin-top: 8px; }
     </style>
 </head>
@@ -143,19 +151,34 @@
     function say(text, warn) { $('msg').textContent = text || ''; $('msg').className = 'note' + (warn ? ' warn' : ''); }
     function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
-    /** A button that asks once more before it acts. */
+    // confirm:start
+    /**
+     * A button that asks once more before it acts. The question stays until it is answered: by a
+     * second click (acts) or by "Abbrechen" beside it. No time limit: a slow second click used to
+     * arm the button anew and never deleted (Lauf 43).
+     */
     function twice(button, label, act) {
-        var armed = false, timer = null;
+        var armed = false, cancel = null;
+        function disarm() {
+            armed = false; button.textContent = label;
+            if (cancel && cancel.parentNode) cancel.parentNode.removeChild(cancel);
+            cancel = null;
+        }
         button.textContent = label;
         button.onclick = function () {
             if (!armed) {
                 armed = true; button.textContent = 'Wirklich löschen?';
-                timer = setTimeout(function () { armed = false; button.textContent = label; }, 4000);
+                cancel = document.createElement('button');
+                cancel.className = 'plain'; cancel.textContent = 'Abbrechen';
+                cancel.onclick = function () { disarm(); say(''); };
+                if (button.parentNode) button.parentNode.insertBefore(cancel, button.nextSibling);
+                say('Noch ein Klick auf „Wirklich löschen?" löscht. „Abbrechen" lässt alles, wie es ist.');
                 return;
             }
-            clearTimeout(timer); armed = false; button.textContent = label; act();
+            disarm(); act();
         };
     }
+    // confirm:end
 
     function cards(node, list, empty) {
         clear(node);

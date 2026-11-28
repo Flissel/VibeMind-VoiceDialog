@@ -242,6 +242,68 @@ test('one receiver for to-python: the journal view adds none, and its button ask
   }
 });
 
+// Lauf 43: "Löschen" at one entry became "Wirklich löschen?", and clicks on it did nothing. The
+// question fell back after 4 s without a word, so each slow click only asked again.
+test('deleting one entry: the question waits for its answer, however slow the second click', () => {
+  const vmod = require('node:vm');
+  const page = fs.readFileSync(path.join(__dirname, 'blue-rose.html'), 'utf8');
+  const slice = page.slice(page.indexOf('// confirm:start'), page.indexOf('// confirm:end'));
+  assert.ok(slice.length > 100);
+  assert.doesNotMatch(slice, /setTimeout|setInterval/, 'no time limit on the question');
+  assert.doesNotMatch(page, /setTimeout\(/, 'nothing on the page falls back by itself');
+
+  const said = [];
+  const makeButton = () => {
+    const row = { children: [], insertBefore(node) { this.children.push(node); node.parentNode = this; }, removeChild(node) { this.children = this.children.filter((c) => c !== node); node.parentNode = null; } };
+    return { textContent: '', onclick: null, parentNode: row, nextSibling: null };
+  };
+  const document = { createElement: () => ({ className: '', textContent: '', onclick: null, parentNode: null }) };
+  const sandbox = { document, say: (text) => said.push(text), out: null };
+  vmod.runInNewContext(`${slice}\nthis.out = twice;`, sandbox);
+  const twice = sandbox.out;
+
+  let acted = 0;
+  const button = makeButton();
+  twice(button, 'Löschen', () => { acted += 1; });
+  assert.equal(button.textContent, 'Löschen');
+  button.onclick();
+  assert.equal(button.textContent, 'Wirklich löschen?');
+  assert.equal(acted, 0);
+  assert.equal(button.parentNode.children.length, 1, '"Abbrechen" stands beside it');
+  assert.equal(button.parentNode.children[0].textContent, 'Abbrechen');
+  assert.match(said.at(-1), /Noch ein Klick/);
+  button.onclick();                                  // the second click, whenever it comes
+  assert.equal(acted, 1, 'the second click deletes');
+  assert.equal(button.textContent, 'Löschen');
+  assert.equal(button.parentNode.children.length, 0);
+
+  button.onclick();
+  button.parentNode.children[0].onclick();           // Abbrechen
+  assert.equal(acted, 1);
+  assert.equal(button.textContent, 'Löschen');
+  assert.equal(button.parentNode.children.length, 0);
+  button.onclick(); button.onclick();
+  assert.equal(acted, 2);
+});
+
+test('deleting one entry asks the brain for exactly that entry; a refusal is said and logged by its code', async () => {
+  const bodies = []; const lines = [];
+  let reply = { ok: true };
+  const rose = createBlueRose({ env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, log: (line) => lines.push(line),
+    fetchJson: async (url, options) => { bodies.push([url.replace(/^.*\/api/, '/api'), JSON.parse(options.body)]); return reply; } });
+  const id = '0f8fad5b-d9cb-469f-a165-70867728950e';   // made up, the form the database gives
+  assert.deepEqual(await rose.remove('befinden', id), { ok: true });
+  assert.deepEqual(await rose.remove('befinden', null), { ok: true });        // "all of the kind" may arrive as null
+  assert.deepEqual(bodies, [['/api/blue_rose/loeschen', { art: 'befinden', id }], ['/api/blue_rose/loeschen', { art: 'befinden' }]]);
+  reply = { ok: false, grund: 'nicht_geloescht' };
+  assert.deepEqual(await rose.remove('befinden', id), { ok: false, text: 'Das Löschen hat nicht geklappt.' });
+  reply = { ok: false, grund: 'Erfundener Inhalt, der nicht ins Protokoll darf' };
+  assert.equal((await rose.remove('befinden', id)).ok, false);
+  assert.equal((await rose.remove('befinden', 'x y')).ok, false);
+  assert.deepEqual(lines, ['[BlueRose] loeschen: abgelehnt (nicht_geloescht)', '[BlueRose] loeschen: abgelehnt (ohne Grund)',
+    '[BlueRose] loeschen: Eingabe nicht angenommen']);
+});
+
 test('the tab opens with the personal space; the journal is one page of the same view', () => {
   const FlowzenManager = require('./flowzen-manager');
   const loaded = [];
