@@ -41,6 +41,17 @@ contextBridge.exposeInMainWorld('flowzenDiary', {
     },
 });
 
+// Blue Rose as the personal space (blue-rose.html): the page asks the main process, which asks the
+// brain (blue-rose-data.js). The page gets ready lines; it never talks to the brain itself.
+contextBridge.exposeInMainWorld('blueRose', {
+    read: (place) => ipcRenderer.invoke('blue-rose:read', place),
+    saveMood: (entry) => ipcRenderer.invoke('blue-rose:mood', entry),
+    setAnalysis: (on) => ipcRenderer.invoke('blue-rose:analysis', on),
+    remove: (art, id) => ipcRenderer.invoke('blue-rose:remove', art, id),
+    // 'bereich' = this page, 'tagebuch' = the journal (flowzen-diary.html)
+    page: (name) => ipcRenderer.send('blue-rose:page', name),
+});
+
 // Receive from main process → deliver to page JS (or queue)
 ipcRenderer.on('flowzen-diary-data', (_event, data) => {
     deliver('setEntries', [data.entries || []]);

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    <title>Blue Rose — Dein Bereich</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--vm-bg-deep, #0a0a14);
+            font-family: var(--vm-font, 'Segoe UI', system-ui, sans-serif);
+            color: var(--vm-text-primary, #e0e0e0);
+            height: 100vh; overflow-y: auto; font-size: 13px; line-height: 1.45;
+        }
+        .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 20px 40px; }
+        header { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+        h1 { font-size: 19px; font-weight: 600; }
+        h1 .rose { margin-right: 8px; filter: hue-rotate(200deg) saturate(1.5) brightness(1.2); }
+        .sub { color: var(--vm-text-secondary, #8b93a7); font-size: 12px; margin-top: 3px; }
+        .top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+        section {
+            background: var(--vm-bg-surface, #12162a);
+            border: 1px solid rgba(var(--space-accent-rgb, 51,102,204), 0.22);
+            border-radius: 10px; padding: 14px 16px; min-width: 0;
+        }
+        section.wide { margin-top: 14px; }
+        h2 { font-size: 13px; font-weight: 600; color: rgb(var(--space-accent-rgb, 51,102,204)); filter: brightness(1.6); }
+        .from { color: var(--vm-text-secondary, #8b93a7); font-size: 11px; margin: 2px 0 10px; }
+        .card {
+            background: rgba(0,0,0,0.22); border: 1px solid rgba(var(--space-accent-rgb, 51,102,204), 0.16);
+            border-radius: 7px; padding: 8px 10px; margin-bottom: 8px; overflow-wrap: anywhere;
+        }
+        .card .basis { color: var(--vm-text-secondary, #8b93a7); font-size: 11px; margin-top: 3px; }
+        .note { color: var(--vm-text-secondary, #8b93a7); font-size: 12px; }
+        .warn { color: var(--vm-status-warn, #ffc145); }
+        button {
+            font: inherit; color: var(--vm-text-primary, #e0e0e0); cursor: pointer;
+            background: rgba(var(--space-accent-rgb, 51,102,204), 0.14);
+            border: 1px solid rgba(var(--space-accent-rgb, 51,102,204), 0.45);
+            border-radius: 6px; padding: 5px 11px;
+        }
+        button:hover:not(:disabled) { background: rgba(var(--space-accent-rgb, 51,102,204), 0.28); }
+        button:focus-visible, input:focus-visible { outline: 2px solid rgb(var(--space-accent-rgb, 51,102,204)); outline-offset: 2px; }
+        button:disabled { opacity: 0.45; cursor: default; }
+        button.plain { background: none; border-color: transparent; color: var(--vm-text-secondary, #8b93a7); padding: 2px 6px; }
+        button.danger { border-color: rgba(255,90,110,0.5); background: rgba(255,90,110,0.10); }
+        button.chip { border-radius: 14px; }
+        button.chip[aria-pressed="true"] { background: rgb(var(--space-accent-rgb, 51,102,204)); color: #fff; }
+        .switch { display: inline-flex; align-items: center; gap: 8px; }
+        .switch button { min-width: 52px; }
+        .switch button[aria-checked="true"] { background: rgb(var(--space-accent-rgb, 51,102,204)); color: #fff; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .energy { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
+        .energy input { flex: 1; accent-color: rgb(var(--space-accent-rgb, 51,102,204)); }
+        .bars { display: flex; gap: 8px; align-items: flex-end; height: 92px; margin: 10px 0 2px; }
+        .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+        .bar i { display: block; width: 100%; max-width: 30px; border-radius: 3px 3px 0 0; background: rgb(var(--space-accent-rgb, 51,102,204)); }
+        .bar i.none { background: rgba(255,255,255,0.10); height: 6px; }
+        .bar span { font-size: 10px; color: var(--vm-text-secondary, #8b93a7); margin-top: 4px; }
+        .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 5px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+        .row:first-of-type { border-top: 0; }
+        .row .what { flex: 0 0 46%; min-width: 0; }
+        .row .how { flex: 1; color: var(--vm-text-secondary, #8b93a7); min-width: 0; }
+        #entries .row .how { color: var(--vm-text-primary, #e0e0e0); }
+        #msg { min-height: 18px; margin: 10px 2px 0; }
+        details summary { cursor: pointer; color: var(--vm-text-secondary, #8b93a7); margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div>
+            <h1><span class="rose">&#127801;</span>Blue Rose — Dein Bereich</h1>
+            <div class="sub">Was VibeMind über dich annimmt. Du kannst alles lesen und löschen.</div>
+        </div>
+        <div class="top">
+            <span class="switch"><span id="analysis-label">Analyse</span>
+                <button id="analysis" role="switch" aria-checked="false" aria-labelledby="analysis-label" disabled>aus</button></span>
+            <button id="diary">Tagebuch</button>
+            <button id="reload">Neu laden</button>
+        </div>
+    </header>
+
+    <div id="blocked" class="card warn" hidden></div>
+
+    <div id="page" hidden>
+        <div class="grid">
+            <section>
+                <h2>Befinden</h2>
+                <div class="from">nur aus deinen eigenen Antworten</div>
+                <div id="mood-last"></div>
+                <div class="bars" id="mood-bars" aria-hidden="true"></div>
+                <div class="note">Energie der letzten 7 Tage (grau = keine Antwort)</div>
+                <div id="mood-note" class="note warn"></div>
+                <details id="mood-form">
+                    <summary>Jetzt eintragen</summary>
+                    <div class="chips" id="mood-chips" role="group" aria-label="Wie geht es dir gerade?"></div>
+                    <label class="energy">Energie <input id="energy" type="range" min="1" max="10" value="5"><b id="energy-value">5</b></label>
+                    <button id="mood-save" disabled>Speichern</button>
+                </details>
+                <div class="card" id="recommend" style="margin-top:12px"></div>
+            </section>
+
+            <section>
+                <h2>Arbeitsweise</h2>
+                <div class="from">gezählt aus dem Entscheidungs-Graphen, ohne Satztexte</div>
+                <div id="work"></div>
+            </section>
+
+            <section>
+                <h2>Was an der Software hakt</h2>
+                <div class="from">gezählt aus dem Entscheidungs-Graphen, ohne Satztexte</div>
+                <div id="friction"></div>
+            </section>
+        </div>
+
+        <section class="wide">
+            <h2>Was gespeichert ist</h2>
+            <div class="from">Anzahl je Art. Löschen entfernt die Einträge aus der Datenbank.</div>
+            <div id="stored"></div>
+            <div class="row"><span class="what">Nie gespeichert</span>
+                <span class="how">Tonaufnahmen · Kopien deiner Sätze · freier Text zum Befinden</span><span></span></div>
+            <details id="entries-box"><summary>Einzelne Einträge zum Befinden</summary><div id="entries"></div></details>
+            <div style="margin-top:12px"><button id="remove-all" class="danger">Alles löschen</button></div>
+        </section>
+        <div id="msg" class="note" role="status" aria-live="polite"></div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+    var api = window.blueRose;
+    var $ = function (id) { return document.getElementById(id); };
+    var chosen = null;
+
+    function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function say(text, warn) { $('msg').textContent = text || ''; $('msg').className = 'note' + (warn ? ' warn' : ''); }
+    function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+    /** A button that asks once more before it acts. */
+    function twice(button, label, act) {
+        var armed = false, timer = null;
+        button.textContent = label;
+        button.onclick = function () {
+            if (!armed) {
+                armed = true; button.textContent = 'Wirklich löschen?';
+                timer = setTimeout(function () { armed = false; button.textContent = label; }, 4000);
+                return;
+            }
+            clearTimeout(timer); armed = false; button.textContent = label; act();
+        };
+    }
+
+    function cards(node, list, empty) {
+        clear(node);
+        if (!list.length) { if (empty) node.appendChild(el('div', 'note', empty)); return; }
+        list.forEach(function (item) {
+            var card = el('div', 'card', item.text);
+            card.appendChild(el('div', 'basis', item.basis));
+            node.appendChild(card);
+        });
+    }
+
+    function draw(vm) {
+        var blocked = vm.state !== 'ok';
+        $('blocked').hidden = !blocked; $('page').hidden = blocked;
+        if (blocked) { $('blocked').textContent = vm.hinweis; $('analysis').disabled = true; return; }
+
+        var sw = $('analysis');
+        sw.disabled = !vm.analyseSchaltbar;
+        sw.setAttribute('aria-checked', String(vm.analyse)); sw.textContent = vm.analyse ? 'an' : 'aus';
+
+        $('mood-last').textContent = vm.befinden.letzter;
+        $('mood-note').textContent = vm.befinden.hinweis;
+        var bars = $('mood-bars'); clear(bars);
+        vm.befinden.tage.forEach(function (day) {
+            var bar = el('div', 'bar'), fill = el('i', day.energie === null ? 'none' : '');
+            if (day.energie !== null) fill.style.height = (day.energie * 7) + 'px';
+            bar.appendChild(fill); bar.appendChild(el('span', '', day.tag)); bars.appendChild(bar);
+        });
+        var chips = $('mood-chips'); clear(chips);
+        vm.stimmungen.forEach(function (mood) {
+            var chip = el('button', 'chip', mood.name);
+            chip.setAttribute('aria-pressed', String(chosen === mood.id));
+            chip.onclick = function () { chosen = mood.id; $('mood-save').disabled = false; draw(vm); };
+            chips.appendChild(chip);
+        });
+        $('recommend').textContent = vm.empfehlung;
+
+        cards($('work'), vm.arbeitsweise, vm.zahlenHinweis || 'Noch zu wenig gezählt.');
+        cards($('friction'), vm.hakt, vm.zahlenHinweis || vm.haktLeer);
+
+        var stored = $('stored'); clear(stored);
+        vm.bestand.forEach(function (line) {
+            var row = el('div', 'row');
+            row.appendChild(el('span', 'what', line.name)); row.appendChild(el('span', 'how', line.text));
+            var button = el('button', 'plain danger');
+            button.disabled = !line.loeschbar;
+            twice(button, 'Löschen', function () { act(api.remove(line.id), 'Gelöscht.'); });
+            row.appendChild(button); stored.appendChild(row);
+        });
+        var entries = $('entries'); clear(entries);
+        $('entries-box').hidden = !vm.befinden.eintraege.length;
+        vm.befinden.eintraege.forEach(function (entry) {
+            var row = el('div', 'row');
+            row.appendChild(el('span', 'how', entry.text));
+            var button = el('button', 'plain danger');
+            twice(button, 'Löschen', function () { act(api.remove('befinden', entry.id), 'Eintrag gelöscht.'); });
+            row.appendChild(button); entries.appendChild(row);
+        });
+    }
+
+    function place() { var now = new Date(); return { stunde: now.getHours(), offsetHours: -now.getTimezoneOffset() / 60 }; }
+    function load() {
+        return api.read(place()).then(draw, function () {
+            draw({ state: 'aus', hinweis: 'Blue Rose konnte nichts laden.' });
+        });
+    }
+    function act(promise, done) {
+        say('…');
+        promise.then(function (result) {
+            say(result && result.ok ? done : (result && result.text) || 'Das hat nicht geklappt.', !(result && result.ok));
+            return load();
+        }, function () { say('Das hat nicht geklappt.', true); });
+    }
+
+    if (!api) { draw({ state: 'aus', hinweis: 'Diese Seite läuft nur in VibeMind.' }); return; }
+    $('energy').oninput = function () { $('energy-value').textContent = $('energy').value; };
+    $('mood-save').onclick = function () {
+        if (!chosen) return;
+        var body = { stimmung: chosen, energie: parseInt($('energy').value, 10), stunde: new Date().getHours() };
+        chosen = null; $('mood-save').disabled = true; $('mood-form').open = false;
+        act(api.saveMood(body), 'Eingetragen.');
+    };
+    $('analysis').onclick = function () {
+        var on = $('analysis').getAttribute('aria-checked') !== 'true';
+        act(api.setAnalysis(on), on ? 'Analyse ist an.' : 'Analyse ist aus. Blue Rose liest den Graphen nicht mehr.');
+    };
+    twice($('remove-all'), 'Alles löschen', function () { act(api.remove('alles'), 'Alles gelöscht.'); });
+    $('reload').onclick = function () { say(''); load(); };
+    $('diary').onclick = function () { api.page('tagebuch'); };
+    load();
+})();
+</script>
+</body>
+</html>

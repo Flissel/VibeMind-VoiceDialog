@@ -2210,6 +2210,21 @@ function setupIpcHandlers() {
         return flowzenManager ? flowzenManager.getIsVisible() : false;
     });
 
+    // Blue Rose as the personal space (blue-rose.html): only its own page may ask. The main process
+    // asks the brain (blue-rose-data.js); mood entries never pass through another page or Python.
+    const fromBlueRose = (event) => Boolean(flowzenManager) && flowzenManager.ownsPage(event.sender);
+    const NOT_ALLOWED = { ok: false, text: 'Nicht erlaubt.' };
+    let blueRose = null;
+    const blueRoseOf = () => blueRose || (blueRose = require('./blue-rose-data').createBlueRose({ log: (line) => console.warn(line) }));
+    ipcMain.handle('blue-rose:read', (event, place) => (fromBlueRose(event)
+        ? blueRoseOf().read(place && typeof place === 'object' ? place : {})
+        : { state: 'aus', hinweis: NOT_ALLOWED.text }));
+    ipcMain.handle('blue-rose:mood', (event, entry) => (fromBlueRose(event)
+        ? blueRoseOf().saveMood(entry && typeof entry === 'object' ? entry : {}) : NOT_ALLOWED));
+    ipcMain.handle('blue-rose:analysis', (event, on) => (fromBlueRose(event) ? blueRoseOf().setAnalysis(on) : NOT_ALLOWED));
+    ipcMain.handle('blue-rose:remove', (event, art, id) => (fromBlueRose(event) ? blueRoseOf().remove(art, id) : NOT_ALLOWED));
+    ipcMain.on('blue-rose:page', (event, name) => { if (fromBlueRose(event)) flowzenManager.showPage(name); });
+
     ipcMain.on('show-agentfarm-tab', (_event, tab) => {
         if (agentfarmManager) {
             // Mutual exclusion

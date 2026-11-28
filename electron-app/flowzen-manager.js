@@ -29,6 +29,9 @@ class FlowzenManager {
     this.sendToPython = sendToPythonFn || null;
     this.flowzenView = null;
     this.isVisible = false;
+    // Which page the view shows: 'bereich' (blue-rose.html, the personal space) or 'tagebuch'
+    // (flowzen-diary.html, the journal). The tab opens with the personal space.
+    this.page = 'bereich';
 
     // Titlebar (32px) + space-nav tab bar (42px + 1px border)
     this.topOffset = 32 + 43;
@@ -49,11 +52,32 @@ class FlowzenManager {
    */
   _startOverlay() {
     this.overlayResult = null;
-    const diaryPath = path.join(__dirname, 'flowzen-diary.html');
+    const diaryPath = path.join(__dirname, this.page === 'tagebuch' ? 'flowzen-diary.html' : 'blue-rose.html');
     _fzLog('Pruefe und lade:', diaryPath);
     const targets = [{ kind: 'file', path: diaryPath }];
     this.overlayReady = loadOverlay(this.flowzenView.webContents, { space: 'Flowzen', targets }, { ...this._overlayDeps, onResult: (r) => { this.overlayResult = r; } });
     return this.overlayReady;
+  }
+
+  /** Is this the page of the view? Only it may ask for the personal data (main.js). */
+  ownsPage(sender) {
+    return Boolean(this.flowzenView) && Boolean(sender) && this.flowzenView.webContents === sender;
+  }
+
+  /** Switch between the personal space and the journal. Unknown names change nothing. */
+  showPage(name) {
+    if (name !== 'bereich' && name !== 'tagebuch') return;
+    if (name === this.page || !this.flowzenView) { this.page = name; return; }
+    this.page = name;
+    this._loaded = false;
+    this._startOverlay();
+  }
+
+  /** The journal still asks Python for its entries; the personal space asks the main process itself. */
+  _requestDiaryData() {
+    if (this.page !== 'tagebuch' || !this.sendToPython) return;
+    this.sendToPython({ type: 'flowzen_status' });
+    this.sendToPython({ type: 'flowzen_diary_entries' });
   }
 
   _recheckOverlay() {
@@ -109,10 +133,7 @@ class FlowzenManager {
       _fzLog('Diary loaded');
 
       // Send pending data request now that page is ready
-      if (this.isVisible && this.sendToPython) {
-        this.sendToPython({ type: 'flowzen_status' });
-        this.sendToPython({ type: 'flowzen_diary_entries' });
-      }
+      if (this.isVisible) this._requestDiaryData();
     });
 
     this.flowzenView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -151,10 +172,7 @@ class FlowzenManager {
     _fzLog('Diary shown');
 
     // Request fresh diary data (only if page already loaded, otherwise did-finish-load handles it)
-    if (this._loaded && this.sendToPython) {
-      this.sendToPython({ type: 'flowzen_status' });
-      this.sendToPython({ type: 'flowzen_diary_entries' });
-    }
+    if (this._loaded) this._requestDiaryData();
   }
 
   /**

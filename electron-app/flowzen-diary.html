@@ -262,6 +262,8 @@
         </div>
     </div>
 
+    <!-- Back to the personal space (blue-rose.html); the journal is one view of the tab Blue Rose. -->
+    <button class="recommend-btn" id="home-btn" style="margin-bottom:0">&#8249; Dein Bereich</button>
     <button class="recommend-btn" id="recommend-btn">Was soll ich als Nächstes tun?</button>
 
     <div class="book-container">
@@ -489,6 +491,9 @@
         });
 
         // Recommend button
+        document.getElementById('home-btn').addEventListener('click', function() {
+            if (window.blueRose) window.blueRose.page('bereich');
+        });
         document.getElementById('recommend-btn').addEventListener('click', function() {
             var btn = this;
             btn.classList.add('loading');

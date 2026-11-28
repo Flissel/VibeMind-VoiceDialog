@@ -151,6 +151,12 @@ def get_n8n_publisher():
     return _n8n_publisher
 
 
+def blue_rose_notiz_erlaubt() -> bool:
+    """Schalter BLUE_ROSE_ROWBOAT_NOTIZ (Vorgabe aus)."""
+    import os
+    return os.getenv("BLUE_ROSE_ROWBOAT_NOTIZ", "0").strip().lower() in ("1", "true", "yes")
+
+
 def get_blue_rose_publisher():
     """Get the Blue Rose (Flowzen) → filesystem publisher (singleton).
 
@@ -159,7 +165,10 @@ def get_blue_rose_publisher():
     """
     global _blue_rose_publisher
     if _blue_rose_publisher is None:
-        if not is_space_enabled("blue-rose"):
+        # 28.11.2026 (Blue Rose Stufe 1): Tagebuchtexte und Stimmungen gehoeren nicht
+        # unverschluesselt in die Rowboat-Wissensablage. Nur noch mit dem Schalter
+        # BLUE_ROSE_ROWBOAT_NOTIZ=1; die vorhandene Notiz bleibt unberuehrt.
+        if not blue_rose_notiz_erlaubt() or not is_space_enabled("blue-rose"):
             return _NoOpPublisher()
         from .blue_rose_publisher import BlueRosePublisher
         _blue_rose_publisher = BlueRosePublisher()
