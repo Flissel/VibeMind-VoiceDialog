@@ -278,6 +278,9 @@ class ClawPortHandlers:
             # Where the result lies (checked by the bridge): the app goes there and marks the card.
             if isinstance(tool_result, dict) and isinstance(tool_result.get("ziel"), dict):
                 answer["ziel"] = dict(tool_result["ziel"])
+            # K8: the question "bauen?" of the coding way; the main process keeps it and signs the answer.
+            if isinstance(tool_result, dict) and isinstance(tool_result.get("coding_frage"), str):
+                answer["coding_frage"] = tool_result["coding_frage"]
             reply(answer)
         except Exception as e:
             # The raw error goes to the log; the chat gets a German sentence.

@@ -142,6 +142,12 @@ if (REMOTE_CONTROL_OPEN) console.log('[Main] Pruefmodus: Fernsteuerung offen (ge
 
 let mainWindow = null;
 let desktopKlicks = null;   // desktop-klicks.js: watches the real mouse input of the window
+// K8: "Ja, bauen" of the coding way, signed here after a real input in the visible window (coding-bauen.js)
+const codingConfirm = require('./coding-bauen').createCodingConfirm({
+    env: process.env,
+    isVisible: () => Boolean(mainWindow) && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized() && mainWindow.isFocused(),
+    remoteOpen: () => REMOTE_CONTROL_OPEN,
+});
 let pythonProcess = null;
 let tray = null;
 
@@ -313,6 +319,7 @@ function createWindow() {
     });
     // a click on the desktop picture is signed only after a real press there (desktop-klicks.js)
     if (desktopKlicks) desktopKlicks.watch(mainWindow.webContents);
+    codingConfirm.watch(mainWindow.webContents);
     // test mode: a strip says that the window can be remote-controlled (fernsteuerung.js)
     if (REMOTE_CONTROL_OPEN) showBanner(mainWindow.webContents);
 
@@ -2632,8 +2639,10 @@ function setupIpcHandlers() {
             // What is on screen (open bubble, visible cards): passed on as given, see renderer/ideas-chat.js.
             // Only here is the mark "typed by the person" set, with the proof of this main process
             // (chat-input.js); the Brain runs Desktop tasks only with it.
+            // K8: "Ja, bauen" to an open coding question goes from here to the Brain, signed (coding-bauen.js)
+            if (codingConfirm.handles(text, typed)) return await codingConfirm.confirm(text);
             const message = chatMessage(text, context, typed, undefined, { remoteOpen: REMOTE_CONTROL_OPEN });
-            const answer = await sendToPythonAndWait(message, 'chat_response', CHAT_ANSWER_MS, { perRequest: true });
+            const answer = codingConfirm.remember(await sendToPythonAndWait(message, 'chat_response', CHAT_ANSWER_MS, { perRequest: true }));
             // K9: a Sales approval is answered in a dialog of this process, never by a sentence of the page
             const question = nativeQuestion(answer);
             if (!question) return answer;

@@ -111,6 +111,17 @@ def typed_request(
     return (context or None), headers
 
 
+CODING_FRAGE_ID = re.compile(r"^[0-9a-f]{32}$")
+
+
+def coding_question_of(data: Any) -> Optional[str]:
+    """The frage_id of a question of the coding way (rueckfrage, weg "coding"), or None."""
+    if not isinstance(data, dict) or data.get("weg") != "coding" or not data.get("rueckfrage"):
+        return None
+    value = data.get("frage_id")
+    return value if isinstance(value, str) and CODING_FRAGE_ID.match(value) else None
+
+
 TRACE_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 PLAIN_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 PLAIN_SPACE = re.compile(r"^[a-z0-9_]{1,32}$")
@@ -331,6 +342,11 @@ class BrainMultihopBridge:
         ziel = ziel_of(data.get("ziel"))
         if ziel is not None:
             tool_result = {**(tool_result or {}), "ziel": ziel}
+        # K8: the question "bauen?" of the coding way. Only its frage_id goes on, to the main process
+        # of the app: it alone signs "Ja, bauen" for it, after a real input of the person.
+        coding = coding_question_of(data) if question else None
+        if coding is not None:
+            tool_result = {**(tool_result or {}), "coding_frage": coding}
         return OrchestrationResult(
             job_id=job_id,
             event_type=event_type,
