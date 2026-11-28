@@ -8,6 +8,7 @@
  * What travels here: counts, one of five mood words, a number 1-10. Never a sentence of the person.
  * Nothing is logged but the kind of a failure.
  */
+const crypto = require('node:crypto');
 const { brainBase } = require('./orders-data');
 
 const MOODS = Object.freeze({
@@ -42,6 +43,7 @@ const REASONS = Object.freeze({
   nicht_geloescht: 'Das Löschen hat nicht geklappt.',
   eingabe_ungueltig: 'Diese Eingabe nimmt Blue Rose nicht an.',
   nur_lokal: 'Das Gehirn hat die Anfrage abgewiesen.',
+  nicht_belegt: 'Das Gehirn erkennt die App nicht (Schlüssel fehlt oder passt nicht).',
   graph_fehlt: 'Der Entscheidungs-Graph ist nicht geladen.',
   graph_fehler: 'Der Entscheidungs-Graph ließ sich nicht lesen.',
 });
@@ -185,12 +187,35 @@ async function defaultFetchJson(url, options = {}) {
   return response.json();
 }
 
-const post = (fetchJson, url, body) => fetchJson(url, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-});
+const KEY_NAME = 'VIBEMIND_EINGABE_SCHLUESSEL';
+const KEY_MIN_LENGTH = 32;
+
+/**
+ * The sign of the app for one request (as desktop-klicks.js for a hand click): the brain takes
+ * nothing for Blue Rose without it, since a Host header can be made up by anyone who reaches the port.
+ * "<sec>.<hmac-sha256>" over "<sec>\nblue-rose <METHOD> <path?query> <sha256 of the body> <once>".
+ */
+function signHeaders(key, method, pathAndQuery, body, { sec = Date.now() / 1000, once = crypto.randomBytes(12).toString('hex') } = {}) {
+  const t = Math.floor(sec);
+  const sum = crypto.createHash('sha256').update(body || '', 'utf8').digest('hex');
+  const mac = crypto.createHmac('sha256', key).update(`${t}\nblue-rose ${method} ${pathAndQuery} ${sum} ${once}`, 'utf8').digest('hex');
+  return { 'X-Blue-Rose-Einmal': once, 'X-Vibemind-Eingabe': `${t}.${mac}` };
+}
 
 /** Reads and writes of the page. Never throws; a failure becomes a calm line. */
-function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log = () => {} } = {}) {
+function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log = () => {}, env = process.env } = {}) {
+  const key = String(env[KEY_NAME] || '').trim();
+  const signed = (method, pathAndQuery, data) => {
+    const body = data === undefined ? undefined : JSON.stringify(data);
+    const headers = { ...signHeaders(key, method, pathAndQuery, body), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) };
+    return fetchJson(`${base}${pathAndQuery}`, body === undefined ? { headers } : { method, headers, body });
+  };
+  const post = (pathAndQuery, data) => signed('POST', pathAndQuery, data);
+  if (key.length < KEY_MIN_LENGTH) {
+    const text = 'Der App fehlt der Schlüssel, mit dem sie sich beim Gehirn ausweist.';
+    const no = async () => ({ ok: false, text });
+    return { read: async () => ({ state: 'fehler', hinweis: text }), saveMood: no, setAnalysis: no, remove: no };
+  }
   const quiet = async (work, what) => {
     try { return await work(); } catch (error) {
       log(`[BlueRose] ${what}: ${error && error.name ? error.name : 'Fehler'}`);
@@ -203,27 +228,27 @@ function createBlueRose({ base = brainBase(), fetchJson = defaultFetchJson, log 
   return {
     async read({ stunde, offsetHours } = {}) {
       const hour = isHour(stunde) ? `&stunde=${stunde}` : '';
-      const answer = await quiet(() => fetchJson(`${base}/api/blue_rose/uebersicht?tage=14${hour}`), 'lesen');
+      const answer = await quiet(() => signed('GET', `/api/blue_rose/uebersicht?tage=14${hour}`), 'lesen');
       return viewModel(answer, { offsetHours });
     },
     async saveMood({ stimmung, energie, stunde } = {}) {
       if (!Object.hasOwn(MOODS, stimmung) || !Number.isInteger(energie) || energie < 1 || energie > 10 || !isHour(stunde)) {
         return { ok: false, text: reason('eingabe_ungueltig') };
       }
-      return result(await quiet(() => post(fetchJson, `${base}/api/blue_rose/befinden`, { stimmung, energie, stunde }), 'eintragen'));
+      return result(await quiet(() => post('/api/blue_rose/befinden', { stimmung, energie, stunde }), 'eintragen'));
     },
     async setAnalysis(on) {
       if (typeof on !== 'boolean') return { ok: false, text: reason('eingabe_ungueltig') };
-      return result(await quiet(() => post(fetchJson, `${base}/api/blue_rose/einstellungen`, { analyse: on }), 'schalter'));
+      return result(await quiet(() => post('/api/blue_rose/einstellungen', { analyse: on }), 'schalter'));
     },
     async remove(art, id) {
       const known = art === 'alles' || KINDS.some((kind) => kind.id === art);
       if (!known || (id !== undefined && (art !== 'befinden' || typeof id !== 'string' || !/^[0-9a-zA-Z-]{1,64}$/.test(id)))) {
         return { ok: false, text: reason('eingabe_ungueltig') };
       }
-      return result(await quiet(() => post(fetchJson, `${base}/api/blue_rose/loeschen`, id === undefined ? { art } : { art, id }), 'loeschen'));
+      return result(await quiet(() => post('/api/blue_rose/loeschen', id === undefined ? { art } : { art, id }), 'loeschen'));
     },
   };
 }
 
-module.exports = { createBlueRose, viewModel, windowCounts, MOODS, KINDS };
+module.exports = { createBlueRose, viewModel, windowCounts, signHeaders, MOODS, KINDS };

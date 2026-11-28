@@ -4,7 +4,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { createBlueRose, viewModel, windowCounts } = require('./blue-rose-data');
+const { createBlueRose, viewModel, windowCounts, signHeaders } = require('./blue-rose-data');
+
+const KEY = 'erfundener-testschluessel-0123456789abcdef';   // no real value
+// Computed with the brain's own code for KEY, POST /api/blue_rose/loeschen, body {"art":"alles"}:
+const VECTOR = '1800000000.2b32ba91da3595ef1577f32e2b910ae608b5deba33f62d4f75e330fed75802ed';
 
 const NOW = new Date(2026, 0, 15, 10, 0, 0).getTime();
 const iso = (daysBack, hour) => new Date(2026, 0, 15 - daysBack, hour, 0, 0).toISOString();
@@ -94,9 +98,15 @@ test('analysis off, missing tables, a silent brain: the page says so and shows n
 
 test('the main process asks the brain on this machine and takes only known values', async () => {
   const calls = [];
+  const signs = [];
   const rose = createBlueRose({
     base: 'http://127.0.0.1:5000',
-    fetchJson: async (url, options = {}) => { calls.push([url, options.body ? JSON.parse(options.body) : null]); return { ok: true }; },
+    env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY },
+    fetchJson: async (url, options = {}) => {
+      calls.push([url, options.body ? JSON.parse(options.body) : null]);
+      signs.push([options.method || 'GET', url.replace('http://127.0.0.1:5000', ''), options.body, options.headers]);
+      return { ok: true };
+    },
   });
   assert.equal((await rose.read({ stunde: 9, offsetHours: 1 })).state, 'ok');
   assert.deepEqual(await rose.saveMood({ stimmung: 'calm', energie: 6, stunde: 9 }), { ok: true });
@@ -110,6 +120,14 @@ test('the main process asks the brain on this machine and takes only known value
     ['http://127.0.0.1:5000/api/blue_rose/loeschen', { art: 'befinden', id: 'id-1' }],
     ['http://127.0.0.1:5000/api/blue_rose/loeschen', { art: 'alles' }],
   ]);
+  // every request carries the sign of the app over exactly itself, each with a value of its own
+  for (const [method, pathAndQuery, body, headers] of signs) {
+    const [sec] = headers['X-Vibemind-Eingabe'].split('.');
+    assert.deepEqual(signHeaders(KEY, method, pathAndQuery, body, { sec: Number(sec), once: headers['X-Blue-Rose-Einmal'] }),
+      { 'X-Blue-Rose-Einmal': headers['X-Blue-Rose-Einmal'], 'X-Vibemind-Eingabe': headers['X-Vibemind-Eingabe'] });
+    assert.match(headers['X-Blue-Rose-Einmal'], /^[0-9a-f]{24}$/);
+  }
+  assert.equal(new Set(signs.map((s) => s[3]['X-Blue-Rose-Einmal'])).size, signs.length);
   calls.length = 0;
   for (const bad of [{ stimmung: 'gluecklich', energie: 5, stunde: 9 }, { stimmung: 'calm', energie: 11, stunde: 9 },
     { stimmung: 'calm', energie: 5.5, stunde: 9 }, { stimmung: 'toString', energie: 5, stunde: 9 }, { stimmung: 'calm', energie: 5 }]) {
@@ -124,10 +142,26 @@ test('the main process asks the brain on this machine and takes only known value
 
 test('a brain that does not answer gives a calm line, and the log names only the kind of failure', async () => {
   const lines = [];
-  const rose = createBlueRose({ fetchJson: async () => { throw new TypeError('erfundener Inhalt'); }, log: (line) => lines.push(line) });
+  const rose = createBlueRose({ env: { VIBEMIND_EINGABE_SCHLUESSEL: KEY }, fetchJson: async () => { throw new TypeError('erfundener Inhalt'); }, log: (line) => lines.push(line) });
   assert.equal((await rose.read({})).state, 'aus');
   assert.deepEqual(await rose.saveMood({ stimmung: 'calm', energie: 6, stunde: 9 }), { ok: false, text: 'Das Gehirn antwortet gerade nicht.' });
   assert.deepEqual(lines, ['[BlueRose] lesen: TypeError', '[BlueRose] eintragen: TypeError']);
+});
+
+test('the sign is the one the brain checks (vector from core/blue_rose.beleg_satz + eingabe_zeichen)', () => {
+  assert.deepEqual(signHeaders(KEY, 'POST', '/api/blue_rose/loeschen', '{"art":"alles"}', { sec: 1800000000, once: 'abcdef0123456789abcdef01' }), {
+    'X-Blue-Rose-Einmal': 'abcdef0123456789abcdef01',
+    'X-Vibemind-Eingabe': VECTOR,
+  });
+});
+
+test('without the key of the app nothing is asked, and the page says why', async () => {
+  let asked = 0;
+  const rose = createBlueRose({ env: { VIBEMIND_EINGABE_SCHLUESSEL: 'zukurz' }, fetchJson: async () => { asked += 1; return { ok: true }; } });
+  assert.equal((await rose.read({})).state, 'fehler');
+  assert.equal((await rose.remove('alles')).ok, false);
+  assert.equal((await rose.saveMood({ stimmung: 'calm', energie: 5, stunde: 9 })).ok, false);
+  assert.equal(asked, 0);
 });
 
 test('the tab opens with the personal space; the journal is one page of the same view', () => {
